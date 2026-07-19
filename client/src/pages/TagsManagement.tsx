@@ -58,6 +58,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import type { Tag } from "@shared/schema";
 import { insertTagSchema } from "@shared/schema";
 import { Link } from "wouter";
@@ -255,24 +257,41 @@ export default function TagsManagement() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <Card>
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="pb-10">
+        <DashboardPageHeader
+          icon={TagIcon}
+          title="إدارة الوسوم"
+          description="نظّم الوسوم المستخدمة في ربط المحتوى وتحسين الوصول إليه."
+          actions={
+            <Button
+              onClick={() => {
+                setIsCreateDialogOpen(true);
+                form.reset();
+              }}
+              className="gap-2"
+              data-testid="button-add-tag"
+            >
+              <PlusCircle className="h-4 w-4" />
+              إضافة وسم جديد
+            </Button>
+          }
+        />
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardHeader>
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex-1">
-                <CardTitle className="flex items-center gap-2">
-                  <TagIcon className="h-5 w-5" />
-                  إدارة الوسوم ({filteredTags.length})
+              <div className="min-w-full sm:min-w-0 sm:flex-1">
+                <CardTitle className="tabular-nums">
+                  الوسوم ({filteredTags.length.toLocaleString("en-US")})
                 </CardTitle>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative">
+              <div className="flex w-full items-center gap-2 flex-wrap sm:w-auto">
+                <div className="relative flex-1 sm:flex-none">
                   <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث..."
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    className="pr-10 w-48"
+                    className="w-full pr-10 sm:w-48"
                     data-testid="input-search-tags"
                   />
                 </div>
@@ -286,17 +305,6 @@ export default function TagsManagement() {
                     <SelectItem value="inactive">معطل</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button
-                  onClick={() => {
-                    setIsCreateDialogOpen(true);
-                    form.reset();
-                  }}
-                  className="gap-2"
-                  data-testid="button-add-tag"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  إضافة وسم جديد
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -357,8 +365,8 @@ export default function TagsManagement() {
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium" data-testid={`tag-usage-${tag.id}`}>
-                              {tag.usageCount}
+                            <span className="font-medium tabular-nums" data-testid={`tag-usage-${tag.id}`}>
+                              {(tag.usageCount ?? 0).toLocaleString("en-US")}
                             </span>
                             {tag.usageCount > 0 && (
                               <Link href={`/dashboard/tags/${tag.id}/articles`}>
@@ -424,7 +432,7 @@ export default function TagsManagement() {
                           <SelectItem value="100">100</SelectItem>
                         </SelectContent>
                       </Select>
-                      <span>من أصل {filteredTags.length} وسم</span>
+                      <span className="tabular-nums">من أصل {filteredTags.length.toLocaleString("en-US")} وسم</span>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -451,9 +459,9 @@ export default function TagsManagement() {
                       
                       <div className="flex items-center gap-1 mx-2">
                         <span className="text-sm text-muted-foreground">صفحة</span>
-                        <span className="text-sm font-medium">{currentPage}</span>
+                        <span className="text-sm font-medium tabular-nums">{currentPage.toLocaleString("en-US")}</span>
                         <span className="text-sm text-muted-foreground">من</span>
-                        <span className="text-sm font-medium">{totalPages}</span>
+                        <span className="text-sm font-medium tabular-nums">{totalPages.toLocaleString("en-US")}</span>
                       </div>
 
                       <Button
@@ -487,7 +495,7 @@ export default function TagsManagement() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </DashboardPageShell>
 
       {/* Create/Edit Dialog */}
       <Dialog

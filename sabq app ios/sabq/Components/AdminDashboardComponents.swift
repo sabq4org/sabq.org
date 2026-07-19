@@ -27,22 +27,22 @@ struct AdminStatGridCard: View {
                     .fill(card.tint.opacity(0.14))
                     .frame(width: 34, height: 34)
                 Image(systemName: card.icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(card.tint)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(card.value)
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(card.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
                 if let breakdown = card.breakdown {
                     Text(breakdown)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -74,9 +74,9 @@ struct AdminStatusBadge: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: status.icon)
-                .font(.system(size: 10, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .bold))
             Text(status.badgeLabel)
-                .font(.system(size: 11, weight: .bold))
+                .font(SabqFonts.app(size: 11, weight: .bold))
         }
         .foregroundStyle(status.tint)
         .padding(.horizontal, 10)
@@ -99,7 +99,7 @@ struct AdminSegmentedControl: View {
                 let isActive = status == selected
                 Button { onSelect(status) } label: {
                     Text(status.label)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(isActive ? .white : SabqTheme.secondaryInk)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -138,12 +138,12 @@ struct AdminNewsRow: View {
                 AdminStatusBadge(status: item.status)
                 Spacer(minLength: 0)
                 Text(SabqFormatters.arabicDate.string(from: item.updatedAt))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
 
             Text(item.title)
-                .font(.system(size: 16, weight: .bold))
+                .font(SabqFonts.app(size: 16, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
@@ -158,7 +158,7 @@ struct AdminNewsRow: View {
 
             if !item.excerpt.isEmpty {
                 Text(item.excerpt)
-                    .font(.system(size: 13))
+                    .font(SabqFonts.app(size: 13))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -182,7 +182,7 @@ struct AdminNewsRow: View {
                         if isPublishing {
                             HStack(spacing: 7) {
                                 ProgressView().controlSize(.small)
-                                Text("جارٍ النشر").font(.system(size: 13, weight: .semibold))
+                                Text("جارٍ النشر").font(SabqFonts.app(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(SabqTheme.teal)
                             .padding(.horizontal, 14)
@@ -222,13 +222,13 @@ struct AdminNewsRow: View {
     private var revisionCue: some View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: "exclamationmark.bubble.fill")
-                .font(.system(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .bold))
             VStack(alignment: .leading, spacing: 2) {
                 Text("بانتظار تعديل الكاتب")
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(SabqFonts.app(size: 12, weight: .heavy))
                 if let notes = item.reviewNotes, !notes.isEmpty {
                     Text(notes)
-                        .font(.system(size: 12, weight: .regular))
+                        .font(SabqFonts.app(size: 12, weight: .regular))
                         .multilineTextAlignment(.leading)
                 }
             }
@@ -251,9 +251,9 @@ struct AdminNewsRow: View {
     private func scheduledCue(_ date: Date) -> some View {
         HStack(spacing: 7) {
             Image(systemName: "clock.fill")
-                .font(.system(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .bold))
             Text("مجدول للنشر: \(SabqFormatters.arabicDate.string(from: date)) — \(SabqFormatters.riyadhTime.string(from: date))")
-                .font(.system(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .bold))
                 .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
         }
@@ -287,7 +287,7 @@ struct AdminNewsRow: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 16, weight: .bold))
+                .font(SabqFonts.app(size: 16, weight: .bold))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .frame(width: 38, height: 38)
                 .background(Circle().fill(SabqTheme.background.opacity(0.6)))
@@ -296,16 +296,16 @@ struct AdminNewsRow: View {
 
     private func metaLabel(icon: String, text: String) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-            Text(text).font(.system(size: 12, weight: .medium))
+            Image(systemName: icon).font(SabqFonts.app(size: 10, weight: .semibold))
+            Text(text).font(SabqFonts.app(size: 12, weight: .medium))
         }
         .foregroundStyle(SabqTheme.secondaryInk)
     }
 
     private func actionLabel(title: String, systemImage: String, tint: Color) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: systemImage).font(.system(size: 13, weight: .bold))
-            Text(title).font(.system(size: 13, weight: .semibold))
+            Image(systemName: systemImage).font(SabqFonts.app(size: 13, weight: .bold))
+            Text(title).font(SabqFonts.app(size: 13, weight: .semibold))
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 14)
@@ -428,16 +428,16 @@ struct AdminReasonSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(action.explanation)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(SabqFonts.app(size: 13, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .multilineTextAlignment(.leading)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text(action.fieldLabel)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(SabqFonts.app(size: 13, weight: .bold))
                             .foregroundStyle(SabqTheme.secondaryInk)
                         TextEditor(text: $text)
-                            .font(.system(size: 15))
+                            .font(SabqFonts.app(size: 15))
                             .foregroundStyle(SabqTheme.ink)
                             .frame(minHeight: 140)
                             .scrollContentBackground(.hidden)
@@ -445,7 +445,7 @@ struct AdminReasonSheet: View {
                             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
                             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
                         Text("5 أحرف على الأقل")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .medium))
                             .foregroundStyle(!trimmed.isEmpty && !isValid ? SabqTheme.coral : SabqTheme.tertiaryInk)
                     }
 
@@ -457,7 +457,7 @@ struct AdminReasonSheet: View {
                     } label: {
                         HStack(spacing: 8) {
                             if submitting { ProgressView().controlSize(.small) }
-                            Text(action.confirmTitle).font(.system(size: 16, weight: .bold))
+                            Text(action.confirmTitle).font(SabqFonts.app(size: 16, weight: .bold))
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)

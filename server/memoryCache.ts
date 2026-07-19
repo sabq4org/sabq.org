@@ -1,6 +1,7 @@
 import memoizee from 'memoizee';
 import type { Response } from 'express';
 import Redis from 'ioredis';
+import { isEnglishSports } from './services/sportsLang';
 
 // On the read-only mirror (READ_ONLY_MODE=true) all cache TTLs are capped to
 // this many ms so published content appears almost instantly instead of being
@@ -307,10 +308,12 @@ export class MemoryCache {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly maxEntries: number;
+  private readonly name: string;
   private lastEvictionLogAt = 0;
 
-  constructor(maxEntries: number = 5000) {
+  constructor(maxEntries: number = 5000, name: string = 'memoryCache') {
     this.maxEntries = maxEntries;
+    this.name = name;
     this.startCleanup();
   }
 
@@ -385,7 +388,7 @@ export class MemoryCache {
     if (now - this.lastEvictionLogAt > 60_000) {
       this.lastEvictionLogAt = now;
       console.warn(
-        `[Cache] memoryCache hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
+        `[Cache] ${this.name} hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
           `If this repeats, some caller is generating unbounded cache keys.`,
       );
     }
@@ -555,6 +558,9 @@ interface SWRCacheEntry<T> {
 export class StaleWhileRevalidateCache {
   private cache: Map<string, SWRCacheEntry<any>> = new Map();
   private refreshing: Set<string> = new Set(); // Track in-flight refreshes
+  // single-flight: وعد الجلب الجاري لكل مفتاح. المتنافسون على نفس المفتاح
+  // ينتظرون نفس الوعد بدل الاستقصاء ثم بدء جلب مكرر بعد 6 ثوانٍ.
+  private inflight: Map<string, Promise<any>> = new Map();
   private readonly maxEntries: number;
   private lastEvictionLogAt = 0;
 
@@ -615,6 +621,7 @@ export class StaleWhileRevalidateCache {
       if (now - entry.timestamp > entry.ttl + entry.staleWhileRevalidate) {
         this.cache.delete(key);
         this.refreshing.delete(key);
+        this.inflight.delete(key);
       }
     }
     if (this.cache.size < this.maxEntries) return;
@@ -627,6 +634,7 @@ export class StaleWhileRevalidateCache {
     for (const [key] of oldest) {
       this.cache.delete(key);
       this.refreshing.delete(key);
+      this.inflight.delete(key);
     }
 
     if (now - this.lastEvictionLogAt > 60_000) {
@@ -650,6 +658,25 @@ export class StaleWhileRevalidateCache {
     return this.refreshing.has(key);
   }
 
+  /** الوعد المشترك للجلب الجاري لهذا المفتاح — إن وُجد — وإلا null. */
+  getInflight<T>(key: string): Promise<T> | null {
+    return (this.inflight.get(key) as Promise<T> | undefined) ?? null;
+  }
+
+  /**
+   * يسجّل وعد جلب جارٍ للمفتاح ويحذفه تلقائيًا عند اكتماله (نجاحًا أو فشلًا).
+   * نستخدم then(cleanup, cleanup) لا finally حتى لا تولّد سلسلة التنظيف رفضًا
+   * غير معالج (unhandled rejection) عند فشل الجلب.
+   */
+  trackInflight<T>(key: string, promise: Promise<T>): Promise<T> {
+    this.inflight.set(key, promise);
+    const cleanup = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(cleanup, cleanup);
+    return promise;
+  }
+
   invalidatePattern(pattern: string): number {
     const regex = new RegExp(pattern);
     let count = 0;
@@ -657,6 +684,7 @@ export class StaleWhileRevalidateCache {
       if (regex.test(key)) {
         this.cache.delete(key);
         this.refreshing.delete(key);
+        this.inflight.delete(key);
         count++;
       }
     }
@@ -669,6 +697,7 @@ export class StaleWhileRevalidateCache {
       if (key.startsWith(prefix)) {
         this.cache.delete(key);
         this.refreshing.delete(key);
+        this.inflight.delete(key);
         count++;
       }
     }
@@ -698,6 +727,31 @@ export async function withSWR<T>(
   fetcher: () => Promise<T>,
   forceFresh: boolean = false
 ): Promise<T> {
+  // فصل كاش بوابة الرياضة بالإنجليزية: لاحقة ":en" تُضاف فقط داخل سياق لغة
+  // إنجليزية (يضبطه middleware في مسارات /api/sports). العربية والكرون وبقية
+  // التطبيق تبقى مفاتيحها كما هي تمامًا — توافق رجعي كامل، بلا تبريد كاش.
+  if (isEnglishSports()) cacheKey = `${cacheKey}:en`;
+
+  // single-flight: جلب واحد فقط جارٍ لكل مفتاح، وكل المتنافسين عليه ينتظرون
+  // نفس الوعد. سابقًا كان المنتظرون يستقصون isRefreshing حتى 6 ثوانٍ ثم
+  // يستسلمون ويبدؤون جلبًا مكررًا — مضخّم thundering-herd تحت طوابير rate-limit
+  // عند المزوّد. الرفض يصل لكل المنتظرين ولا يلوّث الكاش (لا set عند الفشل).
+  const startFetch = (logLabel: string): Promise<T> => {
+    swrCache.markRefreshing(cacheKey);
+    const promise = (async () => {
+      try {
+        const data = await fetcher();
+        swrCache.set(cacheKey, data, ttl, staleWhileRevalidate);
+        return data;
+      } catch (err) {
+        console.error(`[SWR] ${logLabel} fetch failed for ${cacheKey}:`, err);
+        swrCache.clearRefreshing(cacheKey);
+        throw err;
+      }
+    })();
+    return swrCache.trackInflight(cacheKey, promise);
+  };
+
   // Explicit force-refresh (e.g. the native iOS pull-to-refresh, which sends a
   // cache-buster query param + `Cache-Control: no-cache`). Recompute past the
   // cache so a just-published/featured carousel item shows on the FIRST pull
@@ -705,27 +759,12 @@ export async function withSWR<T>(
   // case: a publish only clears the SWR copy on the pod that handled it, so
   // pull-to-refresh routed to another pod kept getting the stale homepage for
   // up to CACHE_TTL.HOMEPAGE (10 min) — the reported "must kill & relaunch the
-  // app" bug. Concurrent force-refreshes are coalesced via the refreshing flag
-  // so a burst of pulls never stampedes the DB.
+  // app" bug. Concurrent force-refreshes are coalesced via the shared in-flight
+  // promise so a burst of pulls never stampedes the DB.
   if (forceFresh) {
-    if (swrCache.isRefreshing(cacheKey)) {
-      for (let attempt = 0; attempt < 30; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        if (!swrCache.isRefreshing(cacheKey)) break;
-      }
-      const after = swrCache.get<T>(cacheKey);
-      if (after.data !== null && !after.isStale) return after.data;
-    }
-    swrCache.markRefreshing(cacheKey);
-    try {
-      const data = await fetcher();
-      swrCache.set(cacheKey, data, ttl, staleWhileRevalidate);
-      return data;
-    } catch (err) {
-      console.error(`[SWR] Force-fresh fetch failed for ${cacheKey}:`, err);
-      swrCache.clearRefreshing(cacheKey);
-      throw err;
-    }
+    const inflight = swrCache.getInflight<T>(cacheKey);
+    if (inflight) return inflight;
+    return startFetch('Force-fresh');
   }
 
   const cached = swrCache.get<T>(cacheKey);
@@ -738,44 +777,21 @@ export async function withSWR<T>(
   // Stale data exists - return it and refresh in background
   if (cached.data !== null && cached.isStale) {
     if (cached.shouldRefresh) {
-      swrCache.markRefreshing(cacheKey);
-      // Background refresh - don't await
-      fetcher()
-        .then((newData) => {
-          swrCache.set(cacheKey, newData, ttl, staleWhileRevalidate);
+      // Background refresh - don't await. يُسجَّل الوعد أيضًا حتى يتشاركه أي
+      // طلب لاحق (forceFresh أو مفتاح أُخلِي من الكاش أثناء التحديث).
+      startFetch('Background')
+        .then(() => {
           console.log(`[SWR] Background refresh completed: ${cacheKey}`);
         })
-        .catch((err) => {
-          console.error(`[SWR] Background refresh failed: ${cacheKey}`, err);
-          swrCache.clearRefreshing(cacheKey);
+        .catch(() => {
+          // الخطأ سُجّل داخل startFetch — لا شيء إضافي هنا.
         });
     }
     return cached.data;
   }
 
-  // No cache - must fetch synchronously
-  // But prevent thundering herd by only allowing one fetch
-  if (swrCache.isRefreshing(cacheKey)) {
-    for (let attempt = 0; attempt < 30; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      const retryCache = swrCache.get<T>(cacheKey);
-      if (retryCache.data !== null) {
-        return retryCache.data;
-      }
-      if (!swrCache.isRefreshing(cacheKey)) break;
-    }
-    const finalCheck = swrCache.get<T>(cacheKey);
-    if (finalCheck.data !== null) return finalCheck.data;
-  }
-
-  swrCache.markRefreshing(cacheKey);
-  try {
-    const data = await fetcher();
-    swrCache.set(cacheKey, data, ttl, staleWhileRevalidate);
-    return data;
-  } catch (err) {
-    console.error(`[SWR] Fetch failed for ${cacheKey}:`, err);
-    swrCache.clearRefreshing(cacheKey);
-    throw err;
-  }
+  // No cache - must fetch. نتشارك الوعد الجاري إن وُجد، وإلا نبدأ الجلب الوحيد.
+  const inflight = swrCache.getInflight<T>(cacheKey);
+  if (inflight) return inflight;
+  return startFetch('Initial');
 }

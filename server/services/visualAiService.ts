@@ -7,7 +7,7 @@
  * - Smart visual recommendations
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import pRetry from "p-retry";
 import https from "https";
@@ -21,7 +21,7 @@ if (!apiKey) {
   console.log("[Visual AI] API key configured successfully");
 }
 
-const geminiClient = new GoogleGenAI({
+const geminiClient = createGoogleGenAI({
   apiKey: apiKey || "missing-api-key",
 });
 
@@ -44,6 +44,7 @@ function isRateLimitError(error: any): boolean {
 
 export interface ImageAnalysisRequest {
   imageUrl: string;
+  imageBase64?: string; // Pre-fetched bytes for non-https sources (gs:// private storage); when set, imageUrl is used for logging only
   articleTitle?: string; // For relevance checking
   articleContent?: string; // For relevance checking
   checkQuality?: boolean;
@@ -129,9 +130,9 @@ export async function analyzeImage(request: ImageAnalysisRequest): Promise<Image
   try {
     console.log(`[Visual AI] Analyzing image: ${request.imageUrl}`);
     
-    // Download image to base64
-    const imageBase64 = await downloadImageToBase64(request.imageUrl);
-    console.log(`[Visual AI] Image downloaded, size: ${imageBase64.length} bytes`);
+    // Use pre-fetched bytes when provided (private gs:// storage), otherwise download
+    const imageBase64 = request.imageBase64 ?? await downloadImageToBase64(request.imageUrl);
+    console.log(`[Visual AI] Image ready, size: ${imageBase64.length} bytes`);
     
     // Build comprehensive analysis prompt
     const promptParts: string[] = [];
@@ -348,7 +349,10 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
     
     // Build smart prompt based on article
     const styleGuide: Record<string, string> = {
-      photorealistic: "professional photojournalism style, high quality, realistic",
+      photorealistic:
+        "true photorealistic photography, natural lighting, shallow depth of field, " +
+        "shot on a professional DSLR camera, documentary photojournalism, high dynamic range, " +
+        "real-world textures and skin tones, no CGI, no illustration, no cartoon, no AI-looking artifacts",
       illustration: "modern digital illustration, clean and professional",
       abstract: "abstract artistic representation, contemporary design",
       infographic: "infographic style, data visualization, modern design"

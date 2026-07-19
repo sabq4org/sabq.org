@@ -74,22 +74,32 @@ const HTML_NO_STORE_HEADERS = {
 // re-render the SPA shell from origin on every crawl (~1.5s TTFB, huge
 // crawl-budget drain), the injected shell is served from Cloudflare's edge in
 // <150ms for repeat hits, refreshed in the background.
-//   - max-age=120     : short browser cache so users still get fresh content.
-//   - s-maxage=300     : edge serves the cached, SEO-injected shell for 5 min.
+//
+// BROWSER vs EDGE split (white-page-after-deploy fix, 2026-06-15):
+//   - Cache-Control governs the VISITOR's browser. We set it to no-store so the
+//     browser NEVER keeps a copy of the shell. This closes the ~120s window in
+//     which a visitor's browser would replay a stale index.html that points at a
+//     rotated /assets/index-<hash>.js (= the classic post-deploy white page).
+//   - CDN-Cache-Control governs Cloudflare's OWN edge tier independently of the
+//     browser, so the edge still serves the SEO-injected shell for 5 min (TTFB
+//     win + crawl-budget savings preserved). The edge keyspace is namespaced by
+//     deploy commit (CF_PAGES_COMMIT_SHA, see htmlCacheKey), so a new deploy =
+//     fresh keyspace — the edge can never serve the previous build's dead chunks.
 //   - stale-while-revalidate=60 : edge can serve a slightly-stale copy while it
 //     refreshes in the background → no cold-start tax for the next crawler.
-// CDN-Cache-Control governs Cloudflare's own tier independently of the browser.
 //
 // SAFETY: this is ONLY applied to indexable content on the canonical host
 // (sabq.org). noindex screens (dashboard/admin/auth/account), non-canonical
 // hosts (*.pages.dev, sabq.news), and any route whose resolved robots meta is
-// `noindex` always fall back to HTML_NO_STORE_HEADERS. A cached shell could
-// reference a rotated /assets/index-<hash>.js after a deploy; the client-side
-// deploy-recovery guard (client/src/lib/deployRecovery.ts) hard-reloads once on
-// a chunk-load error, so the short staleness window self-heals.
+// `noindex` always fall back to HTML_NO_STORE_HEADERS. As a belt-and-suspenders
+// second layer, the inline safety net in client/index.html (and the in-bundle
+// deployRecovery.ts) hard-reloads once with a `_dr` cache-buster on a chunk-load
+// error, so any residual staleness self-heals.
 const HTML_EDGE_CACHE_HEADERS = {
+  // Browser: do not store the shell (cuts the post-deploy stale-HTML window).
   "Cache-Control":
-    "public, max-age=120, s-maxage=300, stale-while-revalidate=60",
+    "private, no-cache, must-revalidate, max-age=0",
+  // Edge: keep caching the SEO-injected shell for the TTFB/crawl-budget win.
   "CDN-Cache-Control":
     "public, max-age=300, stale-while-revalidate=60",
 };
@@ -100,22 +110,49 @@ const STATIC_EXTENSIONS = [
   ".json", ".xml", ".txt", ".pdf",
 ];
 
-// Mirrors a subset of server/utils/noindexPaths.ts — never inject SEO meta into
-// dashboard/admin/auth/account screens (both Arabic and en/ur localized prefixes).
+// Mirrors server/utils/noindexPaths.ts — every private/authenticated SPA route
+// (auth, account, dashboards, admin, onboarding, payment, search). Two uses:
+//   1. never inject content SEO meta into these screens, and
+//   2. serve `X-Robots-Tag: noindex, follow` on them (see finalizeHtml).
+// They are NO LONGER blocked in robots.txt — that blocking caused the GSC
+// "Indexed, though blocked by robots.txt" warning because Google couldn't crawl
+// them to discover the noindex. Now Google crawls, sees the header, and drops
+// them. KEEP IN SYNC with server/utils/noindexPaths.ts.
 const NOINDEX_PREFIXES = [
+  // dashboards / admin / internal tooling
   "/dashboard", "/en/dashboard", "/ur/dashboard",
-  "/admin",
-  "/login", "/register",
-  "/profile", "/en/profile",
-  "/settings",
+  "/admin", "/ifox",
+  // auth flows
+  "/login", "/register", "/logout",
   "/forgot-password", "/reset-password", "/set-password",
   "/2fa-verify", "/verify-email",
-  "/notifications", "/bookmarks", "/my-keywords", "/my-follows",
-  "/preferences-center", "/select-interests", "/edit-interests",
-  "/complete-profile",
-  "/payment-callback", "/advertiser-payment-callback",
+  // account / personalization
+  "/profile", "/en/profile", "/ur/profile",
+  "/bookmarks", "/reading-history",
+  "/my-follows", "/my-keywords", "/my-votes",
+  "/notification-settings", "/en/notification-settings", "/recommendation-settings",
+  "/select-interests", "/edit-interests", "/preferences-center", "/complete-profile",
+  // search (thin / duplicate result pages)
+  "/search", "/en/search", "/ur/search",
+  // onboarding / payment
+  "/onboarding", "/payment", "/payment-callback", "/advertiser-payment-callback",
+  // misc legacy private prefixes
+  "/settings", "/notifications",
   "/advertiser/", "/publisher/", "/staff/",
+  // روابط دعوات المجالس وواجهاتها شخصية: قابلة للفتح والمشاركة، لا للفهرسة.
+  "/gulf-cup/majlis",
 ];
+
+// Boundary-aware prefix match (mirrors isNoindexPath in
+// server/utils/noindexPaths.ts): `/profile` matches `/profile` and
+// `/profile/123` but NOT `/profiles`. Trailing-slash prefixes are normalized.
+function isNoindexPrefix(p) {
+  for (let prefix of NOINDEX_PREFIXES) {
+    if (prefix.endsWith("/")) prefix = prefix.slice(0, -1);
+    if (p === prefix || p.startsWith(prefix + "/")) return true;
+  }
+  return false;
+}
 
 // Paths proxied verbatim to the backend. Mirrors vercel.json `rewrites`.
 function isProxyPath(p) {
@@ -135,6 +172,7 @@ function isProxyPath(p) {
 }
 
 function isStaticAsset(p) {
+  if (p.startsWith("/.well-known/")) return true;
   if (p.startsWith("/assets/")) return true;
   for (const ext of STATIC_EXTENSIONS) if (p.endsWith(ext)) return true;
   return false;
@@ -168,11 +206,35 @@ function isCrawler(ua) {
 }
 
 function isInjectablePath(p) {
-  for (const prefix of NOINDEX_PREFIXES) {
-    if (p === prefix || p.startsWith(prefix + "/") || p.startsWith(prefix)) return false;
-  }
+  if (isNoindexPrefix(p)) return false;
   if (isStaticAsset(p)) return false;
   return true;
+}
+
+// Minimal 410 Gone HTML for archived/unpublished articles. Serving 410 (not a
+// 200 + noindex shell) tells Google the URL is permanently gone so it drops it
+// and stops re-crawling — clearing the "Excluded by noindex tag" report and
+// reclaiming crawl budget. Consistent with the human experience: the public
+// article API already returns 404 for archived articles, so this is not
+// cloaking. noindex header is belt-and-suspenders.
+function goneHtmlResponse() {
+  const body =
+    '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
+    '<meta name="robots" content="noindex, follow">' +
+    '<title>المحتوى لم يَعُد متاحًا — سبق</title></head><body>' +
+    "<h1>هذا المحتوى لم يَعُد متاحًا</h1>" +
+    "<p>المقال المطلوب تمت أرشفته أو إزالته.</p></body></html>";
+  return new Response(body, {
+    status: 410,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Robots-Tag": "noindex, follow",
+      // Short cache so a republished (un-archived) article recovers quickly,
+      // bounded anyway by the slug-redirect/gone TTL upstream.
+      "Cache-Control": "public, max-age=60, s-maxage=120",
+      "CDN-Cache-Control": "public, max-age=120",
+    },
+  });
 }
 
 function isHtml(res) {
@@ -427,10 +489,57 @@ function apiCacheKey(requestUrl) {
   return new Request(u.toString(), { method: "GET" });
 }
 
+// NOTE: a "/assets/* → 404" guard used to live here to intercept deleted chunks
+// before the SPA fallback served them as HTML. It was removed because
+// _routes.json excludes /assets/* from this middleware (so the guard never ran
+// for the very paths it protected), and removing the exclude triggered a
+// Cloudflare "Failed to publish assets" deployment error. Post-deploy recovery
+// now relies on the proactive buildVersion poll (client/src/lib/buildVersion.ts)
+// + the reactive retryImport/deployRecovery layer, which already classifies the
+// MIME/CORS refusal of an HTML response to a .js request as a chunk failure.
+
 export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;
+
+  // ── Missing hashed-asset guard (post-deploy white-page fix) ──────────────
+  // /assets/* holds Vite's content-hashed bundle. When a chunk is MISSING — an
+  // open tab requesting a rotated-out /assets/<oldhash>.js after a deploy, or a
+  // chunk requested mid-deploy — Pages' static layer has no file, so it falls
+  // through the SPA `_redirects` catch-all (`/* /index.html 200`) and serves the
+  // HTML shell as `200 text/html`. Two things then go wrong:
+  //   1. the browser tries to execute HTML as a JS module → MIME error, and
+  //   2. because `_headers` stamps `/assets/*` with `immutable, max-age=1y`, the
+  //      browser CACHES that HTML under the chunk URL for a YEAR — so every later
+  //      load replays the poisoned response and NEITHER the deployRecovery reload
+  //      NOR the buildVersion poll can heal it. Only a manual Ctrl+Shift+R does
+  //      (the recurring "تعذر تحميل الصفحة … امسح الذاكرة" report after deploys).
+  // Fix: intercept /assets/* here (this needs `/assets/*` removed from the
+  // _routes.json `exclude`). If the resolved response is HTML, the file is gone —
+  // return a real, NON-CACHEABLE 404. A Function-generated Response is NOT subject
+  // to the `_headers` immutable rule (that only stamps static-asset responses), so
+  // the 404 is never cached and the chunk URL self-heals once it exists again.
+  // Real assets (js/css/img/font/…) are never text/html, so they pass through
+  // untouched WITH their immutable caching intact.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    path.startsWith("/assets/")
+  ) {
+    const assetRes = await next();
+    if (isHtml(assetRes)) {
+      return new Response("/* sabq: asset not found (rotated by a deploy) */\n", {
+        status: 404,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store, must-revalidate",
+          "X-Sabq-Asset-Miss": "1",
+        },
+      });
+    }
+    return assetRes;
+  }
+
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
   const nextOrigin = (env.NEXT_ORIGIN || "").replace(/\/+$/, "");
@@ -442,6 +551,12 @@ export async function onRequest(context) {
   // builds, or a `www.` variant — must NOT be indexed, or it competes with
   // sabq.org for identical content and dilutes/splits Google's signals.
   const noindexHost = url.hostname !== "sabq.org";
+
+  // Private/authenticated SPA routes (auth, account, dashboard, admin, search…).
+  // No longer robots.txt-blocked, so we serve X-Robots-Tag: noindex here instead
+  // — the documented fix for the "Indexed, though blocked by robots.txt" warning
+  // (Google must be able to crawl the page to see the noindex and drop it).
+  const pathIsNoindex = isNoindexPrefix(path);
 
   // On a non-canonical host, override robots.txt with a blanket disallow so
   // crawlers skip the duplicate entirely (the proxied backend robots.txt says
@@ -455,14 +570,35 @@ export async function onRequest(context) {
     });
   }
 
+  // A recovery reload (deployRecovery.ts + the index.html inline safety-net both
+  // append `?_dr=<ts>`) MUST reach the origin for the CURRENT shell — never a
+  // stale edge HIT. htmlCacheKey() intentionally strips `_dr`, so WITHOUT this
+  // bypass a recovery reload kept resolving to the SAME stale cache entry: the
+  // proactive build-id check (or vite:preloadError) fired, reloaded with `_dr`,
+  // got the identical stale shell back, and the user looped on a white page
+  // until the 300s TTL expired — the "white page after every deploy" report.
+  const isRecoveryReload = url.searchParams.has("_dr");
+  const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
+
   // In-function edge cache (Workers Cache API). Default ON; set
   // EDGE_HTML_CACHE=off to disable (e.g. once a zone-level "Cache Everything"
   // Cache Rule is doing the job). Only active when SEO is injected HERE
   // (EDGE_SEO=on) so we never cache a half-rendered shell that the standalone
   // worker would otherwise enrich.
   const edgeHtmlCacheEnabled =
-    String(env.EDGE_HTML_CACHE || "on").toLowerCase() !== "off" && seoEnabled;
-  const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
+    String(env.EDGE_HTML_CACHE || "on").toLowerCase() !== "off" &&
+    seoEnabled &&
+    // Never cache a shell we can't namespace per-deploy. Without a commit/build
+    // id the cache key collapses to the constant "dev" (see htmlCacheKey), so a
+    // new deploy reuses the SAME key and the edge keeps serving the PREVIOUS
+    // build's shell — which references chunk hashes the deploy just deleted →
+    // 404 → white page for up to 300s after EVERY deploy. If CF_PAGES_COMMIT_SHA
+    // (auto-set on git-connected Pages) is missing, skip the edge cache entirely
+    // rather than risk a cross-deploy stale serve.
+    !!commit &&
+    // A recovery reload must self-heal immediately: bypass both the HIT lookup
+    // and the store so it always pulls the fresh origin shell.
+    !isRecoveryReload;
 
   // Dynamic rendering: only search/social crawlers get the SSR rendering on SSR
   // paths; humans always get the original SPA. The cache is namespaced by
@@ -482,12 +618,17 @@ export async function onRequest(context) {
   // additionally get X-Robots-Tag: noindex and are FORCED to no-store so a
   // duplicate host can never poison the edge with a cacheable copy.
   const finalizeHtml = (res, { cacheable = false } = {}) => {
-    const useCache = cacheable && !noindexHost;
+    // A noindex page (private route) must never be edge-cached as indexable.
+    const useCache = cacheable && !noindexHost && !pathIsNoindex;
     const out = applyHtmlHeaders(
       res,
       useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
     );
-    if (!noindexHost || !isHtml(out)) return out;
+    // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
+    // private routes (login/register/profile/dashboard/search/…). This is the
+    // signal that lets Googlebot drop the now-crawlable (un-robots-blocked)
+    // auth/account URLs from the index.
+    if ((!noindexHost && !pathIsNoindex) || !isHtml(out)) return out;
     const headers = new Headers(out.headers);
     headers.set("X-Robots-Tag", "noindex, follow");
     return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
@@ -646,6 +787,9 @@ export async function onRequest(context) {
       if (redirectTo && redirectTo !== path) {
         return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
       }
+      // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
+      // Google re-crawls forever). The row exists but isn't published.
+      if (slug && slug.gone) return goneHtmlResponse();
       const ssrRes = await proxyToApi(request, nextOrigin);
       // Only edge-cache a successful HTML render; Next 404/5xx pass through
       // no-store so a transient error is never cached as a 200.
@@ -681,6 +825,11 @@ export async function onRequest(context) {
     if (redirectTo && redirectTo !== path) {
       return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
     }
+    // Archived/unpublished article → 410 Gone for CRAWLERS only (mirrors the
+    // SSR-crawler path). Humans keep the SPA shell, whose client-side render
+    // shows the styled not-found (the public article API already 404s archived),
+    // so this stays consistent — not cloaking.
+    if (slug && slug.gone && isCrawler(userAgent)) return goneHtmlResponse();
 
     // No meta (DB hiccup) → don't long-cache an un-injected generic shell on a
     // content URL; serve it no-store so the next crawl re-tries injection.

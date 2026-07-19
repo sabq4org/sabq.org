@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useRoleProtection } from "@/hooks/useRoleProtection";
+import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { X, Save, Send, ArrowRight } from "lucide-react";
+import { X, Save, Send, ArrowRight, Upload, Loader2, AlertTriangle, Zap } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -41,7 +41,8 @@ const articleSchema = z.object({
   summary: z.string().min(20, "الملخص يجب أن يكون 20 حرف على الأقل"),
   summaryEn: z.string().optional(),
   content: z.string().min(50, "المحتوى يجب أن يكون 50 حرف على الأقل"),
-  coverImageUrl: z.string().url("يجب إدخال رابط صحيح").optional().or(z.literal("")),
+  // كان الحقل coverImageUrl ولا يُحفظ إطلاقاً — عمود المقال الفعلي imageUrl
+  imageUrl: z.string().url("يجب إدخال رابط صحيح").optional().or(z.literal("")),
   categoryId: z.string().min(1, "يجب اختيار التصنيف"),
   tags: z.array(z.string()).optional(),
 });
@@ -56,8 +57,13 @@ interface Category {
 
 interface Tag {
   id: string;
-  name: string;
+  // /api/tags يعيد nameAr/nameEn؛ name احتياط لأي شكل قديم
+  name?: string | null;
+  nameAr?: string | null;
+  nameEn?: string | null;
 }
+
+const tagLabel = (tag: Tag) => tag.nameAr || tag.name || tag.nameEn || "";
 
 interface Article {
   id: string;
@@ -66,21 +72,39 @@ interface Article {
   summary: string;
   summaryEn: string | null;
   content: string;
-  coverImageUrl: string | null;
+  imageUrl: string | null;
   categoryId: string;
   tags: string[];
   status: string;
+  publisherStatus: string | null;
+  publisherReviewNotes: string | null;
 }
 
 export default function PublisherArticleEditor() {
-  useRoleProtection('publisher');
+  usePublisherAccess();
   const { id } = useParams<{ id?: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const isEditMode = !!id;
+
+  // نعرف إن كان الناشر موثوقاً (نشر فوري) لضبط نص زر الإرسال
+  const { data: overview } = useQuery<{ publisher: { autoPublish: boolean } }>({
+    queryKey: ["/api/publisher/portal/overview"],
+  });
+  const autoPublish = overview?.publisher?.autoPublish === true;
+
+  // الناشر الموثوق يكتب من المحرر الأساسي الكامل (وسائط، جدولة، توليد ذكي)
+  // وينشر منه مباشرة — هذا النموذج المبسط مخصص لمسار المراجعة فقط
+  useEffect(() => {
+    if (!isEditMode && autoPublish) {
+      setLocation("/dashboard/articles/new", { replace: true });
+    }
+  }, [autoPublish, isEditMode, setLocation]);
 
   // Fetch categories
   const { data: categoriesRaw } = useQuery<Category[]>({
@@ -88,14 +112,21 @@ export default function PublisherArticleEditor() {
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
-  // Fetch tags
-  const { data: tagsData } = useQuery<{ tags: Tag[] }>({
+  // Fetch tags — /api/tags يعيد مصفوفة مباشرة؛ نتحوط لأي شكل
+  // (اتفاقية null-guard في المشروع — كانت الصفحة تنهار على tags.filter)
+  const { data: tagsRaw } = useQuery<Tag[] | { tags: Tag[] }>({
     queryKey: ["/api/tags"],
   });
+  const allTags: Tag[] = Array.isArray(tagsRaw)
+    ? tagsRaw
+    : Array.isArray((tagsRaw as { tags?: Tag[] } | undefined)?.tags)
+      ? (tagsRaw as { tags: Tag[] }).tags
+      : [];
 
-  // Fetch article if editing
+  // Fetch article if editing — كان المسار /api/publisher/articles/:id غير
+  // موجود أصلاً في الخادم؛ البوابة الجديدة توفره بفحص ملكية
   const { data: articleData, isLoading: articleLoading } = useQuery<Article>({
-    queryKey: [`/api/publisher/articles/${id}`],
+    queryKey: [`/api/publisher/portal/articles/${id}`],
     enabled: isEditMode,
   });
 
@@ -107,7 +138,7 @@ export default function PublisherArticleEditor() {
       summary: "",
       summaryEn: "",
       content: "",
-      coverImageUrl: "",
+      imageUrl: "",
       categoryId: "",
       tags: [],
     },
@@ -124,7 +155,8 @@ export default function PublisherArticleEditor() {
     content: "",
     editorProps: {
       attributes: {
-        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[300px] p-4",
+        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl dark:prose-invert text-foreground focus:outline-none min-h-[300px] p-4",
+        "data-testid": "publisher-rich-text-editor-content",
       },
     },
     onUpdate: ({ editor }) => {
@@ -141,7 +173,7 @@ export default function PublisherArticleEditor() {
         summary: articleData.summary,
         summaryEn: articleData.summaryEn || "",
         content: articleData.content,
-        coverImageUrl: articleData.coverImageUrl || "",
+        imageUrl: articleData.imageUrl || "",
         categoryId: articleData.categoryId,
         tags: articleData.tags || [],
       });
@@ -150,75 +182,104 @@ export default function PublisherArticleEditor() {
     }
   }, [articleData, form, editor]);
 
-  // Create mutation
-  const createMutation = useMutation({
-    mutationFn: async (data: ArticleFormData & { status: string }) => {
-      return apiRequest("/api/publisher/articles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/publisher/articles"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/publisher/dashboard"] });
-      toast({
-        title: "نجح",
-        description: "تم حفظ المقال بنجاح",
-      });
-      setLocation("/dashboard/publisher/articles");
-    },
-    onError: (error: any) => {
-      toast({
-        variant: "destructive",
-        title: "خطأ",
-        description: error.message || "حدث خطأ أثناء حفظ المقال",
-      });
-    },
-  });
+  const invalidatePortalQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/articles"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/overview"] });
+    if (id) queryClient.invalidateQueries({ queryKey: [`/api/publisher/portal/articles/${id}`] });
+  };
 
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: async (data: ArticleFormData & { status: string }) => {
-      return apiRequest(`/api/publisher/articles/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/publisher/articles"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/publisher/articles/${id}`] });
-      queryClient.invalidateQueries({ queryKey: ["/api/publisher/dashboard"] });
-      toast({
-        title: "نجح",
-        description: "تم تحديث المقال بنجاح",
-      });
-      setLocation("/dashboard/publisher/articles");
-    },
-    onError: (error: any) => {
-      toast({
-        variant: "destructive",
-        title: "خطأ",
-        description: error.message || "حدث خطأ أثناء تحديث المقال",
-      });
-    },
-  });
+  // حفظ كمسودة، أو حفظ + إرسال للمراجعة (نشر فوري للناشر الموثوق)
+  const onSubmit = (submitForReview: boolean) => {
+    form.handleSubmit(async (data) => {
+      setIsSaving(true);
+      try {
+        const payload = { ...data, tags: selectedTags };
 
-  const onSubmit = (status: "draft" | "pending_review") => {
-    form.handleSubmit((data) => {
-      const payload = {
-        ...data,
-        tags: selectedTags,
-        status,
-      };
+        if (isEditMode) {
+          await apiRequest(`/api/publisher/articles/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (submitForReview) {
+            const result = await apiRequest<{ message: string; published: boolean }>(
+              `/api/publisher/portal/articles/${id}/submit`,
+              { method: "POST", headers: { "Content-Type": "application/json" } },
+            );
+            toast({
+              title: result.published ? "نُشرت المادة 🎉" : "أُرسلت للمراجعة",
+              description: result.message,
+            });
+          } else {
+            toast({ title: "تم الحفظ", description: "حُفظت المادة كمسودة" });
+          }
+        } else {
+          const created = await apiRequest<{ submit: { ok: boolean; published: boolean; message: string } | null }>(
+            "/api/publisher/articles",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...payload, submitForReview }),
+            },
+          );
+          if (submitForReview && created.submit) {
+            toast({
+              title: created.submit.published ? "نُشرت المادة 🎉" : created.submit.ok ? "أُرسلت للمراجعة" : "حُفظت كمسودة",
+              description: created.submit.message,
+              variant: created.submit.ok ? "default" : "destructive",
+            });
+          } else {
+            toast({ title: "تم الحفظ", description: "حُفظت المادة كمسودة" });
+          }
+        }
 
-      if (isEditMode) {
-        updateMutation.mutate(payload);
-      } else {
-        createMutation.mutate(payload);
+        invalidatePortalQueries();
+        setLocation("/dashboard/publisher/articles");
+      } catch (error: any) {
+        toast({
+          variant: "destructive",
+          title: "خطأ",
+          description: error.message || "حدث خطأ أثناء حفظ المادة",
+        });
+      } finally {
+        setIsSaving(false);
       }
     })();
+  };
+
+  // رفع صورة الغلاف إلى مكتبة الوسائط (بدل لصق رابط نصي)
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ variant: "destructive", title: "خطأ", description: "يرجى اختيار ملف صورة" });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ variant: "destructive", title: "خطأ", description: "حجم الصورة يتجاوز 10 ميجابايت" });
+      return;
+    }
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploaded = await apiRequest<{ url: string }>("/api/media/upload", {
+        method: "POST",
+        body: formData,
+        isFormData: true,
+      });
+      form.setValue("imageUrl", uploaded.url, { shouldValidate: true });
+      toast({ title: "تم رفع الصورة", description: "أُضيفت صورة الغلاف بنجاح" });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "خطأ",
+        description: error.message || "فشل رفع الصورة",
+      });
+    } finally {
+      setIsUploadingImage(false);
+      e.target.value = "";
+    }
   };
 
   const handleTagToggle = (tagId: string) => {
@@ -227,9 +288,9 @@ export default function PublisherArticleEditor() {
     );
   };
 
-  const filteredTags = tagsData?.tags.filter((tag) =>
-    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
-  ) || [];
+  const filteredTags = allTags.filter((tag) =>
+    tagLabel(tag).toLowerCase().includes(tagSearch.toLowerCase())
+  );
 
   if (isEditMode && articleLoading) {
     return (
@@ -272,12 +333,31 @@ export default function PublisherArticleEditor() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold" data-testid="text-page-title">
-          {isEditMode ? "تعديل المقال" : "إنشاء مقال جديد"}
+          {isEditMode ? "تعديل المادة" : "خبر جديد"}
         </h1>
         <p className="text-muted-foreground mt-1">
-          {isEditMode ? "قم بتعديل المقال وإرساله للمراجعة" : "أنشئ مقال جديد وأرسله للمراجعة"}
+          {autoPublish
+            ? "مادتك تُنشر مباشرة فور الإرسال (ناشر موثوق) ويُخصم رصيد واحد"
+            : isEditMode ? "عدّل المادة وأعد إرسالها للمراجعة" : "أنشئ مادة جديدة وأرسلها للمراجعة"}
         </p>
       </div>
+
+      {/* ملاحظات المحرر عند «تحتاج تعديلات» */}
+      {isEditMode && articleData?.publisherStatus === "needs_changes" && (
+        <div
+          className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200"
+          data-testid="banner-needs-changes"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold">المحرر طلب تعديلات على هذه المادة</p>
+            {articleData.publisherReviewNotes && (
+              <p className="mt-1 text-sm whitespace-pre-wrap">{articleData.publisherReviewNotes}</p>
+            )}
+            <p className="mt-2 text-xs opacity-80">عدّل المادة ثم اضغط «إرسال للمراجعة» لإعادتها لفريق التحرير.</p>
+          </div>
+        </div>
+      )}
 
       <Form {...form}>
         <form className="space-y-6">
@@ -409,21 +489,55 @@ export default function PublisherArticleEditor() {
           {/* Cover Image */}
           <Card data-testid="card-cover-image">
             <CardHeader>
-              <CardTitle>رابط صورة الغلاف - اختياري</CardTitle>
+              <CardTitle>صورة الغلاف - اختياري</CardTitle>
             </CardHeader>
             <CardContent>
               <FormField
                 control={form.control}
-                name="coverImageUrl"
+                name="imageUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormControl>
-                      <Input
-                        placeholder="https://example.com/image.jpg"
-                        {...field}
-                        data-testid="input-cover-image"
-                      />
-                    </FormControl>
+                    <div className="flex items-start gap-4">
+                      {field.value ? (
+                        <div className="relative">
+                          <img
+                            src={field.value}
+                            alt="صورة الغلاف"
+                            className="h-28 w-44 rounded-md border object-cover"
+                            data-testid="img-cover-preview"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -left-2 h-6 w-6"
+                            onClick={() => form.setValue("imageUrl", "")}
+                            data-testid="button-remove-cover"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex h-28 w-44 items-center justify-center rounded-md border-2 border-dashed bg-muted">
+                          {isUploadingImage
+                            ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            : <Upload className="h-6 w-6 text-muted-foreground" />}
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          disabled={isUploadingImage}
+                          className="cursor-pointer"
+                          data-testid="input-cover-file"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {isUploadingImage ? "جاري رفع الصورة..." : "JPG أو PNG أو WEBP، بحد أقصى 10 ميجابايت"}
+                        </p>
+                      </div>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -478,7 +592,7 @@ export default function PublisherArticleEditor() {
                 />
                 <div className="flex flex-wrap gap-2">
                   {selectedTags.map((tagId) => {
-                    const tag = tagsData?.tags.find((t) => t.id === tagId);
+                    const tag = allTags.find((t) => t.id === tagId);
                     return tag ? (
                       <Badge
                         key={tagId}
@@ -487,7 +601,7 @@ export default function PublisherArticleEditor() {
                         onClick={() => handleTagToggle(tagId)}
                         data-testid={`badge-tag-${tagId}`}
                       >
-                        {tag.name}
+                        {tagLabel(tag)}
                         <X className="mr-1 h-3 w-3" />
                       </Badge>
                     ) : null;
@@ -503,7 +617,7 @@ export default function PublisherArticleEditor() {
                       onClick={() => handleTagToggle(tag.id)}
                       data-testid={`tag-option-${tag.id}`}
                     >
-                      {tag.name}
+                      {tagLabel(tag)}
                     </div>
                   ))}
                 </div>
@@ -526,21 +640,23 @@ export default function PublisherArticleEditor() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => onSubmit("draft")}
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={() => onSubmit(false)}
+                  disabled={isSaving || isUploadingImage}
                   data-testid="button-save-draft"
                 >
-                  <Save className="ml-2 h-4 w-4" />
+                  {isSaving ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <Save className="ml-2 h-4 w-4" />}
                   حفظ كمسودة
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => onSubmit("pending_review")}
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={() => onSubmit(true)}
+                  disabled={isSaving || isUploadingImage}
                   data-testid="button-submit-review"
                 >
-                  <Send className="ml-2 h-4 w-4" />
-                  إرسال للمراجعة
+                  {isSaving
+                    ? <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    : autoPublish ? <Zap className="ml-2 h-4 w-4" /> : <Send className="ml-2 h-4 w-4" />}
+                  {autoPublish ? "نشر الآن" : "إرسال للمراجعة"}
                 </Button>
               </div>
             </CardContent>

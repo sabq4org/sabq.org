@@ -7,6 +7,11 @@ const LOGO_PATH = '/branding/sabq-logo.png';
 const BRAND_COLOR = '#1a73e8';
 const BRAND_DARK = '#0d47a1';
 
+/** روابط متاجر تطبيق سبق — نفس مصادر الموقع (Footer / AppDownloadBanner) */
+const APP_STORE_URL = 'https://apps.apple.com/us/app/%D8%B3%D8%A8%D9%82/id521017976?l=ar';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.sabqorg.sabq&hl=ar';
+const HUAWEI_APPGALLERY_URL = 'https://appgallery.huawei.com/app/C105897661';
+
 function getFrontendUrl(): string {
   if (process.env.FRONTEND_URL) {
     return process.env.FRONTEND_URL;
@@ -291,7 +296,7 @@ function getDefaultTemplate(type: TemplateType): { subject: string; bodyHtml: st
                   <p class="info-card-content">نحن سعداء بانضمامك إلينا ونتطلع لتعاون مثمر معك.</p>
                 </div>
                 
-                <p>يمكنك الآن تسجيل الدخول باستخدام البيانات التالية:</p>
+                <p>بيانات الدخول إلى حسابك:</p>
                 
                 <div class="credentials-box">
                   <p><strong>البريد الإلكتروني:</strong> {{email}}</p>
@@ -299,9 +304,29 @@ function getDefaultTemplate(type: TemplateType): { subject: string; bodyHtml: st
                 </div>
                 
                 <p class="text-muted">يرجى تغيير كلمة المرور فور تسجيل الدخول الأول للحفاظ على أمان حسابك.</p>
-                
+
+                <div class="info-card" style="margin-top: 28px;">
+                  <p class="info-card-label">الأفضل: ادخل عبر تطبيق سبق</p>
+                  <p class="info-card-content">حمّل تطبيق سبق على جوالك وسجّل الدخول بنفس البريد وكلمة المرور — أسهل للمتابعة والإشعارات الفورية.</p>
+                </div>
+
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 20px auto 8px; border-collapse: separate;">
+                  <tr>
+                    <td style="padding: 0 6px 12px;">
+                      <a href="{{appStoreUrl}}" style="display:inline-block;background:#111827;color:#ffffff!important;text-decoration:none;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;">App Store</a>
+                    </td>
+                    <td style="padding: 0 6px 12px;">
+                      <a href="{{playStoreUrl}}" style="display:inline-block;background:#01875f;color:#ffffff!important;text-decoration:none;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;">Google Play</a>
+                    </td>
+                    <td style="padding: 0 6px 12px;">
+                      <a href="{{huaweiAppGalleryUrl}}" style="display:inline-block;background:#c7112d;color:#ffffff!important;text-decoration:none;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;">AppGallery</a>
+                    </td>
+                  </tr>
+                </table>
+
+                <p class="text-muted" style="text-align:center;margin-top:8px;">أو من المتصفح إن رغبت:</p>
                 <p style="text-align: center;">
-                  <a href="{{loginUrl}}" class="btn">تسجيل الدخول الآن</a>
+                  <a href="{{loginUrl}}" class="btn">تسجيل الدخول عبر الموقع</a>
                 </p>
                 
                 <div class="signature">
@@ -331,6 +356,13 @@ function getDefaultTemplate(type: TemplateType): { subject: string; bodyHtml: st
 - كلمة المرور المؤقتة: {{temporaryPassword}}
 
 ⚠️ يرجى تغيير كلمة المرور فور تسجيل الدخول الأول للحفاظ على أمان حسابك.
+
+الأفضل: ادخل عبر تطبيق سبق بنفس البريد وكلمة المرور:
+- آيفون (App Store): {{appStoreUrl}}
+- أندرويد (Google Play): {{playStoreUrl}}
+- هواوي (AppGallery): {{huaweiAppGalleryUrl}}
+
+أو من المتصفح: {{loginUrl}}
 
 مع أطيب التحيات،
 فريق سبق
@@ -804,8 +836,13 @@ export async function sendCorrespondentApprovalEmail(
   temporaryPassword: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // إن وُجد قالب DB قديم بلا روابط التطبيقات نفضّل الافتراضي المحدّث
     const customTemplate = await getTemplate('correspondent_approved');
-    const template = customTemplate || getDefaultTemplate('correspondent_approved');
+    const defaultTemplate = getDefaultTemplate('correspondent_approved');
+    const template =
+      customTemplate && customTemplate.bodyHtml.includes('{{appStoreUrl}}')
+        ? customTemplate
+        : defaultTemplate;
     
     const frontendUrl = getFrontendUrl();
     const data: TemplateData = {
@@ -814,6 +851,9 @@ export async function sendCorrespondentApprovalEmail(
       email,
       temporaryPassword,
       loginUrl: `${frontendUrl}/login`,
+      appStoreUrl: APP_STORE_URL,
+      playStoreUrl: PLAY_STORE_URL,
+      huaweiAppGalleryUrl: HUAWEI_APPGALLERY_URL,
     };
     
     const subject = replacePlaceholders(template.subject, data);

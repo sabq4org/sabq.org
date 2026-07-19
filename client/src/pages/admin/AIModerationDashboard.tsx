@@ -77,6 +77,7 @@ import { arSA } from "date-fns/locale";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { ModerationAdvancedSearch } from "@/components/ModerationAdvancedSearch";
 
 interface ModerationResult {
@@ -93,6 +94,9 @@ interface ModerationResult {
     /** Source platform — set when the comment was posted. Drives the
      *  small platform pill rendered on each moderation row. */
     platform?: "web" | "ios" | "android" | string;
+    /** Sentiment toward the article topic (from the unified AI pipeline). */
+    sentiment?: "positive" | "neutral" | "negative" | string;
+    sentimentConfidence?: number;
     user: {
       id: string;
       firstName?: string;
@@ -113,6 +117,15 @@ interface ModerationStats {
   harmful: number;
   pending: number;
   averageScore: number;
+}
+
+interface SentimentStats {
+  analyzed: number;
+  notAnalyzed: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+  avgConfidence: number | null;
 }
 
 interface MemberComment {
@@ -199,9 +212,9 @@ const issueLabels: Record<string, string> = {
   self_promotion: "ترويج ذاتي",
 };
 
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
+const SectionHeader = ({ title }: { title: string }) => (
   <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
+    <div className="h-8 w-1 rounded-full bg-border" />
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
@@ -211,12 +224,30 @@ const SectionHeader = ({ title, color }: { title: string; color: string }) => (
  * web (👁), iOS (🍎), or Android (🤖). Helps moderators spot mobile-
  * specific abuse patterns at a glance.
  */
+/** Sentiment pill — إيجابي / محايد / سلبي. Hidden when the comment has no
+ *  sentiment yet (pre-rollout comments awaiting the backfill script). */
+function SentimentBadge({ sentiment }: { sentiment?: string }) {
+  if (!sentiment) return null;
+  const config: Record<string, { label: string; cls: string }> = {
+    positive: { label: "إيجابي", cls: "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/40 dark:text-green-400" },
+    neutral:  { label: "محايد",  cls: "border-slate-300 text-slate-600 bg-slate-50 dark:bg-slate-900/40 dark:text-slate-400" },
+    negative: { label: "سلبي",   cls: "border-rose-300 text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400" },
+  };
+  const c = config[sentiment];
+  if (!c) return null;
+  return (
+    <Badge variant="outline" className={`text-xs ${c.cls}`}>
+      {c.label}
+    </Badge>
+  );
+}
+
 function PlatformBadge({ platform }: { platform?: string }) {
   const p = (platform || "web").toLowerCase();
   const config: Record<string, { label: string; cls: string }> = {
     web:     { label: "ويب",     cls: "border-slate-300 text-slate-600 bg-slate-50" },
     ios:     { label: "iOS",      cls: "border-zinc-300 text-zinc-700 bg-zinc-50" },
-    android: { label: "Android",  cls: "border-emerald-300 text-emerald-700 bg-emerald-50" },
+    android: { label: "Android",  cls: "border-border text-muted-foreground bg-muted/30" },
   };
   const c = config[p] || config.web;
   return (
@@ -252,6 +283,10 @@ export default function AIModerationDashboard() {
 
   const { data: stats, isLoading: statsLoading } = useQuery<ModerationStats>({
     queryKey: ["/api/moderation/stats"],
+  });
+
+  const { data: sentimentStats } = useQuery<SentimentStats>({
+    queryKey: ["/api/moderation/sentiment-stats"],
   });
 
   const { data: results, isLoading: resultsLoading, refetch } = useQuery<ModerationResult[]>({
@@ -621,26 +656,12 @@ export default function AIModerationDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-md bg-accent-purple/30">
-              <Brain className="h-6 w-6 text-accent-foreground" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">الرقابة الذكية</h1>
-                <Badge variant="secondary" className="gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  GPT-4o-mini
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                تحليل وفلترة التعليقات تلقائياً باستخدام الذكاء الاصطناعي
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Brain}
+          title={<span className="flex flex-wrap items-center gap-2">الرقابة الذكية <Badge variant="secondary" className="gap-1"><Sparkles className="h-3 w-3" />GPT-4o-mini</Badge></span>}
+          description="تحليل وفلترة التعليقات تلقائياً باستخدام الذكاء الاصطناعي"
+          actions={<>
             <Link href="/admin/comments/suspicious-words">
               <Button variant="outline" className="gap-2" data-testid="link-suspicious-words">
                 <ShieldAlert className="h-4 w-4" />
@@ -673,16 +694,16 @@ export default function AIModerationDashboard() {
                 </>
               )}
             </Button>
-          </div>
-        </div>
+          </>}
+        />
 
         <div className="space-y-3">
-          <SectionHeader title="إحصائيات التحليل" color="bg-blue-500" />
+          <SectionHeader title="إحصائيات التحليل" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
+            <Card className="border-border/70 bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المحلل</CardTitle>
-                <div className="p-2 rounded-md bg-accent-blue/30">
+                <div className="rounded-md bg-muted p-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
                 </div>
               </CardHeader>
@@ -692,10 +713,10 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
+            <Card className="border-border/70 bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">آمن</CardTitle>
-                <div className="p-2 rounded-md bg-accent-green/30">
+                <div className="rounded-md bg-muted p-2">
                   <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
                 </div>
               </CardHeader>
@@ -705,10 +726,10 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
+            <Card className="border-border/70 bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مشكوك فيه</CardTitle>
-                <div className="p-2 rounded-md bg-accent-blue/30">
+                <div className="rounded-md bg-muted p-2">
                   <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 </div>
               </CardHeader>
@@ -718,10 +739,10 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-orange-50 dark:bg-card">
+            <Card className="border-border/70 bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">سبام</CardTitle>
-                <div className="p-2 rounded-md bg-accent-blue/30">
+                <div className="rounded-md bg-muted p-2">
                   <Shield className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                 </div>
               </CardHeader>
@@ -731,10 +752,10 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-red-50 dark:bg-card">
+            <Card className="border-border/70 bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">ضار</CardTitle>
-                <div className="p-2 rounded-md bg-accent-blue/30">
+                <div className="rounded-md bg-muted p-2">
                   <ShieldX className="h-4 w-4 text-red-600 dark:text-red-400" />
                 </div>
               </CardHeader>
@@ -747,30 +768,73 @@ export default function AIModerationDashboard() {
         </div>
 
         {stats && stats.total > 0 && (
-          <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-card">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">متوسط نقاط الأمان</CardTitle>
-              <div className="p-2 rounded-md bg-accent-purple/30">
-                <Target className="h-4 w-4 text-accent-foreground" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <Progress
-                  value={stats.averageScore}
-                  className="h-3 flex-1"
-                />
-                <span className={`text-2xl font-bold ${getScoreColor(stats.averageScore)}`}>
-                  {stats.averageScore.toFixed(1)}%
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="border-border/70 bg-card">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">متوسط نقاط الأمان</CardTitle>
+                <div className="rounded-md bg-muted p-2">
+                  <Target className="h-4 w-4 text-accent-foreground" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <Progress
+                    value={stats.averageScore}
+                    className="h-3 flex-1"
+                  />
+                  <span className={`text-2xl font-bold ${getScoreColor(stats.averageScore)}`}>
+                    {stats.averageScore.toFixed(1)}%
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-card">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">مشاعر التعليقات</CardTitle>
+                <div className="rounded-md bg-muted p-2">
+                  <MessageSquare className="h-4 w-4 text-accent-foreground" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {sentimentStats && sentimentStats.analyzed > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" dir="rtl">
+                      <div
+                        className="bg-green-500"
+                        style={{ width: `${(sentimentStats.positive / sentimentStats.analyzed) * 100}%` }}
+                      />
+                      <div
+                        className="bg-slate-400"
+                        style={{ width: `${(sentimentStats.neutral / sentimentStats.analyzed) * 100}%` }}
+                      />
+                      <div
+                        className="bg-rose-500"
+                        style={{ width: `${(sentimentStats.negative / sentimentStats.analyzed) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span className="text-green-600 dark:text-green-400">إيجابي {sentimentStats.positive}</span>
+                      <span>محايد {sentimentStats.neutral}</span>
+                      <span className="text-rose-600 dark:text-rose-400">سلبي {sentimentStats.negative}</span>
+                      {sentimentStats.notAnalyzed > 0 && (
+                        <span>({sentimentStats.notAnalyzed} بانتظار التحليل)</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    لا توجد تعليقات محللة المشاعر بعد — التحليل يعمل تلقائياً على التعليقات الجديدة
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Advanced Search Section */}
         <div className="space-y-3">
-          <SectionHeader title="البحث المتقدم" color="bg-violet-500" />
+          <SectionHeader title="البحث المتقدم" />
           <Card className="hover-elevate active-elevate-2 transition-all">
             <ModerationAdvancedSearch
             onSelectComment={(commentId) => {
@@ -788,7 +852,7 @@ export default function AIModerationDashboard() {
         </div>
 
         <div className="space-y-3">
-          <SectionHeader title="نتائج التحليل" color="bg-orange-500" />
+          <SectionHeader title="نتائج التحليل" />
           <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -812,7 +876,7 @@ export default function AIModerationDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-          <TabsList className="grid w-full md:w-auto grid-cols-5 gap-2" dir="rtl">
+          <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto p-1 md:w-auto" dir="rtl">
             <TabsTrigger value="all" data-testid="tab-all">
               الكل ({stats?.total || 0})
             </TabsTrigger>
@@ -877,6 +941,7 @@ export default function AIModerationDashboard() {
                                  result.comment.status === "approved" ? "معتمد" : "مرفوض"}
                               </Badge>
                               <PlatformBadge platform={result.comment.platform} />
+                              <SentimentBadge sentiment={result.comment.sentiment} />
                             </div>
 
                             <p className="text-sm mb-3 line-clamp-2">{result.comment.content}</p>
@@ -1256,7 +1321,7 @@ export default function AIModerationDashboard() {
             {memberProfileLoading ? (
               <div className="space-y-4">
                 <Skeleton className="h-24 w-full" />
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   {[1, 2, 3, 4].map((i) => (
                     <Skeleton key={i} className="h-20" />
                   ))}

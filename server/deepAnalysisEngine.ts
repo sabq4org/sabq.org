@@ -100,9 +100,9 @@ export class DeepAnalysisEngine {
     const fullPrompt = `${DEEP_ANALYSIS_GOLDEN_TEMPLATE}\n\n${userPrompt}`;
     
     const configs = [
-      { ...AI_MODELS.GPT_5_1, maxTokens: 16000 },
-      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.7, maxTokens: 16000 },
-      { ...AI_MODELS.GEMINI_3_PRO, temperature: 0.7, maxTokens: 16000 },
+      { ...AI_MODELS.GPT_5_1, maxTokens: 16000, feature: "deep-analysis" },
+      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.7, maxTokens: 16000, feature: "deep-analysis" },
+      { ...AI_MODELS.GEMINI_3_PRO, temperature: 0.7, maxTokens: 16000, feature: "deep-analysis" },
     ];
 
     console.log('[DeepAnalysis] 🚀 Starting analysis generation with 3 AI models...');
@@ -218,7 +218,7 @@ ${a.content}
 
     const result = await aiManager.generate(
       synthesisPrompt,
-      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.5, maxTokens: 16000 }
+      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.5, maxTokens: 16000, feature: "deep-analysis" }
     );
 
     return result.content;
@@ -243,7 +243,7 @@ ${analysis}
 
     const result = await aiManager.generate(
       summaryPrompt,
-      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.3, maxTokens: 500 }
+      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.3, maxTokens: 500, feature: "deep-analysis" }
     );
 
     return result.content;
@@ -269,7 +269,7 @@ ${analysis}
 
     const result = await aiManager.generate(
       extractPrompt,
-      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.2, maxTokens: 1000 }
+      { ...AI_MODELS.CLAUDE_SONNET, temperature: 0.2, maxTokens: 1000, feature: "deep-analysis" }
     );
 
     const recommendations = result.content
@@ -293,8 +293,8 @@ ${analysis}
       : AI_MODELS.CLAUDE_SONNET;
 
     const configWithSettings = model === 'openai' 
-      ? { ...modelConfig, maxTokens: 16000 }
-      : { ...modelConfig, temperature: 0.7, maxTokens: 16000 };
+      ? { ...modelConfig, maxTokens: 16000, feature: "deep-analysis" as const }
+      : { ...modelConfig, temperature: 0.7, maxTokens: 16000, feature: "deep-analysis" as const };
 
     const result = await aiManager.generate(
       fullPrompt,

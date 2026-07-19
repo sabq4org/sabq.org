@@ -1,6 +1,7 @@
 import Foundation
 import CoreText
 import SwiftUI
+import UIKit
 
 // Registers the bundled IBM Plex Sans Arabic weights at app launch so
 // `.font(.custom("IBMPlexSansArabic-…", size:))` works everywhere. We
@@ -10,19 +11,79 @@ import SwiftUI
 enum SabqFonts {
     /// PostScript names. Verified against the IBM Plex Sans Arabic
     /// distribution shipped via @fontsource/ibm-plex-sans-arabic.
-    static let regular  = "IBMPlexSansArabic-Regular"
-    static let semibold = "IBMPlexSansArabic-SemiBold"
-    static let bold     = "IBMPlexSansArabic-Bold"
+    nonisolated static let regular  = "IBMPlexSansArabic-Regular"
+    nonisolated static let semibold = "IBMPlexSansArabic-SemiBold"
+    nonisolated static let bold     = "IBMPlexSansArabic-Bold"
 
     /// Editorial display font used for article titles, hero headings,
     /// and Smart Summary card title.
-    static func headline(size: CGFloat) -> Font {
+    nonisolated static func headline(size: CGFloat) -> Font {
         .custom(bold, size: size)
     }
 
     /// Slightly lighter weight for sub-headings inside articles.
-    static func subhead(size: CGFloat) -> Font {
+    nonisolated static func subhead(size: CGFloat) -> Font {
         .custom(semibold, size: size)
+    }
+
+    /// UIKit counterparts for `SabqRTLText` (UILabel) — نفس عائلات IBM Plex.
+    nonisolated static func uiHeadline(size: CGFloat) -> UIFont {
+        UIFont(name: bold, size: size) ?? .boldSystemFont(ofSize: size)
+    }
+
+    nonisolated static func uiSubhead(size: CGFloat) -> UIFont {
+        UIFont(name: semibold, size: size) ?? .systemFont(ofSize: size, weight: .semibold)
+    }
+
+    nonisolated static func uiApp(size: CGFloat, weight: Font.Weight = .regular) -> UIFont {
+        let isCaption = size <= 13
+        let name: String
+        switch weight {
+        case .ultraLight, .thin, .light, .regular, .medium:
+            name = regular
+        case .semibold:
+            name = isCaption ? regular : semibold
+        case .bold:
+            name = isCaption ? regular : semibold
+        case .heavy, .black:
+            name = isCaption ? regular : bold
+        default:
+            name = regular
+        }
+        let fallback: UIFont.Weight = (name == bold) ? .bold : (name == semibold ? .semibold : .regular)
+        return UIFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: fallback)
+    }
+
+    /// الخط الموحّد للتطبيق كله — يُرجع متغيّر IBM Plex Sans Arabic المناسب
+    /// لوزن SwiftUI المطلوب.
+    ///
+    /// سياسة التخفيف (2026-07):
+    /// - العبارات الصغيرة (≤13pt: وقت، تاريخ، chips، meta) تبقى هوائية —
+    ///   لا Bold أبداً، و`.medium`/`.semibold` يسقطان على Regular.
+    /// - النصوص الأكبر تُخفَّف درجة واحدة: Bold→SemiBold، و`.medium`→Regular
+    ///   (سابقاً كان `.medium` يُرسم SemiBold فيبدو كل شيء ثقيلاً).
+    /// - `headline()` يبقى Bold للعناوين التحريرية الكبيرة فقط.
+    nonisolated static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        let isCaption = size <= 13
+
+        switch weight {
+        case .ultraLight, .thin, .light, .regular:
+            return .custom(regular, size: size)
+        case .medium:
+            // Medium must stay Regular — mapping it to SemiBold made every
+            // clock/date/meta label look bold across the app.
+            return .custom(regular, size: size)
+        case .semibold:
+            return .custom(isCaption ? regular : semibold, size: size)
+        case .bold:
+            // Soften one step: captions → Regular, body/titles → SemiBold.
+            return .custom(isCaption ? regular : semibold, size: size)
+        case .heavy, .black:
+            // Captions stay airy; only large display type keeps true Bold.
+            return .custom(isCaption ? regular : bold, size: size)
+        default:
+            return .custom(regular, size: size)
+        }
     }
 
     private static var didRegister = false

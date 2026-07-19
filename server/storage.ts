@@ -1,5 +1,7 @@
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
+import { log } from "./utils/logger";
+import { isUniqueViolation } from "./utils/pgError";
 import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
@@ -8,6 +10,7 @@ import { nanoid } from 'nanoid';
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
+import { bufferArticleViewIncrement } from "./services/articleViewCounterService";
 import {
   users,
   categories,
@@ -383,11 +386,6 @@ import {
   type InsertCommentEditHistory,
   type CommentDeletionLog,
   type InsertCommentDeletionLog,
-  // Correspondent Applications
-  correspondentApplications,
-  type CorrespondentApplication,
-  type InsertCorrespondentApplication,
-  type CorrespondentApplicationWithDetails,
   // Opinion Author Applications
   opinionAuthorApplications,
   type OpinionAuthorApplication,
@@ -475,11 +473,11 @@ export interface IStorage {
     limit: number;
     totalPages: number;
   }>;
-  
   getUserKPIs(): Promise<{
     total: number;
     emailVerified: number;
     unverified: number;
+    withPhone: number;
     suspended: number;
     banned: number;
     newToday: number;
@@ -488,13 +486,13 @@ export interface IStorage {
     trends: {
       emailVerifiedTrend: number;
       unverifiedTrend: number;
+      withPhoneTrend: number;
       suspendedTrend: number;
       bannedTrend: number;
       newUsersTrend: number;
       activeUsersTrend: number;
     };
   }>;
-  
   suspendUser(userId: string, reason: string, duration?: number): Promise<User>;
   unsuspendUser(userId: string): Promise<User>;
   banUser(userId: string, reason: string, isPermanent: boolean, duration?: number): Promise<User>;
@@ -580,12 +578,17 @@ export interface IStorage {
     email: string;
     firstName: string;
     lastName: string;
+    firstNameEn?: string;
+    lastNameEn?: string;
     phoneNumber?: string;
+    profileImageUrl?: string | null;
     roleIds: string[];
     status?: string;
     emailVerified?: boolean;
     phoneVerified?: boolean;
   }, createdBy: string): Promise<{ user: User; temporaryPassword: string }>;
+  /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
+  getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined>;
   getUserRoles(userId: string): Promise<Array<{ id: string; name: string; nameAr: string }>>;
   updateUserRoles(userId: string, roleIds: string[], updatedBy: string, reason?: string): Promise<void>;
   getAllRoles(): Promise<Array<{ id: string; name: string; nameAr: string; description: string | null; isSystem: boolean }>>;
@@ -632,6 +635,16 @@ export interface IStorage {
   getNewsStatistics(): Promise<{
     totalNews: number;
     todayNews: number;
+    topStoriesThisWeek: Array<{
+      id: string;
+      title: string;
+      slug: string;
+      englishSlug?: string | null;
+      imageUrl?: string | null;
+      categoryName?: string | null;
+      categorySlug?: string | null;
+    }>;
+    /** Legacy field kept for older clients — views omitted from public API. */
     topViewedThisWeek: {
       article: ArticleWithDetails | null;
       views: number;
@@ -768,6 +781,7 @@ export interface IStorage {
       content: string;
       status: string;
       createdAt: string;
+      sentiment?: string; sentimentConfidence?: number;
       user: { id: string; firstName?: string; lastName?: string; email: string };
       articleId: string;
       articleTitle?: string;
@@ -1117,6 +1131,13 @@ export interface IStorage {
     source?: string;
     metadata?: any;
   }): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }>;
+  recordLoyaltyPointsInTx(tx: any, params: {
+    userId: string;
+    action: string;
+    points: number;
+    source?: string;
+    metadata?: any;
+  }, balanceLockHeld?: boolean): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }>;
   getUserPoints(userId: string): Promise<UserPointsTotal | undefined>;
   getUserLoyaltyHistory(userId: string, limit?: number): Promise<UserLoyaltyEvent[]>;
   getTopUsers(limit?: number): Promise<Array<UserPointsTotal & { user: User }>>;
@@ -1287,7 +1308,19 @@ export interface IStorage {
     } | null;
   } | undefined>;
 
-  getActivityLogsAnalytics(): Promise<{
+  getActivityLogsAnalytics(days?: number): Promise<{
+    periodDays: number;
+    summary: {
+      totalCount: number;
+      previousCount: number;
+      changePercent: number | null;
+      activeUsers: number;
+      affectedEntities: number;
+      sensitiveActions: number;
+      automatedActions: number;
+      averagePerDay: number;
+      lastActivityAt: Date | null;
+    };
     topUsers: Array<{
       userId: string;
       userName: string;
@@ -1299,16 +1332,7 @@ export interface IStorage {
       action: string;
       count: number;
     }>;
-    peakHours: Array<{
-      hour: number;
-      count: number;
-    }>;
-    successFailureRate: {
-      successCount: number;
-      failureCount: number;
-      warningCount: number;
-      totalCount: number;
-    };
+    topEntities: Array<{ entityType: string; count: number }>;
     recentActivity: Array<{
       date: string;
       count: number;
@@ -2432,13 +2456,6 @@ export interface IStorage {
   calculateArticleEngagementScore(articleId: string): Promise<void>;
   calculateAllEngagementScores(): Promise<void>;
   
-  // Correspondent Applications
-  createCorrespondentApplication(data: InsertCorrespondentApplication): Promise<CorrespondentApplication>;
-  getCorrespondentApplications(status?: string, page?: number, limit?: number): Promise<{applications: CorrespondentApplicationWithDetails[], total: number}>;
-  getCorrespondentApplicationById(id: string): Promise<CorrespondentApplicationWithDetails | undefined>;
-  approveCorrespondentApplication(id: string, reviewerId: string, notes?: string): Promise<{application: CorrespondentApplication, user: User, temporaryPassword: string}>;
-  rejectCorrespondentApplication(id: string, reviewerId: string, reason: string): Promise<CorrespondentApplication>;
-  
   // Opinion Author Applications - طلبات كتّاب الرأي
   createOpinionAuthorApplication(data: InsertOpinionAuthorApplication): Promise<OpinionAuthorApplication>;
   getOpinionAuthorApplications(status?: string, page?: number, limit?: number): Promise<{applications: OpinionAuthorApplicationWithDetails[], total: number}>;
@@ -2583,16 +2600,34 @@ export class DatabaseStorage implements IStorage {
 
   async updateUser(id: string, userData: UpdateUser): Promise<User> {
     const updateData: any = {};
-    
+
     if (userData.firstName !== undefined) updateData.firstName = userData.firstName;
     if (userData.lastName !== undefined) updateData.lastName = userData.lastName;
+    if (userData.firstNameEn !== undefined) updateData.firstNameEn = userData.firstNameEn;
+    if (userData.lastNameEn !== undefined) updateData.lastNameEn = userData.lastNameEn;
     if (userData.bio !== undefined) updateData.bio = userData.bio;
     if (userData.phoneNumber !== undefined) updateData.phoneNumber = userData.phoneNumber;
     if (userData.profileImageUrl !== undefined) updateData.profileImageUrl = userData.profileImageUrl;
-    
-    // Check if profile is complete
-    if (userData.firstName && userData.lastName) {
+    if (userData.preferredVariant !== undefined) updateData.preferredVariant = userData.preferredVariant;
+    // Honor an explicit isProfileComplete (e.g. POST /api/auth/complete-profile
+    // sends ONLY this flag). Without mapping it the whole payload was dropped
+    // and Drizzle threw "No values to set" on .set({}).
+    if (userData.isProfileComplete !== undefined) updateData.isProfileComplete = userData.isProfileComplete;
+
+    // Convenience: الاسم الأول كافٍ لاعتبار الملف مكتملًا (حسابات الجوال
+    // كانت تُترك بلا اسم لأننا كنّا نشترط الاسمين معًا).
+    const nextFirst = (userData.firstName ?? "").trim();
+    if (nextFirst.length >= 2) {
       updateData.isProfileComplete = true;
+    } else if (userData.firstName && userData.lastName) {
+      updateData.isProfileComplete = true;
+    }
+
+    // Guard the empty-update case: Drizzle's .set({}) throws "No values to set".
+    // Nothing to change → return the current row unchanged instead of crashing.
+    if (Object.keys(updateData).length === 0) {
+      const [current] = await db.select().from(users).where(eq(users.id, id));
+      return current;
     }
 
     const [user] = await db
@@ -2600,7 +2635,7 @@ export class DatabaseStorage implements IStorage {
       .set(updateData)
       .where(eq(users.id, id))
       .returning();
-      
+
     return user;
   }
 
@@ -2820,6 +2855,7 @@ export class DatabaseStorage implements IStorage {
     total: number;
     emailVerified: number;
     unverified: number;
+    withPhone: number;
     suspended: number;
     banned: number;
     newToday: number;
@@ -2828,6 +2864,7 @@ export class DatabaseStorage implements IStorage {
     trends: {
       emailVerifiedTrend: number;
       unverifiedTrend: number;
+      withPhoneTrend: number;
       suspendedTrend: number;
       bannedTrend: number;
       newUsersTrend: number;
@@ -2839,27 +2876,27 @@ export class DatabaseStorage implements IStorage {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-
-    // Current stats
+    const hasPhone = sql`${users.phoneNumber} is not null and btrim(${users.phoneNumber}) <> ''`;
     const [stats] = await db
       .select({
         total: sql<number>`count(*)`,
         emailVerified: sql<number>`count(*) filter (where ${users.emailVerified} = true)`,
         unverified: sql<number>`count(*) filter (where ${users.emailVerified} = false)`,
+        withPhone: sql<number>`count(*) filter (where ${hasPhone})`,
         suspended: sql<number>`count(*) filter (where ${users.status} = 'suspended')`,
         banned: sql<number>`count(*) filter (where ${users.status} = 'banned')`,
         newToday: sql<number>`count(*) filter (where ${users.createdAt} >= ${today})`,
         newThisWeek: sql<number>`count(*) filter (where ${users.createdAt} >= ${weekAgo})`,
         active24h: sql<number>`count(*) filter (where ${users.lastActivityAt} >= ${yesterday})`,
+        withPhoneThisWeek: sql<number>`count(*) filter (where ${hasPhone} and ${users.createdAt} >= ${weekAgo})`,
       })
       .from(users)
       .where(isNull(users.deletedAt));
-
-    // Previous week stats for trends
     const [prevWeekStats] = await db
       .select({
         emailVerified: sql<number>`count(*) filter (where ${users.emailVerified} = true)`,
         unverified: sql<number>`count(*) filter (where ${users.emailVerified} = false)`,
+        withPhone: sql<number>`count(*) filter (where ${hasPhone} and ${users.createdAt} >= ${twoWeeksAgo} and ${users.createdAt} < ${weekAgo})`,
         suspended: sql<number>`count(*) filter (where ${users.status} = 'suspended')`,
         banned: sql<number>`count(*) filter (where ${users.status} = 'banned')`,
         newUsers: sql<number>`count(*) filter (where ${users.createdAt} >= ${twoWeeksAgo} and ${users.createdAt} < ${weekAgo})`,
@@ -2867,8 +2904,6 @@ export class DatabaseStorage implements IStorage {
       })
       .from(users)
       .where(isNull(users.deletedAt));
-
-    // Calculate trends (percentage change)
     const calculateTrend = (current: number, previous: number) => {
       if (previous === 0) return current > 0 ? 100 : 0;
       return ((current - previous) / previous) * 100;
@@ -2878,6 +2913,7 @@ export class DatabaseStorage implements IStorage {
       total: Number(stats.total),
       emailVerified: Number(stats.emailVerified),
       unverified: Number(stats.unverified),
+      withPhone: Number(stats.withPhone),
       suspended: Number(stats.suspended),
       banned: Number(stats.banned),
       newToday: Number(stats.newToday),
@@ -2886,6 +2922,7 @@ export class DatabaseStorage implements IStorage {
       trends: {
         emailVerifiedTrend: calculateTrend(Number(stats.emailVerified), Number(prevWeekStats.emailVerified)),
         unverifiedTrend: calculateTrend(Number(stats.unverified), Number(prevWeekStats.unverified)),
+        withPhoneTrend: calculateTrend(Number(stats.withPhoneThisWeek), Number(prevWeekStats.withPhone)),
         suspendedTrend: calculateTrend(Number(stats.suspended), Number(prevWeekStats.suspended)),
         bannedTrend: calculateTrend(Number(stats.banned), Number(prevWeekStats.banned)),
         newUsersTrend: calculateTrend(Number(stats.newThisWeek), Number(prevWeekStats.newUsers)),
@@ -3540,7 +3577,10 @@ export class DatabaseStorage implements IStorage {
     email: string;
     firstName: string;
     lastName: string;
+    firstNameEn?: string;
+    lastNameEn?: string;
     phoneNumber?: string;
+    profileImageUrl?: string | null;
     roleIds: string[];
     status?: string;
     emailVerified?: boolean;
@@ -3554,11 +3594,14 @@ export class DatabaseStorage implements IStorage {
     const user = await db.transaction(async (tx) => {
       const [user] = await tx.insert(users).values({
         id: userId,
-        email: userData.email,
+        email: userData.email.trim().toLowerCase(),
         passwordHash,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        phoneNumber: userData.phoneNumber,
+        firstName: userData.firstName.trim(),
+        lastName: userData.lastName.trim(),
+        firstNameEn: userData.firstNameEn?.trim() || null,
+        lastNameEn: userData.lastNameEn?.trim() || null,
+        phoneNumber: userData.phoneNumber?.trim() || null,
+        profileImageUrl: userData.profileImageUrl || null,
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
@@ -3569,10 +3612,11 @@ export class DatabaseStorage implements IStorage {
 
       if (userData.roleIds && userData.roleIds.length > 0) {
         await tx.insert(userRoles).values(
-          userData.roleIds.map(roleId => ({
+          [...new Set(userData.roleIds)].map(roleId => ({
             id: nanoid(),
             userId,
             roleId,
+            assignedBy: createdBy,
           }))
         );
       }
@@ -3584,9 +3628,9 @@ export class DatabaseStorage implements IStorage {
         entityType: 'user',
         entityId: userId,
         newValue: {
-          email: userData.email,
-          firstName: userData.firstName,
-          lastName: userData.lastName,
+          email: userData.email.trim().toLowerCase(),
+          firstName: userData.firstName.trim(),
+          lastName: userData.lastName.trim(),
           roleIds: userData.roleIds,
         },
       });
@@ -3595,6 +3639,16 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { user, temporaryPassword: randomPassword };
+  }
+
+  /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
+  async getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined> {
+    const [u] = await db
+      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, status: users.status, role: users.role })
+      .from(users)
+      .where(sql`lower(${users.email}) = ${email}`)
+      .limit(1);
+    return u;
   }
 
   async getUserRoles(userId: string): Promise<Array<{ id: string; name: string; nameAr: string }>> {
@@ -3737,39 +3791,44 @@ export class DatabaseStorage implements IStorage {
 
   async getCategoriesWithStats(): Promise<Array<CategoryWithStats>> {
     const result = await db.execute(sql`
+      WITH reaction_counts AS (
+        SELECT article_id, count(*) AS total_likes
+        FROM reactions
+        GROUP BY article_id
+      ),
+      bookmark_counts AS (
+        SELECT article_id, count(*) AS total_bookmarks
+        FROM bookmarks
+        GROUP BY article_id
+      ),
+      article_stats AS (
+        SELECT
+          a.category_id,
+          count(*) AS article_count,
+          COALESCE(sum(a.views), 0) AS total_views,
+          COALESCE(sum(rc.total_likes), 0) AS total_likes,
+          COALESCE(sum(bc.total_bookmarks), 0) AS total_bookmarks,
+          count(*) FILTER (
+            WHERE a.published_at >= NOW() - INTERVAL '24 hours'
+          ) AS last_24h,
+          count(*) FILTER (
+            WHERE a.published_at >= NOW() - INTERVAL '7 days'
+          ) AS last_7d
+        FROM articles a
+        LEFT JOIN reaction_counts rc ON rc.article_id = a.id
+        LEFT JOIN bookmark_counts bc ON bc.article_id = a.id
+        WHERE a.status = 'published'
+        GROUP BY a.category_id
+      )
       SELECT c.*,
         COALESCE(s.article_count, 0)::int AS "articleCount",
         COALESCE(s.total_views, 0)::int AS "totalViews",
-        COALESCE(lk.total_likes, 0)::int AS "totalLikes",
-        COALESCE(bk.total_bookmarks, 0)::int AS "totalBookmarks",
-        COALESCE(p.last_24h, 0)::int AS "last24h",
-        COALESCE(p.last_7d, 0)::int AS "last7d"
+        COALESCE(s.total_likes, 0)::int AS "totalLikes",
+        COALESCE(s.total_bookmarks, 0)::int AS "totalBookmarks",
+        COALESCE(s.last_24h, 0)::int AS "last24h",
+        COALESCE(s.last_7d, 0)::int AS "last7d"
       FROM categories c
-      LEFT JOIN LATERAL (
-        SELECT count(*) AS article_count, COALESCE(sum(a.views), 0) AS total_views
-        FROM articles a WHERE a.category_id = c.id AND a.status = 'published'
-      ) s ON true
-      LEFT JOIN LATERAL (
-        SELECT count(*) AS total_likes
-        FROM reactions r
-        INNER JOIN articles a ON r.article_id = a.id
-        WHERE a.category_id = c.id AND a.status = 'published'
-      ) lk ON true
-      LEFT JOIN LATERAL (
-        SELECT count(*) AS total_bookmarks
-        FROM bookmarks b
-        INNER JOIN articles a ON b.article_id = a.id
-        WHERE a.category_id = c.id AND a.status = 'published'
-      ) bk ON true
-      LEFT JOIN LATERAL (
-        SELECT
-          count(*) FILTER (WHERE a.published_at >= NOW() - INTERVAL '24 hours') AS last_24h,
-          count(*) FILTER (WHERE a.published_at >= NOW() - INTERVAL '7 days') AS last_7d
-        FROM articles a
-        WHERE a.category_id = c.id
-          AND a.status = 'published'
-          AND a.published_at >= NOW() - INTERVAL '7 days'
-      ) p ON true
+      LEFT JOIN article_stats s ON s.category_id = c.id
       ORDER BY c.display_order, c.name_ar
     `);
 
@@ -3886,8 +3945,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters?.searchQuery) {
+      const searchPattern = `%${filters.searchQuery}%`;
       conditions.push(
-        sql`${articles.title} ILIKE ${`%${filters.searchQuery}%`} OR ${articles.excerpt} ILIKE ${`%${filters.searchQuery}%`}`
+        or(
+          // Matches idx_articles_title_trgm (GIN on lower(title)) for
+          // published searches while preserving case-insensitive semantics.
+          sql`lower(${articles.title}) LIKE lower(${searchPattern})`,
+          ilike(articles.excerpt, searchPattern),
+        )
       );
     }
 
@@ -4027,7 +4092,12 @@ export class DatabaseStorage implements IStorage {
     if (row.status === 'archived') {
       const isAuthorized = userRole === 'system_admin' || userRole === 'admin' || userRole === 'editor';
       if (!isAuthorized) {
-        console.warn(`[SECURITY] Archived article access denied - Article: ${row.slug}, UserRole: ${userRole || 'unauthenticated'}, UserId: ${userId || 'none'}`);
+        // الوصول المرفوض من زائر غير مسجّل سلوكٌ طبيعي (روابط قديمة/زواحف)
+        // وكان يملأ السجلّات بضجيج بلا قيمة. نُسجّل فقط محاولات المستخدمين
+        // المسجّلين غير المصرّح لهم لأنها الإشارة الأمنية الفعلية.
+        if (userId) {
+          console.warn(`[SECURITY] Archived article access denied - Article: ${row.slug}, UserRole: ${userRole || 'unknown'}, UserId: ${userId}`);
+        }
         return undefined;
       }
     }
@@ -4271,15 +4341,45 @@ export class DatabaseStorage implements IStorage {
       englishSlug: article.englishSlug || generateEnglishSlug(),
     };
 
-    // Auto-link articles by specific content managers to their publishers
-    // أحمد بديوي (DI1H7gaTfZ5mr765EhQNW) -> شركة عنوان الإعلام (948fdde0-97b0-44ac-872d-639337ebcafa)
-    const contentManagerPublisherMap: Record<string, string> = {
-      'DI1H7gaTfZ5mr765EhQNW': '948fdde0-97b0-44ac-872d-639337ebcafa', // أحمد بديوي -> شركة عنوان الإعلام
-    };
-
-    if ((article as any).authorId && contentManagerPublisherMap[(article as any).authorId]) {
-      (articleWithSlug as any).publisherId = contentManagerPublisherMap[(article as any).authorId];
-      (articleWithSlug as any).isPublisherNews = true;
+    // Auto-link publisher-agency articles: any author with
+    // users.linkedPublisherId gets their articles stamped with the agency.
+    // (Replaces the old hardcoded contentManagerPublisherMap that only knew
+    // أحمد بديوي; the legacy pair is kept as a fallback until the manual
+    // linked_publisher_id backfill runs in production.)
+    const authorId = (article as any).authorId as string | undefined;
+    if (authorId && !(articleWithSlug as any).publisherId) {
+      let linkedPublisherId: string | null = null;
+      try {
+        const [author] = await db
+          .select({ linkedPublisherId: users.linkedPublisherId })
+          .from(users)
+          .where(eq(users.id, authorId))
+          .limit(1);
+        linkedPublisherId = author?.linkedPublisherId ?? null;
+      } catch (err) {
+        console.error('[Publisher] linkedPublisherId lookup failed:', err);
+      }
+      if (!linkedPublisherId && authorId === 'DI1H7gaTfZ5mr765EhQNW') {
+        linkedPublisherId = '948fdde0-97b0-44ac-872d-639337ebcafa'; // أحمد بديوي -> شركة عنوان الإعلام
+      }
+      // مالك الوكالة (publishers.userId) قد لا يحمل linkedPublisherId —
+      // نختم مواده أيضاً حتى تُنسب للوكالة من المحرر الأساسي
+      if (!linkedPublisherId) {
+        try {
+          const [owned] = await db
+            .select({ id: publishers.id })
+            .from(publishers)
+            .where(eq(publishers.userId, authorId))
+            .limit(1);
+          linkedPublisherId = owned?.id ?? null;
+        } catch (err) {
+          console.error('[Publisher] owner publisher lookup failed:', err);
+        }
+      }
+      if (linkedPublisherId) {
+        (articleWithSlug as any).publisherId = linkedPublisherId;
+        (articleWithSlug as any).isPublisherNews = true;
+      }
     }
 
     // Pre-fill ai_image flag from media_files if the chosen image URL
@@ -4351,11 +4451,8 @@ export class DatabaseStorage implements IStorage {
     // Random boost for team morale (5-10 views per visit)
     const boostOptions = [5, 6, 7, 8, 9, 10];
     const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-    
-    await db
-      .update(articles)
-      .set({ views: sql`${articles.views} + ${randomBoost}` })
-      .where(eq(articles.id, id));
+
+    bufferArticleViewIncrement(id, randomBoost);
   }
 
   async updateArticlesOrder(articleOrders: Array<{ id: string; displayOrder: number }>): Promise<void> {
@@ -4588,72 +4685,77 @@ export class DatabaseStorage implements IStorage {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Total news (exclude opinion articles)
-    const totalNews = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(articles)
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion")
-        )
-      );
+    const [summaryRows, topArticles] = await Promise.all([
+      db
+        .select({
+          totalNews: sql<number>`count(*)::int`,
+          todayNews: sql<number>`count(*) FILTER (WHERE ${articles.publishedAt} >= ${todayStart})::int`,
+          averageViews: sql<number>`COALESCE(AVG(${articles.views}), 0)::int`,
+        })
+        .from(articles)
+        .where(
+          and(
+            eq(articles.status, "published"),
+            ne(articles.articleType, "opinion")
+          )
+        ),
 
-    // Today's news
-    const todayNews = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(articles)
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion"),
-          gte(articles.publishedAt, todayStart)
+      db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          imageUrl: articles.imageUrl,
+          views: articles.views,
+          categoryName: categories.nameAr,
+          categorySlug: categories.slug,
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            ne(articles.articleType, "opinion"),
+            gte(articles.publishedAt, weekStart)
+          )
         )
-      );
+        .orderBy(desc(articles.views))
+        .limit(5),
+    ]);
 
-    // Average views
-    const avgViews = await db
-      .select({ avg: sql<number>`COALESCE(AVG(views), 0)::int` })
-      .from(articles)
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion")
-        )
-      );
+    const summary = summaryRows[0];
 
-    // Top viewed this week
-    const topArticle = await db
-      .select()
-      .from(articles)
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion"),
-          gte(articles.publishedAt, weekStart)
-        )
-      )
-      .orderBy(desc(articles.views))
-      .limit(1);
+    const topStoriesThisWeek = topArticles.map((row) => ({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      englishSlug: row.englishSlug,
+      imageUrl: row.imageUrl,
+      categoryName: row.categoryName ?? null,
+      categorySlug: row.categorySlug ?? null,
+    }));
 
-    const topArticleDetails = topArticle[0]
-      ? {
-          ...topArticle[0].articles,
-          author: topArticle[0].users || undefined,
-          category: topArticle[0].categories || undefined,
-        }
-      : null;
+    const lead = topStoriesThisWeek[0] ?? null;
 
     return {
-      totalNews: totalNews[0]?.count ?? 0,
-      todayNews: todayNews[0]?.count ?? 0,
+      totalNews: summary?.totalNews ?? 0,
+      todayNews: summary?.todayNews ?? 0,
+      topStoriesThisWeek,
+      // Legacy shape for older clients — do not expand this for public UIs.
       topViewedThisWeek: {
-        article: topArticleDetails,
-        views: topArticleDetails?.views ?? 0,
+        article: lead
+          ? ({
+              id: lead.id,
+              title: lead.title,
+              slug: lead.slug,
+              englishSlug: lead.englishSlug,
+              imageUrl: lead.imageUrl,
+            } as ArticleWithDetails)
+          : null,
+        views: topArticles[0]?.views ?? 0,
       },
-      averageViews: Math.round(avgViews[0]?.avg ?? 0),
+      averageViews: Math.round(summary?.averageViews ?? 0),
     };
   }
 
@@ -5167,6 +5269,7 @@ export class DatabaseStorage implements IStorage {
       status: string;
       createdAt: string;
       platform: string;
+      sentiment?: string; sentimentConfidence?: number;
       user: { id: string; firstName?: string; lastName?: string; email: string };
       articleId: string;
       articleTitle?: string;
@@ -5216,6 +5319,7 @@ export class DatabaseStorage implements IStorage {
         status: r.comment.status,
         createdAt: r.comment.createdAt.toISOString(),
         platform: r.comment.platform || "web",
+        sentiment: r.comment.currentSentiment || undefined, sentimentConfidence: r.comment.currentSentimentConfidence ?? undefined,
         user: {
           id: r.user?.id || '',
           firstName: r.user?.firstName || undefined,
@@ -9591,15 +9695,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Loyalty System - Points and Events
-  async recordLoyaltyPoints(params: {
+  async recordLoyaltyPointsInTx(tx: any, params: {
     userId: string;
     action: string;
     points: number;
     source?: string;
     metadata?: any;
-  }): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }> {
-    const result = await db.transaction(async (tx) => {
+  }, balanceLockHeld = false): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }> {
       const now = new Date();
+
+      // Every points mutation for this user shares one database lock, including
+      // different actions/sources. This prevents read-modify-write races from
+      // dropping a concurrent payout and also serializes first-row creation.
+      if (!balanceLockHeld) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${`loyalty-balance:${params.userId}`}))`,
+        );
+      }
       
       // 1. Get active campaign inside transaction
       const applicableCampaign = await this.getApplicableCampaignInTx(
@@ -9636,7 +9748,8 @@ export class DatabaseStorage implements IStorage {
       const [existingPoints] = await tx
         .select()
         .from(userPointsTotal)
-        .where(eq(userPointsTotal.userId, params.userId));
+        .where(eq(userPointsTotal.userId, params.userId))
+        .for("update");
 
       const oldRank = existingPoints?.currentRank || "القارئ الجديد";
       const oldLevel = existingPoints?.rankLevel ?? 1;
@@ -9684,7 +9797,16 @@ export class DatabaseStorage implements IStorage {
         rankChanged,
         newRank: rankChanged ? newRank : undefined,
       };
-    });
+  }
+
+  async recordLoyaltyPoints(params: {
+    userId: string;
+    action: string;
+    points: number;
+    source?: string;
+    metadata?: any;
+  }): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }> {
+    const result = await db.transaction((tx) => this.recordLoyaltyPointsInTx(tx, params));
 
     // Trigger loyalty pass update (outside transaction)
     await this.triggerLoyaltyPassUpdate(params.userId, params.action);
@@ -10077,7 +10199,7 @@ export class DatabaseStorage implements IStorage {
     return angle;
   }
 
-  async getAngleWriter(managerUserId: string | null): Promise<{ name: string; avatar: string | null; slug: string | null } | null> {
+  async getAngleWriter(managerUserId: string | null): Promise<{ id: string; name: string; avatar: string | null; slug: string | null; bio: string | null } | null> {
     if (!managerUserId) return null;
 
     const [row] = await db
@@ -10085,9 +10207,11 @@ export class DatabaseStorage implements IStorage {
         firstName: users.firstName,
         lastName: users.lastName,
         profileImageUrl: users.profileImageUrl,
+        bio: users.bio,
         staffSlug: staff.slug,
         staffNameAr: staff.nameAr,
         staffProfileImage: staff.profileImage,
+        staffBioAr: staff.bioAr,
       })
       .from(users)
       .leftJoin(staff, eq(staff.userId, users.id))
@@ -10098,9 +10222,11 @@ export class DatabaseStorage implements IStorage {
 
     const name = (row.staffNameAr || [row.firstName, row.lastName].filter(Boolean).join(" ").trim()) || "كاتب الزاوية";
     return {
+      id: managerUserId,
       name,
       avatar: row.staffProfileImage || row.profileImageUrl || null,
       slug: row.staffSlug || null,
+      bio: row.staffBioAr || row.bio || null,
     };
   }
 
@@ -12050,7 +12176,19 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getActivityLogsAnalytics(): Promise<{
+  async getActivityLogsAnalytics(days = 30): Promise<{
+    periodDays: number;
+    summary: {
+      totalCount: number;
+      previousCount: number;
+      changePercent: number | null;
+      activeUsers: number;
+      affectedEntities: number;
+      sensitiveActions: number;
+      automatedActions: number;
+      averagePerDay: number;
+      lastActivityAt: Date | null;
+    };
     topUsers: Array<{
       userId: string;
       userName: string;
@@ -12062,22 +12200,34 @@ export class DatabaseStorage implements IStorage {
       action: string;
       count: number;
     }>;
-    peakHours: Array<{
-      hour: number;
-      count: number;
-    }>;
-    successFailureRate: {
-      successCount: number;
-      failureCount: number;
-      warningCount: number;
-      totalCount: number;
-    };
+    topEntities: Array<{ entityType: string; count: number }>;
     recentActivity: Array<{
       date: string;
       count: number;
     }>;
   }> {
-    // Get top 5 most active users
+    const periodDays = [7, 30, 90].includes(days) ? days : 30;
+    const periodStart = sql`NOW() - ${periodDays} * INTERVAL '1 day'`;
+    const previousPeriodStart = sql`NOW() - ${periodDays * 2} * INTERVAL '1 day'`;
+
+    const [summaryRow] = await db
+      .select({
+        totalCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
+        previousCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${previousPeriodStart} AND ${activityLogs.createdAt} < ${periodStart})::int`,
+        activeUsers: sql<number>`count(DISTINCT ${activityLogs.userId}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NOT NULL)::int`,
+        affectedEntities: sql<number>`count(DISTINCT (${activityLogs.entityType}, ${activityLogs.entityId})) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
+        sensitiveActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND lower(${activityLogs.action}) IN ('delete', 'ban', 'reject', 'assign_role', 'remove_role', 'update_role_permissions', 'reset_password'))::int`,
+        automatedActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NULL)::int`,
+        lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})`,
+      })
+      .from(activityLogs);
+
+    const totalCount = summaryRow?.totalCount || 0;
+    const previousCount = summaryRow?.previousCount || 0;
+    const changePercent = previousCount > 0
+      ? Math.round(((totalCount - previousCount) / previousCount) * 1000) / 10
+      : null;
+
     const topUsersQuery = await db
       .select({
         userId: activityLogs.userId,
@@ -12089,6 +12239,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(activityLogs)
       .innerJoin(users, eq(activityLogs.userId, users.id))
+      .where(gte(activityLogs.createdAt, periodStart))
       .groupBy(
         activityLogs.userId,
         users.firstName,
@@ -12107,73 +12258,40 @@ export class DatabaseStorage implements IStorage {
       profileImageUrl: user.profileImageUrl,
     }));
 
-    // Get top actions
     const topActionsQuery = await db
       .select({
         action: activityLogs.action,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
+      .where(gte(activityLogs.createdAt, periodStart))
       .groupBy(activityLogs.action)
       .orderBy(desc(sql`count(*)`))
-      .limit(10);
+      .limit(6);
 
     const topActions = topActionsQuery.map((item) => ({
       action: item.action,
       count: item.count,
     }));
 
-    // Get peak hours (activity by hour of day)
-    const peakHoursQuery = await db
+    const topEntitiesQuery = await db
       .select({
-        hour: sql<number>`EXTRACT(HOUR FROM ${activityLogs.createdAt})::int`,
+        entityType: activityLogs.entityType,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
-      .groupBy(sql`EXTRACT(HOUR FROM ${activityLogs.createdAt})`)
-      .orderBy(sql`EXTRACT(HOUR FROM ${activityLogs.createdAt})`);
+      .where(gte(activityLogs.createdAt, periodStart))
+      .groupBy(activityLogs.entityType)
+      .orderBy(desc(sql`count(*)`))
+      .limit(6);
 
-    const peakHours = peakHoursQuery.map((item) => ({
-      hour: item.hour,
-      count: item.count,
-    }));
-
-    // Get success/failure/warning rate (based on action naming convention)
-    const actionsQuery = await db
-      .select({
-        action: activityLogs.action,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(activityLogs)
-      .groupBy(activityLogs.action);
-
-    let successCount = 0;
-    let failureCount = 0;
-    let warningCount = 0;
-    let totalCount = 0;
-
-    actionsQuery.forEach((item) => {
-      totalCount += item.count;
-      const action = item.action.toLowerCase();
-      if (action.includes('success') || action.includes('create') || action.includes('update')) {
-        successCount += item.count;
-      } else if (action.includes('fail') || action.includes('error') || action.includes('delete') || action.includes('ban')) {
-        failureCount += item.count;
-      } else if (action.includes('warn') || action.includes('suspend')) {
-        warningCount += item.count;
-      } else {
-        successCount += item.count; // Default to success
-      }
-    });
-
-    // Get recent activity (last 7 days)
     const recentActivityQuery = await db
       .select({
         date: sql<string>`DATE(${activityLogs.createdAt})::text`,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
-      .where(gte(activityLogs.createdAt, sql`NOW() - INTERVAL '7 days'`))
+      .where(gte(activityLogs.createdAt, periodStart))
       .groupBy(sql`DATE(${activityLogs.createdAt})`)
       .orderBy(sql`DATE(${activityLogs.createdAt})`);
 
@@ -12183,15 +12301,24 @@ export class DatabaseStorage implements IStorage {
     }));
 
     return {
+      periodDays,
+      summary: {
+        totalCount,
+        previousCount,
+        changePercent,
+        activeUsers: summaryRow?.activeUsers || 0,
+        affectedEntities: summaryRow?.affectedEntities || 0,
+        sensitiveActions: summaryRow?.sensitiveActions || 0,
+        automatedActions: summaryRow?.automatedActions || 0,
+        averagePerDay: Math.round((totalCount / periodDays) * 10) / 10,
+        lastActivityAt: summaryRow?.lastActivityAt || null,
+      },
       topUsers,
       topActions,
-      peakHours,
-      successFailureRate: {
-        successCount,
-        failureCount,
-        warningCount,
-        totalCount,
-      },
+      topEntities: topEntitiesQuery.map((item) => ({
+        entityType: item.entityType,
+        count: item.count,
+      })),
       recentActivity,
     };
   }
@@ -14909,7 +15036,9 @@ export class DatabaseStorage implements IStorage {
         console.log(`✅ Short link created: ${shortCode} -> ${data.originalUrl}`);
         return created;
       } catch (error: any) {
-        if (error.code === '23505' && error.constraint === 'short_links_short_code_unique') {
+        // Drizzle يلفّ خطأ PG داخل DrizzleQueryError؛ isUniqueViolation يفك
+        // التغليف ويتحقق من code + constraint بشكل موحّد.
+        if (isUniqueViolation(error, 'short_links_short_code_unique')) {
           attempts++;
           console.log(`⚠️  Short code collision (attempt ${attempts}/${maxRetries}), retrying...`);
           if (attempts >= maxRetries) {
@@ -15217,7 +15346,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async triggerLoyaltyPassUpdate(userId: string, reason: string) {
-    console.log('🔄 [Loyalty Pass] Triggering update for user:', userId, 'Reason:', reason);
+    log.debug('🔄 [Loyalty Pass] Triggering update for user:', userId, 'Reason:', reason);
     
     // Log the update event (Phase 2: will send APNs)
     const { passUpdateLogger } = await import('./lib/passkit/PassUpdateLogger');
@@ -16780,13 +16909,19 @@ export class DatabaseStorage implements IStorage {
     read?: boolean;
     limit?: number;
     offset?: number;
+    excludeTypes?: string[];
   }): Promise<{ notifications: NotificationInbox[]; total: number }> {
     const conditions = [eq(notificationsInbox.userId, userId)];
-    
+
     if (filters?.read !== undefined) {
       conditions.push(eq(notificationsInbox.read, filters.read));
     }
-    
+
+    // استبعاد أنواع محددة (مثل إشعارات نشر المقالات التحريرية من مركز إشعارات الويب).
+    if (filters?.excludeTypes && filters.excludeTypes.length > 0) {
+      conditions.push(not(inArray(notificationsInbox.type, filters.excludeTypes)));
+    }
+
     const whereClause = and(...conditions);
     
     const [totalResult] = await db
@@ -17097,10 +17232,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePublisher(id: string, publisherData: UpdatePublisher): Promise<Publisher> {
+    // updatePublisherSchema يمرر التواريخ نصوصاً ("YYYY-MM-DD") بينما drizzle
+    // يستدعي toISOString() على قيم timestamp — نطبّع هنا لكلا مساري التحديث.
+    const normalized: any = { ...publisherData };
+    for (const key of ["publishingEndsAt", "suspendedUntil"] as const) {
+      const value = normalized[key];
+      if (typeof value === "string") {
+        const parsed = value.trim() ? new Date(value) : null;
+        normalized[key] = parsed && !isNaN(parsed.getTime()) ? parsed : null;
+      }
+    }
+
     const [publisher] = await db
       .update(publishers)
       .set({
-        ...publisherData,
+        ...normalized,
         updatedAt: new Date(),
       } as any)
       .where(eq(publishers.id, id))
@@ -17181,14 +17327,18 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(publisherCredits.publisherId, publisherId),
           eq(publisherCredits.isActive, true),
-          sql`${publisherCredits.remainingCredits} > 0`,
+          // الباقة المفتوحة صالحة دائماً بغض النظر عن الرصيد المتبقي
+          or(
+            eq(publisherCredits.isUnlimited, true),
+            sql`${publisherCredits.remainingCredits} > 0`
+          ),
           or(
             isNull(publisherCredits.expiryDate),
             gte(publisherCredits.expiryDate, now)
           )
         )
       )
-      .orderBy(asc(publisherCredits.expiryDate))
+      .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
       .limit(1);
     return credit;
   }
@@ -17560,7 +17710,8 @@ export class DatabaseStorage implements IStorage {
       }
 
       // Re-validate credit balance inside the locked transaction
-      if (activeCredit.remainingCredits < 1) {
+      // (الباقة المفتوحة لا تُقيَّد برصيد)
+      if (!activeCredit.isUnlimited && activeCredit.remainingCredits < 1) {
         throw new Error('رصيد الناشر غير كافٍ');
       }
 
@@ -17576,8 +17727,9 @@ export class DatabaseStorage implements IStorage {
         .returning();
 
       // Step 4: Deduct credit (within transaction)
+      // الباقة المفتوحة: نُحصي الاستخدام للتقارير دون إنقاص الرصيد
       const creditsBefore = activeCredit.remainingCredits;
-      const creditsAfter = creditsBefore - 1;
+      const creditsAfter = activeCredit.isUnlimited ? creditsBefore : creditsBefore - 1;
 
       await tx
         .update(publisherCredits)
@@ -17597,10 +17749,12 @@ export class DatabaseStorage implements IStorage {
           articleId,
           actionType: 'credit_used',
           creditsBefore,
-          creditsChanged: -1,
+          creditsChanged: activeCredit.isUnlimited ? 0 : -1,
           creditsAfter,
           performedBy,
-          notes: `تم خصم رصيد مقابل نشر خبر: ${article.title}`,
+          notes: activeCredit.isUnlimited
+            ? `نشر خبر ضمن باقة مفتوحة: ${article.title}`
+            : `تم خصم رصيد مقابل نشر خبر: ${article.title}`,
         });
 
       // If we reach here, all operations succeeded
@@ -20351,182 +20505,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // CORRESPONDENT APPLICATIONS - طلبات المراسلين
-  // ============================================
-  
-  async createCorrespondentApplication(data: InsertCorrespondentApplication): Promise<CorrespondentApplication> {
-    // Normalize email so the approval-time lookup (which matches against the
-    // lowercased users.email) always finds an existing reader account. Without
-    // this, a capitalization/whitespace difference creates a duplicate user row.
-    const normalized = { ...data, email: data.email?.toLowerCase().trim() };
-    const [application] = await db.insert(correspondentApplications).values(normalized).returning();
-    return application;
-  }
-
-  async getCorrespondentApplications(status?: string, page: number = 1, limit: number = 10): Promise<{applications: CorrespondentApplicationWithDetails[], total: number}> {
-    const offset = (page - 1) * limit;
-    const conditions = [];
-    if (status && status !== 'all') {
-      conditions.push(eq(correspondentApplications.status, status));
-    }
-    
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-    
-    const [countResult] = await db.select({ count: count() }).from(correspondentApplications).where(whereClause);
-    const total = countResult?.count || 0;
-    
-    const applications = await db.select({
-      id: correspondentApplications.id,
-      arabicName: correspondentApplications.arabicName,
-      englishName: correspondentApplications.englishName,
-      email: correspondentApplications.email,
-      phone: correspondentApplications.phone,
-      jobTitle: correspondentApplications.jobTitle,
-      bio: correspondentApplications.bio,
-      city: correspondentApplications.city,
-      profilePhotoUrl: correspondentApplications.profilePhotoUrl,
-      status: correspondentApplications.status,
-      reviewedBy: correspondentApplications.reviewedBy,
-      reviewedAt: correspondentApplications.reviewedAt,
-      reviewNotes: correspondentApplications.reviewNotes,
-      createdUserId: correspondentApplications.createdUserId,
-      createdAt: correspondentApplications.createdAt,
-    })
-    .from(correspondentApplications)
-    .where(whereClause)
-    .orderBy(desc(correspondentApplications.createdAt))
-    .limit(limit)
-    .offset(offset);
-    
-    return { applications, total };
-  }
-
-  async getCorrespondentApplicationById(id: string): Promise<CorrespondentApplicationWithDetails | undefined> {
-    const [application] = await db.select().from(correspondentApplications).where(eq(correspondentApplications.id, id));
-    if (!application) return undefined;
-    
-    let reviewer = null;
-    if (application.reviewedBy) {
-      const [reviewerData] = await db.select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-      }).from(users).where(eq(users.id, application.reviewedBy));
-      reviewer = reviewerData || null;
-    }
-    
-    return { ...application, reviewer };
-  }
-
-  async approveCorrespondentApplication(id: string, reviewerId: string, notes?: string): Promise<{application: CorrespondentApplication, user: User, temporaryPassword: string}> {
-    const [application] = await db.select().from(correspondentApplications).where(eq(correspondentApplications.id, id));
-    if (!application) throw new Error("Application not found");
-    if (application.status !== 'pending') throw new Error("Application already processed");
-
-    // Check if user with this email already exists.
-    // Match case-insensitively: registration/login lowercase the email, so a
-    // case/whitespace difference here would otherwise miss the existing reader
-    // and create a duplicate user row with the same email.
-    const applicantEmail = application.email.toLowerCase().trim();
-    const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
-    
-    let finalUser: User;
-    let temporaryPassword = '';
-    
-    if (existingUser) {
-      // User already exists - update their role to reporter and link to application
-      const [updatedUser] = await db.update(users)
-        .set({
-          role: 'reporter',
-          jobTitle: application.jobTitle || existingUser.jobTitle,
-          bio: application.bio || existingUser.bio,
-          city: application.city || existingUser.city,
-          profileImageUrl: application.profilePhotoUrl || existingUser.profileImageUrl,
-          isProfileComplete: true,
-        })
-        .where(eq(users.id, existingUser.id))
-        .returning();
-      finalUser = updatedUser;
-      
-      // Assign reporter role via RBAC
-      const [reporterRole] = await db.select().from(roles).where(eq(roles.name, 'reporter'));
-      if (reporterRole) {
-        await db.insert(userRoles).values({
-          userId: existingUser.id,
-          roleId: reporterRole.id,
-          assignedBy: reviewerId,
-        }).onConflictDoNothing();
-      }
-    } else {
-      // Create new user
-      temporaryPassword = nanoid(12);
-      const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
-      
-      const [newUser] = await db.insert(users).values({
-        id: nanoid(),
-        email: applicantEmail,
-        firstName: application.arabicName.split(' ')[0] || application.arabicName,
-        lastName: application.arabicName.split(' ').slice(1).join(' ') || '',
-        profileImageUrl: application.profilePhotoUrl,
-        status: 'active',
-        passwordHash: hashedPassword,
-        emailVerified: true,
-        role: 'reporter',
-        jobTitle: application.jobTitle,
-        bio: application.bio,
-        isProfileComplete: true,
-        mustChangePassword: true, // Require password change on first login
-      }).returning();
-      finalUser = newUser;
-      
-      // Assign reporter role via RBAC
-      const [reporterRole] = await db.select().from(roles).where(eq(roles.name, 'reporter'));
-      if (reporterRole) {
-        await db.insert(userRoles).values({
-          userId: newUser.id,
-          roleId: reporterRole.id,
-          assignedBy: reviewerId,
-        }).onConflictDoNothing();
-      }
-    }
-    
-    // Update application
-    const [updatedApplication] = await db.update(correspondentApplications)
-      .set({
-        status: 'approved',
-        reviewedBy: reviewerId,
-        reviewedAt: new Date(),
-        reviewNotes: notes,
-        createdUserId: finalUser.id,
-      })
-      .where(eq(correspondentApplications.id, id))
-      .returning();
-    
-    return { application: updatedApplication, user: finalUser, temporaryPassword };
-  }
-
-  async rejectCorrespondentApplication(id: string, reviewerId: string, reason: string): Promise<CorrespondentApplication> {
-    const [application] = await db.update(correspondentApplications)
-      .set({
-        status: 'rejected',
-        reviewedBy: reviewerId,
-        reviewedAt: new Date(),
-        reviewNotes: reason,
-      })
-      .where(eq(correspondentApplications.id, id))
-      .returning();
-    
-    if (!application) throw new Error("Application not found");
-    return application;
-  }
-
-  // ============================================
   // OPINION AUTHOR APPLICATIONS - طلبات كتّاب الرأي
   // ============================================
   
   async createOpinionAuthorApplication(data: InsertOpinionAuthorApplication): Promise<OpinionAuthorApplication> {
-    // Normalize email (see createCorrespondentApplication) so approval matches
+    // Normalize email (see correspondentApplicationService) so approval matches
     // the existing reader account instead of minting a second user row.
     const [application] = await db.insert(opinionAuthorApplications).values({
       ...data,
@@ -20600,7 +20583,7 @@ export class DatabaseStorage implements IStorage {
     if (application.status !== 'pending') throw new Error("Application already processed");
 
     // Check if user with this email already exists (case-insensitive — see
-    // approveCorrespondentApplication for why this matters).
+    // correspondentApplicationService.approveCorrespondentApplication for why this matters).
     const applicantEmail = application.email.toLowerCase().trim();
     const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
     

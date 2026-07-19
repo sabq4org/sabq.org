@@ -21,6 +21,9 @@ enum NotificationDeepLink: Hashable {
     case opinion(slug: String)
     case draft(id: String)
     case feedback(id: String)
+    case match(id: Int)
+    case asianCupMatch(id: Int)
+    case survey(token: String)
 }
 
 /// Coordinator owned by `sabqApp` — exposes the latest APNs device token
@@ -48,14 +51,13 @@ final class NotificationsStore {
     /// Refetch the unread count from the backend. Called on every push
     /// receipt (foreground + tap) and on app-becomes-active transitions
     /// so the bell's red dot stays in sync without needing a manual
-    /// home-feed pull-to-refresh. Cheap single API call; safely no-ops
-    /// when the user isn't signed in (the call returns 401 and we
-    /// silently swallow it).
+    /// home-feed pull-to-refresh. Uses the lightweight count endpoint —
+    /// the previous full-page fetch pulled the whole notifications list
+    /// just to read `unread`. Safely no-ops when the user isn't signed
+    /// in (the call returns 401 and we silently swallow it).
     func refreshUnreadCount() async {
-        guard let page = try? await APIClient.shared.fetchEditorialNotifications() else {
-            return
-        }
-        unreadCount = page.unread
+        guard let count = try? await APIClient.shared.fetchUnreadCount() else { return }
+        unreadCount = count
     }
 
     func setDeviceToken(_ token: String) {
@@ -87,7 +89,8 @@ final class NotificationsStore {
                 osVersion: UIDevice.current.systemVersion,
                 appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
                 locale: langCode,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                installationId: UIDevice.current.identifierForVendor?.uuidString
             )
             print("[Push] APNs token registered with backend")
         } catch {
@@ -118,11 +121,17 @@ final class NotificationsStore {
         return nil
     }
 
-    private func parseSabqDeepLink(url: URL) -> NotificationDeepLink? {
+    /// internal (لا private): يُستدعى أيضًا من onOpenURL في ContentView —
+    /// ضغطة الـ Live Activity/Dynamic Island تصل كرابط sabq:// عبر النظام
+    /// لا عبر userInfo الإشعارات، وكانت طريقًا مسدودًا قبل ربطها.
+    func parseSabqDeepLink(url: URL) -> NotificationDeepLink? {
         // sabq://article/<slug>   — news article detail
         // sabq://opinion/<slug>   — opinion article detail
         // sabq://draft/<id>       — editorial notifications (draft surface)
         // sabq://feedback/<id>    — editorial notifications (feedback surface)
+        // sabq://match/<id>              — match center (WC / sports alerts)
+        // sabq://asian-cup/match/<id>    — Asian Cup match center
+        // sabq://survey/<token>          — personal survey invitation (SurveyView)
         guard url.scheme == "sabq" else { return nil }
         let host = url.host ?? ""
         let path = url.pathComponents.filter { $0 != "/" }
@@ -132,6 +141,16 @@ final class NotificationsStore {
         case "opinion" where !value.isEmpty: return .opinion(slug: value)
         case "draft" where !value.isEmpty:   return .draft(id: value)
         case "feedback" where !value.isEmpty: return .feedback(id: value)
+        case "survey" where !value.isEmpty: return .survey(token: value)
+        case "match":
+            if let id = Int(value) { return .match(id: id) }
+            return nil
+        case "asian-cup":
+            // sabq://asian-cup/match/<id>
+            if path.count >= 2, path[0] == "match", let id = Int(path[1]) {
+                return .asianCupMatch(id: id)
+            }
+            return nil
         default: return nil
         }
     }

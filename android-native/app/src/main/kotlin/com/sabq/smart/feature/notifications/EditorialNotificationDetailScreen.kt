@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatQuote
@@ -65,6 +66,7 @@ import com.sabq.smart.util.formatRelativeDateAr
 fun EditorialNotificationDetailScreen(
     onBack: () -> Unit,
     onOpenArticle: (slug: String) -> Unit,
+    onOpenSurvey: (token: String) -> Unit,
     viewModel: EditorialNotificationDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -82,6 +84,7 @@ fun EditorialNotificationDetailScreen(
                 is EditorialNotificationDetailViewModel.DetailState.Loaded -> DetailContent(
                     item = s.item,
                     onOpenArticle = onOpenArticle,
+                    onOpenSurvey = onOpenSurvey,
                 )
                 EditorialNotificationDetailViewModel.DetailState.NotFound -> CenteredMessage(
                     text = "هذا الإشعار لم يعد متاحاً.",
@@ -133,6 +136,7 @@ private fun DetailTopBar(onBack: () -> Unit) {
 private fun DetailContent(
     item: EditorialNotification,
     onOpenArticle: (String) -> Unit,
+    onOpenSurvey: (String) -> Unit,
 ) {
     val style = detailStyle(item.type)
 
@@ -156,6 +160,18 @@ private fun DetailContent(
                 onClick = { onOpenArticle(item.articleSlug) },
             )
         }
+        // دعوة استطلاع: deepLink يحمل sabq://survey/<token> — الزر يفتح الشاشة مباشرة
+        if (item.type == "survey_invite") {
+            val token = item.deepLink
+                ?.substringAfterLast('/')
+                ?.takeIf { it.isNotBlank() }
+            if (token != null) {
+                ActionButton(
+                    title = "شارك برأيك الآن",
+                    onClick = { onOpenSurvey(token) },
+                )
+            }
+        }
     }
 }
 
@@ -174,6 +190,7 @@ private fun detailStyle(type: String): DetailStyle {
         "rejected" -> DetailStyle(Icons.Filled.Cancel, colors.coral, "اعتذار")
         "needs_revision" -> DetailStyle(Icons.Filled.Edit, colors.primaryEnd, "طلب تعديل")
         "archived" -> DetailStyle(Icons.Filled.Archive, colors.tertiaryInk, "أرشفة")
+        "survey_invite" -> DetailStyle(Icons.Filled.Checklist, colors.sky, "دعوة استطلاع")
         else -> DetailStyle(Icons.Filled.Notifications, colors.secondaryInk, "إشعار")
     }
 }

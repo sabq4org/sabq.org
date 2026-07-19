@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, Type, Waves, BookOpen } from "lucide-react";
+import { Eye, Type, Waves, BookOpen, MonitorCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useAccessibility } from "@/contexts/AccessibilityContext";
 import { Separator } from "@/components/ui/separator";
+import { useTheme, type ThemePreference } from "@/components/ThemeProvider";
 
 type AccessibilitySettingsProps = {
   variant?: 'mobile' | 'desktop';
@@ -27,6 +28,7 @@ type AccessibilitySettingsProps = {
 
 export function AccessibilitySettings({ variant }: AccessibilitySettingsProps = {}) {
   const [open, setOpen] = useState(false);
+  const { themePreference, setTheme } = useTheme();
   const {
     settings,
     setFontSize,
@@ -66,6 +68,45 @@ export function AccessibilitySettings({ variant }: AccessibilitySettingsProps = 
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
+          {/* Visual theme preference */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <MonitorCog className="h-5 w-5 text-muted-foreground" />
+              <Label htmlFor="theme-preference" className="text-base font-medium">
+                المظهر
+              </Label>
+            </div>
+            <Select
+              value={themePreference}
+              onValueChange={(value) => setTheme(value as ThemePreference)}
+            >
+              <SelectTrigger
+                id="theme-preference"
+                className="w-full"
+                data-testid="select-theme-preference"
+                aria-label="اختر مظهر الموقع"
+              >
+                <SelectValue placeholder="اختر المظهر" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system" data-testid="theme-option-system">
+                  حسب إعداد الجهاز
+                </SelectItem>
+                <SelectItem value="light" data-testid="theme-option-light">
+                  فاتح
+                </SelectItem>
+                <SelectItem value="dark" data-testid="theme-option-dark">
+                  ليلي مريح
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground text-right">
+              الوضع الليلي يستخدم درجات هادئة مناسبة للقراءة الطويلة
+            </p>
+          </div>
+
+          <Separator />
+
           {/* Font Size Setting */}
           <div className="space-y-3">
             <div className="flex items-center gap-3">

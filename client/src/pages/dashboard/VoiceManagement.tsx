@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { 
   Mic, 
   Plus, 
@@ -69,7 +70,7 @@ export default function VoiceManagement() {
 
   const cloneMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch("/api/elevenlabs/voices/clone", {
+      const response = await fetch(apiUrl("/api/elevenlabs/voices/clone"), {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -223,19 +224,12 @@ export default function VoiceManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <AudioWaveform className="h-7 w-7 text-primary" />
-              إدارة الأصوات
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              استنساخ وإدارة أصوات المنصة
-            </p>
-          </div>
-          
-          <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={AudioWaveform}
+          title="إدارة الأصوات"
+          description="استنساخ وإدارة أصوات المنصة"
+          actions={<Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-clone-voice">
                 <Plus className="h-4 w-4 ml-2" />
@@ -342,8 +336,8 @@ export default function VoiceManagement() {
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
-        </div>
+          </Dialog>}
+        />
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">

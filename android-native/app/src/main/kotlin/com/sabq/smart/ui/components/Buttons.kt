@@ -18,7 +18,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
@@ -50,14 +52,18 @@ fun SmallActionButton(
     ) {
         Text(
             text = title,
-            style = SabqTheme.typography.chipLabel,
+            // iOS: size 12 .medium → renders Regular (≤13 softening).
+            style = SabqTheme.typography.chipLabel.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+            ),
             color = tint,
         )
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(13.dp),
+            modifier = Modifier.size(12.dp),
         )
     }
 }
@@ -93,7 +99,8 @@ fun PrimaryCTAButton(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = if (enabled) 8.dp else 0.dp,
+                // iOS: .shadow(radius: 12, y: 6) tinted glow.
+                elevation = if (enabled) 12.dp else 0.dp,
                 shape = shape,
                 ambientColor = SabqTheme.colors.primaryEnd.copy(alpha = 0.25f),
                 spotColor = SabqTheme.colors.primaryEnd.copy(alpha = 0.25f),

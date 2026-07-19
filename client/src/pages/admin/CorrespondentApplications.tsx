@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { 
   Users, 
   Clock, 
@@ -21,7 +23,12 @@ import {
   RefreshCw,
   Copy,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Link2,
+  ExternalLink,
+  BookOpenCheck,
+  FileText,
+  BadgeCheck
 } from "lucide-react";
 import {
   Table,
@@ -55,7 +62,16 @@ type ApplicationStatus = "all" | "pending" | "approved" | "rejected";
 interface ApplicationsResponse {
   applications: CorrespondentApplicationWithDetails[];
   total: number;
+  counts?: {
+    pending: number;
+    approved: number;
+    rejected: number;
+    total: number;
+  };
 }
+
+const isReaderRole = (role?: string | null) =>
+  !!role && ["reader", "user", "subscriber"].includes(role.toLowerCase());
 
 export default function CorrespondentApplications() {
   const { toast } = useToast();
@@ -68,13 +84,14 @@ export default function CorrespondentApplications() {
   const [approvalResult, setApprovalResult] = useState<{
     temporaryPassword: string;
     email: string;
+    existingAccountUpgraded?: boolean;
   } | null>(null);
   const [showApprovalResultDialog, setShowApprovalResultDialog] = useState(false);
 
   const { data, isLoading, refetch } = useQuery<ApplicationsResponse>({
     queryKey: ["/api/admin/correspondent-applications", statusFilter, page],
     queryFn: () => 
-      fetch(`/api/admin/correspondent-applications?status=${statusFilter}&page=${page}&limit=10`)
+      fetch(apiUrl(`/api/admin/correspondent-applications?status=${statusFilter}&page=${page}&limit=10`))
         .then(res => res.json()),
   });
 
@@ -89,11 +106,12 @@ export default function CorrespondentApplications() {
     onSuccess: (data) => {
       toast({
         title: "تمت الموافقة",
-        description: "تم قبول الطلب وإنشاء حساب المراسل",
+        description: data.message || "تم قبول الطلب وإنشاء حساب المراسل",
       });
       setApprovalResult({
         temporaryPassword: data.temporaryPassword,
         email: data.user.email,
+        existingAccountUpgraded: data.existingAccountUpgraded,
       });
       setShowApprovalResultDialog(true);
       setShowDetailsDialog(false);
@@ -139,7 +157,7 @@ export default function CorrespondentApplications() {
       case "pending":
         return <Badge variant="secondary" data-testid="badge-status-pending"><Clock className="w-3 h-3 ml-1" />قيد المراجعة</Badge>;
       case "approved":
-        return <Badge className="bg-green-500" data-testid="badge-status-approved"><CheckCircle className="w-3 h-3 ml-1" />مقبول</Badge>;
+        return <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid="badge-status-approved"><CheckCircle className="w-3 h-3 ml-1" />مقبول</Badge>;
       case "rejected":
         return <Badge variant="destructive" data-testid="badge-status-rejected"><XCircle className="w-3 h-3 ml-1" />مرفوض</Badge>;
       default:
@@ -147,9 +165,11 @@ export default function CorrespondentApplications() {
     }
   };
 
-  const pendingCount = data?.applications?.filter(a => a.status === "pending").length || 0;
-  const approvedCount = data?.applications?.filter(a => a.status === "approved").length || 0;
-  const rejectedCount = data?.applications?.filter(a => a.status === "rejected").length || 0;
+  // Global counts from the API (fallback to page-local counting for safety)
+  const totalCount = data?.counts?.total ?? data?.total ?? 0;
+  const pendingCount = data?.counts?.pending ?? (data?.applications?.filter(a => a.status === "pending").length || 0);
+  const approvedCount = data?.counts?.approved ?? (data?.applications?.filter(a => a.status === "approved").length || 0);
+  const rejectedCount = data?.counts?.rejected ?? (data?.applications?.filter(a => a.status === "rejected").length || 0);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -159,80 +179,107 @@ export default function CorrespondentApplications() {
     });
   };
 
+  const registerUrl = `${window.location.origin}/correspondent/register`;
+
+  const copyRegisterLink = () => {
+    navigator.clipboard.writeText(registerUrl);
+    toast({
+      title: "تم نسخ رابط التقديم",
+      description: "أرسل الرابط لمن يرغب بالتقدم كمراسل — يفتح نموذج التقديم مباشرة",
+    });
+  };
+
   const limit = 10;
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
   return (
     <DashboardLayout>
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">طلبات المراسلين</h1>
-          <p className="text-muted-foreground" data-testid="text-page-description">إدارة طلبات التسجيل كمراسل صحفي</p>
-        </div>
-        <Button variant="outline" onClick={() => refetch()} data-testid="button-refresh">
-          <RefreshCw className="w-4 h-4 ml-2" />
-          تحديث
-        </Button>
-      </div>
+    <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="pb-10">
+      <DashboardPageHeader
+        icon={Users}
+        title="طلبات المراسلين"
+        description={<span data-testid="text-page-description">إدارة طلبات التسجيل كمراسل صحفي</span>}
+        titleTestId="text-page-title"
+        actions={
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button className="w-full gap-2 sm:w-auto" onClick={copyRegisterLink} data-testid="button-copy-register-link">
+              <Link2 className="w-4 h-4 ml-2" />
+              نسخ رابط التقديم
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2 sm:w-auto"
+              onClick={() => window.open(registerUrl, "_blank", "noopener")}
+              data-testid="button-open-register-link"
+            >
+              <ExternalLink className="w-4 h-4 ml-2" />
+              فتح النموذج
+            </Button>
+            <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={() => refetch()} data-testid="button-refresh">
+              <RefreshCw className="w-4 h-4 ml-2" />
+              تحديث
+            </Button>
+          </div>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-muted rounded-lg">
-                <Users className="w-5 h-5" />
+              <div className="rounded-lg bg-sky-100/80 p-2 dark:bg-sky-950/40">
+                <Users className="w-5 h-5 text-sky-700 dark:text-sky-300" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الطلبات</p>
-                <p className="text-2xl font-bold" data-testid="text-total-count">{data?.total || 0}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-total-count">{totalCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/45 via-card to-card shadow-sm dark:border-amber-900/35 dark:from-amber-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              <div className="rounded-lg bg-amber-100/80 p-2 dark:bg-amber-950/40">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">قيد المراجعة</p>
-                <p className="text-2xl font-bold" data-testid="text-pending-count">{pendingCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-pending-count">{pendingCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <div className="rounded-lg bg-emerald-100/80 p-2 dark:bg-emerald-950/40">
+                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">مقبولة</p>
-                <p className="text-2xl font-bold" data-testid="text-approved-count">{approvedCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-approved-count">{approvedCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm dark:border-rose-900/35 dark:from-rose-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              <div className="rounded-lg bg-rose-100/80 p-2 dark:bg-rose-950/40">
+                <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">مرفوضة</p>
-                <p className="text-2xl font-bold" data-testid="text-rejected-count">{rejectedCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-rejected-count">{rejectedCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
+      <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <CardTitle>قائمة الطلبات</CardTitle>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApplicationStatus)}>
             <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
@@ -258,7 +305,8 @@ export default function CorrespondentApplications() {
               لا توجد طلبات
             </div>
           ) : (
-            <Table>
+            <div className="overflow-x-auto">
+            <Table className="min-w-[820px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right">المتقدم</TableHead>
@@ -281,13 +329,19 @@ export default function CorrespondentApplications() {
                         <div>
                           <p className="font-medium" data-testid={`text-name-${app.id}`}>{app.arabicName}</p>
                           <p className="text-sm text-muted-foreground">{app.englishName}</p>
+                          {app.status === "pending" && isReaderRole(app.existingUserRole) && (
+                            <Badge variant="outline" className="mt-1 gap-1 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300" data-testid={`badge-reader-${app.id}`}>
+                              <BookOpenCheck className="w-3 h-3" />
+                              لديه عضوية قارئ
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell data-testid={`text-email-${app.id}`}>{app.email}</TableCell>
                     <TableCell data-testid={`text-city-${app.id}`}>{app.city}</TableCell>
-                    <TableCell>
-                      {new Date(app.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}
+                    <TableCell className="tabular-nums">
+                      {new Date(app.createdAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")}
                     </TableCell>
                     <TableCell>{getStatusBadge(app.status)}</TableCell>
                     <TableCell>
@@ -342,13 +396,14 @@ export default function CorrespondentApplications() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                الصفحة {page} من {totalPages} (إجمالي {data?.total || 0} طلب)
+              <div className="text-sm text-muted-foreground tabular-nums">
+                الصفحة {page.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")} (إجمالي {(data?.total || 0).toLocaleString("en-US")} طلب)
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -405,21 +460,119 @@ export default function CorrespondentApplications() {
                   <p className="text-sm text-muted-foreground">رقم الهاتف</p>
                   <p className="font-medium" data-testid="text-detail-phone">{selectedApplication.phone}</p>
                 </div>
+                {selectedApplication.nationalId && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">رقم الهوية / الإقامة</p>
+                    <p className="font-medium tabular-nums" data-testid="text-detail-national-id">{selectedApplication.nationalId}</p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-sm text-muted-foreground">المدينة</p>
-                  <p className="font-medium" data-testid="text-detail-city">{selectedApplication.city}</p>
+                  <p className="text-sm text-muted-foreground">المنطقة / المدينة</p>
+                  <p className="font-medium" data-testid="text-detail-city">
+                    {selectedApplication.region ? `${selectedApplication.region} — ` : ""}{selectedApplication.city}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">المسمى الوظيفي</p>
                   <p className="font-medium" data-testid="text-detail-job">{selectedApplication.jobTitle}</p>
                 </div>
+                {selectedApplication.licenseNumber && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">رقم الترخيص المهني</p>
+                    <p className="font-medium" data-testid="text-detail-license-number">
+                      {selectedApplication.licenseNumber}
+                      {selectedApplication.licenseExpiresAt && (
+                        <span className="text-sm text-muted-foreground tabular-nums">
+                          {" "}(ينتهي {new Date(selectedApplication.licenseExpiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {selectedApplication.specializations && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">مجالات التغطية</p>
+                    <p className="font-medium" data-testid="text-detail-specializations">{selectedApplication.specializations}</p>
+                  </div>
+                )}
+                {selectedApplication.yearsOfExperience != null && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">سنوات الخبرة</p>
+                    <p className="font-medium tabular-nums">{selectedApplication.yearsOfExperience}</p>
+                  </div>
+                )}
+                {selectedApplication.currentEmployer && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">جهة العمل الحالية / الأخيرة</p>
+                    <p className="font-medium">{selectedApplication.currentEmployer}</p>
+                  </div>
+                )}
               </div>
+
+              {selectedApplication.portfolioLinks && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">روابط أعمال منشورة</p>
+                  <div className="space-y-1">
+                    {selectedApplication.portfolioLinks.split(/\s+/).filter(l => l.startsWith("http")).map((link, i) => (
+                      <a
+                        key={i}
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-sm text-primary hover:underline truncate"
+                        dir="ltr"
+                      >
+                        {link}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(selectedApplication.licenseFileKey || selectedApplication.cvFileKey) && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedApplication.licenseFileKey && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => window.open(apiUrl(`/api/admin/correspondent-applications/${selectedApplication.id}/file/license`), "_blank", "noopener")}
+                      data-testid="button-download-license"
+                    >
+                      <BadgeCheck className="w-4 h-4" />
+                      عرض الترخيص المهني
+                    </Button>
+                  )}
+                  {selectedApplication.cvFileKey && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => window.open(apiUrl(`/api/admin/correspondent-applications/${selectedApplication.id}/file/cv`), "_blank", "noopener")}
+                      data-testid="button-download-cv"
+                    >
+                      <FileText className="w-4 h-4" />
+                      السيرة الذاتية
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {selectedApplication.bio && (
                 <div>
                   <p className="text-sm text-muted-foreground">نبذة عنه</p>
                   <p className="font-medium" data-testid="text-detail-bio">{selectedApplication.bio}</p>
                 </div>
+              )}
+
+              {selectedApplication.status === "pending" && isReaderRole(selectedApplication.existingUserRole) && (
+                <Alert>
+                  <BookOpenCheck className="h-4 w-4" />
+                  <AlertTitle>لديه عضوية قارئ بنفس البريد</AlertTitle>
+                  <AlertDescription>
+                    عند قبول الطلب ستتم ترقية حسابه الحالي تلقائياً إلى حساب مراسل (لن يُنشأ حساب مكرر)، مع تعيين كلمة مرور مؤقتة جديدة يجب تغييرها عند أول دخول.
+                  </AlertDescription>
+                </Alert>
               )}
 
               {selectedApplication.reviewNotes && (
@@ -429,8 +582,8 @@ export default function CorrespondentApplications() {
                 </div>
               )}
 
-              <div className="text-sm text-muted-foreground">
-                تاريخ التقديم: {new Date(selectedApplication.createdAt).toLocaleDateString("ar-SA-u-ca-gregory", {
+              <div className="text-sm text-muted-foreground tabular-nums">
+                تاريخ التقديم: {new Date(selectedApplication.createdAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -553,8 +706,16 @@ export default function CorrespondentApplications() {
               </div>
             </AlertDescription>
           </Alert>
+          {approvalResult?.existingAccountUpgraded && (
+            <Alert>
+              <BookOpenCheck className="h-4 w-4" />
+              <AlertDescription>
+                كان لدى المتقدم عضوية قارئ بنفس البريد — تمت ترقية حسابه الحالي إلى حساب مراسل وتعيين كلمة المرور المؤقتة أعلاه.
+              </AlertDescription>
+            </Alert>
+          )}
           <p className="text-sm text-muted-foreground">
-            يرجى إرسال بيانات الدخول للمراسل عبر البريد الإلكتروني. يجب على المراسل تغيير كلمة المرور عند أول تسجيل دخول.
+            تم إرسال بيانات الدخول للمراسل تلقائياً عبر البريد الإلكتروني، ويمكنك أيضاً إرسالها يدوياً من هنا. يجب على المراسل تغيير كلمة المرور عند أول تسجيل دخول.
           </p>
           <DialogFooter>
             <Button onClick={() => setShowApprovalResultDialog(false)} data-testid="button-close-result">
@@ -563,7 +724,7 @@ export default function CorrespondentApplications() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </DashboardPageShell>
     </DashboardLayout>
   );
 }

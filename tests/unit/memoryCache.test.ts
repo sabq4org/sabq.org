@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MemoryCache, StaleWhileRevalidateCache } from "../../server/memoryCache";
+import { MemoryCache, StaleWhileRevalidateCache, withSWR, swrCache } from "../../server/memoryCache";
 
 // Audit M1.1: both caches were unbounded Maps — a flood of unique keys
 // inside one TTL window could OOM the pod. These tests pin the cap contract:
@@ -104,5 +104,112 @@ describe("StaleWhileRevalidateCache — size cap", () => {
     expect(r.data).toBe("v");
     expect(r.isStale).toBe(true);
     expect(r.shouldRefresh).toBe(true);
+  });
+});
+
+// single-flight: المتنافسون على نفس المفتاح يتشاركون وعد الجلب الجاري بدل
+// الاستقصاء 6 ثوانٍ ثم بدء جلب مكرر. المفاتيح فريدة لكل اختبار لأن withSWR
+// يعمل على الـsingleton المشترك swrCache.
+let sfCounter = 0;
+const sfKey = () => `test:single-flight:${++sfCounter}`;
+
+describe("withSWR — single-flight", () => {
+  it("concurrent callers on a cold key share one fetcher execution", async () => {
+    const key = sfKey();
+    let calls = 0;
+    let resolveFetch!: (v: string) => void;
+    const fetcher = () => {
+      calls++;
+      return new Promise<string>((res) => {
+        resolveFetch = res;
+      });
+    };
+    const p1 = withSWR(key, 60_000, 60_000, fetcher);
+    const p2 = withSWR(key, 60_000, 60_000, fetcher);
+    const p3 = withSWR(key, 60_000, 60_000, fetcher);
+    expect(calls).toBe(1);
+    resolveFetch("value");
+    await expect(p1).resolves.toBe("value");
+    await expect(p2).resolves.toBe("value");
+    await expect(p3).resolves.toBe("value");
+    expect(calls).toBe(1);
+  });
+
+  it("waiters share the in-flight promise with no 6s polling cap", async () => {
+    vi.useFakeTimers();
+    const key = sfKey();
+    let calls = 0;
+    const fetcher = () => {
+      calls++;
+      // fetch أبطأ من سقف الاستقصاء القديم (6 ثوانٍ) — سابقًا كان المنتظر
+      // يستسلم ويبدأ جلبًا مكررًا؛ الآن ينتظر نفس الوعد مهما طال.
+      return new Promise<string>((res) => setTimeout(() => res("slow"), 10_000));
+    };
+    const p1 = withSWR(key, 60_000, 60_000, fetcher);
+    const p2 = withSWR(key, 60_000, 60_000, fetcher);
+    await vi.advanceTimersByTimeAsync(10_500);
+    await expect(p1).resolves.toBe("slow");
+    await expect(p2).resolves.toBe("slow");
+    expect(calls).toBe(1);
+  });
+
+  it("a rejected fetch rejects all awaiting callers without poisoning the cache", async () => {
+    const key = sfKey();
+    let calls = 0;
+    const err = new Error("boom");
+    const fetcher = () => {
+      calls++;
+      return Promise.reject<string>(err);
+    };
+    const p1 = withSWR(key, 60_000, 60_000, fetcher);
+    const p2 = withSWR(key, 60_000, 60_000, fetcher);
+    await expect(p1).rejects.toBe(err);
+    await expect(p2).rejects.toBe(err);
+    expect(calls).toBe(1);
+    // لا بيانات محفوظة ولا وعد عالق — والمحاولة التالية تعيد الجلب فعليًا
+    expect(swrCache.get(key).data).toBeNull();
+    expect(swrCache.getInflight(key)).toBeNull();
+    await expect(withSWR(key, 60_000, 60_000, async () => "ok")).resolves.toBe("ok");
+  });
+
+  it("serves stale immediately and runs exactly one background refresh", async () => {
+    const key = sfKey();
+    swrCache.set(key, "stale", 1, 60_000); // ttl 1ms → يصبح stale فورًا تقريبًا
+    await new Promise((r) => setTimeout(r, 5));
+    let calls = 0;
+    let resolveFetch!: (v: string) => void;
+    const fetcher = () => {
+      calls++;
+      return new Promise<string>((res) => {
+        resolveFetch = res;
+      });
+    };
+    await expect(withSWR(key, 60_000, 60_000, fetcher)).resolves.toBe("stale");
+    await expect(withSWR(key, 60_000, 60_000, fetcher)).resolves.toBe("stale");
+    expect(calls).toBe(1); // المتصل الثاني لم يبدأ تحديثًا خلفيًا مكررًا
+    resolveFetch("fresh");
+    await swrCache.getInflight<string>(key);
+    await expect(withSWR(key, 60_000, 60_000, fetcher)).resolves.toBe("fresh");
+    expect(calls).toBe(1);
+  });
+
+  it("forceFresh callers share the in-flight refresh instead of duplicating it", async () => {
+    const key = sfKey();
+    swrCache.set(key, "cached", 60_000, 60_000);
+    let calls = 0;
+    let resolveFetch!: (v: string) => void;
+    const fetcher = () => {
+      calls++;
+      return new Promise<string>((res) => {
+        resolveFetch = res;
+      });
+    };
+    const p1 = withSWR(key, 60_000, 60_000, fetcher, true);
+    const p2 = withSWR(key, 60_000, 60_000, fetcher, true);
+    expect(calls).toBe(1);
+    resolveFetch("forced");
+    await expect(p1).resolves.toBe("forced");
+    await expect(p2).resolves.toBe("forced");
+    expect(calls).toBe(1);
   });
 });

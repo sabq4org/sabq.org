@@ -24,7 +24,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
+import com.sabq.smart.feature.auth.CompleteNameScreen
 import com.sabq.smart.feature.auth.SmartSignUpScreen
+import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
 import com.sabq.smart.feature.brief.DailyBriefScreen
 import com.sabq.smart.feature.brief.InterestsPickerScreen
@@ -87,6 +89,7 @@ object SabqRoutes {
     const val Notifications = "notifications"
     const val NotificationDetail = "notifications/{id}"
     const val NotificationPreferences = "notifications/preferences"
+    const val Survey = "survey/{token}"
     const val EditProfile = "account/edit"
     const val ChangePassword = "account/change-password"
     const val ForgotPassword = "account/forgot-password"
@@ -108,10 +111,44 @@ object SabqRoutes {
     const val ContributorDashboard = "dashboard/contributor"
     const val WorldCup = "world-cup"
     const val WorldCupMatch = "world-cup/match/{id}"
+    const val WorldCupTeam = "world-cup/team/{id}?name={name}&logo={logo}"
+    const val WorldCupPredictions = "world-cup/predictions"
+    const val Predictions = "predictions"
+    const val GulfCup = "gulf-cup"
+    const val GulfCupMatch = "gulf-cup/match/{id}"
+    const val GulfCupTeam = "gulf-cup/team/{id}?name={name}&logo={logo}"
+    const val AsianCup = "asian-cup"
+    const val AsianCupMatch = "asian-cup/match/{id}"
+    const val AsianCupTeam = "asian-cup/team/{id}"
+    // مُقترب — analytical-angles surface (landing + angle + topic + writer).
+    const val Muqtarab = "muqtarab"
+    const val MuqtarabAngle = "muqtarab/angle/{slug}"
+    const val MuqtarabTopic = "muqtarab/topic/{angleSlug}/{topicSlug}"
+    const val MuqtarabWriter = "muqtarab/writer/{id}"
 
     fun worldCupMatch(id: Int): String = "world-cup/match/$id"
 
+    fun worldCupTeam(id: Int, name: String, logo: String): String =
+        "world-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
+
+    fun gulfCupMatch(id: Int): String = "gulf-cup/match/$id"
+
+    fun gulfCupTeam(id: Int, name: String, logo: String): String =
+        "gulf-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
+
+    fun asianCupMatch(id: Int): String = "asian-cup/match/$id"
+    fun asianCupTeam(id: Int): String = "asian-cup/team/$id"
+
+    fun muqtarabAngle(slug: String): String = "muqtarab/angle/${Uri.encode(slug)}"
+
+    fun muqtarabTopic(angleSlug: String, topicSlug: String): String =
+        "muqtarab/topic/${Uri.encode(angleSlug)}/${Uri.encode(topicSlug)}"
+
+    fun muqtarabWriter(id: String): String = "muqtarab/writer/${Uri.encode(id)}"
+
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
+
+    fun survey(token: String): String = "survey/${Uri.encode(token)}"
 
     val TabRoutes = setOf(Home, Explore, Bookmarks, Profile)
 
@@ -148,9 +185,13 @@ object SabqRoutes {
 fun SabqApp(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     pushNavViewModel: com.sabq.smart.data.push.PushNavViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
+    majlisLinkViewModel: com.sabq.smart.feature.gulfcup.GcMajlisLinkViewModel = hiltViewModel(),
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val pendingPush by pushNavViewModel.target.collectAsStateWithLifecycle()
+    val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
+    val pendingMajlisLink by majlisLinkViewModel.target.collectAsStateWithLifecycle()
     val isDarkTheme = if (settings.followsSystemDark)
         androidx.compose.foundation.isSystemInDarkTheme()
     else settings.isDarkMode
@@ -173,6 +214,19 @@ fun SabqApp(
         androidx.compose.runtime.LaunchedEffect(pendingPush) {
             val target = pendingPush ?: return@LaunchedEffect
             when {
+                // دعوة استطلاع — الأعلى أولوية: توكن شخصي يفتح شاشته مباشرة
+                !target.surveyToken.isNullOrBlank() ->
+                    navController.navigate(SabqRoutes.survey(target.surveyToken!!))
+                target.deepLinkPath == "/asian-cup" ->
+                    navController.navigate(SabqRoutes.AsianCup)
+                target.deepLinkPath?.startsWith("/asian-cup/match/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.asianCupMatch(it))
+                    }
+                target.deepLinkPath?.startsWith("/asian-cup/team/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.asianCupTeam(it))
+                    }
                 !target.articleSlug.isNullOrBlank() ->
                     navController.navigate(SabqRoutes.articleDetail(target.articleSlug!!))
                 !target.notificationId.isNullOrBlank() ->
@@ -181,9 +235,23 @@ fun SabqApp(
             pushNavViewModel.consume()
         }
 
+        // Universal/custom links and Majlis push taps always land in the Gulf
+        // Cup predictions hub. The target remains persisted until the invite
+        // is accepted/cancelled or the addressed council is actually opened.
+        androidx.compose.runtime.LaunchedEffect(pendingMajlisLink) {
+            if (pendingMajlisLink != null && currentRoute != SabqRoutes.GulfCup) {
+                navController.navigate(SabqRoutes.GulfCup) { launchSingleTop = true }
+            }
+        }
+
         // Show the floating tab bar only on top-level tab routes; it
         // hides for ArticleDetail so the reader gets the full screen.
         val showTabBar = currentTab != null
+
+        // جلسات قديمة بلا اسم — غطاء إلزامي (شاشة الدخول تتولى الإكمال بعد OTP).
+        val showCompleteName = currentUser?.needsDisplayName == true &&
+            currentRoute != SabqRoutes.Login &&
+            settings.hasCompletedOnboardingV2
 
         Box(
             modifier = Modifier
@@ -220,6 +288,12 @@ fun SabqApp(
                         onWorldCupClick = {
                             navController.navigate(SabqRoutes.WorldCup)
                         },
+                        onGulfCupClick = {
+                            navController.navigate(SabqRoutes.GulfCup)
+                        },
+                        onAsianCupClick = {
+                            navController.navigate(SabqRoutes.AsianCup)
+                        },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
                         },
@@ -250,6 +324,12 @@ fun SabqApp(
                             hArticle.slug?.let { slug ->
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
+                        },
+                        onMuqtarabAllClick = {
+                            navController.navigate(SabqRoutes.Muqtarab)
+                        },
+                        onMuqtarabTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
                         },
                     )
                 }
@@ -319,6 +399,7 @@ fun SabqApp(
                     SettingsScreen(
                         onLoginClick = { navController.navigate(SabqRoutes.Login) },
                         onLoyaltyClick = { navController.navigate(SabqRoutes.Loyalty) },
+                        onPredictionsClick = { navController.navigate(SabqRoutes.Predictions) },
                         onEditProfileClick = { navController.navigate(SabqRoutes.EditProfile) },
                         onChangePasswordClick = { navController.navigate(SabqRoutes.ChangePassword) },
                         onDeleteAccountClick = { navController.navigate(SabqRoutes.DeleteAccount) },
@@ -376,8 +457,16 @@ fun SabqApp(
                     )
                 }
                 composable(SabqRoutes.ContributorDashboard) {
-                    com.sabq.smart.feature.settings.ContributorDashboardScreen(
+                    // «لوحة الكاتب»: كاتب الرأي يرى مساحة الكاتب بأربعة تبويبات،
+                    // وغيره لوحة الأداء وحدها — مطابقة لسلوك iOS.
+                    com.sabq.smart.feature.settings.WriterWorkspaceScreen(
                         onBack = { navController.popBackStack() },
+                        onOpenSurvey = { surveyToken ->
+                            navController.navigate(SabqRoutes.survey(surveyToken))
+                        },
+                        onOpenNotifications = {
+                            navController.navigate(SabqRoutes.Notifications)
+                        },
                     )
                 }
                 composable(SabqRoutes.Opinions) {
@@ -452,6 +541,22 @@ fun SabqApp(
                     com.sabq.smart.feature.worldcup.WorldCupScreen(
                         onBack = { navController.popBackStack() },
                         onOpenMatch = { id -> navController.navigate(SabqRoutes.worldCupMatch(id)) },
+                        onOpenArticle = { slug -> navController.navigate(SabqRoutes.articleDetail(slug)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.worldCupTeam(team.id, team.name, team.logo)) },
+                        onOpenPredictions = { navController.navigate(SabqRoutes.WorldCupPredictions) },
+                    )
+                }
+                composable(SabqRoutes.WorldCupPredictions) {
+                    com.sabq.smart.feature.worldcup.WorldCupPredictionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                // المنصة المركزية للتوقّعات — كل البطولات ما عدا المونديال
+                composable(SabqRoutes.Predictions) {
+                    com.sabq.smart.feature.predictions.PredictionCenterScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
                     )
                 }
                 composable(
@@ -460,6 +565,141 @@ fun SabqApp(
                 ) {
                     com.sabq.smart.feature.worldcup.WorldCupMatchCenterScreen(
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.WorldCupTeam,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) {
+                    com.sabq.smart.feature.worldcup.WorldCupTeamScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.worldCupMatch(id)) },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(SabqRoutes.GulfCup) {
+                    com.sabq.smart.feature.gulfcup.GulfCupScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.gulfCupMatch(id)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.gulfCupTeam(team.id, team.name, team.logo)) },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(SabqRoutes.AsianCup) {
+                    com.sabq.smart.feature.asiancup.AsianCupScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.asianCupMatch(id)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.asianCupTeam(team.id)) },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AsianCupMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.asiancup.AsianCupMatchScreen(
+                        fixtureId = fixtureId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AsianCupTeam,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val teamId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.asiancup.AsianCupTeamScreen(
+                        teamId = teamId,
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.asianCupMatch(id)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.GulfCupMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.gulfcup.GulfCupMatchScreen(
+                        fixtureId = fixtureId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.GulfCupTeam,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
+                    val teamId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.gulfcup.GulfCupTeamScreen(
+                        teamId = teamId,
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.gulfCupMatch(id)) },
+                    )
+                }
+                composable(SabqRoutes.Muqtarab) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabLandingScreen(
+                        onBack = { navController.popBackStack() },
+                        onAngleClick = { slug ->
+                            navController.navigate(SabqRoutes.muqtarabAngle(slug))
+                        },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MuqtarabAngle,
+                    arguments = listOf(navArgument("slug") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabAngleScreen(
+                        onBack = { navController.popBackStack() },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
+                        onWriterClick = { id ->
+                            navController.navigate(SabqRoutes.muqtarabWriter(id))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MuqtarabTopic,
+                    arguments = listOf(
+                        navArgument("angleSlug") { type = NavType.StringType },
+                        navArgument("topicSlug") { type = NavType.StringType },
+                    ),
+                ) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabTopicScreen(
+                        onBack = { navController.popBackStack() },
+                        onAngleClick = { slug ->
+                            navController.navigate(SabqRoutes.muqtarabAngle(slug))
+                        },
+                        onWriterClick = { id ->
+                            navController.navigate(SabqRoutes.muqtarabWriter(id))
+                        },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MuqtarabWriter,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabWriterScreen(
+                        onBack = { navController.popBackStack() },
+                        onAngleClick = { slug ->
+                            navController.navigate(SabqRoutes.muqtarabAngle(slug))
+                        },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
                     )
                 }
                 composable(SabqRoutes.Notifications) {
@@ -482,6 +722,18 @@ fun SabqApp(
                         onOpenArticle = { slug ->
                             navController.navigate(SabqRoutes.articleDetail(slug))
                         },
+                        onOpenSurvey = { surveyToken ->
+                            navController.navigate(SabqRoutes.survey(surveyToken))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.Survey,
+                    arguments = listOf(navArgument("token") { type = NavType.StringType }),
+                ) { entry ->
+                    com.sabq.smart.feature.survey.SurveyScreen(
+                        token = entry.arguments?.getString("token").orEmpty(),
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.NotificationPreferences) {
@@ -638,6 +890,11 @@ fun SabqApp(
             if (!settings.hasCompletedOnboardingV2) {
                 OnboardingScreen(
                     onComplete = { settingsViewModel.completeOnboarding() },
+                )
+            } else if (showCompleteName) {
+                CompleteNameScreen(
+                    onDone = { /* AuthRepository cache updates → needsDisplayName flips */ },
+                    phoneHint = currentUser?.phone,
                 )
             }
         }

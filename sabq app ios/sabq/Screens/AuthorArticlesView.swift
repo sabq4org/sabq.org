@@ -62,7 +62,7 @@ struct AuthorArticlesView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))
@@ -84,13 +84,13 @@ struct AuthorArticlesView: View {
 
             VStack(spacing: 8) {
                 Text(page?.author.name ?? authorName)
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 22, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.center)
 
                 if let role = page?.author.role, !role.isEmpty {
                     Text(role)
-                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .tracking(0.4)
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .padding(.horizontal, 12)
@@ -108,7 +108,7 @@ struct AuthorArticlesView: View {
 
             if let bio = page?.author.bio, !bio.isEmpty {
                 Text(bio)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -167,7 +167,7 @@ struct AuthorArticlesView: View {
                 )
                 .frame(width: 88, height: 88)
             Text(String((page?.author.name ?? authorName).prefix(1)))
-                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 36, weight: .heavy))
                 .foregroundStyle(SabqTheme.primaryEnd)
         }
     }
@@ -201,15 +201,15 @@ struct AuthorArticlesView: View {
         VStack(spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text(label)
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .tracking(0.2)
             }
             .foregroundStyle(tint)
 
             Text(value)
-                .font(.system(size: 19, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 19, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -255,10 +255,10 @@ struct AuthorArticlesView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "tag.fill")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("التصنيفات الأبرز")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
             }
 
@@ -275,11 +275,11 @@ struct AuthorArticlesView: View {
         let tint = Self.colorFromHex(cat.color) ?? SabqTheme.primaryEnd
         return HStack(spacing: 6) {
             Image(systemName: cat.icon ?? "circle.fill")
-                .font(.system(size: 10, weight: .semibold))
+                .font(SabqFonts.app(size: 10, weight: .regular))
             Text(cat.nameAr)
-                .font(.system(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .regular))
             Text("\(cat.count)")
-                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .monospacedDigit()
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
@@ -304,15 +304,15 @@ struct AuthorArticlesView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "newspaper.fill")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("أحدث المنشورات")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Spacer(minLength: 0)
                 if !articles.isEmpty {
                     Text("\(articles.count)")
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .monospacedDigit()
                 }

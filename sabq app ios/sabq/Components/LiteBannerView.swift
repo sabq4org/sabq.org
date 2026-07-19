@@ -44,16 +44,18 @@ struct LiteBannerView: View {
         .animation(.easeOut(duration: 0.25), value: lite.banner)
         .padding(.horizontal, 14)
         .padding(.top, 8)
+        // لا تعترض لمسات السحب للتحديث عندما لا يوجد شريط ظاهر
+        .allowsHitTesting(lite.banner != .none)
     }
 
     @ViewBuilder
     private func ActivationPill() -> some View {
         HStack(spacing: 10) {
             Image(systemName: "bolt.fill")
-                .font(.system(size: 13, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(.white)
             Text("الاتصال بطيء — تم التحويل لتصفح سبق Lite ⚡")
-                .font(.system(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(.white)
                 .lineLimit(2)
             Spacer(minLength: 0)
@@ -71,10 +73,10 @@ struct LiteBannerView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "wifi")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("الاتصال تحسّن — العودة للوضع الطبيعي؟")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                 Spacer(minLength: 0)
             }
@@ -84,7 +86,7 @@ struct LiteBannerView: View {
                     lite.acceptRecovery()
                 } label: {
                     Text("عودة")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
@@ -97,7 +99,7 @@ struct LiteBannerView: View {
                     lite.dismissRecovery()
                 } label: {
                     Text("ابقَ في Lite")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)

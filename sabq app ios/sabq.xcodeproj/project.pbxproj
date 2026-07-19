@@ -9,6 +9,11 @@
 /* Begin PBXBuildFile section */
 		3AFD17212FC1BC640025FACF /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 3AFD17202FC1BC640025FACF /* GoogleSignIn */; };
 		3AFD17232FC1BC6D0025FACF /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 3AFD17222FC1BC6D0025FACF /* GoogleSignInSwift */; };
+		5A11110000000000000000B1 /* LiveMatchAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A1 /* LiveMatchAttributes.swift */; };
+		5A11110000000000000000B2 /* LiveMatchLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A2 /* LiveMatchLiveActivity.swift */; };
+		5A11110000000000000000B3 /* SabqWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A3 /* SabqWidgetsBundle.swift */; };
+		5A11110000000000000000B4 /* LiveMatchAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A1 /* LiveMatchAttributes.swift */; };
+		5A11110000000000000000B5 /* SabqWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A5 /* SabqWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,12 +31,38 @@
 			remoteGlobalIDString = 3AFE5FD72F60C121006270F8;
 			remoteInfo = sabq;
 		};
+		5A11110000000000000000D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3AFE5FD02F60C121006270F8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A11110000000000000000D1;
+			remoteInfo = SabqWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5A11110000000000000000C4 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5A11110000000000000000B5 /* SabqWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		3AFE5FD82F60C121006270F8 /* sabq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sabq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AFE5FE72F60C123006270F8 /* sabqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sabqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sabqUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A11110000000000000000A1 /* LiveMatchAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMatchAttributes.swift; sourceTree = "<group>"; };
+		5A11110000000000000000A2 /* LiveMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMatchLiveActivity.swift; sourceTree = "<group>"; };
+		5A11110000000000000000A3 /* SabqWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SabqWidgetsBundle.swift; sourceTree = "<group>"; };
+		5A11110000000000000000A4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5A11110000000000000000A5 /* SabqWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SabqWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -89,6 +120,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A11110000000000000000C2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -103,6 +141,7 @@
 			isa = PBXGroup;
 			children = (
 				3AFE5FDA2F60C121006270F8 /* sabq */,
+				5A11110000000000000000E1 /* SabqWidgets */,
 				3AFE5FEA2F60C123006270F8 /* sabqTests */,
 				3AFE5FF42F60C123006270F8 /* sabqUITests */,
 				3AFD171F2FC1BC640025FACF /* Frameworks */,
@@ -116,8 +155,20 @@
 				3AFE5FD82F60C121006270F8 /* sabq.app */,
 				3AFE5FE72F60C123006270F8 /* sabqTests.xctest */,
 				3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */,
+				5A11110000000000000000A5 /* SabqWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		5A11110000000000000000E1 /* SabqWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				5A11110000000000000000A1 /* LiveMatchAttributes.swift */,
+				5A11110000000000000000A2 /* LiveMatchLiveActivity.swift */,
+				5A11110000000000000000A3 /* SabqWidgetsBundle.swift */,
+				5A11110000000000000000A4 /* Info.plist */,
+			);
+			path = SabqWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -130,10 +181,12 @@
 				3AFE5FD42F60C121006270F8 /* Sources */,
 				3AFE5FD52F60C121006270F8 /* Frameworks */,
 				3AFE5FD62F60C121006270F8 /* Resources */,
+				5A11110000000000000000C4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5A11110000000000000000D5 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				3AFE5FDA2F60C121006270F8 /* sabq */,
@@ -193,6 +246,25 @@
 			productReference = 3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		5A11110000000000000000D1 /* SabqWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A11110000000000000000D2 /* Build configuration list for PBXNativeTarget "SabqWidgetsExtension" */;
+			buildPhases = (
+				5A11110000000000000000C1 /* Sources */,
+				5A11110000000000000000C2 /* Frameworks */,
+				5A11110000000000000000C3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SabqWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = SabqWidgetsExtension;
+			productReference = 5A11110000000000000000A5 /* SabqWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -213,6 +285,9 @@
 					3AFE5FF02F60C123006270F8 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 3AFE5FD72F60C121006270F8;
+					};
+					5A11110000000000000000D1 = {
+						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
@@ -235,6 +310,7 @@
 			projectRoot = "";
 			targets = (
 				3AFE5FD72F60C121006270F8 /* sabq */,
+				5A11110000000000000000D1 /* SabqWidgetsExtension */,
 				3AFE5FE62F60C123006270F8 /* sabqTests */,
 				3AFE5FF02F60C123006270F8 /* sabqUITests */,
 			);
@@ -263,6 +339,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A11110000000000000000C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -270,6 +353,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A11110000000000000000B4 /* LiveMatchAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,6 +371,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A11110000000000000000C1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A11110000000000000000B1 /* LiveMatchAttributes.swift in Sources */,
+				5A11110000000000000000B2 /* LiveMatchLiveActivity.swift in Sources */,
+				5A11110000000000000000B3 /* SabqWidgetsBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -299,6 +393,11 @@
 			isa = PBXTargetDependency;
 			target = 3AFE5FD72F60C121006270F8 /* sabq */;
 			targetProxy = 3AFE5FF22F60C123006270F8 /* PBXContainerItemProxy */;
+		};
+		5A11110000000000000000D5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A11110000000000000000D1 /* SabqWidgetsExtension */;
+			targetProxy = 5A11110000000000000000D6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -427,7 +526,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026061401;
+				CURRENT_PROJECT_VERSION = 2026071807;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -459,7 +558,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 9.9.9;
+				MARKETING_VERSION = 10.1.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -484,7 +583,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026061401;
+				CURRENT_PROJECT_VERSION = 2026071807;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -516,7 +615,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 9.9.9;
+				MARKETING_VERSION = 10.1.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -635,6 +734,65 @@
 			};
 			name = Release;
 		};
+		5A11110000000000000000D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071807;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SabqWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDevelopmentRegion = ar;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 10.1.9;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.SabqWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5A11110000000000000000D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071807;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SabqWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDevelopmentRegion = ar;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 10.1.9;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.SabqWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -670,6 +828,15 @@
 			buildConfigurations = (
 				3AFE60022F60C123006270F8 /* Debug */,
 				3AFE60032F60C123006270F8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5A11110000000000000000D2 /* Build configuration list for PBXNativeTarget "SabqWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A11110000000000000000D3 /* Debug */,
+				5A11110000000000000000D4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

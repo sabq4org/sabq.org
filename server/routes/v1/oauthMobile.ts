@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { OAuth2Client } from "google-auth-library";
 import appleSignin from "apple-signin-auth";
 import { eq, or } from "drizzle-orm";
@@ -10,6 +11,8 @@ import {
   getUserStatusMessage,
 } from "@shared/schema";
 import { db } from "../../db";
+import { varaSendOtp, varaVerifyOtp } from "../../services/varaPhoneOtp";
+import { normalizePhone, findOrCreatePhoneUser } from "../../services/phoneAuth";
 
 const router = Router();
 
@@ -43,9 +46,17 @@ function getGoogleAudiences(): string[] {
 }
 
 function getAppleAudiences(): string[] {
+  const extraBundles = (process.env.APPLE_MOBILE_BUNDLE_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return [
     process.env.APPLE_CLIENT_ID,
     process.env.APPLE_IOS_BUNDLE_ID,
+    process.env.APPLE_SPORTS_BUNDLE_ID,
+    process.env.APPLE_GULFCUP_BUNDLE_ID,
+    process.env.APPLE_ASIANCUP_BUNDLE_ID,
+    ...extraBundles,
   ].filter((v): v is string => Boolean(v && v.trim()));
 }
 
@@ -88,6 +99,27 @@ async function issueSession(
 
   return { token, expiresAt };
 }
+
+// MARK: - دخول/تسجيل بالجوال (Twilio Verify) — E.164 دولي (+ أو 00) أو سعودي محلي.
+// (التطبيع + إنشاء/ربط المستخدم في services/phoneAuth.ts — مشترك مع الويب.)
+
+// حدّ إرسال الرمز — يحمي من قصف الرسائل والتكلفة: 5 إرسالات/نافذة لكل رقم (أو IP).
+const phoneSendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // ساعة
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Custom keyGenerator already falls back to req.ip — disable IPv6 validation noise.
+  validate: { keyGeneratorIpFallback: false, ip: false, xForwardedForHeader: false },
+  keyGenerator: (req) => {
+    const e164 = normalizePhone(req.body?.phone);
+    return e164 || req.ip || "unknown";
+  },
+  message: {
+    success: false,
+    message: "تجاوزت الحد المسموح لإرسال الرموز. حاول بعد قليل.",
+  },
+});
 
 router.post("/auth/google", async (req: Request, res: Response) => {
   try {
@@ -366,6 +398,65 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       success: false,
       message: "خطأ داخلي في الخادم",
     });
+  }
+});
+
+// إرسال رمز التحقق (SMS) عبر Twilio Verify.
+router.post("/auth/phone/send", phoneSendLimiter, async (req: Request, res: Response) => {
+  try {
+    const e164 = normalizePhone(req.body?.phone);
+    if (!e164) {
+      return res.status(400).json({
+        success: false,
+        message: "رقم جوال غير صحيح. أدخل الرقم بصيغة دولية مثل +9665XXXXXXXX.",
+      });
+    }
+    const result = await varaSendOtp(e164);
+    return res.status(result.success ? 200 : 502).json(result);
+  } catch (error) {
+    console.error("[v1 OAuth] /auth/phone/send error:", error);
+    return res.status(500).json({ success: false, message: "تعذّر إرسال رمز التحقق" });
+  }
+});
+
+// التحقق من الرمز → دخول العضو، وإنشاء حسابه إن لم يكن موجودًا (نفس SSO سبق).
+router.post("/auth/phone/verify", async (req: Request, res: Response) => {
+  try {
+    const e164 = normalizePhone(req.body?.phone);
+    const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
+    if (!e164) {
+      return res.status(400).json({ success: false, message: "رقم جوال غير صحيح" });
+    }
+    if (code.length < 4) {
+      return res.status(400).json({ success: false, message: "رمز التحقق غير صحيح" });
+    }
+
+    const check = await varaVerifyOtp(e164, code);
+    if (!check.valid) {
+      return res.status(401).json({ success: false, message: check.message });
+    }
+
+    const deviceInfo: DeviceInfo | undefined = req.body?.deviceInfo;
+
+    // البحث عن المستخدم أو إنشاؤه (منطق مشترك مع الويب).
+    const result = await findOrCreatePhoneUser(e164);
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+    const user = result.user;
+
+    const { token, expiresAt } = await issueSession(user.id, deviceInfo, req.ip);
+
+    return res.json({
+      success: true,
+      message: "تم تسجيل الدخول عبر الجوال",
+      token,
+      expiresAt: expiresAt.toISOString(),
+      user: buildUserPayload(user),
+    });
+  } catch (error) {
+    console.error("[v1 OAuth] /auth/phone/verify error:", error);
+    return res.status(500).json({ success: false, message: "خطأ داخلي في الخادم" });
   }
 });
 

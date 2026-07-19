@@ -199,12 +199,87 @@ extension View {
     }
 }
 
-// MARK: - Scroll Geometry Compat (iOS 18+ → iOS 17 no-op)
+// MARK: - Scroll Geometry Compat (iOS 18+ native / iOS 17 KVO fallback)
 
-/// Reports the scroll Y offset using `.onScrollGeometryChange` on
-/// iOS 18+ and silently no-ops on iOS 17. Callers that depend on the
-/// offset (scroll-to-top thresholds, parallax) should pick safe
-/// defaults so the absence of updates degrades gracefully.
+/// iOS 17 fallback for `.onScrollGeometryChange`: a zero-size probe placed
+/// as the ScrollView's background locates the backing `UIScrollView` in the
+/// hosting UIKit tree and observes `contentOffset` via KVO. Before this,
+/// the fallback was a silent no-op — on iOS 17 (the minimum we ship to)
+/// re-tapping Home never scrolled to top, the reading-progress bar stayed
+/// at zero, reading-depth analytics reported nothing, and the tab bar
+/// never auto-hid. The traversal only ever executes on iOS 17.x (18+ takes
+/// the native path), so it is frozen against a fixed OS and cannot rot
+/// with future releases.
+private struct LegacyScrollObserver: UIViewRepresentable {
+    let onScroll: (_ offsetY: CGFloat, _ progress: CGFloat) -> Void
+
+    func makeUIView(context: Context) -> LegacyScrollProbeView {
+        let view = LegacyScrollProbeView()
+        view.onScroll = onScroll
+        return view
+    }
+
+    func updateUIView(_ uiView: LegacyScrollProbeView, context: Context) {
+        uiView.onScroll = onScroll
+    }
+}
+
+final class LegacyScrollProbeView: UIView {
+    var onScroll: ((CGFloat, CGFloat) -> Void)?
+    private var observation: NSKeyValueObservation?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil, observation == nil else { return }
+        // انتظر دورة تخطيط واحدة حتى تكتمل شجرة الـ UIKit المضيفة.
+        DispatchQueue.main.async { [weak self] in self?.attach() }
+    }
+
+    private func attach() {
+        guard observation == nil, let scrollView = findScrollView() else { return }
+        observation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
+            // نفس القيم الخام التي يمررها مسار iOS 18 (onScrollGeometryChange)
+            // كي تصح عتبات المستهلكين (120 للعودة للأعلى، 80 لإخفاء الشريط).
+            let y = sv.contentOffset.y
+            let h = max(1, sv.contentSize.height - sv.bounds.height)
+            let p = min(1, max(0, y / h))
+            DispatchQueue.main.async { self?.onScroll?(y, p) }
+        }
+    }
+
+    private func findScrollView() -> UIScrollView? {
+        // الـ probe خلفية للـ ScrollView فليس داخله — نصعد للأسلاف ونبحث
+        // نزولًا، ونختار الأكبر مساحةً كي لا نلتقط rail أفقيًا متداخلًا.
+        var ancestor: UIView? = superview
+        var hops = 0
+        while let container = ancestor, hops < 6 {
+            var found: [UIScrollView] = []
+            Self.collectScrollViews(in: container, depth: 0, into: &found)
+            if let best = found.max(by: {
+                $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height
+            }) {
+                return best
+            }
+            ancestor = container.superview
+            hops += 1
+        }
+        return nil
+    }
+
+    private static func collectScrollViews(in view: UIView, depth: Int, into result: inout [UIScrollView]) {
+        if let sv = view as? UIScrollView {
+            result.append(sv)
+            return
+        }
+        guard depth < 8 else { return }
+        for sub in view.subviews {
+            collectScrollViews(in: sub, depth: depth + 1, into: &result)
+        }
+    }
+}
+
+/// Reports the scroll Y offset — `.onScrollGeometryChange` on iOS 18+,
+/// KVO probe on iOS 17 (see `LegacyScrollObserver`).
 private struct ScrollOffsetTracker: ViewModifier {
     let onChange: (CGFloat) -> Void
 
@@ -216,15 +291,14 @@ private struct ScrollOffsetTracker: ViewModifier {
                 onChange(y)
             }
         } else {
-            content
+            content.background(LegacyScrollObserver { y, _ in onChange(y) })
         }
     }
 }
 
-/// Reports scroll progress in [0, 1] using `.onScrollGeometryChange`
-/// on iOS 18+ and no-ops on iOS 17. The reading-progress bar in the
-/// article/opinion detail screens uses this; on iOS 17 the bar simply
-/// stays at zero, which is acceptable.
+/// Reports scroll progress in [0, 1] — `.onScrollGeometryChange` on
+/// iOS 18+, KVO probe on iOS 17. Drives the reading-progress bar and
+/// reading-depth analytics in the article/opinion detail screens.
 private struct ScrollProgressTracker: ViewModifier {
     let onChange: (CGFloat) -> Void
 
@@ -237,7 +311,7 @@ private struct ScrollProgressTracker: ViewModifier {
                 onChange(p)
             }
         } else {
-            content
+            content.background(LegacyScrollObserver { _, p in onChange(p) })
         }
     }
 }
@@ -253,7 +327,7 @@ extension View {
 
     /// Auto-hide the floating tab bar when this ScrollView scrolls down,
     /// re-show it on upward scroll or when the user returns near the top.
-    /// No-op on iOS 17 (the tab bar stays put), so the layout never breaks.
+    /// iOS 18+ uses onScrollGeometryChange; iOS 17 uses the KVO probe.
     func sabqAutoHideTabBar() -> some View {
         modifier(TabBarAutoHideTracker())
     }
@@ -333,7 +407,9 @@ private struct TabBarAutoHideTracker: ViewModifier {
                 TabBarVisibility.shared.report(y)
             }
         } else {
-            content
+            content.background(LegacyScrollObserver { y, _ in
+                TabBarVisibility.shared.report(y)
+            })
         }
     }
 }
@@ -387,7 +463,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
             image = nil
             return
         }
-        if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
+        if let cached = ImageCache.cached(requestedURL, minPixelSize: self.maxPixelSize) {
             image = cached
             return
         }
@@ -420,11 +496,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
         // the next mount is instant, but only update UI when we're still the
         // current request.
         if let loaded {
-            ImageCache.shared.setObject(
-                loaded,
-                forKey: requestedURL as NSURL,
-                cost: ImageCache.byteCost(of: loaded)
-            )
+            ImageCache.store(loaded, for: requestedURL, budget: maxPx)
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
@@ -457,6 +529,10 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
+    // التلاشي يُدار بـ opacity مستقلة بدل .transition — حتى لا يلتقط أنيميشن
+    // الإدراج إعادةَ حساب إزاحة التركيز أثناء استقرار التخطيط عند التحميل
+    // (كان ذلك يُحدث «انزلاق الصورة + فراغ جانبي» لحظيًا، أوضحه عرض Pro Max).
+    @State private var shown = false
 
     init(
         url: URL?,
@@ -473,7 +549,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             ZStack(alignment: .topLeading) {
                 if let image {
                     focalImage(image, in: proxy.size)
-                        .transition(.opacity.animation(.easeOut(duration: 0.25)))
+                        .opacity(shown ? 1 : 0)
                 } else {
                     placeholder()
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -514,16 +590,27 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             .interpolation(.high)
             .frame(width: drawnW, height: drawnH)
             .offset(x: offsetX, y: offsetY)
+            // داخل كروسيل TabView (.page) يُعيد GeometryReader قياس الصفحة
+            // أثناء السحب، فتتغيّر أبعاد الحاوية ومعها الإزاحة المحسوبة. بدون
+            // هذا يلتقط SwiftUI تلك التغيّرات ضمن أنيميشن السحب فتبدو الصورة
+            // «تنزلق من مكانها» عند الانتقال بين الشرائح. تعطيل الأنيميشن عند
+            // تغيّر الحجم يثبّت الصورة (الظهور الأول يبقى بتلاشٍ عبر transition).
+            .animation(nil, value: container)
     }
 
     @MainActor
     private func loadImage(for requestedURL: URL?) async {
         guard let requestedURL else {
             image = nil
+            shown = false
             return
         }
-        if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
+        if let cached = ImageCache.cached(requestedURL, minPixelSize: 2400) {
+            // صورة مخبّأة: ضعها بموضعها النهائي فورًا بلا أنيميشن هندسة، ثم
+            // لاشِ الشفافية فقط — فلا تنزلق ولا يظهر فراغ على الشاشات العريضة.
             image = cached
+            shown = false
+            withAnimation(.easeOut(duration: 0.2)) { shown = true }
             return
         }
 
@@ -549,19 +636,18 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         }
 
         if let loaded {
-            ImageCache.shared.setObject(
-                loaded,
-                forKey: requestedURL as NSURL,
-                cost: ImageCache.byteCost(of: loaded)
-            )
+            ImageCache.store(loaded, for: requestedURL, budget: 2400)
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
-            withAnimation(.easeOut(duration: 0.25)) {
-                image = loaded
-            }
+            // ضبط الصورة بلا أنيميشن (موضع نهائي فورًا) ثم تلاشي الشفافية فقط —
+            // يمنع التقاطَ أنيميشنِ الإدراج لإعادة حساب إزاحة التركيز.
+            image = loaded
+            shown = false
+            withAnimation(.easeOut(duration: 0.25)) { shown = true }
         } else {
             image = nil
+            shown = false
         }
     }
 }
@@ -591,12 +677,54 @@ nonisolated enum ImageCDN {
 }
 
 nonisolated enum ImageCache {
-    nonisolated(unsafe) static let shared: NSCache<NSURL, UIImage> = {
-        let c = NSCache<NSURL, UIImage>()
+    /// قيمة الكاش: الصورة + «ميزانية» الجلب (maxPixelSize وقت التنزيل).
+    /// المفتاح يبقى الرابط الأصلي (مشاركة البطاقة/الهيرو/اللايتبوكس)، لكن
+    /// القبول صار «ترقية فقط»: طالب دقّة أعلى لا يقبل نسخة البطاقة الصغيرة —
+    /// كان prefetch البطاقات (1200px) يسبق الهيرو فيملأ مفتاحه ويظهر الهيرو
+    /// ضبابيًّا على الشاشات العريضة. الميزانية تمنع أيضًا إعادة جلب عبثية
+    /// لأصلٍ أصغر من المطلوب (جُلب بميزانية كافية وبقي صغيرًا = هذا أفضل المتاح).
+    final class Entry {
+        let image: UIImage
+        let budget: CGFloat
+        init(image: UIImage, budget: CGFloat) {
+            self.image = image
+            self.budget = budget
+        }
+    }
+
+    nonisolated(unsafe) static let shared: NSCache<NSURL, Entry> = {
+        let c = NSCache<NSURL, Entry>()
         c.countLimit = 150
         c.totalCostLimit = 100 * 1024 * 1024
         return c
     }()
+
+    /// النسخة المخبّأة إن كانت كافية للدقّة المطلوبة (بميزانيتها أو بأبعادها
+    /// الفعلية ≥ 85% من المطلوب — التقريب يمنع إعادة جلب بلا فرق بصري).
+    static func cached(_ url: URL, minPixelSize: CGFloat) -> UIImage? {
+        guard let entry = shared.object(forKey: url as NSURL) else { return nil }
+        if entry.budget + 0.5 >= minPixelSize { return entry.image }
+        let maxDim = max(entry.image.size.width, entry.image.size.height) * entry.image.scale
+        return maxDim >= minPixelSize * 0.85 ? entry.image : nil
+    }
+
+    /// النسخة المخبّأة بأي دقّة — للعرض الفوري ريثما تصل الأعلى (اللايتبوكس).
+    static func cachedAny(_ url: URL) -> UIImage? {
+        shared.object(forKey: url as NSURL)?.image
+    }
+
+    /// يخزّن نسخة — ولا يستبدل نسخة بميزانية أكبر بأخرى أصغر (سباق
+    /// prefetch البطاقات مع تحميل الهيرو المتزامن).
+    static func store(_ image: UIImage, for url: URL, budget: CGFloat) {
+        if let existing = shared.object(forKey: url as NSURL), existing.budget >= budget {
+            return
+        }
+        shared.setObject(
+            Entry(image: image, budget: budget),
+            forKey: url as NSURL,
+            cost: byteCost(of: image)
+        )
+    }
 
     /// Dedicated URLSession for image downloads. The default
     /// `URLSession.shared` caps `httpMaximumConnectionsPerHost` at 4 —
@@ -633,12 +761,12 @@ nonisolated enum ImageCache {
             // Cache key is always the ORIGINAL url so the lightbox and the
             // on-mount loaders all hit the same entry. Only the network
             // fetch uses the width-bounded CF variant.
-            if shared.object(forKey: url as NSURL) != nil { continue }
+            if cached(url, minPixelSize: maxPixelSize) != nil { continue }
             let fetchURL = ImageCDN.sized(url, width: width)
             Task.detached(priority: .utility) {
                 guard let (data, _) = try? await imageSession.data(from: fetchURL) else { return }
                 guard let img = decodedImage(data: data, maxPixelSize: maxPixelSize) else { return }
-                shared.setObject(img, forKey: url as NSURL, cost: byteCost(of: img))
+                store(img, for: url, budget: maxPixelSize)
             }
         }
     }
@@ -669,6 +797,40 @@ nonisolated enum ImageCache {
     /// memory ceiling.
     static func byteCost(of image: UIImage) -> Int {
         Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+    }
+}
+
+// MARK: - Upload image preparation
+
+/// تجهيز صورة للرفع: تصغير الضلع الأطول إلى حدّ معقول ثم JPEG — مشترك بين
+/// المشاركة الجديدة (ArticleSubmissionView) وإعادة الإرسال (ArticleRevisionView)
+/// التي كانت ترفع الأصل الخام (4-8MB × عدة صور × 1.33 base64 = تجاوز حدّ
+/// جسم JSON وذروة ذاكرة بلا داعٍ).
+nonisolated enum SabqImageUpload {
+    static func prepare(
+        _ image: UIImage,
+        maxDimension: CGFloat = 2000,
+        quality: CGFloat = 0.7
+    ) -> (data: Data, image: UIImage) {
+        let size = image.size
+        let longest = max(size.width, size.height)
+        let scaled: UIImage
+        if longest > maxDimension {
+            let factor = maxDimension / longest
+            let newSize = CGSize(width: size.width * factor, height: size.height * factor)
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1
+            let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+            scaled = renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        } else {
+            scaled = image
+        }
+        let data = scaled.jpegData(compressionQuality: quality)
+            ?? image.jpegData(compressionQuality: quality)
+            ?? Data()
+        return (data, scaled)
     }
 }
 
@@ -788,7 +950,7 @@ struct ImageLightbox: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(SabqFonts.app(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(.white.opacity(0.18)))
@@ -833,7 +995,7 @@ struct ImageLightbox: View {
         // stays sharp. NSCache hit short-circuits to the already-loaded
         // bitmap; otherwise we download once and seed both `image` and
         // the cache.
-        if let cached = ImageCache.shared.object(forKey: url as NSURL) {
+        if let cached = ImageCache.cachedAny(url) {
             // Show the cached (lower-res) bitmap immediately so the user
             // never sees a blank lightbox, then upgrade if a higher-res
             // version is available below.
@@ -856,7 +1018,7 @@ struct ImageLightbox: View {
 
 // MARK: - Theme
 
-enum SabqTheme {
+nonisolated enum SabqTheme {
     static let background  = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1)
@@ -1019,11 +1181,11 @@ struct CompactScreenHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 28, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 14, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
@@ -1055,11 +1217,11 @@ struct SectionHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(.system(size: 14, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
@@ -1089,7 +1251,7 @@ struct SmallSquareBadge: View {
             .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
             }
     }
@@ -1111,7 +1273,7 @@ struct SquareIconBadge: View {
             .frame(width: 72, height: 72)
             .overlay {
                 Image(systemName: systemImage)
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(SabqFonts.app(size: 26, weight: .semibold))
                     .foregroundStyle(tint)
             }
     }
@@ -1129,10 +1291,10 @@ struct SmallActionButton: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
 
                 Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
             }
             .foregroundStyle(tint)
             .padding(.horizontal, 14)
@@ -1156,10 +1318,10 @@ struct PrimaryCTAButton: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Text(title)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
 
                 Image(systemName: systemImage)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
             }
             .foregroundStyle(Color.white.opacity(isDisabled ? 0.7 : 1))
             .frame(maxWidth: .infinity)
@@ -1191,10 +1353,10 @@ struct CategoryChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(isSelected ? .white : SabqTheme.secondaryInk)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
                 .background(
                     Capsule(style: .continuous)
                         .fill(
@@ -1221,10 +1383,10 @@ struct StatusChip: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
+            .font(SabqFonts.app(size: 11, weight: .regular))
             .foregroundStyle(tint)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 Capsule(style: .continuous)
                     .fill(tint.opacity(0.10))
@@ -1242,13 +1404,13 @@ struct DetailLabelPill: View {
         HStack(spacing: 5) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(SabqFonts.app(size: 10, weight: .medium))
                     // SF Symbols vary in bounding box — lock size so every pill
                     // matches the passport "موثَّق" chip height.
                     .frame(width: 11, height: 11)
             }
             Text(title)
-                .font(.system(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .lineLimit(1)
         }
         .foregroundStyle(tint)
@@ -1274,42 +1436,31 @@ struct FeaturedArticleCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Hero container uses the `Color.clear → .overlay(image)`
-            // pattern instead of letting the Image drive intrinsic size.
-            // Why: in RTL TabView pages (especially the first page,
-            // which is *visually* the last because of layoutDirection
-            // inversion), CachedAsyncImage's intrinsic width — derived
-            // from .fill's aspect-ratio math on the loaded UIImage —
-            // would leak into the card's layout pass, making the card
-            // wider than the TabView page. The Arabic title + excerpt
-            // then bled past the screen's right edge, clipping the
-            // first word of every line (e.g. "أبو" missing from
-            // "أبوظبي"). `Color.clear` gives the container a fixed,
-            // parent-driven width, and `.overlay { image.scaledToFill }
-            // .clipped()` paints the image inside that fixed frame
-            // without ever asking SwiftUI to recompute layout from the
-            // image's pixel size.
-            // 16:10 hero — was fixed 200pt which produced a too-short
-            // viewport that crop-clipped faces in portrait shots (the
-            // backend's focal point is centred for most photos and the
-            // resulting hero ate the top of the head). Android renders
-            // a taller hero at the same width and shows the full
-            // subject; matching it here. Reported 2026-05-24.
+            // Hero must always span the card width. Using aspectRatio(.fit)
+            // as the *outer* size rule let TabView's fixed height compress
+            // the image horizontally on wide phones (Pro / Pro Max) while
+            // the text block below kept the card full-width — white side
+            // gutters. Width-driven height + fixedSize(vertical) refuses
+            // that squeeze; carousel height tracks the same math.
             Color.clear
                 .frame(maxWidth: .infinity)
                 .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .fixedSize(horizontal: false, vertical: true)
                 .overlay {
-                    if let urlString = article.imageURL, let url = URL(string: urlString) {
-                        FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                    Group {
+                        if let urlString = article.imageURL, let url = URL(string: urlString) {
+                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                                articleImagePlaceholder
+                                    .overlay {
+                                        ProgressView()
+                                            .tint(SabqTheme.primaryEnd)
+                                    }
+                            }
+                        } else {
                             articleImagePlaceholder
-                                .overlay {
-                                    ProgressView()
-                                        .tint(SabqTheme.primaryEnd)
-                                }
                         }
-                    } else {
-                        articleImagePlaceholder
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .clipped()
                 .clipShape(
@@ -1338,39 +1489,37 @@ struct FeaturedArticleCard: View {
                 // the long Arabic title bled past the card edge, clipping
                 // the start of every line (looked like "أبو" was missing
                 // from "أبوظبي").
-                Text(article.title)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
+                    color: SabqTheme.ink,
+                    lineLimit: 3,
+                    lineSpacing: 4
+                )
 
-                Text(article.excerpt)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                SabqRTLText(
+                    article.excerpt,
+                    uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
+                    color: SabqTheme.secondaryInk,
+                    lineLimit: 2,
+                    lineSpacing: 3
+                )
 
                 HStack(spacing: 12) {
                     HStack(spacing: 5) {
                         Image(systemName: "clock")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                         Text(article.readingTime)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                             .monospacedDigit()
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                     HStack(spacing: 5) {
                         Image(systemName: "calendar")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                         Text(article.dateFormatted)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
@@ -1381,7 +1530,7 @@ struct FeaturedArticleCard: View {
                         onBookmark()
                     } label: {
                         Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(SabqFonts.app(size: 15, weight: .medium))
                             .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
                             .scaleEffect(isBookmarked ? 1.15 : 1)
                             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
@@ -1420,10 +1569,10 @@ struct FeaturedArticleCard: View {
                 endPoint: .bottomTrailing
             )
         )
-        .frame(height: 200)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             Image(systemName: article.category.icon)
-                .font(.system(size: 80, weight: .ultraLight))
+                .font(SabqFonts.app(size: 80, weight: .ultraLight))
                 .foregroundStyle(article.category.tint.opacity(0.15))
         }
     }
@@ -1468,12 +1617,13 @@ struct CompactArticleRow: View {
                     if isNew { newPill }
                 }
 
-                Text(article.title)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqFonts.uiSubhead(size: 16),
+                    color: SabqTheme.ink,
+                    lineLimit: 2,
+                    lineSpacing: 4
+                )
 
                 metadataRow
             }
@@ -1504,12 +1654,13 @@ struct CompactArticleRow: View {
         VStack(alignment: .leading, spacing: 12) {
             heroImage
 
-            Text(article.title)
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-                .foregroundStyle(SabqTheme.ink)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .lineSpacing(4)
+            SabqRTLText(
+                article.title,
+                uiFont: SabqFonts.uiSubhead(size: 17),
+                color: SabqTheme.ink,
+                lineLimit: 3,
+                lineSpacing: 4
+            )
 
             metadataRow
         }
@@ -1557,7 +1708,7 @@ struct CompactArticleRow: View {
         )
         .overlay {
             Image(systemName: article.category.icon)
-                .font(.system(size: 40, weight: .light))
+                .font(SabqFonts.app(size: 40, weight: .light))
                 .foregroundStyle(article.category.tint.opacity(0.5))
         }
     }
@@ -1568,13 +1719,13 @@ struct CompactArticleRow: View {
         HStack(spacing: 4) {
             Circle()
                 .fill(SabqTheme.coral)
-                .frame(width: 6, height: 6)
+                .frame(width: 5, height: 5)
             Text("عاجل")
-                .font(.system(size: 11, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .medium))
                 .foregroundStyle(SabqTheme.coral)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background(
             Capsule(style: .continuous)
                 .fill(SabqTheme.coral.opacity(0.10))
@@ -1583,10 +1734,10 @@ struct CompactArticleRow: View {
 
     private var newPill: some View {
         Text("جديد")
-            .font(.system(size: 11, weight: .bold))
+            .font(SabqFonts.app(size: 10, weight: .medium))
             .foregroundStyle(SabqTheme.leaf)
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(
                 Capsule(style: .continuous)
                     .fill(SabqTheme.leaf.opacity(0.12))
@@ -1597,15 +1748,15 @@ struct CompactArticleRow: View {
         HStack(spacing: 12) {
             HStack(spacing: 4) {
                 Image(systemName: "clock")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text(article.readingTime)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .monospacedDigit()
             }
             .foregroundStyle(SabqTheme.tertiaryInk)
 
             Text(article.relativeDate)
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
 
             Spacer(minLength: 0)
@@ -1615,7 +1766,7 @@ struct CompactArticleRow: View {
                 onBookmark()
             } label: {
                 Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
                     .scaleEffect(isBookmarked ? 1.1 : 1)
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isBookmarked)
@@ -1636,7 +1787,7 @@ struct CompactArticleRow: View {
             .frame(width: size, height: size)
             .overlay {
                 Image(systemName: article.category.icon)
-                    .font(.system(size: size * 0.33, weight: .light))
+                    .font(SabqFonts.app(size: size * 0.33, weight: .light))
                     .foregroundStyle(article.category.tint.opacity(0.6))
             }
     }
@@ -1668,11 +1819,11 @@ struct CategoryTile: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(category.subtitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1718,19 +1869,19 @@ struct EmptyStateView: View {
                     .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
 
                 Image(systemName: icon)
-                    .font(.system(size: 42, weight: .semibold))
+                    .font(SabqFonts.app(size: 42, weight: .semibold))
                     .foregroundStyle(tint)
                     .symbolEffect(.pulse, isActive: isAnimating)
             }
 
             VStack(spacing: 8) {
                 Text(title)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.center)
 
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 15, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -1744,9 +1895,9 @@ struct EmptyStateView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(SabqFonts.app(size: 14, weight: .semibold))
                         Text(actionTitle)
-                            .font(.system(size: 14, weight: .bold))
+                            .font(SabqFonts.app(size: 14, weight: .bold))
                     }
                     .foregroundStyle(tint)
                     .padding(.horizontal, 24)
@@ -1821,6 +1972,10 @@ struct SabqTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
+                // التبويب غير المحدد أيقونة فقط — بدون توصيف لا يعرف مستخدم
+                // VoiceOver أسماء التبويبات ولا أيّها المحدد حاليًا.
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
         .padding(.horizontal, 8)
@@ -1842,13 +1997,13 @@ struct SabqTabBar: View {
         let tint = SabqTheme.primaryEnd
         HStack(spacing: 6) {
             Image(systemName: isSelected ? tab.selectedImage : tab.systemImage)
-                .font(.system(size: 17, weight: .semibold))
+                .font(SabqFonts.app(size: 16, weight: .medium))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(isSelected ? tint : SabqTheme.tertiaryInk)
 
             if isSelected {
                 Text(tab.title)
-                    .font(.system(size: 12.5, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(tint)
                     // Without these, "استكشاف" wraps onto a second line
                     // inside the narrower active capsule on 6.1" devices.
@@ -1885,7 +2040,7 @@ struct SabqSearchBar: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .semibold))
+                .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(text.isEmpty ? SabqTheme.primaryEnd.opacity(0.5) : SabqTheme.primaryEnd)
                 .animation(.easeInOut(duration: 0.2), value: text.isEmpty)
 
@@ -1899,7 +2054,7 @@ struct SabqSearchBar: View {
                     SabqHaptics.light()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .font(SabqFonts.app(size: 16))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 .buttonStyle(.plain)
@@ -1928,7 +2083,7 @@ struct SabqSearchBar: View {
     @ViewBuilder
     private var textField: some View {
         let field = TextField(placeholder, text: $text)
-            .font(.system(size: 16, weight: .medium))
+            .font(SabqFonts.app(size: 16, weight: .medium))
             .foregroundStyle(SabqTheme.ink)
             .multilineTextAlignment(.leading)
             .onSubmit { onSubmit?() }

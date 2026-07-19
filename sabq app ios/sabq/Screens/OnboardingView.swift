@@ -84,19 +84,19 @@ struct OnboardingView: View {
                     .stroke(slide.tint.opacity(0.20), lineWidth: 1)
                     .frame(width: 200, height: 200)
                 Image(systemName: slide.icon)
-                    .font(.system(size: 64, weight: .light))
+                    .font(SabqFonts.app(size: 64, weight: .light))
                     .foregroundStyle(slide.tint)
                     .symbolRenderingMode(.hierarchical)
             }
 
             VStack(spacing: 14) {
                 Text(slide.title)
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 26, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.center)
 
                 Text(slide.body)
-                    .font(.system(size: 15))
+                    .font(SabqFonts.app(size: 15))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
@@ -118,10 +118,10 @@ struct OnboardingView: View {
             if page < slides.count - 1 {
                 Button {
                     SabqHaptics.light()
-                    completed = true
+                    finishOnboarding()
                 } label: {
                     Text("تخطّي")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             } else {
@@ -132,6 +132,21 @@ struct OnboardingView: View {
         .padding(.horizontal, 26)
         .padding(.bottom, 30)
         .padding(.top, 16)
+    }
+
+    /// Finish onboarding for both paths (skip + "ابدأ الآن"). Asks for
+    /// notification permission here — independent of login — so the system
+    /// prompt fires on first run and Sabq registers an APNs token + appears
+    /// in iOS notification settings. Previously the prompt only fired after
+    /// sign-in (AuthStore.registerPushTokenAfterAuth), so users who browsed
+    /// without an account were never asked and Sabq was absent from the
+    /// notification center (bug 2026-06-24). The token is stored locally and
+    /// re-linked to the account after login.
+    private func finishOnboarding() {
+        Task { _ = await NotificationsStore.shared.requestPermission() }
+        withAnimation(.easeOut(duration: 0.3)) {
+            completed = true
+        }
     }
 
     private var indicators: some View {
@@ -154,13 +169,11 @@ struct OnboardingView: View {
                     page += 1
                 }
             } else {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    completed = true
-                }
+                finishOnboarding()
             }
         } label: {
             Text(page < slides.count - 1 ? "التالي" : "ابدأ الآن")
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)

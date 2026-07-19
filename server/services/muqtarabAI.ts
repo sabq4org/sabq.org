@@ -8,7 +8,12 @@ import {
   updateAutoGenerationSettings,
 } from "./autoImageGenerationService";
 
-const MODEL = { provider: "openai" as const, model: "gpt-4o-mini", jsonMode: true };
+const MODEL = {
+  provider: "openai" as const,
+  model: "gpt-4o-mini",
+  jsonMode: true,
+  feature: "muqtarab-ai",
+};
 
 function extractJson(raw: string): unknown | null {
   const trimmed = raw.trim();

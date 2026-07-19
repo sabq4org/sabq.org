@@ -15,7 +15,12 @@ import { drizzle as drizzleNeon, type NeonDatabase } from 'drizzle-orm/neon-serv
 import { Pool as PgPool } from 'pg';
 import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import ws from "ws";
+import { sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
+import {
+  getSessionFallbackPoolConfig,
+  shouldRunStartupMaintenance,
+} from "./dbPoolConfig";
 
 neonConfig.webSocketConstructor = ws;
 neonConfig.pipelineConnect = "password";
@@ -31,18 +36,31 @@ const DB_DRIVER = (process.env.DB_DRIVER || 'neon').toLowerCase();
 let pool: any;
 let db: NeonDatabase<typeof schema> | NodePgDatabase<typeof schema>;
 let _dbConnected = false;
+// مزلاج «جاهز مرة واحدة»: يثبت true بعد أول تحقق ناجح ولا يعود false مع
+// الأعطال العابرة. يقود بوابة /health حتى لا يحوّل Railway الترافيك إلى
+// حاوية جديدة قبل أن تكون قاعدة البيانات (وربما Neon بعد suspend) جاهزة —
+// عاصفتا النشر 2026-07-18 (18:05 و18:45 UTC) كانتا كلها «timeout exceeded
+// when trying to connect» في الدقائق الأولى بعد الإقلاع.
+let _dbEverConnected = false;
 let _dbLastError: string | null = null;
 let _reconnectTimer: ReturnType<typeof setInterval> | null = null;
+let _sessionFallbackPool: any;
 
 function getDatabaseUrl(): string | undefined {
   return process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 }
 
 function initPool(databaseUrl: string): void {
+  // Sizing note (incident 2026-07-11): a breaking-news push (الأوامر الملكية)
+  // saturated max=15 within seconds — every request then queued 10s on
+  // pool.connect() and died with "timeout exceeded when trying to connect",
+  // returning 5xx HTML to clients (the "JSON Parse: Unrecognized token '<'"
+  // reports). max=50 stays well under Neon's limits (direct ≥112, -pooler 10k).
+  // min=2 keeps warm sockets so a post-idle burst doesn't pay full cold-start.
   const poolConfig = {
     connectionString: databaseUrl,
-    max: 15,
-    min: 0,
+    max: 50,
+    min: 2,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,
@@ -73,6 +91,35 @@ function initPool(databaseUrl: string): void {
   }
 }
 
+/**
+ * A dedicated pool for connect-pg-simple. During a Redis outage every request
+ * with a session can hit PostgreSQL; sharing the main pool allowed those calls
+ * to consume all 50 content connections. Keeping at most a few short-lived
+ * session connections forms a bulkhead around article/search traffic.
+ */
+export function getSessionFallbackPool(): any {
+  if (_sessionFallbackPool) return _sessionFallbackPool;
+
+  const databaseUrl = getDatabaseUrl();
+  if (!databaseUrl) {
+    throw new Error("Database URL is required for the PostgreSQL session store");
+  }
+
+  const poolConfig = getSessionFallbackPoolConfig(databaseUrl);
+  _sessionFallbackPool = DB_DRIVER === "pg"
+    ? new PgPool(poolConfig)
+    : new NeonPool(poolConfig);
+
+  _sessionFallbackPool.on("error", (err: any) => {
+    console.error("[Session Pool] Unexpected client error:", err.message);
+  });
+
+  console.log(
+    `[Session Pool] Isolated PostgreSQL pool initialized (max=${poolConfig.max}, connTimeout=${poolConfig.connectionTimeoutMillis}ms, queryTimeout=${poolConfig.query_timeout}ms)`,
+  );
+  return _sessionFallbackPool;
+}
+
 async function verifyConnection(): Promise<boolean> {
   try {
     if (!pool) return false;
@@ -80,6 +127,7 @@ async function verifyConnection(): Promise<boolean> {
     await pool.query('SELECT 1');
     const elapsed = Date.now() - start;
     _dbConnected = true;
+    _dbEverConnected = true;
     _dbLastError = null;
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[DB] Connection verified (${elapsed}ms)`);
@@ -93,15 +141,32 @@ async function verifyConnection(): Promise<boolean> {
   }
 }
 
+// تدفئة الـpool قبل استقبال الترافيك: min=2 لا يكفي لحظة تحويل Railway
+// الترافيك إلى الحاوية الجديدة — أول موجة طلبات كانت تتكدس كلها على
+// pool.connect (بحد 10 ثوانٍ) فوق Neon بارد. فتح عدة اتصالات بالتوازي
+// هنا يدفع كلفة الإقلاع مرة واحدة قبل أن يمر أي طلب حقيقي.
+async function warmPool(target: number): Promise<void> {
+  try {
+    const warmers = Array.from({ length: target }, () =>
+      pool.query('SELECT 1').catch(() => {}),
+    );
+    await Promise.all(warmers);
+    console.log(`[DB] Pool warmed (${target} parallel connections)`);
+  } catch {
+    // أفضل جهد — التحقق الأساسي تم في verifyConnection
+  }
+}
+
 let _dbMaintenanceDone = false;
 
 async function runStartupMaintenance(): Promise<void> {
   if (_dbMaintenanceDone) return;
   _dbMaintenanceDone = true;
-  if (process.env.SKIP_DB_MAINTENANCE === 'true') {
-    console.log('[DB] Startup maintenance skipped (SKIP_DB_MAINTENANCE=true) — read-only mode for safety');
+  if (!shouldRunStartupMaintenance()) {
+    console.log('[DB] Startup maintenance disabled by default (set RUN_DB_STARTUP_MAINTENANCE=true explicitly to enable)');
     return;
   }
+  console.warn('[DB] Startup maintenance explicitly enabled — running database-changing operations');
   try {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_homepage_order ON articles (status, hide_from_homepage, display_order DESC, published_at DESC)`);
     console.log('[DB] Homepage order index ensured');
@@ -129,11 +194,38 @@ async function runStartupMaintenance(): Promise<void> {
   } finally {
     try { await pool.query(`SET statement_timeout = '0'`); } catch {}
   }
+  // Trigram index backing the /api/search title fallback (lower(title) LIKE
+  // '%q%'). Without it, numeric/no-FTS-match queries (e.g. "4220449") force a
+  // full seq scan and hit the 3s timeout. gin_trgm_ops serves leading-wildcard
+  // ILIKE. Built on lower(title) to match the query's lower(a.title) predicate.
+  try {
+    await pool.query(`SET statement_timeout = '20s'`);
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_title_trgm ON articles USING gin(lower(title) gin_trgm_ops) WHERE status = 'published'`);
+    console.log('[DB] Title trigram index ensured');
+  } catch (err: any) {
+    console.warn('[DB] Title trigram index creation skipped:', err.message);
+  } finally {
+    try { await pool.query(`SET statement_timeout = '0'`); } catch {}
+  }
   try {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_published_status ON articles (published_at DESC) WHERE status = 'published'`);
     console.log('[DB] Published status index ensured');
   } catch (err: any) {
     console.warn('[DB] Published status index creation skipped:', err.message);
+  }
+  // GIN index backing the /api/keyword/:kw SEO-keywords fallback. The exact-match
+  // fast path queries (seo -> 'keywords') @> to_jsonb('kw'); jsonb_path_ops is the
+  // smallest opclass that serves @> containment. Without it that fallback runs a
+  // full jsonb_array_elements_text scan over every published article (~3.5s).
+  try {
+    await pool.query(`SET statement_timeout = '20s'`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_seo_keywords_gin ON articles USING gin((seo -> 'keywords') jsonb_path_ops) WHERE status = 'published'`);
+    console.log('[DB] SEO keywords GIN index ensured');
+  } catch (err: any) {
+    console.warn('[DB] SEO keywords GIN index creation skipped:', err.message);
+  } finally {
+    try { await pool.query(`SET statement_timeout = '0'`); } catch {}
   }
   try {
     await pool.query(`
@@ -179,6 +271,7 @@ function startReconnectLoop(): void {
       if (connected) {
         console.log('[DB] Reconnection successful');
         stopReconnectLoop();
+        warmPool(8);
         runStartupMaintenance();
       }
     } catch (error: any) {
@@ -208,7 +301,7 @@ try {
   initPool(databaseUrl);
   
   console.log("[DB] Pool initialized");
-  console.log(`[DB] Pool config: max=15, min=0, idleTimeout=30s, connTimeout=10s, allowExitOnIdle=true (driver=${DB_DRIVER})`);
+  console.log(`[DB] Pool config: max=50, min=2, idleTimeout=30s, connTimeout=10s, allowExitOnIdle=true (driver=${DB_DRIVER})`);
   
   const monitorInterval = process.env.NODE_ENV === 'production' ? 300000 : 60000;
   const monitorTimer = setInterval(() => {
@@ -232,6 +325,7 @@ try {
     if (!connected) {
       startReconnectLoop();
     } else {
+      warmPool(8);
       runStartupMaintenance();
     }
   });
@@ -251,6 +345,13 @@ try {
 
 export function isDatabaseAvailable(): boolean {
   return pool !== undefined && db !== undefined && _dbConnected;
+}
+
+// بوابة جاهزية الإقلاع لـ/health: تعود true بعد أول تحقق ناجح وتبقى كذلك.
+// عمدًا لا تهبط مع الأعطال العابرة — فحص Railway وقت النشر فقط، وإسقاطها
+// لاحقًا قد يجعل منصة النشر تعتبر حاوية سليمة فاشلة.
+export function isDatabaseReadyOnce(): boolean {
+  return _dbEverConnected;
 }
 
 export function getDatabaseStatus(): { connected: boolean; lastError: string | null; reconnecting: boolean } {
@@ -286,6 +387,24 @@ export async function timedQuery<T>(
     console.error(`❌ [Query Error] ${queryName}: ${elapsed}ms`, error);
     throw error;
   }
+}
+
+// Run a read query bounded by a real Postgres statement_timeout so a slow query
+// is CANCELLED server-side (releasing its pool connection) rather than lingering.
+// The JS-side Promise.race some callers use only abandons the JS promise — the
+// underlying DB query keeps running and holds one of the 15 pool connections
+// until it finishes on its own. Under load that starves the pool and stalls
+// unrelated light writes (e.g. POST /view). Wrapping the query in a short
+// transaction with SET LOCAL statement_timeout makes PG abort it on time.
+export async function executeWithStatementTimeout<T = any>(
+  query: any,
+  timeoutMs: number,
+): Promise<T> {
+  const ms = Math.max(100, Math.floor(timeoutMs));
+  return (db as any).transaction(async (tx: any) => {
+    await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${ms}`));
+    return (await tx.execute(query)) as T;
+  });
 }
 
 // Pool stats helper for debugging

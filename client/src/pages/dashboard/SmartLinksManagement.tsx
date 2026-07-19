@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Link2, Database, Tag } from "lucide-react";
 import type { InsertEntityTypeDb, InsertSmartEntityDb, InsertSmartTermDb } from "@shared/schema";
@@ -295,16 +296,15 @@ export default function SmartLinksManagement() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-6 space-y-6" dir="rtl">
-        <div>
-          <h1 className="text-3xl font-bold">الروابط الذكية</h1>
-          <p className="text-muted-foreground mt-2">
-            إدارة أنواع الكيانات والكيانات الذكية والمصطلحات المرتبطة بها
-          </p>
-        </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={Link2}
+          title="الروابط الذكية"
+          description="إدارة أنواع الكيانات والكيانات الذكية والمصطلحات المرتبطة بها."
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" dir="rtl">
-          <TabsList className="grid w-full grid-cols-3" dir="rtl">
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3" dir="rtl">
             <TabsTrigger value="entity-types" className="gap-2" data-testid="tab-entity-types">
               <Database className="h-4 w-4" />
               أنواع الكيانات
@@ -1065,7 +1065,7 @@ function SmartEntityDialog({
                     formData.append('image', file);
                     
                     try {
-                      const response = await fetch("/api/smart-entities/upload-image", {
+                      const response = await fetch(apiUrl("/api/smart-entities/upload-image"), {
                         method: "POST",
                         body: formData,
                         credentials: "include",

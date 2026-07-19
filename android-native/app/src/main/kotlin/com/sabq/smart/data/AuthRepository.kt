@@ -1,11 +1,15 @@
 package com.sabq.smart.data
 
 import com.sabq.smart.data.api.ApiErrorResponse
+import com.sabq.smart.data.api.ApiLoginResponse
 import com.sabq.smart.data.api.AppleFullName
 import com.sabq.smart.data.api.AppleOAuthRequest
 import com.sabq.smart.data.api.GoogleOAuthRequest
 import com.sabq.smart.data.api.LoginRequest
 import com.sabq.smart.data.api.OAuthDeviceInfo
+import com.sabq.smart.data.api.PhoneSendRequest
+import com.sabq.smart.data.api.PhoneSendResponse
+import com.sabq.smart.data.api.PhoneVerifyRequest
 import com.sabq.smart.data.api.RegisterRequest
 import com.sabq.smart.data.api.ResendActivationRequest
 import com.sabq.smart.data.api.ResendActivationResponse
@@ -126,20 +130,59 @@ class AuthRepository @Inject constructor(
      * [PendingActivationException] so the login screen can offer the
      * "resend activation email" affordance.
      */
-    suspend fun login(email: String, password: String): User {
+    suspend fun login(email: String, password: String): User =
+        loginWithIdentifier(email, password)
+
+    /**
+     * دخول بحساب سبق بالبريد أو الجوال + كلمة المرور.
+     * يكتشف البريد بوجود «@» ويرسل `email` أو `phone` حسب ذلك.
+     */
+    suspend fun loginWithIdentifier(identifier: String, password: String): User {
+        val trimmed = identifier.trim()
+        val isEmail = trimmed.contains("@")
         val response = try {
-            api.login(LoginRequest(email = email.trim(), password = password))
+            api.login(
+                LoginRequest(
+                    email = if (isEmail) trimmed.lowercase() else null,
+                    phone = if (isEmail) null else trimmed,
+                    password = password,
+                ),
+            )
         } catch (e: HttpException) {
             val errorBody = extractErrorBody(e)
             if (errorBody?.requiresActivation == true) {
                 throw PendingActivationException(
                     message = errorBody.message ?: "الحساب غير مفعل. يرجى تفعيل الحساب أولاً",
                     userId = errorBody.userId,
-                    email = email.trim(),
+                    email = if (isEmail) trimmed else null,
                 )
             }
             throw AuthException(errorBody?.message ?: "تعذّر تسجيل الدخول")
         }
+        return finishCredentialLogin(response)
+    }
+
+    /** إرسال رمز تحقّق للجوال. الرقم بأي صيغة سعودية — الخادم يطبّعه. */
+    suspend fun sendPhoneCode(phone: String): PhoneSendResponse {
+        return try {
+            api.sendPhoneCode(PhoneSendRequest(phone = phone))
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "تعذّر إرسال رمز التحقق")
+        }
+    }
+
+    /** التحقق من رمز الجوال وتثبيت الجلسة (ينشئ الحساب إن لزم). */
+    suspend fun verifyPhoneCode(phone: String, code: String): User {
+        val response = try {
+            api.verifyPhoneCode(PhoneVerifyRequest(phone = phone, code = code))
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "رمز التحقق غير صحيح")
+        }
+        return finishCredentialLogin(response)
+    }
+
+    /** تثبيت الجلسة بعد دخول بريد/جوال/OTP — نفس مسار OAuth بعد إصدار التوكن. */
+    private suspend fun finishCredentialLogin(response: ApiLoginResponse): User {
         val token = response.token
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول")
         tokenStore.set(token)

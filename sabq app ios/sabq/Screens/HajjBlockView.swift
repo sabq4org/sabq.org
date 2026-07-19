@@ -63,7 +63,7 @@ struct HajjBlockView: View {
         .overlay(alignment: .topLeading) {
             // Decorative crescent — kept subtle so it reads as texture.
             Image(systemName: "moon.fill")
-                .font(.system(size: 36, weight: .ultraLight))
+                .font(SabqFonts.app(size: 36, weight: .ultraLight))
                 .foregroundStyle(Palette.moonOverlay)
                 .padding(.top, 12)
                 .padding(.leading, 12)
@@ -76,14 +76,14 @@ struct HajjBlockView: View {
     private func header(block: APIHajjBlockResponse) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text("🕋")
-                .font(.system(size: 26))
+                .font(SabqFonts.app(size: 26))
             VStack(alignment: .leading, spacing: 2) {
                 Text(block.title ?? "صدى الحج")
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 19, weight: .bold))
                     .foregroundStyle(Palette.titleInk)
                 if let subtitle = block.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(Palette.subtitleInk)
                         .lineLimit(2)
                 }
@@ -92,9 +92,9 @@ struct HajjBlockView: View {
             if let updated = block.lastUpdatedAt, let date = SabqFormatters.parseISO8601(updated) {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
-                        .font(.system(size: 9))
+                        .font(SabqFonts.app(size: 9))
                     Text(relativeTime(date))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                 }
                 .foregroundStyle(Palette.secondaryInk)
                 .padding(.horizontal, 8)
@@ -125,13 +125,13 @@ struct HajjBlockView: View {
                     let isCurrent = p.id == phase
                     HStack(spacing: 5) {
                         Text("يوم")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                             .opacity(0.7)
                         Text(p.nameAr)
-                            .font(.system(size: 11, weight: .bold))
+                            .font(SabqFonts.app(size: 11, weight: .bold))
                         if isCurrent, let day = hajjDay {
                             Text("· \(day) ذو الحجة")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                                 .opacity(0.75)
                         }
                     }
@@ -150,7 +150,7 @@ struct HajjBlockView: View {
                 // the title row.
                 if phase == "before", let d = daysToArafat, d > 0 {
                     Text(d == 1 ? "غدًا يوم عرفة" : "\(d) أيام حتى يوم عرفة")
-                        .font(.system(size: 11, weight: .heavy))
+                        .font(SabqFonts.app(size: 11, weight: .heavy))
                         .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
@@ -167,12 +167,12 @@ struct HajjBlockView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
                     Text(article.hajjEmoji)
-                        .font(.system(size: 11))
+                        .font(SabqFonts.app(size: 11))
                     Text(article.hajjTag)
-                        .font(.system(size: 10, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .heavy))
                     if article.isPinned == true {
                         Text("★")
-                            .font(.system(size: 9, weight: .heavy))
+                            .font(SabqFonts.app(size: 9, weight: .heavy))
                             .foregroundStyle(Palette.pinnedStar)
                     }
                 }
@@ -182,7 +182,7 @@ struct HajjBlockView: View {
                 .background(Palette.tagChipBg, in: Capsule())
 
                 Text(article.title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(Palette.articleTitleInk)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -190,7 +190,7 @@ struct HajjBlockView: View {
                 if let published = article.publishedAt,
                    let date = SabqFormatters.parseISO8601(published) {
                     Text(relativeTime(date))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(Palette.tertiaryInk)
                 }
             }
@@ -224,7 +224,7 @@ struct HajjBlockView: View {
                 colors: [Palette.thumbStart, Palette.thumbEnd],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
-            Text("🕋").font(.system(size: 24)).opacity(0.55)
+            Text("🕋").font(SabqFonts.app(size: 24)).opacity(0.55)
         }
     }
 

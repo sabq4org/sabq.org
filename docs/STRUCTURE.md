@@ -6,6 +6,20 @@
 > ملاحظة: لم يُنقل أو يُحذف أي ملف كود أو إعداد. كود TypeScript لا يستورد ملفات `.md`،
 > وتم التحقق بعد النقل عبر `npm run check`.
 
+## docs/systems/ — كتالوج الأنظمة (مصدر الحقيقة للمنتج)
+
+خريطة الأنظمة التشغيلية + حوكمة Agents + جرد الملفات/استهلاك AI.
+
+| ملف | الدور |
+|-----|--------|
+| `README.md` | نقطة الدخول |
+| `GOVERNANCE.md` | قواعد التحديث والقالب |
+| `registry.json` | سجل آلي (id، globs، روابط) |
+| `inventory-snapshot.json` | لقطة أعداد الملفات للإنتاج |
+| `<id>/SYSTEM.md` | وثيقة إلزامية لكل نظام قبل تعديله |
+
+لوحة التحكم: `/dashboard/systems-catalog` · CLI: `node scripts/systems-inventory.mjs`
+
 ## docs/security/ — الأمن
 - `SECURITY_AUDIT_REPORT.md` — تقرير تدقيق أمني سابق
 - `SECURITY_LINK_INJECTION_AUDIT_AR.md` — تدقيق حقن الروابط
@@ -21,9 +35,11 @@
 ## docs/setup/ — الإعداد والتشغيل
 - `DATABASE_SETUP_INSTRUCTIONS_AR.md`
 - `OBJECT-STORAGE-SETUP.md`
+- `R2_NEWS_IMAGES_ROLLOUT.md` — تشغيل صور الأخبار على R2، التدرج، الكاش، والتراجع
 - `SECRETS-UPDATE-GUIDE.md`
 - `WEBHOOK-SETUP-GUIDE.md`
 - `MIGRATION_RUNBOOK.md`
+- `GOOGLE_ANALYTICS.md` — كيف نضع gtag/GA4 ونرصد مشاهدات الصفحات (ويب + iOS + Android)
 
 ## docs/handoff/ — تسليمات
 - `HANDOFF-android-native-2026-05-19.md`
@@ -42,6 +58,11 @@
 
 ## docs/notes/ — ملاحظات
 - `sultan.md`
+
+## ولاء / عضوية
+- `LOYALTY_iOS_HANDOFF.md` — تسليم Phase 3 للولاء على iOS
+- `LOYALTY_WALAONE_ACQUISITION_PREVIEW.md` — معاينة اكتساب النقاط × ولاء ون (2026-07-17): صفحة `/loyalty-preview` والقيم المقترحة — لم تُطبَّق على الإنتاج
+- `LOYALTY_WALAONE_TERMS_RISK_MAP.md` — خريطة مخاطر شروط ولاء ون → حماية سبق + صفحة `/loyalty-terms`
 
 ## مقترحات لم تُنفَّذ (تتطلّب قرار الفريق)
 - إنشاء `SECURITY.md` جذري يفهرس وثائق الأمن وسياسة الإفصاح.

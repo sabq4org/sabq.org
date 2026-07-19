@@ -63,7 +63,7 @@ struct SignUpFlowView: View {
                                 HStack {
                                     ProgressView().tint(SabqTheme.primaryEnd)
                                     Text("ننشئ حسابك…")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(SabqFonts.app(size: 12, weight: .medium))
                                         .foregroundStyle(SabqTheme.secondaryInk)
                                 }
                                 .padding(.vertical, 8)
@@ -134,7 +134,7 @@ struct SignUpFlowView: View {
                         .opacity(buildProgress < Self.buildSteps.count ? 0.0 : 0.6)
                         .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false), value: buildProgress)
                     Image(systemName: buildProgress < Self.buildSteps.count ? "sparkles" : "checkmark")
-                        .font(.system(size: 36, weight: .heavy))
+                        .font(SabqFonts.app(size: 36, weight: .heavy))
                         .foregroundStyle(.white)
                 }
                 Spacer()
@@ -144,17 +144,17 @@ struct SignUpFlowView: View {
             VStack(alignment: .center, spacing: 6) {
                 if buildProgress < Self.buildSteps.count {
                     Text("نُجهّز ملفّك الذكي…")
-                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 22, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("لحظات قليلة وتصبح سبق أقرب إليك")
-                        .font(.system(size: 13))
+                        .font(SabqFonts.app(size: 13))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 } else {
                     Text("أهلاً \(name) 🎉")
-                        .font(.system(size: 26, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 26, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("ملفّك الذكي جاهز. كل خبر من الآن مرتّب لك أنت.")
-                        .font(.system(size: 13))
+                        .font(SabqFonts.app(size: 13))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .multilineTextAlignment(.center)
                 }
@@ -174,7 +174,7 @@ struct SignUpFlowView: View {
                                 .frame(width: 28, height: 28)
                             if idx < buildProgress {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .heavy))
+                                    .font(SabqFonts.app(size: 12, weight: .heavy))
                                     .foregroundStyle(.white)
                             } else if idx == buildProgress {
                                 ProgressView()
@@ -182,12 +182,12 @@ struct SignUpFlowView: View {
                                     .scaleEffect(0.7)
                             } else {
                                 Image(systemName: item.icon)
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(SabqFonts.app(size: 12, weight: .semibold))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
                         }
                         Text(item.label)
-                            .font(.system(size: 14, weight: idx <= buildProgress ? .bold : .medium))
+                            .font(SabqFonts.app(size: 14, weight: idx <= buildProgress ? .bold : .medium))
                             .foregroundStyle(idx <= buildProgress ? SabqTheme.ink : SabqTheme.tertiaryInk)
                         Spacer(minLength: 0)
                     }
@@ -218,7 +218,7 @@ struct SignUpFlowView: View {
                     dismiss()
                 } label: {
                     Text("ابدأ التصفّح")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 16, weight: .heavy))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
@@ -262,15 +262,15 @@ struct SignUpFlowView: View {
                     ))
                     .frame(width: 36, height: 36)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .heavy))
+                    .font(SabqFonts.app(size: 16, weight: .heavy))
                     .foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("SABQ AI")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Text("مرشدك إلى ملفّك")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Spacer(minLength: 0)
@@ -278,7 +278,7 @@ struct SignUpFlowView: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .padding(8)
                     .background(Circle().fill(SabqTheme.paleFill))
@@ -327,14 +327,14 @@ struct SignUpFlowView: View {
                 ))
                 .frame(width: 26, height: 26)
             Image(systemName: "sparkles")
-                .font(.system(size: 11, weight: .bold))
+                .font(SabqFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(.white)
         }
     }
 
     private func aiBubble(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 14, weight: .medium))
+            .font(SabqFonts.app(size: 14, weight: .medium))
             .foregroundStyle(SabqTheme.ink)
             .multilineTextAlignment(.leading)
             .padding(.horizontal, 14)
@@ -351,7 +351,7 @@ struct SignUpFlowView: View {
 
     private func userBubble(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 14, weight: .semibold))
+            .font(SabqFonts.app(size: 14, weight: .semibold))
             .foregroundStyle(.white)
             .multilineTextAlignment(.leading)
             .padding(.horizontal, 14)
@@ -390,7 +390,7 @@ struct SignUpFlowView: View {
                         .autocorrectionDisabled(step == .askEmail || step == .askPassword)
                 }
             }
-            .font(.system(size: 14, weight: .medium))
+            .font(SabqFonts.app(size: 14, weight: .medium))
             .focused($inputFocused)
             .submitLabel(.send)
             .onSubmit { Task { await handleSubmit() } }
@@ -405,7 +405,7 @@ struct SignUpFlowView: View {
                 Task { await handleSubmit() }
             } label: {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(
@@ -447,9 +447,9 @@ struct SignUpFlowView: View {
                     Text(selectedInterests.isEmpty
                         ? "تخطّي"
                         : "تأكيد \(selectedInterests.count) تصنيفاً")
-                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 14, weight: .heavy))
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -477,7 +477,7 @@ struct SignUpFlowView: View {
             if isOn { selectedInterests.remove(id) } else { selectedInterests.insert(id) }
         } label: {
             Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(isOn ? .white : SabqTheme.ink)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
@@ -492,7 +492,7 @@ struct SignUpFlowView: View {
     private func errorRetry(_ msg: String) -> some View {
         VStack(spacing: 10) {
             Text(msg)
-                .font(.system(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(SabqTheme.coral)
                 .multilineTextAlignment(.center)
             Button {
@@ -501,7 +501,7 @@ struct SignUpFlowView: View {
                 Task { await startConversation() }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)

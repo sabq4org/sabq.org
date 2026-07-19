@@ -191,11 +191,14 @@ final class BookmarksStore {
     }
 }
 
+/// ميتاداتا فقط — بلا `body`: كان النص الكامل لكل مقال محفوظ يُرمَّز إلى
+/// UserDefaults عند كل toggle ويُفكّ عند كل إقلاع (ملف plist بعدة ميغابايت
+/// لمن لديه مئات المحفوظات)، بينما شاشة التفاصيل تعيد الجلب من الـ API أصلًا.
+/// الكاش القديم المخزَّن بمفتاح body يظل يُفكّ بنجاح (المفاتيح الزائدة تُتجاهل).
 private struct CachedArticle: Codable {
     let id: String
     let title: String
     let excerpt: String
-    let body: String
     let categoryRaw: String
     let author: String
     let publishDate: Date
@@ -210,7 +213,6 @@ private struct CachedArticle: Codable {
         id = article.id
         title = article.title
         excerpt = article.excerpt
-        body = article.body
         categoryRaw = article.category.rawValue
         author = article.author
         publishDate = article.publishDate
@@ -233,9 +235,8 @@ private struct CachedArticle: Codable {
             // means the smart-summary card falls back to `excerpt` for the
             // brief moment between opening a bookmark and the fetch landing.
             aiSummary: "",
-            body: body,
-            // Bookmarks store only the stripped body; the rich HTML is
-            // re-fetched from the API when the article is opened.
+            // النص والـ HTML يُعاد جلبهما من الـ API عند فتح المقال.
+            body: "",
             bodyHTML: "",
             category: ArticleCategory(rawValue: categoryRaw) ?? .saudi,
             author: author,

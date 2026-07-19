@@ -36,6 +36,9 @@ struct HomeLiteView: View {
             .padding(.bottom, 32)
         }
         .background(SabqTheme.background.ignoresSafeArea())
+        .refreshable {
+            await articlesStore.loadArticles(ignoreCache: true)
+        }
         .task {
             // Same first-load pattern as the full feed — fetch once
             // if the store hasn't populated yet. Subsequent navigations
@@ -51,7 +54,7 @@ struct HomeLiteView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "bolt.fill")
-                .font(.system(size: 14, weight: .bold))
+                .font(SabqFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(SabqTheme.primaryEnd)
                 .padding(6)
                 .background(
@@ -59,10 +62,10 @@ struct HomeLiteView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text("سبق Lite")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text("عرض الأخبار فقط — أسرع وأخف")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Spacer(minLength: 0)
@@ -96,7 +99,7 @@ struct HomeLiteView: View {
                             ProgressView().tint(SabqTheme.primaryEnd)
                         } else {
                             Text("تحميل المزيد")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SabqTheme.primaryEnd)
                         }
                     }
@@ -112,7 +115,7 @@ struct HomeLiteView: View {
         VStack(spacing: 12) {
             ProgressView().tint(SabqTheme.primaryEnd)
             Text("يتم تحميل الأخبار…")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)

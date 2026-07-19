@@ -179,8 +179,9 @@ export async function getUserPermissionOverrides(userId: string): Promise<Array<
 // Invalidate cached permission data for a user
 // Call this when roles/permissions change
 export function invalidateUserPermissionCache(userId: string): void {
-  const cacheKey = `rbac:${userId}`;
-  memoryCache.delete(cacheKey);
+  memoryCache.delete(`rbac:${userId}`);
+  // The composed GET /api/auth/user payload embeds permissions — keep in sync.
+  memoryCache.delete(`auth-user:${userId}`);
 }
 
 // Middleware: Require authentication
@@ -331,8 +332,17 @@ export function requireRole(...roleNames: string[]) {
       }
     }
 
-    // Check if user has any of the required roles
-    const hasRole = roleNames.some(roleName => userRoleNames.includes(roleName));
+    // Check if user has any of the required roles.
+    // Superusers (system_admin / superadmin / …) satisfy any gate that
+    // includes "admin" — otherwise a system_admin-only account gets 403 on
+    // routes written as requireRole("admin", "editor") while still seeing
+    // those pages in the sidebar (nav maps system_admin → admin).
+    const isSuperuser = userRoleNames.some((r) =>
+      (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r),
+    );
+    const hasRole =
+      roleNames.some((roleName) => userRoleNames.includes(roleName)) ||
+      (isSuperuser && roleNames.includes("admin"));
 
     if (!hasRole) {
       console.error(`[RBAC] Access denied - user roles: ${userRoleNames.join(', ')}, required: ${roleNames.join(', ')}`);
@@ -363,7 +373,17 @@ export async function logActivity(params: {
   };
 }) {
   const { activityLogs } = await import("@shared/schema");
-  
+
+  // entity_type and entity_id are NOT NULL in the schema; bail out early with a
+  // clear warning instead of issuing an insert that is guaranteed to violate the
+  // constraint (avoids noisy DrizzleQueryError stacks in production logs).
+  if (!params.entityType || !params.entityId) {
+    console.warn(
+      `[logActivity] skipped: missing entityType/entityId for action="${params.action}" (userId=${params.userId})`,
+    );
+    return;
+  }
+
   try {
     await db.insert(activityLogs).values({
       userId: params.userId,

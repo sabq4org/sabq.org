@@ -126,13 +126,13 @@ export function InfographicArticleCard({
 
                 {/* Summary */}
                 {article.aiSummary && (
-                  <p className="text-muted-foreground text-base leading-relaxed line-clamp-2 mb-4">
+                  <p className="mb-4 line-clamp-2 text-base font-medium leading-relaxed text-foreground/70">
                     {article.aiSummary}
                   </p>
                 )}
 
                 {/* Meta Row */}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground mb-6">
+                <div className="mb-6 flex items-center gap-4 text-sm font-medium text-foreground/65">
                   {timeAgo && (
                     <span className="flex items-center gap-1.5">
                       <Clock className="h-4 w-4" />
@@ -200,7 +200,7 @@ export function InfographicArticleCard({
                 {article.title}
               </h3>
               {timeAgo && (
-                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                <div className="mt-1 flex items-center gap-2 text-xs font-medium text-foreground/65">
                   <span>{timeAgo}</span>
                 </div>
               )}
@@ -283,7 +283,7 @@ export function InfographicArticleCard({
 
           {/* Footer */}
           <div className="p-4 bg-gradient-to-b from-muted/30 to-transparent">
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <div className="flex items-center justify-between text-sm font-medium text-foreground/65">
               <div className="flex items-center gap-3">
                 {timeAgo && (
                   <span className="flex items-center gap-1">

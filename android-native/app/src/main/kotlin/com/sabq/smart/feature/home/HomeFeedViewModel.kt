@@ -6,12 +6,15 @@ import com.sabq.smart.data.Article
 import com.sabq.smart.data.ArticleRepository
 import com.sabq.smart.data.AudioNewsletter
 import com.sabq.smart.data.BookmarksStore
+import com.sabq.smart.data.BreakingTickerHeadline
 import com.sabq.smart.data.CalendarEvent
 import com.sabq.smart.data.HajjBlock
 import com.sabq.smart.data.HomeExtrasRepository
 import com.sabq.smart.data.InsightsRepository
 import com.sabq.smart.data.LoyaltyRepository
 import com.sabq.smart.data.LoyaltySummary
+import com.sabq.smart.data.MuqTopic
+import com.sabq.smart.data.MuqtarabRepository
 import com.sabq.smart.data.Section
 import com.sabq.smart.data.Story
 import com.sabq.smart.data.TodayInsights
@@ -39,8 +42,13 @@ sealed interface HomeFeedUiState {
         val isLoadingMore: Boolean = false,
         val bookmarkedIds: Set<String> = emptySet(),
         /** Top breaking-news headline — shown as a single coral pill
-         *  between the greeting and the featured carousel. */
+         *  between the greeting and the featured carousel. Fallback
+         *  when [breakingTicker] is empty. */
         val breaking: Article? = null,
+        /** Dashboard-curated breaking ticker headlines. When non-empty
+         *  the rotating [BreakingTickerBar] takes precedence over the
+         *  single [breaking] pill — mirrors iOS HomeFeedView.swift:157. */
+        val breakingTicker: List<BreakingTickerHeadline> = emptyList(),
         /** Top opinion articles (max 5). Rendered as a horizontal
          *  rail under the opinionsPreview section. */
         val opinions: List<Article> = emptyList(),
@@ -64,6 +72,10 @@ sealed interface HomeFeedUiState {
          *  of season / no articles) — Home then renders nothing in
          *  this slot. */
         val hajjBlock: HajjBlock? = null,
+        /** Featured «مُقترب» topics — rendered as a horizontal strip
+         *  with an "الكل" link to the Muqtarab landing. Empty hides
+         *  the whole block. */
+        val muqtarabTopics: List<MuqTopic> = emptyList(),
     ) : HomeFeedUiState
 }
 
@@ -74,6 +86,7 @@ class HomeFeedViewModel @Inject constructor(
     private val bookmarks: BookmarksStore,
     private val insightsRepo: InsightsRepository,
     private val loyaltyRepo: LoyaltyRepository,
+    private val muqtarabRepo: MuqtarabRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeFeedUiState>(HomeFeedUiState.Loading)
@@ -222,12 +235,16 @@ class HomeFeedViewModel @Inject constructor(
     private fun loadExtras() {
         viewModelScope.launch {
             val breakingJob = async { runCatching { repo.getBreaking() }.getOrDefault(emptyList()) }
+            // بار العاجل من لوحة التحكم — الخادم يرجع `null` حرفيًا عند عدم
+            // وجود موضوع نشط ففشلُ الترميز هنا يعني «لا شريط» (سقوط للبطاقة).
+            val tickerJob = async { runCatching { extrasRepo.getBreakingTicker() }.getOrDefault(emptyList()) }
             val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 5) }.getOrNull()?.items ?: emptyList() }
             val trendingJob = async { runCatching { repo.getTrending() }.getOrDefault(emptyList()) }
             val storiesJob = async { runCatching { extrasRepo.getStories() }.getOrDefault(emptyList()) }
             val calendarJob = async { runCatching { extrasRepo.getCalendarUpcoming() }.getOrDefault(emptyList()) }
             val audioJob = async { runCatching { extrasRepo.getLatestAudioNewsletter() }.getOrNull() }
             val hajjJob = async { runCatching { extrasRepo.getHajjBlock() }.getOrNull() }
+            val muqtarabJob = async { runCatching { muqtarabRepo.getFeaturedTopics(limit = 6) }.getOrDefault(emptyList()) }
             // Auth-required side-fetches. Anonymous users will 401 here;
             // we swallow that and the personal-journey block stays
             // hidden because [journeyInsights] remains null.
@@ -239,12 +256,14 @@ class HomeFeedViewModel @Inject constructor(
             async { runCatching { bookmarks.syncFromServer() } }
 
             val breaking = breakingJob.await().firstOrNull()
+            val breakingTicker = tickerJob.await()
             val opinions = opinionsJob.await()
             val trending = trendingJob.await().take(3)
             val stories = storiesJob.await()
             val calendar = calendarJob.await().take(3)
             val audioNewsletter = audioJob.await()
             val hajjBlock = hajjJob.await()
+            val muqtarabTopics = muqtarabJob.await()
             val insights = insightsJob.await()
             val loyalty = loyaltyJob.await()
 
@@ -252,12 +271,14 @@ class HomeFeedViewModel @Inject constructor(
                 if (c is HomeFeedUiState.Loaded) {
                     c.copy(
                         breaking = breaking,
+                        breakingTicker = breakingTicker,
                         opinions = opinions,
                         trending = trending,
                         stories = stories,
                         calendar = calendar,
                         audioNewsletter = audioNewsletter,
                         hajjBlock = hajjBlock,
+                        muqtarabTopics = muqtarabTopics,
                         journeyInsights = insights,
                         loyaltySummary = loyalty,
                     )

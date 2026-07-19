@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "../ThemeToggle";
+import { DashboardThemePickerButton } from "../DashboardThemePickerButton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,8 @@ import { InternalAnnouncement } from "../InternalAnnouncement";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { UserRole } from "@/nav/types";
 import type { NavItem } from "@/nav/types";
+
+import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -97,12 +100,14 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen w-full items-center justify-center" dir="ltr">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading...</p>
+      <DashboardThemeProvider>
+        <div className="flex h-screen w-full items-center justify-center" dir="ltr">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading...</p>
+          </div>
         </div>
-      </div>
+      </DashboardThemeProvider>
     );
   }
 
@@ -237,6 +242,7 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
+    <DashboardThemeProvider>
     <SidebarProvider>
       <div className="flex h-screen w-full" dir="ltr">
         <Sidebar side="left" collapsible="offcanvas">
@@ -299,6 +305,7 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
           <header className="flex h-16 items-center gap-4 border-b px-4 md:px-6">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex-1" />
+            <DashboardThemePickerButton />
             <ThemeToggle />
           </header>
           
@@ -311,5 +318,6 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+    </DashboardThemeProvider>
   );
 }

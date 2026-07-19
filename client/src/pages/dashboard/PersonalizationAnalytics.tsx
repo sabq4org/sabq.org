@@ -96,13 +96,16 @@ function LoadingState() {
 function EmptyState() {
   return (
     <DashboardLayout>
-      <div className="space-y-6" data-testid="page-personalization-analytics-empty">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Target className="h-6 w-6 text-primary" />
+      <div className="space-y-6 pb-10" dir="rtl" data-testid="page-personalization-analytics-empty">
+        <header className="flex items-center gap-3 border-b border-border/60 pb-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Target className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">تحليلات التخصيص</h1>
+            <p className="mt-1 text-sm text-muted-foreground">متابعة تجربة المستخدم وأداء التوصيات المخصصة</p>
           </div>
-          <h1 className="text-3xl font-bold">تحليلات التخصيص</h1>
-        </div>
+        </header>
         
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
@@ -133,21 +136,21 @@ export default function PersonalizationAnalytics() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl" data-testid="page-personalization-analytics">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Target className="h-6 w-6 text-primary" />
-          </div>
+      <div className="space-y-6 px-1 pb-8" dir="rtl" data-testid="page-personalization-analytics">
+        <header className="flex items-center gap-3 border-b border-border/60 pb-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Target className="h-5 w-5" />
+          </span>
           <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">تحليلات التخصيص</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl" data-testid="text-page-title">تحليلات التخصيص</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               تحليل شامل لتجربة المستخدم المخصصة وأداء نظام التوصيات
             </p>
           </div>
-        </div>
+        </header>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+          <Card className="border-border/70 bg-card shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 إجمالي التفاعلات
@@ -164,7 +167,7 @@ export default function PersonalizationAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-border/70 bg-card shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 متوسط المقالات لكل مستخدم
@@ -181,7 +184,7 @@ export default function PersonalizationAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-border/70 bg-card shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 الشريحة الأكثر نشاطاً
@@ -198,7 +201,7 @@ export default function PersonalizationAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-border/70 bg-card shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 المستخدمون النشطون اليوم
@@ -423,7 +426,7 @@ export default function PersonalizationAnalytics() {
                         </div>
                         <Badge 
                           variant={index === 0 ? "default" : "outline"}
-                          className={index === 0 ? "bg-emerald-500" : ""}
+                          className={index === 0 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : ""}
                         >
                           {item.ctr.toFixed(1)}%
                         </Badge>

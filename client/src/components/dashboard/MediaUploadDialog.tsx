@@ -97,12 +97,22 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
         },
       });
     },
-    onSuccess: () => {
+    onSuccess: (uploadedMedia: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/media"] });
-      toast({
-        title: "تم الرفع بنجاح",
-        description: "تم رفع الملف إلى مكتبة الوسائط",
-      });
+      // كشف التكرار بالبصمة الإدراكية: الصورة نفسها موجودة مسبقًا في المكتبة
+      const dup = uploadedMedia?.duplicateOf as { title?: string | null } | null;
+      if (dup) {
+        toast({
+          title: "⚠️ صورة مطابقة موجودة مسبقًا",
+          description: `هذه الصورة موجودة في المكتبة${dup.title ? ` («${dup.title}»)` : ""} — رُفعت نسختك، ويمكن حذف إحداهما من قائمة التكرارات.`,
+          duration: 9000,
+        });
+      } else {
+        toast({
+          title: "تم الرفع بنجاح",
+          description: "تم رفع الملف إلى مكتبة الوسائط",
+        });
+      }
       handleClose();
     },
     onError: (error: any) => {
@@ -116,12 +126,18 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
   });
 
   const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // matches the server's 10MB cap
+  const ALLOWED_IMAGE_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/avif",
+  ]);
 
   const handleFileSelect = (file: File) => {
-    if (!file.type.startsWith("image/")) {
+    if (!ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase())) {
       toast({
         title: "نوع ملف غير مدعوم",
-        description: "يرجى اختيار صورة (JPEG أو PNG أو WEBP)",
+        description: "يرجى اختيار صورة (JPEG أو PNG أو WEBP أو AVIF)",
         variant: "destructive",
       });
       return;
@@ -234,7 +250,7 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
                   id="file-input"
                   type="file"
                   className="hidden"
-                  accept="image/*"
+                  accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileSelect(file);

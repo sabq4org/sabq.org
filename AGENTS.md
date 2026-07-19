@@ -9,6 +9,29 @@
 
 ---
 
+## كتالوج الأنظمة — بوابة قراءة إلزامية 🗂️
+
+المشروع فيه أنظمة منتج مستقلة (ولاء، توقعات، تحرير، iFox، مقترب، …).  
+**مصدر الحقيقة:** [`docs/systems/registry.json`](docs/systems/registry.json) + [`docs/systems/<id>/SYSTEM.md`](docs/systems/README.md).
+
+### قاعدة الـ Agent (لا تُتخطى)
+1. قبل أي تعديل: طابق المسارات مع `pathGlobs` في السجل → حدّد `id`.
+2. اقرأ `docs/systems/<id>/SYSTEM.md` كاملاً.
+3. صرّح في أول تنفيذ أنك قرأت الملف.
+4. لا توسّع لنظام مجاور دون Issue/موافقة.
+5. إن تغيّر العقد أو نقاط الدخول: حدّث `SYSTEM.md` و`lastReviewed` في نفس الـ PR.
+
+التفاصيل: [`docs/systems/README.md`](docs/systems/README.md) · [`docs/systems/GOVERNANCE.md`](docs/systems/GOVERNANCE.md) · [`.cursor/rules/systems-docs-gate.mdc`](.cursor/rules/systems-docs-gate.mdc).
+
+```bash
+# جرد محلي + تحديث لقطة الإنتاج
+node scripts/systems-inventory.mjs --write-snapshot
+```
+
+لوحة الأدمن: `/dashboard/systems-catalog` (صلاحية `system.manage_settings`).
+
+---
+
 ## هيكل المشروع
 
 ```

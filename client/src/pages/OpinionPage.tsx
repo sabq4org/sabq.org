@@ -103,42 +103,54 @@ export default function OpinionPage() {
       <NavigationBar />
 
       <main className="flex-1">
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-8 space-y-3">
-            <div className="flex items-center gap-3">
-              <BookOpen className="h-8 w-8 text-primary" />
-              <h1 className="text-4xl font-bold text-foreground" data-testid="text-page-title">
-                مقالات الرأي
-              </h1>
+        {/* Hero Section — رأس القسم */}
+        <section className="relative pt-16 pb-8 px-4 overflow-hidden" data-testid="section-hero">
+          <div className="absolute inset-0 h-[50vh]">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
+            <div className="absolute top-20 right-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
+            <div className="absolute bottom-20 left-10 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
+          </div>
+
+          <div className="container max-w-4xl mx-auto text-center relative">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+              <BookOpen className="w-4 h-4" />
+              <span>آراء وتحليلات</span>
             </div>
-            <p className="text-lg text-muted-foreground">
+
+            <h1 className="text-5xl md:text-7xl font-black mb-6 bg-gradient-to-l from-foreground via-foreground to-muted-foreground bg-clip-text" data-testid="text-page-title">
+              مقالات الرأي
+            </h1>
+
+            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-6" data-testid="text-page-tagline">
               آراء وتحليلات من كتّابنا المتميزين
             </p>
+          </div>
+        </section>
 
-            <div className="flex items-center gap-2 pt-1">
-              <Button
-                variant={sortMode === "trending" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setSortMode("trending");
-                  setCurrentPage(1);
-                }}
-                data-testid="button-opinion-sort-trending"
-              >
-                الأكثر تداولاً
-              </Button>
-              <Button
-                variant={sortMode === "latest" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setSortMode("latest");
-                  setCurrentPage(1);
-                }}
-                data-testid="button-opinion-sort-latest"
-              >
-                الأحدث
-              </Button>
-            </div>
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8 flex items-center justify-center gap-2">
+            <Button
+              variant={sortMode === "trending" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setSortMode("trending");
+                setCurrentPage(1);
+              }}
+              data-testid="button-opinion-sort-trending"
+            >
+              الأكثر تداولاً
+            </Button>
+            <Button
+              variant={sortMode === "latest" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setSortMode("latest");
+                setCurrentPage(1);
+              }}
+              data-testid="button-opinion-sort-latest"
+            >
+              الأحدث
+            </Button>
           </div>
 
           <DmsLeaderboardAd />

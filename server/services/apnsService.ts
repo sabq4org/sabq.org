@@ -7,7 +7,7 @@
 
 import { db } from "../db";
 import { pushDevices, pushCampaigns, pushCampaignEvents } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import https from "https";
 import http2 from "http2";
@@ -20,12 +20,35 @@ const APNS_PORT = 443;
 // Get APNs host based on environment
 // IMPORTANT: TestFlight and App Store builds ALWAYS use Production APNs
 // Only use Sandbox for Xcode debug builds (which we don't use)
+//
+// Cached at module level: the host is derived purely from env (which doesn't
+// change at runtime), so we resolve + log it once instead of on every single
+// push send. Logging it per-token flooded Railway logs and tripped its
+// per-deployment log rate limit (dropping messages) during large broadcasts.
+let cachedApnsHost: string | null = null;
 function getApnsHost(): string {
+  if (cachedApnsHost) return cachedApnsHost;
   // Use APNS_ENVIRONMENT to explicitly control, default to production
   const useSandbox = process.env.APNS_ENVIRONMENT === "sandbox";
-  const host = useSandbox ? APNS_HOST_SANDBOX : APNS_HOST_PRODUCTION;
-  console.log(`[APNs] Using ${useSandbox ? 'SANDBOX' : 'PRODUCTION'} environment: ${host}`);
-  return host;
+  cachedApnsHost = useSandbox ? APNS_HOST_SANDBOX : APNS_HOST_PRODUCTION;
+  console.log(`[APNs] Using ${useSandbox ? 'SANDBOX' : 'PRODUCTION'} environment: ${cachedApnsHost}`);
+  return cachedApnsHost;
+}
+
+// بيئة كل توكن (تُتعلَّم عند نجاح الإرسال بعد fallback): بناءات Xcode التطويرية
+// تحمل توكنات sandbox بينما TestFlight/المتجر إنتاج — البيئة الخاطئة تعيد
+// BadDeviceToken فتتجمّد تحديثات قفل الشاشة والتنبيهات لأجهزة المطوّرين. عند
+// الرفض نعيد المحاولة على البيئة الأخرى مرة واحدة ونحفظ الناجحة للتوكن.
+const tokenHostCache = new Map<string, string>();
+const TOKEN_HOST_CACHE_MAX = 5000;
+
+function rememberTokenHost(token: string, host: string): void {
+  if (tokenHostCache.size >= TOKEN_HOST_CACHE_MAX) tokenHostCache.clear();
+  tokenHostCache.set(token, host);
+}
+
+function otherHost(host: string): string {
+  return host === APNS_HOST_PRODUCTION ? APNS_HOST_SANDBOX : APNS_HOST_PRODUCTION;
 }
 
 // APNs credentials from environment
@@ -36,66 +59,101 @@ interface ApnsCredentials {
   bundleId: string;
 }
 
-function getApnsCredentials(): ApnsCredentials | null {
+// Cached credentials per profile ("default" | "sports"). Resolved + logged once
+// each, then reused for every subsequent send (env vars don't change at
+// runtime). `undefined` slot = not computed; `null` = computed-but-missing.
+const credentialsCache = new Map<string, ApnsCredentials | null>();
+
+// حزمة تطبيق الرياضة. مفتاح .p8 مرتبط بفريق Apple واحد فقط، فإن كان تطبيق
+// الرياضة على فريق مختلف عن الأخبار فلن يصلح مفتاح الأخبار لدفع com.sabq.sports
+// (يرجع APNs 403 InvalidProviderToken). نسمح بمفتاح APNs منفصل للرياضة عبر
+// APNS_SPORTS_* — وإن لم يُضبط نرجع لمفتاح الأخبار الافتراضي (يعمل فقط لو كان
+// التطبيقان على نفس الفريق).
+const SPORTS_BUNDLE_ID = process.env.APNS_SPORTS_BUNDLE_ID || "com.sabq.sports";
+
+/**
+ * تهيئة مفتاح PEM لـ APNs. يتحمّل ثلاث صيغ لصق شائعة في env:
+ *   1) PEM كامل بترويسة BEGIN/END (مع أسطر أو مسافات داخل الجسم).
+ *   2) literal "\n" بدل أسطر فعلية.
+ *   3) جسم Base64 وحده **بلا ترويسة** — الخطأ الأشيع؛ نلفّه بترويسة PEM صحيحة،
+ *      وإلا يفشل jwt.sign في تحليله.
+ */
+function formatPrivateKey(privateKey: string): string {
+  let key = privateKey.trim();
+  if (key.includes("\\n")) {
+    key = key.replace(/\\n/g, "\n");
+  }
+
+  if (key.includes("-----BEGIN")) {
+    const match = key.match(/-----BEGIN [^-]+-----\s*([\s\S]+?)\s*-----END [^-]+-----/);
+    if (match) {
+      const body = match[1].replace(/\s+/g, "");
+      return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+    }
+    return key;
+  }
+
+  // لا ترويسة → جسم Base64 عارٍ. أزل كل فراغ ولفّه بترويسة PEM صحيحة.
+  const body = key.replace(/\s+/g, "");
+  if (!body) return key;
+  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+}
+
+/**
+ * بيانات اعتماد APNs حسب التطبيق (bundle). تطبيق الرياضة قد يكون على فريق Apple
+ * مختلف، فيستخدم مفتاح APNS_SPORTS_* إن ضُبط؛ غير ذلك يُستخدم مفتاح الأخبار
+ * الافتراضي. bundleId قد يأتي كـ topic لنشاط Live Activity
+ * (`<bundle>.push-type.liveactivity`) فنجرّده للأساس قبل المطابقة.
+ */
+function getApnsCredentials(bundleId?: string | null): ApnsCredentials | null {
+  const base = (bundleId || "").replace(/\.push-type\.liveactivity$/, "");
+  const sportsKeyId = process.env.APNS_SPORTS_KEY_ID;
+  const sportsTeamId = process.env.APNS_SPORTS_TEAM_ID;
+  const sportsKey = process.env.APNS_SPORTS_KEY_P8 || process.env.APNS_SPORTS_PRIVATE_KEY;
+  const useSports = base === SPORTS_BUNDLE_ID && Boolean(sportsKeyId && sportsTeamId && sportsKey);
+  const profile = useSports ? "sports" : "default";
+
+  const cached = credentialsCache.get(profile);
+  if (cached !== undefined) return cached;
+
   // Support both APNS_PRIVATE_KEY and APNS_KEY_P8 (Apple's .p8 file content).
   // keyId/teamId are env-only — hardcoded fallbacks were removed in the
   // 2026-06-10 audit so a leaked .p8 alone is not immediately usable.
-  const keyId = process.env.APNS_KEY_ID;
-  const teamId = process.env.APNS_TEAM_ID;
-  const privateKey = process.env.APNS_KEY_P8 || process.env.APNS_PRIVATE_KEY;
-  const bundleId = process.env.APNS_BUNDLE_ID || "com.sabq.sabqorg";
+  const keyId = useSports ? sportsKeyId! : process.env.APNS_KEY_ID;
+  const teamId = useSports ? sportsTeamId! : process.env.APNS_TEAM_ID;
+  const privateKey = useSports ? sportsKey! : (process.env.APNS_KEY_P8 || process.env.APNS_PRIVATE_KEY);
+  const credBundle = useSports ? SPORTS_BUNDLE_ID : (process.env.APNS_BUNDLE_ID || "com.sabq.sabqorg");
 
   if (!privateKey || !keyId || !teamId) {
-    console.warn("[APNs] Missing credentials (APNS_KEY_P8 / APNS_KEY_ID / APNS_TEAM_ID) - push notifications disabled");
+    if (profile === "default") {
+      console.warn("[APNs] Missing credentials (APNS_KEY_P8 / APNS_KEY_ID / APNS_TEAM_ID) - push notifications disabled");
+    }
+    credentialsCache.set(profile, null);
     return null;
   }
 
-  // Log credentials being used (without revealing private key)
-  console.log(`[APNs] Using credentials: keyId=${keyId}, teamId=${teamId}, bundleId=${bundleId}, keyLength=${privateKey.length}`);
-
-  // Format private key properly for APNs
-  let formattedKey = privateKey;
-  
-  // Replace literal \n with actual newlines
-  if (formattedKey.includes("\\n")) {
-    formattedKey = formattedKey.replace(/\\n/g, "\n");
-  }
-  
-  // If key has spaces instead of newlines (common when pasted into env vars)
-  if (formattedKey.includes("-----BEGIN PRIVATE KEY-----")) {
-    // Extract the Base64 body, removing spaces from it
-    const match = formattedKey.match(/-----BEGIN PRIVATE KEY-----\s*([\s\S]+?)\s*-----END PRIVATE KEY-----/);
-    if (match) {
-      // Remove all whitespace from the Base64 body
-      const body = match[1].replace(/\s+/g, '');
-      formattedKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
-      console.log("[APNs] Reformatted key to proper PEM format");
-    }
-  }
-
-  return { keyId, teamId, privateKey: formattedKey, bundleId };
+  // Log credentials being used (without revealing private key) — logged once per profile.
+  console.log(`[APNs] Using ${profile} credentials: keyId=${keyId}, teamId=${teamId}, bundleId=${credBundle}, keyLength=${privateKey.length}`);
+  const creds: ApnsCredentials = { keyId, teamId, privateKey: formatPrivateKey(privateKey), bundleId: credBundle };
+  credentialsCache.set(profile, creds);
+  return creds;
 }
 
-// Cache for JWT token (valid for 1 hour)
-// Clear cache on startup to ensure new keys are used
-let cachedToken: { token: string; expiresAt: number; keyId: string } | null = null;
+// Cache for JWT tokens, keyed by keyId so the news + sports keys don't evict
+// each other (a single slot would thrash on every alternating send → repeated
+// signing). Each token valid ~1h; we refresh 5min early.
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 /**
- * Generate a JWT token for APNs authentication
- * Tokens are cached and reused until they expire
- * Cache is invalidated if keyId changes (new key uploaded)
+ * Generate a JWT token for APNs authentication.
+ * Tokens are cached per keyId and reused until they expire (5-min buffer).
  */
 function generateApnsToken(credentials: ApnsCredentials): string {
   const now = Math.floor(Date.now() / 1000);
-  
-  // Return cached token if still valid (with 5 minute buffer) AND keyId matches
-  if (cachedToken && cachedToken.expiresAt > now + 300 && cachedToken.keyId === credentials.keyId) {
-    return cachedToken.token;
-  }
 
-  // Clear cache if keyId changed
-  if (cachedToken && cachedToken.keyId !== credentials.keyId) {
-    console.log(`[APNs] Key changed from ${cachedToken.keyId} to ${credentials.keyId} - clearing token cache`);
+  const cached = tokenCache.get(credentials.keyId);
+  if (cached && cached.expiresAt > now + 300) {
+    return cached.token;
   }
 
   const payload = {
@@ -112,12 +170,7 @@ function generateApnsToken(credentials: ApnsCredentials): string {
   });
 
   // Cache token for 55 minutes (Apple allows up to 1 hour)
-  cachedToken = {
-    token,
-    expiresAt: now + 3300,
-    keyId: credentials.keyId,
-  };
-
+  tokenCache.set(credentials.keyId, { token, expiresAt: now + 3300 });
   return token;
 }
 
@@ -170,16 +223,49 @@ export async function sendPushNotification(
     expiration?: number;
     collapseId?: string;
     pushType?: "alert" | "background" | "voip" | "complication" | "fileprovider" | "mdm";
+    // تجاوز apns-topic لكل جهاز (تطبيقات APNs متعددة). فارغ = bundle الافتراضي.
+    topic?: string;
   } = {}
 ): Promise<ApnsResponse> {
-  const credentials = getApnsCredentials();
-  
+  // اختر المفتاح حسب تطبيق الجهاز (topic = bundleId)؛ الرياضة قد تستخدم مفتاحًا منفصلًا.
+  const credentials = getApnsCredentials(options.topic);
+
   if (!credentials) {
     console.log("[APNs] No credentials configured - skipping push");
     return { success: false, reason: "APNs not configured" };
   }
 
-  const host = getApnsHost();
+  const preferredHost = tokenHostCache.get(deviceToken) ?? getApnsHost();
+  const first = await sendPushRaw(preferredHost, credentials, deviceToken, payload, options);
+  if (first.success) {
+    rememberTokenHost(deviceToken, preferredHost);
+    return first;
+  }
+  // بيئة خاطئة (توكن sandbox على إنتاج أو العكس) → جرّب البيئة الأخرى مرة واحدة.
+  if (first.reason === "BadDeviceToken") {
+    const fallback = otherHost(preferredHost);
+    const retry = await sendPushRaw(fallback, credentials, deviceToken, payload, options);
+    if (retry.success) {
+      rememberTokenHost(deviceToken, fallback);
+      return retry;
+    }
+  }
+  return first;
+}
+
+function sendPushRaw(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  deviceToken: string,
+  payload: ApnsPayload,
+  options: {
+    priority?: "5" | "10";
+    expiration?: number;
+    collapseId?: string;
+    pushType?: "alert" | "background" | "voip" | "complication" | "fileprovider" | "mdm";
+    topic?: string;
+  },
+): Promise<ApnsResponse> {
   const token = generateApnsToken(credentials);
   const path = `/3/device/${deviceToken}`;
 
@@ -196,7 +282,7 @@ export async function sendPushNotification(
         ":method": "POST",
         ":path": path,
         "authorization": `bearer ${token}`,
-        "apns-topic": credentials.bundleId,
+        "apns-topic": options.topic || credentials.bundleId,
         "apns-push-type": options.pushType || "alert",
         "apns-priority": options.priority || "10",
         ...(options.expiration && { "apns-expiration": options.expiration.toString() }),
@@ -248,6 +334,283 @@ export async function sendPushNotification(
   });
 }
 
+// ============================================================================
+// Live Activity push-to-update (ActivityKit)
+// ============================================================================
+
+/** الحالة المتغيّرة للنشاط — يجب أن تطابق LiveMatchAttributes.ContentState في iOS. */
+export interface LiveActivityContentState {
+  homeScore: number;
+  awayScore: number;
+  homePenaltyScore?: number | null;
+  awayPenaltyScore?: number | null;
+  minute: string;
+  statusLabel: string;
+  isLive: boolean;
+  isFinished: boolean;
+  lastEvent: string | null;
+  /**
+   * Unix seconds for the moment represented by 0:00 of the running match clock.
+   * iOS renders a local ticking timer from this anchor, so the lock-screen
+   * activity does not wait for an APNs push every minute.
+   */
+  clockStartEpoch?: number | null;
+}
+
+export interface LiveActivityUpdateOptions {
+  event: "update" | "end";
+  contentState: LiveActivityContentState;
+  /** bundle التطبيق المُصدِر للنشاط — يحدّد apns-topic. فارغ = الـbundle الافتراضي. */
+  bundleId?: string | null;
+  /** متى تُعتبر بيانات النشاط قديمة (ثوانٍ Unix) — يُعتّمها النظام بعدها. */
+  staleDate?: number;
+  /** للحدث "end": متى يزيل النظام النشاط تلقائيًا (ثوانٍ Unix). */
+  dismissalDate?: number;
+  /** تنبيه اختياري يظهر عند التحديث (هدف مثلاً). */
+  alert?: { title: string; body: string };
+  /**
+   * أولوية APNs: "10" = فوري (للأهداف/البطاقات/النهاية)، "5" = موفّر للطاقة
+   * وللميزانية (لتغيّرات الدقيقة/الإحصائيات الروتينية). الافتراضي "10".
+   * تقسيم الأولوية يمنع استنزاف ميزانية iOS فيصل الهدف فوريًا دائمًا.
+   */
+  priority?: "5" | "10";
+}
+
+export interface LiveActivityStartAttributes {
+  fixtureId: number;
+  homeName: string;
+  awayName: string;
+  homeLogo: string;
+  awayLogo: string;
+  homeLogoFile: string | null;
+  awayLogoFile: string | null;
+  competition: string;
+  /** Swift Codable Date: seconds from Apple's 2001-01-01 reference date. */
+  kickoff: number;
+}
+
+export interface LiveActivityStartOptions {
+  contentState: LiveActivityContentState;
+  attributes: LiveActivityStartAttributes;
+  attributesType: string;
+  bundleId: string;
+  alert: { title: string; body: string };
+  staleDate?: number;
+  priority?: "5" | "10";
+}
+
+/** Starts a new ActivityKit activity through an iOS push-to-start token. */
+export async function sendLiveActivityStart(
+  pushToStartToken: string,
+  options: LiveActivityStartOptions,
+): Promise<ApnsResponse> {
+  const credentials = getApnsCredentials(options.bundleId);
+  if (!credentials) return { success: false, reason: "APNs not configured" };
+
+  const preferredHost = tokenHostCache.get(pushToStartToken) ?? getApnsHost();
+  const first = await sendLiveActivityStartRaw(preferredHost, credentials, pushToStartToken, options);
+  if (first.success) {
+    rememberTokenHost(pushToStartToken, preferredHost);
+    return first;
+  }
+  if (first.reason === "BadDeviceToken") {
+    const fallback = otherHost(preferredHost);
+    const retry = await sendLiveActivityStartRaw(fallback, credentials, pushToStartToken, options);
+    if (retry.success) rememberTokenHost(pushToStartToken, fallback);
+    return retry;
+  }
+  return first;
+}
+
+function sendLiveActivityStartRaw(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  pushToStartToken: string,
+  options: LiveActivityStartOptions,
+): Promise<ApnsResponse> {
+  const payload = {
+    aps: {
+      timestamp: Math.floor(Date.now() / 1000),
+      event: "start",
+      "content-state": options.contentState,
+      "attributes-type": options.attributesType,
+      attributes: options.attributes,
+      alert: options.alert,
+      ...(options.staleDate ? { "stale-date": options.staleDate } : {}),
+    },
+  };
+
+  return sendLiveActivityHttp2(
+    host,
+    credentials,
+    pushToStartToken,
+    options.bundleId,
+    options.priority || "10",
+    payload,
+  );
+}
+
+function sendLiveActivityHttp2(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  deviceToken: string,
+  bundleId: string,
+  priority: "5" | "10",
+  payload: Record<string, unknown>,
+): Promise<ApnsResponse> {
+  const token = generateApnsToken(credentials);
+  return new Promise((resolve) => {
+    try {
+      const client = http2.connect(`https://${host}:${APNS_PORT}`);
+      client.on("error", (err) => resolve({ success: false, reason: err.message }));
+      const req = client.request({
+        ":method": "POST",
+        ":path": `/3/device/${deviceToken}`,
+        authorization: `bearer ${token}`,
+        "apns-topic": `${bundleId}.push-type.liveactivity`,
+        "apns-push-type": "liveactivity",
+        "apns-priority": priority,
+      });
+      let responseData = "";
+      let apnsId: string | undefined;
+      let statusCode: number | undefined;
+      req.on("response", (h) => {
+        apnsId = h["apns-id"] as string;
+        statusCode = h[":status"] as number;
+      });
+      req.on("data", (chunk) => { responseData += chunk; });
+      req.on("end", () => {
+        client.close();
+        if (statusCode === 200) return resolve({ success: true, apnsId, statusCode });
+        let reason = "Unknown error";
+        try { reason = JSON.parse(responseData).reason || reason; } catch {}
+        resolve({ success: false, apnsId, statusCode, reason });
+      });
+      req.on("error", (err) => {
+        client.close();
+        resolve({ success: false, reason: err.message });
+      });
+      req.write(JSON.stringify(payload));
+      req.end();
+    } catch (error: any) {
+      resolve({ success: false, reason: error.message });
+    }
+  });
+}
+
+/**
+ * يدفع تحديث Live Activity لتوكن نشاط (ActivityKit push token) عبر APNs.
+ *
+ * يختلف عن sendPushNotification في أمرين: الموضوع (apns-topic) يجب أن يكون
+ * `<bundleId>.push-type.liveactivity`، ونوع الدفع `liveactivity`. الحمولة
+ * تتبع صيغة aps الخاصة بـ ActivityKit (timestamp/event/content-state).
+ */
+export async function sendLiveActivityUpdate(
+  activityPushToken: string,
+  options: LiveActivityUpdateOptions,
+): Promise<ApnsResponse> {
+  // اختر المفتاح حسب bundle التطبيق المُصدِر للنشاط (الرياضة قد تستخدم مفتاحًا منفصلًا).
+  const credentials = getApnsCredentials(options.bundleId);
+  if (!credentials) {
+    return { success: false, reason: "APNs not configured" };
+  }
+
+  const preferredHost = tokenHostCache.get(activityPushToken) ?? getApnsHost();
+  const first = await sendLiveActivityRaw(preferredHost, credentials, activityPushToken, options);
+  if (first.success) {
+    rememberTokenHost(activityPushToken, preferredHost);
+    return first;
+  }
+  // توكن نشاط من بناء تطويري (sandbox) على بيئة الإنتاج أو العكس → البيئة الأخرى.
+  if (first.reason === "BadDeviceToken") {
+    const fallback = otherHost(preferredHost);
+    const retry = await sendLiveActivityRaw(fallback, credentials, activityPushToken, options);
+    if (retry.success) {
+      rememberTokenHost(activityPushToken, fallback);
+      return retry;
+    }
+  }
+  return first;
+}
+
+function sendLiveActivityRaw(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  activityPushToken: string,
+  options: LiveActivityUpdateOptions,
+): Promise<ApnsResponse> {
+  const token = generateApnsToken(credentials);
+  const path = `/3/device/${activityPushToken}`;
+
+  const aps: Record<string, unknown> = {
+    timestamp: Math.floor(Date.now() / 1000),
+    event: options.event,
+    "content-state": options.contentState,
+  };
+  if (options.staleDate) aps["stale-date"] = options.staleDate;
+  if (options.event === "end" && options.dismissalDate) {
+    aps["dismissal-date"] = options.dismissalDate;
+  }
+  if (options.alert) {
+    aps.alert = { title: options.alert.title, body: options.alert.body };
+  }
+  const payload = { aps };
+
+  return new Promise((resolve) => {
+    try {
+      const client = http2.connect(`https://${host}:${APNS_PORT}`);
+      client.on("error", (err) => {
+        resolve({ success: false, reason: err.message });
+      });
+
+      const headers = {
+        ":method": "POST",
+        ":path": path,
+        authorization: `bearer ${token}`,
+        // الموضوع الخاص بأنشطة Live Activity — يتبع bundle التطبيق المُصدِر
+        // (الرياضة com.sabq.sports)، وإلا الـbundle الافتراضي للخادم.
+        "apns-topic": `${options.bundleId || credentials.bundleId}.push-type.liveactivity`,
+        "apns-push-type": "liveactivity",
+        "apns-priority": options.priority || "10",
+      };
+
+      const req = client.request(headers);
+      let responseData = "";
+      let apnsId: string | undefined;
+      let statusCode: number | undefined;
+
+      req.on("response", (h) => {
+        apnsId = h["apns-id"] as string;
+        statusCode = h[":status"] as number;
+      });
+      req.on("data", (chunk) => {
+        responseData += chunk;
+      });
+      req.on("end", () => {
+        client.close();
+        if (statusCode === 200) {
+          resolve({ success: true, apnsId, statusCode });
+        } else {
+          let reason = "Unknown error";
+          try {
+            reason = JSON.parse(responseData).reason || reason;
+          } catch {}
+          resolve({ success: false, apnsId, statusCode, reason });
+        }
+      });
+      req.on("error", (err) => {
+        client.close();
+        resolve({ success: false, reason: err.message });
+      });
+
+      req.write(JSON.stringify(payload));
+      req.end();
+    } catch (error: any) {
+      resolve({ success: false, reason: error.message });
+    }
+  });
+}
+
 /**
  * Send push notification to multiple devices (batch)
  */
@@ -273,62 +636,92 @@ export async function sendBatchPushNotifications(
   }
 
   for (const batch of batches) {
-    const promises = batch.map(async (token) => {
-      const response = await sendPushNotification(token, payload);
-      console.log(`[APNs] Token ${token.substring(0, 16)}... result: ${response.success ? 'OK' : response.reason}`);
-      
-      // Record event if campaignId provided
-      if (campaignId) {
-        try {
-          const [device] = await db
-            .select({ id: pushDevices.id, userId: pushDevices.userId })
-            .from(pushDevices)
-            .where(eq(pushDevices.deviceToken, token))
-            .limit(1);
-
-          await db.insert(pushCampaignEvents).values({
-            campaignId,
-            deviceId: device?.id || null,
-            userId: device?.userId || null,
-            eventType: response.success ? "sent" : "failed",
-            apnsId: response.apnsId,
-            errorCode: response.reason,
-            errorMessage: response.reason,
-          });
-        } catch (err) {
-          console.error("[APNs] Failed to record event:", err);
+    // Pre-resolve device rows for the whole batch in ONE query instead of one
+    // SELECT per token. During a large broadcast the previous per-token SELECT
+    // + per-token INSERT + per-token UPDATE (all fired via Promise.all over 100
+    // tokens) saturated the 15-connection pool, which surfaced as
+    // "[APM] ⚠️ Slow request" on unrelated requests waiting for a connection.
+    const deviceByToken = new Map<string, { id: string; userId: string | null }>();
+    if (campaignId) {
+      try {
+        const devices = await db
+          .select({ id: pushDevices.id, userId: pushDevices.userId, deviceToken: pushDevices.deviceToken })
+          .from(pushDevices)
+          .where(inArray(pushDevices.deviceToken, batch));
+        for (const d of devices) {
+          deviceByToken.set(d.deviceToken, { id: d.id, userId: d.userId });
         }
+      } catch (err) {
+        console.error("[APNs] Failed to load devices for batch:", err);
       }
+    }
 
-      // Automatically deactivate bad/unregistered device tokens.
-      // `DeviceTokenNotForTopic` is what APNs returns when a token was
-      // registered under a different bundle ID than the one we're
-      // sending under — exactly the state of every token saved before
-      // the `com.sabq.sabqapp` → `com.sabq.sabqorg` migration. Without
-      // this branch those rows would stay `is_active = true` forever
-      // and every broadcast would re-attempt them.
-      if (!response.success && (
+    // Network sends still run concurrently across the batch — send throughput
+    // is unchanged. Only the DB writes are pulled out of the per-token path and
+    // flushed in bulk below.
+    const sendResults = await Promise.all(
+      batch.map(async (token) => {
+        const response = await sendPushNotification(token, payload);
+        // Only log failures: per-token success lines were emitted for every
+        // device in a broadcast (thousands), flooding Railway logs and hitting
+        // its log rate limit. Failures stay logged so error tracking is intact.
+        if (!response.success) {
+          console.log(`[APNs] Token ${token.substring(0, 16)}... failed: ${response.reason}`);
+        }
+        return { token, response };
+      })
+    );
+
+    // Record events for the whole batch in a single INSERT instead of one row
+    // per token. Same rows, same eventType, same apnsId/error fields as before.
+    if (campaignId && sendResults.length > 0) {
+      const eventRows = sendResults.map(({ token, response }) => {
+        const device = deviceByToken.get(token);
+        return {
+          campaignId,
+          deviceId: device?.id || null,
+          userId: device?.userId || null,
+          eventType: response.success ? "sent" : "failed",
+          apnsId: response.apnsId,
+          errorCode: response.reason,
+          errorMessage: response.reason,
+        };
+      });
+      try {
+        await db.insert(pushCampaignEvents).values(eventRows);
+      } catch (err) {
+        console.error("[APNs] Failed to record batch events:", err);
+      }
+    }
+
+    // Automatically deactivate bad/unregistered device tokens in a single
+    // UPDATE ... WHERE token IN (...) instead of one UPDATE per token.
+    // `DeviceTokenNotForTopic` is what APNs returns when a token was
+    // registered under a different bundle ID than the one we're sending
+    // under — exactly the state of every token saved before the
+    // `com.sabq.sabqapp` → `com.sabq.sabqorg` migration. Without this those
+    // rows would stay `is_active = true` forever and every broadcast would
+    // re-attempt them.
+    const invalidTokens = sendResults
+      .filter(({ response }) => !response.success && (
         response.reason === 'BadDeviceToken' ||
         response.reason === 'Unregistered' ||
         response.reason === 'DeviceTokenNotForTopic'
-      )) {
-        try {
-          await db
-            .update(pushDevices)
-            .set({ isActive: false, updatedAt: new Date() })
-            .where(eq(pushDevices.deviceToken, token));
-          console.log(`[APNs] Deactivated invalid token: ${token.substring(0, 16)}... (${response.reason})`);
-        } catch (err) {
-          console.error("[APNs] Failed to deactivate token:", err);
-        }
+      ))
+      .map(({ token }) => token);
+    if (invalidTokens.length > 0) {
+      try {
+        await db
+          .update(pushDevices)
+          .set({ isActive: false, updatedAt: new Date() })
+          .where(inArray(pushDevices.deviceToken, invalidTokens));
+        console.log(`[APNs] Deactivated ${invalidTokens.length} invalid token(s)`);
+      } catch (err) {
+        console.error("[APNs] Failed to deactivate tokens:", err);
       }
+    }
 
-      return response;
-    });
-
-    const responses = await Promise.all(promises);
-    
-    for (const response of responses) {
+    for (const { response } of sendResults) {
       if (response.success) {
         results.success++;
       } else {
@@ -459,7 +852,7 @@ export async function deactivateInvalidDevices(tokens: string[]): Promise<void> 
  * Check if APNs is configured and ready
  */
 export function isApnsConfigured(): boolean {
-  return getApnsCredentials() !== null;
+  return getApnsCredentials() !== null || getApnsCredentials(SPORTS_BUNDLE_ID) !== null;
 }
 
 /**

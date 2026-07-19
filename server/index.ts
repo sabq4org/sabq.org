@@ -1,6 +1,24 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
+import * as Sentry from "@sentry/node";
+// Sentry error monitoring — enabled only when SENTRY_DSN is set. Errors-only:
+// tracing/profiling/logs deliberately off (quota + overhead on a site this
+// size). exitEvenIfOtherHandlersAreRegistered=false preserves the
+// long-standing "log but don't exit" uncaughtException behavior below.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    release: process.env.RAILWAY_GIT_COMMIT_SHA || undefined,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration({ exitEvenIfOtherHandlersAreRegistered: false }),
+    ],
+  });
+  console.log("[Server] ✅ Sentry error monitoring enabled");
+} else {
+  console.warn("[Server] ⚠️ SENTRY_DSN not set — Sentry error monitoring disabled");
+}
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import rateLimit from "express-rate-limit";
@@ -33,14 +51,53 @@ if ((globalThis as any).__sabqAttachExpress) {
 
 app.get("/health", async (_req, res) => {
   let dbReady = false;
+  // بوابة النشر: Railway لا يحوّل الترافيك للحاوية الجديدة إلا بعد نجاح
+  // healthcheck (مهلة 60s في railway.json). قبل هذه البوابة كانت الحاوية
+  // تبلّغ 200 فورًا بينما pool فارغ وNeon بارد وRedis لم يتصل بعد، فتستقبل
+  // موجة الترافيك كاملة وتغرق في «timeout exceeded when trying to connect»
+  // لدقائق (نوبتا نشر 2026-07-18). المزلاج يثبت بعد أول تحقق ناجح فلا
+  // يُفشل الفحصَ عطلٌ عابر لاحق أثناء التشغيل.
+  let bootReady = true;
   try {
-    const { isDatabaseAvailable } = await import("./db");
+    const { isDatabaseAvailable, isDatabaseReadyOnce } = await import("./db");
     dbReady = isDatabaseAvailable();
+    bootReady = isDatabaseReadyOnce();
+  } catch {}
+  if (!bootReady) {
+    res.status(503).json({
+      status: "starting",
+      timestamp: new Date().toISOString(),
+      database: "warming-up",
+    });
+    return;
+  }
+  // حالة مزوّد TheSports للتشخيص (configured/inCooldown/lastError) — تُكشف هل
+  // تأخّر النتائج اللحظية سببه IP Railway غير مُدرج («URL/IP not authorized»)
+  // أم لا. بلا كشف أسرار (user/secret). أفضل جهد: لا تفشل /health لو تعذّر القراءة.
+  let theSports: unknown = null;
+  try {
+    const { getTheSportsStatus } = await import("./services/theSportsService");
+    theSports = getTheSportsStatus();
+  } catch {}
+  // حالة القيادة — leader=false على كل الـpods يعني أعمال الدفع (Live Activity/
+  // التنبيهات) ميتة رغم أن الـAPI يعمل (فخ قفل الانتخاب بعد النشر). للتشخيص السريع.
+  let leader = false;
+  let podId: string | null = null;
+  let leaderMode: string | null = null;
+  try {
+    const le = await import("./leaderElection");
+    leader = le.isLeader();
+    podId = le.getPodId();
+    leaderMode = le.getLeaderMode();
   } catch {}
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
     database: dbReady ? "connected" : "warming-up",
+    leader,
+    leaderMode,
+    podId,
+    theSports,
   });
 });
 
@@ -300,6 +357,13 @@ app.use(
 // Enable Gzip compression for all responses
 app.use(compression({
   filter: (req, res) => {
+    // no-transform is a RESPONSE directive (SSE live-stream sets it) — the old
+    // check read the request header, so this guard never fired and SSE survived
+    // only via compression's internal shouldTransform. Check the response too.
+    const resCacheControl = String(res.getHeader('cache-control') ?? '');
+    if (resCacheControl.includes('no-transform')) {
+      return false;
+    }
     if (req.headers['cache-control']?.includes('no-transform')) {
       return false;
     }
@@ -532,6 +596,30 @@ const writeLimiter = rateLimit({
   },
 });
 
+// Anti-scraping read limiter for the public /api/world-cup/* surface. These are
+// the ONLY heavily-trafficked GET endpoints that re-expose a paid third-party
+// feed (API-Football) verbatim, so an open JSON endpoint is an invitation for
+// someone to freeload on our subscription (and indirectly burn our provider
+// quota on cache-cold paths). The general/write limiters above both skip GET,
+// so reads were previously unthrottled at origin. This is safe to keep
+// per-minute and generous because: (a) genuine visitors are served from the
+// Cloudflare CDN (the `public, s-maxage=…` headers on every route) and never
+// reach origin, so the limiter only sees cache MISSES — exactly the bulk-scrape
+// pattern; (b) the real per-visitor IP survives the Pages proxy via
+// X-Sabq-Client-IP (see rateLimitKey + functions/_middleware.js), so this does
+// NOT collapse every visitor into one bucket. Tune with WC_READ_RATE_LIMIT.
+const worldCupReadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: Number(process.env.WC_READ_RATE_LIMIT) || 300, // per identity/IP per minute
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: rateLimitKey,
+  // Only throttle reads here; there are no write routes under /api/world-cup.
+  skip: (req) => req.method !== 'GET' && req.method !== 'HEAD',
+});
+
 // ---------------------------------------------------------------------------
 // CACHE-CONTROL INVARIANT FOR NOINDEX SPA ROUTES (do not break)
 // ---------------------------------------------------------------------------
@@ -706,6 +794,12 @@ if (process.env.NODE_ENV !== "production") {
 // Apply general rate limiter to all API routes
 app.use("/api", generalApiLimiter);
 app.use("/api", writeLimiter);
+// Anti-scraping read throttle scoped to the public World Cup feed (see above).
+app.use("/api/world-cup", worldCupReadLimiter);
+// Same anti-scraping throttle for the public King's Cup feed (also re-exposes
+// the paid API-Football feed verbatim). Reuses the same generous per-minute
+// limiter — genuine visitors are served from the CDN and never reach origin.
+app.use("/api/kings-cup", worldCupReadLimiter);
 
 // ============================================
 // APM (Application Performance Monitoring) Middleware
@@ -851,10 +945,11 @@ if (!(globalThis as any).__sabqServer) {
     const { edgeExistsHandler } = await import("./routes/edgeExistsRoute");
     app.get("/api/edge-exists", edgeExistsHandler);
 
-    const audioNewsletterRoutes = await import("./routes/audioNewsletterRoutes");
-    app.use("/api/audio-newsletters", audioNewsletterRoutes.default);
-    console.log("[Server] ✅ Audio Newsletter routes registered (priority)");
-
+    // Mobile API uses Bearer tokens (verifyMemberSession), not Passport cookies,
+    // so it is safe to mount before setupAuth. Audio newsletter routes MUST be
+    // mounted inside registerRoutes() after setupAuth — otherwise requireRole /
+    // requirePermission see an unauthenticated request and return 401 Unauthorized
+    // (which the dashboard treats as session expiry and kicks the admin out).
     const mobileApiRoutes = (await import("./routes/mobileApiRoutes")).default;
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
@@ -1062,6 +1157,12 @@ if (!(globalThis as any).__sabqServer) {
       console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
     } else {
       console.log("[Server] 🛰  Headless mode — crawler/SEO middleware skipped (SERVE_SPA=false). SEO is handled by the frontend deployment + Cloudflare edge worker.");
+    }
+
+    // Sentry must see errors before the final handler consumes them — the SDK
+    // middleware captures 5xx (its default filter) then forwards via next(err).
+    if (process.env.SENTRY_DSN) {
+      Sentry.setupExpressErrorHandler(app);
     }
 
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -1351,6 +1452,9 @@ if (!(globalThis as any).__sabqServer) {
       // تكتب في قاعدة البيانات، وهو ممنوع على الـ replica (مستخدم SELECT-only).
       const enableBackgroundWorkers =
         process.env.ENABLE_BACKGROUND_WORKERS === "true" && !isReadOnlyMirror();
+      // النشرة الثقيلة لها process مستقل. لا تعِد تشغيلها داخل API إلا كخيار
+      // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
+      const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
       
       const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop, onBecomeLeader } = await import("./leaderElection");
       await tryBecomeLeader();
@@ -1370,6 +1474,25 @@ if (!(globalThis as any).__sabqServer) {
             startPushWorker();
           } catch (error) {
             console.error("[Server] Error starting push worker after failover:", error);
+          }
+          try {
+            const { initializeAudioNewsletterJobs } = await import("./jobs/audioNewsletterJob");
+            initializeAudioNewsletterJobs();
+            console.log("[Server] ✅ Audio newsletter jobs started after failover");
+          } catch (error) {
+            console.error("[Server] Error starting audio newsletter jobs after failover:", error);
+          }
+          try {
+            if (
+              process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false'
+              && runNewsletterSchedulerInWeb
+            ) {
+              const { newsletterScheduler } = await import("./services/newsletterScheduler");
+              newsletterScheduler.start();
+              console.log("[Server] Newsletter scheduler started after failover");
+            }
+          } catch (error) {
+            console.error("[Server] Error starting newsletter scheduler after failover:", error);
           }
         });
       }
@@ -1601,6 +1724,28 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 15000);
       }
+
+      if (shouldRunBackgroundJobs) {
+        setTimeout(async () => {
+          try {
+            const { startCommentModerationQueueJob } = await import("./jobs/commentModerationQueueJob");
+            startCommentModerationQueueJob();
+          } catch (error) {
+            console.error("[Server] Error starting comment moderation queue job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 17000);
+      }
+
+      if (shouldRunBackgroundJobs) {
+        setTimeout(async () => {
+          try {
+            const { runOneShotStoriesArchive } = await import("./jobs/oneShotStoriesArchive");
+            await runOneShotStoriesArchive();
+          } catch (error) {
+            console.error("[Server] Error running one-shot stories archive:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 19000);
+      }
       
       // Start Audio Newsletter Jobs (scheduled generation and retries) - delayed
       if (shouldRunBackgroundJobs) {
@@ -1618,7 +1763,7 @@ if (!(globalThis as any).__sabqServer) {
 
       const enableNewsletterScheduler = process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false';
       
-      if (shouldRunBackgroundJobs && enableNewsletterScheduler) {
+      if (shouldRunBackgroundJobs && enableNewsletterScheduler && runNewsletterSchedulerInWeb) {
         setTimeout(async () => {
           try {
             const { newsletterScheduler } = await import("./services/newsletterScheduler");
@@ -1628,19 +1773,27 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting newsletter scheduler:", error);
           }
         }, BACKGROUND_JOB_DELAY + 25000);
+      } else if (enableNewsletterScheduler && !runNewsletterSchedulerInWeb) {
+        console.log('[Server] Newsletter scheduler delegated to newsletter-worker');
       }
       
       const enableAITasksScheduler = process.env.ENABLE_AI_TASKS_SCHEDULER !== 'false';
+      const enableIfoxGenerator = process.env.ENABLE_IFOX_GENERATOR !== 'false';
       
-      if (shouldRunBackgroundJobs && enableAITasksScheduler) {
-        setTimeout(async () => {
-          try {
-            const { startAITasksScheduler } = await import("./jobs/aiTasksJob");
-            startAITasksScheduler();
-          } catch (error) {
-            console.error("[Server] Error starting AI tasks scheduler:", error);
-          }
-        }, BACKGROUND_JOB_DELAY + 30000);
+      if (shouldRunBackgroundJobs) {
+        // AI Tasks Scheduler — مستهلك للتوكن، خلف flag مستقل عن وظائف الصيانة
+        if (enableAITasksScheduler) {
+          setTimeout(async () => {
+            try {
+              const { startAITasksScheduler } = await import("./jobs/aiTasksJob");
+              startAITasksScheduler();
+            } catch (error) {
+              console.error("[Server] Error starting AI tasks scheduler:", error);
+            }
+          }, BACKGROUND_JOB_DELAY + 30000);
+        } else {
+          console.log("[Server] AI Tasks Scheduler disabled (set ENABLE_AI_TASKS_SCHEDULER=true to enable)");
+        }
         
         setTimeout(async () => {
           try {
@@ -1661,15 +1814,47 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting cleanup jobs:", error);
           }
         }, BACKGROUND_JOB_DELAY + 50000);
-        
+
+        // Media pipeline — تحليل وفهرسة أرشيف مكتبة الوسائط ليليًا (مستهلك
+        // لاستدعاءات Gemini، خلف flag مستقل مثل بقية الوظائف المستهلكة للتوكن)
+        if (process.env.ENABLE_MEDIA_PIPELINE !== 'false') {
+          setTimeout(async () => {
+            try {
+              const { startMediaPipelineJob } = await import("./jobs/mediaPipelineJob");
+              startMediaPipelineJob();
+            } catch (error) {
+              console.error("[Server] Error starting media pipeline job:", error);
+            }
+          }, BACKGROUND_JOB_DELAY + 52000);
+        } else {
+          console.log("[Server] Media pipeline job disabled (unset ENABLE_MEDIA_PIPELINE=false to enable)");
+        }
+
+        // AI Hub — إعادة فحص النماذج الموقوفة بالقاطع + التجميع اليومي للاستهلاك
         setTimeout(async () => {
           try {
-            const { startIfoxContentGeneratorJob } = await import("./jobs/ifoxContentGeneratorJob");
-            startIfoxContentGeneratorJob();
+            const { startAiProviderHealthCheckJob } = await import("./jobs/aiProviderHealthCheck");
+            startAiProviderHealthCheckJob();
+            const { startAiUsageRollupJob } = await import("./jobs/aiUsageRollup");
+            startAiUsageRollupJob();
           } catch (error) {
-            console.error("[Server] Error starting iFox generator:", error);
+            console.error("[Server] Error starting AI Hub jobs:", error);
           }
-        }, BACKGROUND_JOB_DELAY + 60000);
+        }, BACKGROUND_JOB_DELAY + 55000);
+
+        // iFox Content Generator — مستهلك للتوكن (مقالات كاملة + صور)، خلف flag مستقل
+        if (enableIfoxGenerator) {
+          setTimeout(async () => {
+            try {
+              const { startIfoxContentGeneratorJob } = await import("./jobs/ifoxContentGeneratorJob");
+              startIfoxContentGeneratorJob();
+            } catch (error) {
+              console.error("[Server] Error starting iFox generator:", error);
+            }
+          }, BACKGROUND_JOB_DELAY + 60000);
+        } else {
+          console.log("[Server] iFox Content Generator disabled (set ENABLE_IFOX_GENERATOR=true to enable)");
+        }
         
         setTimeout(async () => {
           try {
@@ -1688,6 +1873,15 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting staff comms scheduler:", error);
           }
         }, BACKGROUND_JOB_DELAY + 80000);
+
+        setTimeout(async () => {
+          try {
+            const { startPublisherAlertsJob } = await import("./jobs/publisherAlertsJob");
+            startPublisherAlertsJob();
+          } catch (error) {
+            console.error("[Server] Error starting publisher alerts job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 85000);
         
         setTimeout(async () => {
           try {
@@ -1778,10 +1972,8 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 100000);
         
-      } else if (!shouldRunBackgroundJobs) {
-        console.log("[Server] AI Tasks Scheduler skipped (background workers disabled or not leader)");
       } else {
-        console.log("[Server] AI Tasks Scheduler disabled (set ENABLE_AI_TASKS_SCHEDULER=true to enable)");
+        console.log("[Server] Background maintenance + AI jobs skipped (background workers disabled or not leader)");
       }
 
       // أخبار المونديال: التسجيل خارج بوابة isLeader() عمدًا — أثناء النشر
@@ -1799,6 +1991,58 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // Push-to-start: يبدأ Live Activity تلقائيًا للمباريات المتابَعة قبل
+      // انطلاقها بعشر دقائق. عامل منفصل ودورة أبطأ من تحديث النتيجة الحية.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startLiveActivityStartWorker } = await import("./jobs/liveActivityStartWorker");
+            startLiveActivityStartWorker();
+          } catch (error) {
+            console.error("[Server] Error starting live activity start worker:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // أخبار كأس خادم الحرمين الشريفين: نفس نمط التسجيل الدائم وفحص القيادة
+      // داخل الدورة (kingsCupNewsJob). خلف KC_NEWS_ENABLED.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startKingsCupNewsJob } = await import("./jobs/kingsCupNewsJob");
+            startKingsCupNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting kings cup news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // مسودّات أخبار SportMonks: نفس نمط التسجيل الدائم وفحص القيادة داخل
+      // الدورة (sportmonksNewsJob). خلف WC_NEWS_ENABLED + توكن SportMonks.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportmonksNewsJob } = await import("./jobs/sportmonksNewsJob");
+            startSportmonksNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sportmonks news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // الأسماء الرياضية الموحّدة: التقاط الترجمات المعلّقة كل ساعة (شبكة أمان
+      // للملء بالخلفية). تسجيل دائم وفحص القيادة داخل الدورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsNamesJob } = await import("./jobs/sportsNamesJob");
+            startSportsNamesJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports names job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات المونديال: نفس نمط أخبار المونديال — تسجيل دائم وفحص
       // القيادة داخل الدورة، يمنح الفائزين نقاطهم فور انتهاء المباراة.
       if (enableBackgroundWorkers) {
@@ -1812,6 +2056,64 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // محرّك الذكاء الرياضي: قارئ المشهد + قصص الموسم. تسجيل دائم وفحص القيادة
+      // داخل الدورة، خلف SPORTS_INTEL_ENABLED (مُطفأ افتراضياً) + مفتاح API.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsSceneJob } = await import("./jobs/sportsSceneJob");
+            startSportsSceneJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports intelligence job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // لقطات VARA الذكية: توليد لقطات قصيرة للفرق النشطة. خلف
+      // SPORTS_SNAPS_ENABLED + مفتاح API، وفحص القيادة داخل كل دورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsSnapsJob } = await import("./jobs/sportsSnapsJob");
+            startSportsSnapsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports snaps job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // تسوية توقّعات كأس آسيا الذكية: نفس نمط المونديال — تسجيل دائم وفحص
+
+      // تسوية توقّعات دوري روشن (محرّك المونديال على الدوري المحلي): تسجيل دائم
+
+      // تسوية توقّعات الكؤوس المحلية (كأس الملك + كأس السوبر) على المحرّك المُعمّم
+
+      // تسوية توقّعات خليجي 27 (بركة متدرّجة + جائزة متراكمة + شارات + إشعار):
+
+      // المنصة المركزية للتوقعات: عامل تسوية واحد لكل البطولات (Prediction Core)
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startPredictionCoreJob } = await import("./jobs/predictionCoreJob");
+            startPredictionCoreJob();
+          } catch (error) {
+            console.error("[Server] Error starting prediction core job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // تسخين تفاصيل المباريات الساخنة — يقتل الجلب البارد لمركز المباراة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsMatchWarmupJob } = await import("./jobs/sportsMatchWarmupJob");
+            startSportsMatchWarmupJob();
+          } catch (error) {
+            console.error("[Server] Error starting match warmup job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // رادار سبق الذكي: نفس نمط المونديال — تسجيل دائم وفحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
@@ -1820,6 +2122,57 @@ if (!(globalThis as any).__sabqServer) {
             startRadarJob();
           } catch (error) {
             console.error("[Server] Error starting radar job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // التنبيهات الرياضية الذكية: نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsAlertsJob } = await import("./jobs/sportsAlertsJob");
+            startSportsAlertsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports alerts job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // تنبيهات الانتقالات (سعودية + عالمية بارزة): نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startTransferAlertsJob } = await import("./jobs/transferAlertsJob");
+            startTransferAlertsJob();
+          } catch (error) {
+            console.error("[Server] Error starting transfer alerts job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+
+      // عامل النشاط المباشر (iOS Live Activity): يدفع تحديثات شاشة القفل عبر
+      // APNs كل 10 ثوانٍ. نفس النمط — تسجيل دائم وفحص القيادة داخل الدورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startLiveActivityWorker } = await import("./jobs/liveActivityWorker");
+            startLiveActivityWorker();
+          } catch (error) {
+            console.error("[Server] Error starting live activity worker:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // تغذية TheSports MQTT (WebSocket) — نتائج/أحداث لحظية فوق detail_live.
+      // للتعطيل: THESPORTS_MQTT_ENABLED=false
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startTheSportsMqttWorker } = await import("./jobs/theSportsMqttWorker");
+            startTheSportsMqttWorker();
+          } catch (error) {
+            console.error("[Server] Error starting TheSports MQTT worker:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }

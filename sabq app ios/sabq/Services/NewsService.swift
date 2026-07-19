@@ -15,13 +15,16 @@ enum NewsService {
             .map(OpinionArticle.from)
     }
 
+    /// `nil` يعني فشل المسارين معًا (الرئيسية والاحتياطي) — شبكة/خادم لا
+    /// «محتوى فارغ»؛ يميّزه المخزن ليعرض حالة خطأ قابلة لإعادة المحاولة
+    /// بدل skeleton أبدي صامت.
     static func fetchHomepage(ignoreCache: Bool = false) async -> (
         featured: [Article],
         latest: [Article],
         breaking: [Article],
         stories: [APIStory],
         trending: [String]
-    ) {
+    )? {
         do {
             let response: APIHomepageResponse
             let paginatedArticles: [Article]
@@ -74,7 +77,7 @@ enum NewsService {
                 let breaking = all.filter(\.isBreaking)
                 return (featured.isEmpty ? Array(all.prefix(3)) : featured, all, breaking, [], [])
             } catch {
-                return ([], [], [], [], [])
+                return nil
             }
         }
     }
@@ -119,7 +122,8 @@ enum NewsService {
 
             return (articles, result.hasMore)
         } catch {
-            if let cached = await categoryCacheActor.get(slug: slug, page: page) {
+            // فشل الشبكة: نسخة قديمة (حتى المنتهية صلاحيتها) أفضل من قائمة فارغة.
+            if let cached = await categoryCacheActor.getStale(slug: slug, page: page) {
                 return cached
             }
             return ([], false)
@@ -154,10 +158,6 @@ enum NewsService {
 
     static func fetchComments(slug: String) async -> [APIComment] {
         (try? await APIClient.shared.fetchComments(slug: slug)) ?? []
-    }
-
-    static func fetchAudioSummary(slug: String) async -> APIAudioSummary? {
-        try? await APIClient.shared.fetchAudioSummary(slug: slug)
     }
 
     static func search(query: String, page: Int = 1) async -> (articles: [Article], total: Int) {
@@ -287,19 +287,58 @@ enum NewsService {
 // MARK: - Thread-safe Category Cache
 
 private actor CategoryCacheActor {
-    private var cache: [String: [Int: (articles: [Article], hasMore: Bool)]] = [:]
+    private struct EntryValue {
+        let articles: [Article]
+        let hasMore: Bool
+        let storedAt: Date
+    }
+
+    /// كان الكاش بلا انتهاء ولا سقف: تصنيف فُتح قبل ساعة يظل يقدّم مواده
+    /// القديمة حتى يسحب المستخدم تحديث الرئيسية (وهي التي تمسحه)، وتصفّح
+    /// أقسام كثيرة ينمّيه بلا حدّ. صلاحية 5 دقائق + سقف صفحات مع طرد
+    /// الأقدم يبقيان التنقل فوريًّا دون تقادم أو انتفاخ.
+    private static let ttl: TimeInterval = 5 * 60
+    private static let maxEntries = 40
+
+    private var cache: [String: [Int: EntryValue]] = [:]
+    /// ترتيب الاستخدام (مفاتيح "slug#page") — للطرد الأقدم أولًا.
+    private var order: [String] = []
+
+    private func key(_ slug: String, _ page: Int) -> String { "\(slug)#\(page)" }
 
     func get(slug: String, page: Int) -> (articles: [Article], hasMore: Bool)? {
-        cache[slug]?[page]
+        guard let entry = cache[slug]?[page] else { return nil }
+        guard Date().timeIntervalSince(entry.storedAt) < Self.ttl else {
+            cache[slug]?[page] = nil
+            order.removeAll { $0 == key(slug, page) }
+            return nil
+        }
+        return (entry.articles, entry.hasMore)
+    }
+
+    /// نسخة تتجاهل الصلاحية — احتياطي «الأفضل من لا شيء» عند فشل الشبكة.
+    func getStale(slug: String, page: Int) -> (articles: [Article], hasMore: Bool)? {
+        cache[slug]?[page].map { ($0.articles, $0.hasMore) }
     }
 
     func set(slug: String, page: Int, value: (articles: [Article], hasMore: Bool)) {
         var slugCache = cache[slug] ?? [:]
-        slugCache[page] = value
+        slugCache[page] = EntryValue(articles: value.articles, hasMore: value.hasMore, storedAt: Date())
         cache[slug] = slugCache
+
+        let k = key(slug, page)
+        order.removeAll { $0 == k }
+        order.append(k)
+        while order.count > Self.maxEntries {
+            let evicted = order.removeFirst()
+            let parts = evicted.split(separator: "#")
+            guard parts.count == 2, let page = Int(parts[1]) else { continue }
+            cache[String(parts[0])]?[page] = nil
+        }
     }
 
     func removeAll() {
         cache.removeAll()
+        order.removeAll()
     }
 }

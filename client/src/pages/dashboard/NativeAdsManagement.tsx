@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -779,31 +780,25 @@ export default function NativeAdsManagement() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6" dir="rtl">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500 to-red-600">
-              <Megaphone className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">إدارة المحتوى المدفوع</h1>
-              <p className="text-sm text-muted-foreground">
-                إدارة الإعلانات المدفوعة والمحتوى الراعي
-              </p>
-            </div>
-          </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={Megaphone}
+          title="إدارة المحتوى المدفوع"
+          description="إدارة الإعلانات المدفوعة والمحتوى الراعي."
+          actions={
           <Button onClick={() => handleOpenDialog()} data-testid="button-create-ad">
             <Plus className="h-4 w-4 ml-2" />
             إنشاء إعلان جديد
           </Button>
-        </div>
+          }
+        />
 
-        <div className="grid gap-4 md:grid-cols-5 mb-6">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الإعلانات</CardTitle>
-              <div className="p-2 rounded-md bg-purple-500/20">
-                <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <BarChart3 className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -813,25 +808,25 @@ export default function NativeAdsManagement() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الإعلانات النشطة</CardTitle>
-              <div className="p-2 rounded-md bg-green-500/20">
-                <Play className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <div className="rounded-lg bg-muted p-2 text-emerald-600">
+                <Play className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-active-ads">
+              <div className="text-2xl font-bold" data-testid="text-active-ads">
                 {formatNumber(activeAds)}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي المشاهدات</CardTitle>
-              <div className="p-2 rounded-md bg-blue-500/20">
-                <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <Eye className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -841,11 +836,11 @@ export default function NativeAdsManagement() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي النقرات</CardTitle>
-              <div className="p-2 rounded-md bg-amber-500/20">
-                <MousePointer className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <MousePointer className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -855,11 +850,11 @@ export default function NativeAdsManagement() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-pink-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">معدل النقر (CTR)</CardTitle>
-              <div className="p-2 rounded-md bg-pink-500/20">
-                <TrendingUp className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -870,7 +865,7 @@ export default function NativeAdsManagement() {
           </Card>
         </div>
 
-        <Card className="mb-6">
+        <Card>
           <CardHeader>
             <CardTitle>الفلاتر</CardTitle>
           </CardHeader>

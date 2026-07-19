@@ -1,7 +1,236 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
+import {
+  BarChart3,
+  Bot,
+  BriefcaseBusiness,
+  Contact,
+  Newspaper,
+  Settings,
+  Users,
+  PanelsTopLeft,
+} from "lucide-react";
 import type { NavItem, NavContext, NavState, UserRole } from "./types";
 import { navConfig } from "./nav.config";
+
+const STAFF_NAV_SECTION_DEFINITIONS = [
+  {
+    id: "workspace_editorial",
+    labelAr: "التحرير والنشر",
+    labelKey: "nav.workspace_editorial",
+    icon: Newspaper,
+    itemIds: [
+      "articles",
+      "smart_radar",
+      "breaking_ticker",
+      "gulf_events",
+      "muqtarab",
+      "muqtarab_review",
+      "audio_newsletters",
+      "audio_briefs",
+      "calendar",
+      "world_days",
+      "media_library",
+    ],
+  },
+  {
+    id: "workspace_site",
+    labelAr: "واجهة الموقع",
+    labelKey: "nav.workspace_site",
+    icon: PanelsTopLeft,
+    itemIds: [
+      "categories",
+      "tags",
+      "smart_links",
+      "smart_blocks",
+      "quad_categories_block",
+      "themes",
+      "templates",
+      "hajj_block",
+    ],
+  },
+  {
+    id: "workspace_ai",
+    labelAr: "الأدوات الذكية",
+    labelKey: "nav.workspace_ai",
+    icon: Bot,
+    itemIds: [
+      "smart_journalist",
+      "ai_tools",
+      "deep_analysis_manage",
+      "deep_analysis_create",
+      "deep_analysis_public",
+      "data_story_generator",
+      "prompt_studio",
+      "transcription_tool",
+      "voice_management",
+      "auto_image_settings",
+    ],
+  },
+  {
+    id: "workspace_audience",
+    labelAr: "الجمهور والتواصل",
+    labelKey: "nav.workspace_audience",
+    icon: Contact,
+    itemIds: [
+      "ai_moderation",
+      "push_notifications",
+      "contact_messages",
+      "opinion_tickets",
+      "surveys",
+      "announcements",
+      "communications",
+      "editor_alerts",
+      "loyalty_admin",
+    ],
+  },
+  {
+    id: "workspace_business",
+    labelAr: "الأعمال والشراكات",
+    labelKey: "nav.workspace_business",
+    icon: BriefcaseBusiness,
+    itemIds: [
+      "media_store_orders",
+      "native_ads",
+      "payment-analytics",
+      "ad_campaigns",
+      "ad_creatives",
+      "inventory_slots",
+      "ad_account",
+      "ad_analytics",
+      "publishers_list",
+      "publishers_articles",
+      "publishers_analytics",
+    ],
+  },
+  {
+    id: "workspace_analytics",
+    labelAr: "التحليلات والتقارير",
+    labelKey: "nav.workspace_analytics",
+    icon: BarChart3,
+    itemIds: [
+      "dashboards",
+      "trending",
+      "behavior",
+      "abTests",
+      "recommendation-analytics",
+      "sentiment-analytics",
+      "personalization-analytics",
+      "article-analytics",
+      "deep_analysis_stats",
+    ],
+  },
+  {
+    id: "workspace_people",
+    labelAr: "الفريق والصلاحيات",
+    labelKey: "nav.workspace_people",
+    icon: Users,
+    itemIds: [
+      "staff",
+      "users_mgmt",
+      "roles",
+      "permissions",
+      "correspondents",
+      "opinion-authors",
+      "staff-communications",
+      "staff-productivity",
+      "email-templates",
+    ],
+  },
+  {
+    id: "workspace_system",
+    labelAr: "النظام والتكاملات",
+    labelKey: "nav.workspace_system",
+    icon: Settings,
+    itemIds: [
+      "rss_feeds",
+      "spa_news",
+      "sportmonks_news",
+      "integrations",
+      "storage",
+      "audits",
+      "system_settings",
+      "sports_tournaments",
+      "admin_tools",
+      "systems_catalog",
+      "ai_hub",
+    ],
+  },
+] as const;
+
+const STAFF_NAV_PRIORITY_IDS = ["dashboard", "tasks", "new_article"] as const;
+const COMPACT_NAV_ROLES = new Set<UserRole>([
+  "reporter",
+  "opinion_author",
+  "angle_writer",
+  "publisher",
+  "advertiser",
+  "guest",
+]);
+
+/**
+ * Reorganize the already-authorized navigation leaves by staff workflow.
+ * Access is intentionally filtered first; this layer changes presentation only.
+ */
+function organizeStaffNavigation(items: NavItem[], role: UserRole): NavItem[] {
+  if (COMPACT_NAV_ROLES.has(role)) return items;
+
+  const leaves = flattenNavTree(items).filter((item) => item.path);
+
+  // Small contributor menus are clearer without extra containers.
+  if (leaves.length <= 5) return items;
+
+  const leavesById = new Map<string, NavItem>();
+  const seenPaths = new Set<string>();
+
+  for (const item of leaves) {
+    if (!item.path || leavesById.has(item.id) || seenPaths.has(item.path)) continue;
+    leavesById.set(item.id, { ...item, children: undefined });
+    seenPaths.add(item.path);
+  }
+
+  const usedIds = new Set<string>();
+  const priorityItems = STAFF_NAV_PRIORITY_IDS.flatMap((id) => {
+    const item = leavesById.get(id);
+    if (!item) return [];
+    usedIds.add(id);
+    return [item];
+  });
+
+  const sections: NavItem[] = STAFF_NAV_SECTION_DEFINITIONS.flatMap((section) => {
+    const children = section.itemIds.flatMap((id) => {
+      const item = leavesById.get(id);
+      if (!item || usedIds.has(id)) return [];
+      usedIds.add(id);
+      return [item];
+    });
+
+    if (children.length === 0) return [];
+
+    return [{
+      id: section.id,
+      labelKey: section.labelKey,
+      labelAr: section.labelAr,
+      icon: section.icon,
+      roles: [role],
+      children,
+    } satisfies NavItem];
+  });
+
+  const remaining = Array.from(leavesById.values()).filter((item) => !usedIds.has(item.id));
+  if (remaining.length > 0) {
+    sections.push({
+      id: "workspace_more",
+      labelKey: "nav.workspace_more",
+      labelAr: "المزيد",
+      icon: Settings,
+      roles: [role],
+      children: remaining,
+    });
+  }
+
+  return [...priorityItems, ...sections];
+}
 
 /**
  * Check if feature flags pass for an item
@@ -40,6 +269,14 @@ function itemPassesAccessCheck(
     if (item.excludeRoles.some((r) => roles.includes(r))) {
       return false;
     }
+  }
+
+  // requireRoles: raw role names only (e.g. system_admin) — bypasses
+  // resolveUserRole mapping and permission wildcards so regular admin
+  // with "*" cannot see system_admin-only items.
+  if (item.requireRoles && item.requireRoles.length > 0) {
+    const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
+    return item.requireRoles.some((r) => roles.includes(r));
   }
 
   // If item has permissions defined, check permissions (permission-first).
@@ -228,7 +465,8 @@ export function useNav(context: NavContext): NavState {
     const allRoles = context.allRoles;
 
     // Filter tree - now includes permission-based filtering
-    const treeFiltered = filterNavTree(navConfig, role, flags, userPermissions, allRoles);
+    const authorizedTree = filterNavTree(navConfig, role, flags, userPermissions, allRoles);
+    const treeFiltered = organizeStaffNavigation(authorizedTree, role);
 
     // Find active item
     const activeItem = findActiveItem(treeFiltered, currentPath);
@@ -257,9 +495,9 @@ export function useNav(context: NavContext): NavState {
 export function trackNavClick(id: string, path?: string) {
   // Placeholder for analytics tracking
   if (typeof window !== "undefined") {
-    console.log("[Nav] Item clicked:", { id, path, timestamp: new Date().toISOString() });
-    
     // يمكن إضافة تكامل مع Google Analytics أو أي نظام تتبع آخر هنا
     // Example: window.gtag?.('event', 'nav_item_clicked', { id, path });
+    void id;
+    void path;
   }
 }

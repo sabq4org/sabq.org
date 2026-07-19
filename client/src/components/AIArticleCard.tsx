@@ -242,7 +242,7 @@ export function AIArticleCard({
             </div>
           )}
 
-          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-auto">
+          <div className="mt-auto flex items-center gap-3 text-xs font-medium text-foreground/65">
             {article.author && (
               <span className="font-medium truncate">
                 {article.author.firstName} {article.author.lastName}

@@ -129,7 +129,7 @@ struct OpinionDetailView: View {
                 url: displayOpinion.imageURL.flatMap(URL.init(string:)),
                 placeholderImage: displayOpinion.imageURL
                     .flatMap(URL.init(string:))
-                    .flatMap { ImageCache.shared.object(forKey: $0 as NSURL) }
+                    .flatMap { ImageCache.cachedAny($0) }
             )
         }
         .fullScreenCover(item: Binding(
@@ -138,7 +138,7 @@ struct OpinionDetailView: View {
         )) { holder in
             ImageLightbox(
                 url: holder.url,
-                placeholderImage: ImageCache.shared.object(forKey: holder.url as NSURL)
+                placeholderImage: ImageCache.cachedAny(holder.url)
             )
         }
         .onAppear {
@@ -158,7 +158,7 @@ struct OpinionDetailView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))
@@ -177,7 +177,7 @@ struct OpinionDetailView: View {
                         bookmarksStore.toggle(opinion.id, article: displayOpinion.asArticleForBookmark())
                     } label: {
                         Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(SabqFonts.app(size: 16, weight: .semibold))
                             .foregroundStyle(
                                 bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
                             )
@@ -191,7 +191,7 @@ struct OpinionDetailView: View {
                         shareOpinion()
                     } label: {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(SabqFonts.app(size: 16, weight: .semibold))
                             .foregroundStyle(SabqTheme.secondaryInk)
                             .padding(8)
                             .background(Circle().fill(.ultraThinMaterial))
@@ -207,9 +207,20 @@ struct OpinionDetailView: View {
         .onDisappear {
             copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
-            audioPlayer?.pause()
-            audioPlayer = nil
+            if audioPlayer != nil {
+                audioPlayer?.pause()
+                audioPlayer = nil
+                SabqAudioSession.deactivate()
+            }
             isPlayingAudio = false
+        }
+        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «إيقاف» وجلسة
+        // الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
+            isPlayingAudio = false
+            audioPlayer = nil
+            SabqAudioSession.deactivate()
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
@@ -240,7 +251,7 @@ struct OpinionDetailView: View {
             toggleLike()
         } label: {
             Image(systemName: isLiked ? "heart.fill" : "heart")
-                .font(.system(size: 16, weight: .semibold))
+                .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
                 .padding(8)
                 .background(Circle().fill(.ultraThinMaterial))
@@ -268,9 +279,9 @@ struct OpinionDetailView: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text(isPlayingAudio ? "إيقاف" : "استماع")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
@@ -295,7 +306,7 @@ struct OpinionDetailView: View {
         // bytes. Opinions live in the same `articles` table, so the
         // slug works for both kinds.
         guard let slug = displayOpinion.slug, !slug.isEmpty,
-              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
+              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
         SabqAudioSession.activate()
@@ -344,7 +355,7 @@ struct OpinionDetailView: View {
         .frame(height: 220)
         .overlay {
             Image(systemName: "text.quote")
-                .font(.system(size: 100, weight: .ultraLight))
+                .font(SabqFonts.app(size: 100, weight: .ultraLight))
                 .foregroundStyle(SabqTheme.primaryEnd.opacity(0.18))
         }
     }
@@ -364,9 +375,9 @@ struct OpinionDetailView: View {
         FlowLayout(spacing: 8) {
             HStack(spacing: 5) {
                 Image(systemName: "text.quote")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text("مقال رأي")
-                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .tracking(0.5)
             }
             .foregroundStyle(SabqTheme.primaryEnd)
@@ -407,13 +418,13 @@ struct OpinionDetailView: View {
                 // colon boundary and flips the order visually.
                 HStack(spacing: 5) {
                     Image(systemName: "applepencil")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("\(displayOpinion.bylineLabel):")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(displayOpinion.authorName)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -423,22 +434,22 @@ struct OpinionDetailView: View {
             .layoutPriority(2)
 
             Text("·")
-                .font(.system(size: 11))
+                .font(SabqFonts.app(size: 11))
                 .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
 
             Text(displayOpinion.readingTime)
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .monospacedDigit()
                 .lineLimit(1)
                 .layoutPriority(1)
 
             Text("·")
-                .font(.system(size: 11))
+                .font(SabqFonts.app(size: 11))
                 .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
 
             Text(displayOpinion.dateFormatted)
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -467,10 +478,10 @@ struct OpinionDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("الموجز الذكي")
-                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.ink)
                     Spacer(minLength: 0)
                     if canListen {
@@ -479,7 +490,7 @@ struct OpinionDetailView: View {
                 }
 
                 Text(body)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
@@ -495,9 +506,9 @@ struct OpinionDetailView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .regular))
                             Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                         }
                         .foregroundStyle(SabqTheme.primaryEnd)
                     }
@@ -631,9 +642,9 @@ struct OpinionDetailView: View {
     private func actionButton(icon: String, label: String, isActive: Bool = false) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(SabqFonts.app(size: 16, weight: .semibold))
             Text(label)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 10, weight: .regular))
         }
         .foregroundStyle(isActive ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
         .frame(maxWidth: .infinity)
@@ -657,14 +668,14 @@ struct OpinionDetailView: View {
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("الوسوم")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(SabqTheme.secondaryInk)
 
             FlowLayout(spacing: 8) {
                 ForEach(displayTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.primaryStart)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -697,26 +708,26 @@ struct OpinionDetailView: View {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(opinion.title)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
 
                             HStack(spacing: 5) {
                                 Image(systemName: "applepencil")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                                 Text("\(opinion.bylineLabel):")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                                 Text(opinion.authorName)
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                                     .lineLimit(1)
                             }
 
                             Text(opinion.relativeDate)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)

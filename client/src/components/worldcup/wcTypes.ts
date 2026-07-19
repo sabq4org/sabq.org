@@ -8,6 +8,124 @@ export interface WcTeam {
   name: string;
   logo: string;
   winner: boolean | null;
+  /** ترتيب فيفا للمنتخب (TheSports) — في قائمة المنتخبات فقط، اختياري */
+  fifaRank?: number | null;
+}
+
+/** الزخم الهجومي عبر الزمن (من trends) — /api/world-cup/momentum/:id */
+export interface WcMomentumPoint {
+  label: string;
+  minute: number;
+  home: number;
+  away: number; // سالبة (تُرسم أسفل الصفر)
+  net: number;
+}
+
+export interface WcMomentum {
+  available: boolean;
+  live: boolean;
+  possession: { home: number; away: number } | null;
+  points: WcMomentumPoint[];
+}
+
+/** مؤشّر الضغط لحظة بلحظة (Pressure Index) — /api/world-cup/pressure/:id */
+export interface WcPressurePoint {
+  label: string;
+  minute: number;
+  home: number;
+  away: number; // سالبة (تُرسم أسفل الصفر)
+  net: number;
+}
+
+export interface WcPressure {
+  available: boolean;
+  live: boolean;
+  latest: { side: "home" | "away" | "even"; value: number } | null;
+  points: WcPressurePoint[];
+}
+
+/** التوقعات الاحتمالية (Predictions) — /api/world-cup/forecast/:id */
+export interface WcOverUnderLine {
+  line: number;
+  over: number;
+  under: number;
+}
+
+export interface WcCorrectScore {
+  score: string; // "2-0" (المضيف-الضيف)
+  prob: number;
+}
+
+export interface WcForecast {
+  available: boolean;
+  fulltime: { home: number; draw: number; away: number } | null;
+  btts: { yes: number; no: number } | null;
+  doubleChance: { homeOrDraw: number; awayOrDraw: number; homeOrAway: number } | null;
+  goals: WcOverUnderLine[];
+  correctScores: WcCorrectScore[];
+}
+
+/** معطيات المباراة (إحصائيات + طقس + غيابات) — /api/world-cup/match-facts/:id */
+export interface WcWeather {
+  type: "actual" | "forecast";
+  temp: number | null;
+  description: string;
+  icon: string;
+  humidity: string;
+}
+
+export interface WcAbsentee {
+  name: string;
+  location: "home" | "away";
+  reason: string;
+}
+
+export interface WcEventDetail {
+  minute: number;
+  location: "home" | "away";
+  klass: "goal" | "card" | "var";
+  detail: string; // مُعرَّب
+  player: string;
+}
+
+export interface WcMatchFacts {
+  available: boolean;
+  statistics: WcStatistic[]; // متوافق مع StatRow
+  weather: WcWeather | null;
+  absentees: WcAbsentee[];
+  eventDetails: WcEventDetail[];
+  halftime: { home: number; away: number } | null;
+}
+
+/** الأهداف المتوقعة (xG) — /api/world-cup/xg/:id */
+export interface WcXgPlayer {
+  name: string;
+  location: "home" | "away";
+  xg: number;
+}
+
+export interface WcXg {
+  available: boolean;
+  home: { xg: number; xgot: number };
+  away: { xg: number; xgot: number };
+  topPlayers: WcXgPlayer[];
+}
+
+/** التعليق المباشر المترجم (من commentaries) — /api/world-cup/commentary/:id */
+export interface WcCommentaryItem {
+  minute: number;
+  extraMinute: number | null;
+  goal: boolean;
+  important: boolean;
+  textAr: string;
+  textEn: string;
+  order: number;
+}
+
+export interface WcCommentary {
+  available: boolean;
+  live: boolean;
+  items: WcCommentaryItem[];
 }
 
 export interface WcFixture {
@@ -29,7 +147,12 @@ export interface WcFixture {
   away: WcTeam;
   goals: { home: number | null; away: number | null };
   penalties: { home: number | null; away: number | null } | null;
+  matchNo?: number;
+  homeCode?: string;
+  awayCode?: string;
 }
+
+export type WcQualifyStatus = "qualified" | "eliminated" | "contention";
 
 export interface WcStandingRow {
   rank: number;
@@ -43,6 +166,11 @@ export interface WcStandingRow {
   goalsDiff: number;
   points: number;
   form: string | null;
+  // حالة التأهّل للمركزين الأوّلين (تُحسب خادميًّا) — null حين ينتهي دور المجموعات
+  qualifyStatus?: WcQualifyStatus | null;
+  // true إذا حُدِّث الصفّ لحظيًّا من TheSports
+  live?: boolean;
+  liveDelta?: number;
 }
 
 export interface WcGroup {
@@ -101,6 +229,44 @@ export interface WcLineup {
   substitutes: WcLineupPlayer[];
 }
 
+// التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups)
+export interface WcExpectedLineupPlayer {
+  name: string;
+  jersey: number | null;
+  slot: number | null;
+  grid: string | null;
+  row: number | null;
+}
+
+export interface WcExpectedLineupSide {
+  formation: string | null;
+  starters: WcExpectedLineupPlayer[];
+  bench: WcExpectedLineupPlayer[];
+}
+
+export interface WcExpectedLineups {
+  available: boolean;
+  home: WcExpectedLineupSide | null;
+  away: WcExpectedLineupSide | null;
+}
+
+// تشكيلة الجولة (SportMonks Team of the Week)
+export interface WcTotwPlayer {
+  name: string;
+  photo: string | null;
+  teamName: string;
+  teamLogo: string | null;
+  rating: number;
+  slot: number;
+  row: number;
+}
+
+export interface WcTeamOfTheWeek {
+  available: boolean;
+  formation: string | null;
+  players: WcTotwPlayer[];
+}
+
 export interface WcStatistic {
   key: string;
   label: string;
@@ -156,11 +322,103 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  /** القيمة السوقية (TheSports) — null إن تعذّر الربط */
+  marketValue: number | null;
+  marketValueCurrency: string;
+}
+
+/** القيمة السوقية وتاريخها للاعب — /api/world-cup/player/:id/market */
+export interface WcPlayerMarket {
+  available: boolean;
+  marketValue: number | null;
+  currency: string;
+  history: { time: number; value: number }[];
 }
 
 export interface WcSquad {
   team: WcTeam;
   players: WcSquadPlayer[];
+}
+
+export interface WcTeamExtra {
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  squadSize: number | null;
+}
+
+/** تصنيف فيفا للمنتخب — إثراء TheSports */
+export interface WcFifaRank {
+  rank: number;
+  points: number | null;
+  /** عدد المراكز المتغيّرة (موجب = صعد ▲، سالب = نزل ▼) — null إن تعذّر */
+  change: number | null;
+}
+
+/** إصابة/غياب لاعب — إثراء TheSports */
+export interface WcInjury {
+  player: string;
+  reason: string | null;
+  status: string | null;
+  until: string | null;
+}
+
+/** قناة بثّ مباراة — إثراء TheSports */
+export interface WcTvChannel {
+  name: string;
+  country: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
+/** بند إحصائي للموسم — إثراء TheSports (season/recent/team/stat) */
+export interface WcSeasonStatItem {
+  label: string;
+  value: number;
+  percent?: boolean;
+}
+
+/** إحصاء المنتخب في البطولة — إثراء TheSports */
+export interface WcTeamSeasonStats {
+  available: boolean;
+  matches: number;
+  items: WcSeasonStatItem[];
+}
+
+/** سطر إحصاء/تقييم لاعب في مباراة — إثراء TheSports (match/player_stats/detail) */
+export interface WcPlayerStatLine {
+  name: string;
+  rating: number | null;
+  starter: boolean;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+}
+
+/** تقييمات لاعبي المباراة (مضيف/ضيف) — إثراء TheSports */
+export interface WcMatchPlayerStats {
+  available: boolean;
+  home: { team: WcTeam; players: WcPlayerStatLine[] } | null;
+  away: { team: WcTeam; players: WcPlayerStatLine[] } | null;
+}
+
+/** المدرّب (صورة/خطة/عمر/جنسية) من TheSports */
+export interface WcCoachInfo {
+  name: string;
+  photo: string;
+  formation: string | null;
+  age: number | null;
+  nationality: string | null;
+}
+
+/** ملعب المنتخب (اسم/سعة/مدينة/دولة) من TheSports */
+export interface WcVenueInfo {
+  name: string;
+  capacity: number | null;
+  city: string;
+  country: string | null;
 }
 
 export interface WcTeamProfile {
@@ -170,6 +428,28 @@ export interface WcTeamProfile {
   group: WcGroup | null;
   fixtures: WcFixture[];
   squad: WcSquadPlayer[];
+  extra?: WcTeamExtra | null;
+  fifaRank?: WcFifaRank | null;
+  injuries?: WcInjury[];
+  seasonStats?: WcTeamSeasonStats;
+  coachInfo?: WcCoachInfo | null;
+  venue?: WcVenueInfo | null;
+}
+
+/** حقائق البطولة — /api/world-cup/facts */
+export interface WcCompetitionFacts {
+  defendingChampion: WcTeam | null;
+  defendingChampionTitles: number | null;
+  mostTitles: { teams: WcTeam[]; count: number } | null;
+  host: string | null;
+}
+
+/** تنسيق القيمة السوقية بالعربية المختصرة (مليار/مليون) مع رمز العملة */
+export function formatMarketValue(value: number | null, currency = "€"): string | null {
+  if (value == null || value <= 0) return null;
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "")} مليار ${currency}`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")} مليون ${currency}`;
+  return `${value.toLocaleString("en-US")} ${currency}`;
 }
 
 export interface WcPlayerCareerStop {
@@ -228,15 +508,56 @@ export interface WcPlayerCard {
   injury: { reason: string } | null;
 }
 
+/** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
+export interface WcChampion {
+  team: WcTeam;
+  runnerUp: WcTeam | null;
+  /** نتيجة النهائي بترتيب «الفائز أولًا» (W-L) — نفس اتفاقية الترجيح الموحّدة */
+  score: string | null;
+  /** نتيجة ركلات الترجيح بترتيب «الفائز أولًا» — null إن حُسم النهائي دونها */
+  penalties: string | null;
+  decidedAt: string | null;
+  source: "auto" | "manual";
+}
+
+/** لمحة بطاقات الستوريز في الصفحة الرئيسية (أصوات الجمهور) */
+export interface WcStoriesTeaser {
+  champions: Array<{
+    teamId: number;
+    name: string;
+    logo: string | null;
+    pct: number;
+    eliminated: boolean;
+  }>;
+  eliminatedNote: { teamId: number; name: string; pct: number } | null;
+  topScorer: {
+    playerId: number;
+    name: string;
+    photo: string | null;
+    pct: number;
+  } | null;
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
   matchOfTheDay: { fixture: WcFixture; prediction: WcPrediction | null } | null;
+  // المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — قد تكون في يوم
+  // تقويمي تالٍ فلا تظهر في today؛ تُستخدم لعرض بطاقات Hero متجاورة.
+  matchOfDayPeers?: WcFixture[];
+  // توقعات النتيجة مفهرسة بمعرّف المباراة — لكل مباراة تُعرض كبطاقة Hero
+  predictions?: Record<number, WcPrediction>;
   saudi: {
     next: WcFixture | null;
     fixtures: WcFixture[];
     group: WcGroup | null;
   };
+  /** بطل البطولة بعد حسم النهائي (أو المعيَّن يدويًا من اللوحة) */
+  champion?: WcChampion | null;
+  /** true عندما أُطفئ البلوك من لوحة التحكم — القسم كله يختفي */
+  hidden?: boolean;
+  /** نسب توقّع البطل/الهدّاف + ملاحظة خروج مرشّح بارز */
+  storiesTeaser?: WcStoriesTeaser | null;
   updatedAt: string;
 }
 
@@ -318,5 +639,38 @@ export function countdownTo(timestamp: number): WcCountdown {
     minutes: Math.floor((total % 3_600_000) / 60_000),
     seconds: Math.floor((total % 60_000) / 1000),
     total,
+  };
+}
+
+/**
+ * نتيجة ركلات الترجيح مع تحديد الفائز. النتيجة مرتّبة دائمًا «الفائز أولًا»
+ * (winnerScore > loserScore) كي لا تنقلب بصريًّا بحسب اتجاه العرض (RTL/LTR).
+ * المصدر موثوق: penalties.home يخصّ المضيف وpenalties.away يخصّ الضيف (نفس
+ * ربط الأهداف). تُرجع null إن لم تُحسم المباراة بالترجيح. لا نعتمد على علم
+ * `team.winner` الخام لأن المزوّد قد يتركه فارغًا في مباريات الترجيح.
+ */
+export interface WcPenaltyOutcome {
+  winnerSide: "home" | "away";
+  winnerName: string;
+  winnerScore: number;
+  loserScore: number;
+}
+
+/** الحد الأدنى البنيوي لحساب الترجيح — يقبل مباريات المونديال وكأس الملك معًا */
+export interface PenaltyFixtureLike {
+  penalties?: { home: number | null; away: number | null } | null;
+  home: { name: string };
+  away: { name: string };
+}
+
+export function penaltyOutcome(fixture: PenaltyFixtureLike): WcPenaltyOutcome | null {
+  const pen = fixture.penalties;
+  if (!pen || pen.home == null || pen.away == null || pen.home === pen.away) return null;
+  const homeWon = pen.home > pen.away;
+  return {
+    winnerSide: homeWon ? "home" : "away",
+    winnerName: homeWon ? fixture.home.name : fixture.away.name,
+    winnerScore: homeWon ? pen.home : pen.away,
+    loserScore: homeWon ? pen.away : pen.home,
   };
 }

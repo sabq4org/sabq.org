@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import { retryWithBackoff } from '../utils/retryWithBackoff';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 
 export interface TTSOptions {
   text: string;
@@ -14,6 +15,8 @@ export interface TTSOptions {
   };
   /** Optional natural-language tone instructions (used by OpenAI gpt-4o-mini-tts). */
   instructions?: string;
+  /** Language hint for Arabic number verbalization before synthesis. */
+  language?: 'ar' | 'en' | 'ur';
 }
 
 export interface Voice {
@@ -27,85 +30,211 @@ export interface Voice {
   accent?: string;
   age?: string;
   use_case?: string;
+  /** Highlighted in admin UI as a top pick for Sabq. */
+  recommended?: boolean;
 }
 
-// Curated Arabic voices for news broadcasting - Saudi/Gulf accent priority
+// Curated Arabic voices for news broadcasting — Saudi/Gulf first, then MSA.
+// Shared-library IDs work for TTS on Creator+ without adding to My Voices.
 export const ARABIC_NEWS_VOICES = [
-  // ⭐ Saudi/Gulf Voices - Primary for Saudi audience
+  // ⭐ Saudi — primary for Sabq audience
   {
-    voice_id: '5Spsi3mCH9e7futpnGE5',
-    name: 'فارس - مذيع أخبار خليجي',
+    voice_id: 'yXEnnEln9armDCyhkXcA',
+    name: 'صوت جدة الإذاعي — Jeddawi Echo',
     gender: 'male',
-    accent: 'gulf',
+    accent: 'saudi',
+    age: 'young',
+    use_case: 'formal_news',
+    description: 'صوت سعودي عميق وواثق من جدة — مثالي للنشرات والإعلانات والبودكاست',
+    recommended: true,
+  },
+  {
+    voice_id: 'usjDi9nBY6UHvtKrL4ba',
+    name: 'عبدالله — راوي سعودي',
+    gender: 'male',
+    accent: 'saudi',
     age: 'middle_aged',
     use_case: 'formal_news',
-    description: 'صوت خليجي واضح ومتوازن، يتميز بالدفء والاحترافية - مثالي للنشرات الإخبارية'
+    description: 'صوت رجالي سعودي دافئ وواضح — مناسب للسرد والبودكاست والأخبار',
+    recommended: true,
+  },
+  {
+    voice_id: 'MI88rOZjXbH22N8KHXUo',
+    name: 'علي — راوي سعودي عميق',
+    gender: 'male',
+    accent: 'saudi',
+    age: 'middle_aged',
+    use_case: 'narration',
+    description: 'صوت رجالي عربي هادئ ورنّان بنبرة سعودية ثابتة وواضحة',
+    recommended: true,
+  },
+  {
+    voice_id: '3nav5pHC1EYvWOd5LmnA',
+    name: 'سعود — رسمي وواضح',
+    gender: 'male',
+    accent: 'saudi',
+    age: 'middle_aged',
+    use_case: 'formal_news',
+    description: 'صوت عميق ورسمي يوحي بالثقة — مناسب للنشرات الجادة',
+    recommended: true,
+  },
+  {
+    voice_id: 'cFUFIbKkO2iZFwS8cRnY',
+    name: 'ناصر الجبيلي — سعودي احترافي',
+    gender: 'male',
+    accent: 'saudi',
+    age: 'middle_aged',
+    use_case: 'formal_news',
+    description: 'صوت خليجي «لهجة بيضاء» متوازن بين الدفء والاحترافية',
+  },
+  {
+    voice_id: 'oJCdZCYaJobw2GlrIQm5',
+    name: 'ماجد — ثابت ودقيق',
+    gender: 'male',
+    accent: 'saudi',
+    age: 'young',
+    use_case: 'informative',
+    description: 'صوت سعودي نجدي هادئ ودقيق — مناسب للمحتوى التعليمي والتوضيحي',
+  },
+  {
+    voice_id: 'OoE8swS3hImZANNOodf6',
+    name: 'علي أحمد — لهجة سعودية أصيلة',
+    gender: 'male',
+    accent: 'saudi',
+    age: 'middle_aged',
+    use_case: 'storytelling',
+    description: 'صوت سعودي طبيعي بلهجة محلية أصيلة',
   },
   {
     voice_id: 'IK7YYZcSpmlkjKrQxbSn',
-    name: 'رائد - صوت سعودي أصيل',
+    name: 'رائد — صوت سعودي أصيل',
     gender: 'male',
     accent: 'saudi',
     age: 'mature',
     use_case: 'storytelling',
-    description: 'صوت سعودي رجالي ناضج بلهجة خليجية أصيلة'
+    description: 'صوت سعودي رجالي ناضج بلهجة خليجية أصيلة',
   },
-  // Modern Standard Arabic - Professional News
   {
-    voice_id: 'G1HOkzin3NMwRHSq60UI',
-    name: 'شوقي - مذيع إذاعي',
+    voice_id: '5Spsi3mCH9e7futpnGE5',
+    name: 'فارس — مذيع أخبار خليجي',
+    gender: 'male',
+    accent: 'gulf',
+    age: 'middle_aged',
+    use_case: 'formal_news',
+    description: 'صوت خليجي واضح ومتوازن — مثالي للنشرات الإخبارية',
+  },
+  {
+    voice_id: 'aMmeBf0lzDYlouyfqNjh',
+    name: 'مريم — سعودية هادئة ودافئة',
+    gender: 'female',
+    accent: 'saudi',
+    age: 'middle_aged',
+    use_case: 'narration',
+    description: 'صوت نسائي سعودي ناعم من المنطقة الشرقية — دافئ ومعبّر',
+    recommended: true,
+  },
+  {
+    voice_id: 'TbzNVcMOFmKd8tUT5liY',
+    name: 'مصطفى عبدالله — خليجي',
+    gender: 'male',
+    accent: 'gulf',
+    age: 'middle_aged',
+    use_case: 'storytelling',
+    description: 'راوٍ عربي هادئ بلهجة خليجية تمزج الكويتي والسعودي',
+  },
+  {
+    voice_id: 'G1QUjBCuRBbLbAmYlTgl',
+    name: 'أبو سالم — كويتي احترافي',
+    gender: 'male',
+    accent: 'gulf',
+    age: 'middle_aged',
+    use_case: 'formal_news',
+    description: 'صوت كويتي قوي وواضح للتعليق الإخباري والوثائقيات',
+  },
+  // Modern Standard Arabic — professional news
+  {
+    voice_id: 'xvhpbk8otnNHtT3fjCpr',
+    name: 'عمر — فصحى احترافية',
     gender: 'male',
     accent: 'msa',
     age: 'middle_aged',
     use_case: 'formal_news',
-    description: 'صوت عميق وواضح بلكنة عربية محايدة، مثالي للوثائقيات والأخبار'
+    description: 'صوت رجالي عربي دافئ بفصحى حديثة مع لمسة سعودية خفيفة',
+    recommended: true,
   },
   {
-    voice_id: 'JjTirzdD7T3GMLkwdd3a',
-    name: 'حميدة - إذاعي محترف',
+    voice_id: 'G1HOkzin3NMwRHSq60UI',
+    name: 'شوقي — مذيع إذاعي',
     gender: 'male',
     accent: 'msa',
     age: 'middle_aged',
-    use_case: 'radio',
-    description: 'صوت مناسب للإذاعة والبث الإخباري'
+    use_case: 'formal_news',
+    description: 'صوت عميق وواضح بلكنة عربية محايدة — مثالي للوثائقيات والأخبار',
+  },
+  {
+    voice_id: 'beZRlJoDAXQuY5EaPgHK',
+    name: 'دارشو — فصحى ملكية',
+    gender: 'male',
+    accent: 'msa',
+    age: 'middle_aged',
+    use_case: 'narration',
+    description: 'صوت عميق ورنّان بفصحى فخمة — مناسب للسرد الوثائقي',
+  },
+  {
+    voice_id: 'QRq5hPRAKf5ZhSlTBH6r',
+    name: 'يحيى — دافئ ومعبّر',
+    gender: 'male',
+    accent: 'msa',
+    age: 'middle_aged',
+    use_case: 'narration',
+    description: 'صوت رجالي عربي دافئ ومعبّر — مناسب للأخبار والبودكاست',
   },
   {
     voice_id: 'kERwN6X2cY8g1XbfzJsX',
-    name: 'مراد سامي - قارئ أخبار',
+    name: 'مراد سامي — قارئ أخبار',
     gender: 'male',
     accent: 'msa',
     age: 'middle_aged',
     use_case: 'news_reading',
-    description: 'صوت هادئ مثالي لقراءة الأخبار والكتب والمقالات'
+    description: 'صوت هادئ مثالي لقراءة الأخبار والكتب والمقالات',
   },
-  // Female Voices - Professional News Anchors
   {
     voice_id: 'VwC51uc4PUblWEJSPzeo',
-    name: 'أبرار صباح - مذيعة أخبار',
+    name: 'أبرار صباح — مذيعة أخبار',
+    gender: 'female',
+    accent: 'msa',
+    age: 'middle_aged',
+    use_case: 'formal_news',
+    description: 'صوت نسائي عربي واضح — مثالي للبودكاست والإعلانات والأخبار',
+  },
+  {
+    voice_id: 'mRdG9GYEjJmIzqbYTidv',
+    name: 'سناء — هادئة وصادقة',
+    gender: 'female',
+    accent: 'msa',
+    age: 'middle_aged',
+    use_case: 'narration',
+    description: 'صوت نسائي عربي ناعم وصادق — من أكثر الأصوات استخداماً',
+    recommended: true,
+  },
+  {
+    voice_id: 'w4LX7bK479eHGM1k15Em',
+    name: 'حبيبة — واضحة ودافئة',
     gender: 'female',
     accent: 'msa',
     age: 'young',
     use_case: 'formal_news',
-    description: 'صوت نسائي عربي مثالي للبودكاست والإعلانات والوثائقيات والأخبار'
-  },
-  {
-    voice_id: 'qi4PkV9c01kb869Vh7Su',
-    name: 'أسماء - مذيعة محترفة',
-    gender: 'female',
-    accent: 'msa',
-    age: 'young',
-    use_case: 'narration',
-    description: 'صوت نسائي بلهجة فصحى حديثة مع نبرة حوارية لطيفة'
+    description: 'صوت نسائي شاب دافئ وواضح — مناسب للنشرات والقصص',
   },
   {
     voice_id: 'u0TsaWvt0v8migutHM3M',
-    name: 'غزلان - صوت هادئ',
+    name: 'غزلان — صوت هادئ',
     gender: 'female',
     accent: 'msa',
     age: 'middle_aged',
     use_case: 'podcast',
-    description: 'صوت ناعم ومتوازن وهادئ، مناسب للبودكاست واليوتيوب والسرد'
-  }
+    description: 'صوت ناعم ومتوازن وهادئ — مناسب للبودكاست والسرد',
+  },
 ];
 
 export class ElevenLabsService {
@@ -113,8 +242,8 @@ export class ElevenLabsService {
   private baseUrl = 'https://api.elevenlabs.io/v1';
   
   // Voice Configuration for Arabic News Broadcasting
-  // Using شوقي - صوت عميق وواضح بلكنة عربية محايدة، مثالي للوثائقيات والأخبار
-  private defaultVoiceId = 'G1HOkzin3NMwRHSq60UI'; // Shawqi - Deep clear MSA voice for news
+  // Jeddawi Echo — deep confident Saudi male from Jeddah
+  private defaultVoiceId = 'yXEnnEln9armDCyhkXcA';
   
   // Optimized voice settings for smooth, professional news delivery
   // Higher stability = smoother flow without choppy pauses
@@ -140,11 +269,13 @@ export class ElevenLabsService {
   private async _textToSpeechRequest(options: TTSOptions, timeoutMs: number): Promise<Buffer> {
     const voiceId = options.voiceId || this.defaultVoiceId;
     const model = options.model || 'eleven_multilingual_v2';
+    // Leaf-level تفقيط so direct callers (summary-audio, job queue) get spoken numbers.
+    const text = normalizeTextForTts(options.text, { language: options.language ?? 'auto' });
     
     const url = `${this.baseUrl}/text-to-speech/${voiceId}`;
     
     const requestBody = {
-      text: options.text,
+      text,
       model_id: model,
       voice_settings: options.voiceSettings || this.defaultVoiceSettings
     };
@@ -297,7 +428,8 @@ export class ElevenLabsService {
     
     // Add audio files
     options.files.forEach((file, index) => {
-      const blob = new Blob([file], { type: 'audio/mpeg' });
+      // TS 6+: Buffer<ArrayBufferLike> is not a BlobPart; wrap as Uint8Array.
+      const blob = new Blob([new Uint8Array(file)], { type: 'audio/mpeg' });
       formData.append('files', blob, `sample_${index}.mp3`);
     });
 
@@ -378,7 +510,7 @@ export class ElevenLabsService {
   }): Promise<SpeechToTextResult> {
     const formData = new FormData();
     
-    const blob = new Blob([options.file], { type: 'audio/mpeg' });
+    const blob = new Blob([new Uint8Array(options.file)], { type: 'audio/mpeg' });
     formData.append('file', blob, 'audio.mp3');
     formData.append('model_id', 'scribe_v1');
     

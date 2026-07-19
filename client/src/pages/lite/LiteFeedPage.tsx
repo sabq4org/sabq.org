@@ -4,19 +4,20 @@ import { useLocation } from "wouter";
 import { SwipeCard } from "@/components/lite/SwipeCard";
 import { LiteModeAdSlot, useLiteModeAdTracking, forceTriggerAdsWhenReady } from "@/components/DmsAdSlot";
 import { 
-  Newspaper, 
+  Newspaper,
   Loader2,
   RefreshCw,
   RotateCcw,
   User as UserIcon,
   MousePointerClick,
   ChevronUp,
-  LayoutGrid
+  LayoutGrid,
+  PenLine
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { apiRequest, apiUrl, trackBeacon } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, hasRole } from "@/hooks/useAuth";
 import type { Article, Category, User } from "@shared/schema";
 import sabqLogo from "@assets/sabq-logo.png";
 
@@ -378,8 +379,8 @@ export default function LiteFeedPage() {
         // never show a toast for telemetry.
         try {
           trackBeacon(`/api/articles/${currentItem.data.id}/view`);
-        } catch (error) {
-          console.debug("Article view tracking failed (silent):", error);
+        } catch {
+          // صامت عمداً — تتبع المشاهدات لا يُظهر أخطاء ولا يسجلها
         }
       } else if (currentItem.type === 'dms_ad') {
         // Trigger ads EVERY time an ad slide becomes visible (wait for slots, no guard)
@@ -542,6 +543,20 @@ export default function LiteFeedPage() {
           <LayoutGrid className="h-4 w-4" />
         </button>
         
+        {/* مدخل كاتب الرأي داخل التطبيق: التطبيق يفتح على /lite ولا يمر
+            بلوحة التحكم — بدون هذا الزر لا يصل الكاتب لبطاقة يومه وتنبيهاته */}
+        {isAuthenticated && hasRole(user, "opinion_author") && (
+          <button
+            onClick={() => setLocation('/dashboard/opinion-author')}
+            className="h-9 flex items-center gap-1.5 px-3 bg-white/10 backdrop-blur-sm rounded-full text-white/80 text-xs font-medium hover:text-white hover:bg-white/20 transition-all"
+            data-testid="button-writer-workspace"
+            title="لوحة الكاتب"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            لوحة الكاتب
+          </button>
+        )}
+
         {isAuthenticated && user && (
           <>
             {user.profileImageUrl ? (

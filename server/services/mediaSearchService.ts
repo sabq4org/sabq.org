@@ -265,3 +265,122 @@ export async function backfillMediaEmbeddings(batchSize = 8): Promise<EmbedBackf
 
   return { processed: rows.length, embedded, remaining };
 }
+
+export interface ArticleMediaSuggestions {
+  files: SemanticSearchItem[];
+  total: number;
+  query: string;
+}
+
+/**
+ * Suggest library images for an article draft: embed the title (+ a plain-text
+ * slice of the body) and rank the semantically-indexed archive against it.
+ * Sensitive-flagged images are excluded — they must be picked deliberately from
+ * the library, never auto-offered. Results keep semanticSearchMedia's shape so
+ * pickers can render them like any other media card (with relevanceScore 0-100).
+ */
+export async function suggestMediaForArticle(opts: {
+  title: string;
+  content?: string | null;
+  limit?: number;
+}): Promise<ArticleMediaSuggestions> {
+  const title = (opts.title || "").trim();
+  if (!title) return { files: [], total: 0, query: "" };
+
+  const limit = Math.min(24, Math.max(1, opts.limit ?? 6));
+  const bodyText = (opts.content || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 400);
+  const query = bodyText ? `${title} — ${bodyText}` : title;
+
+  // Over-fetch so the sensitive-content filter doesn't leave the strip short.
+  const { files } = await semanticSearchMedia(query, { limit: limit * 2 });
+  const safe = files.filter((f) => !f.aiHasSensitiveContent).slice(0, limit);
+  return { files: safe, total: safe.length, query };
+}
+
+/**
+ * Visually/semantically similar library images to a given one (vector cosine
+ * over media_vectors, excluding the file itself). Powers "صور مشابهة" so an
+ * editor can find alternate angles of the same event from the archive.
+ */
+export async function similarMedia(
+  mediaFileId: string,
+  limit = 12,
+): Promise<{ files: SemanticSearchItem[]; total: number }> {
+  const capped = Math.min(30, Math.max(1, limit));
+
+  const [self] = await db
+    .select({ embedding: mediaVectors.embedding })
+    .from(mediaVectors)
+    .where(eq(mediaVectors.mediaFileId, mediaFileId))
+    .limit(1);
+  if (!self || !Array.isArray(self.embedding) || self.embedding.length === 0) {
+    return { files: [], total: 0 };
+  }
+  const selfVec = self.embedding as number[];
+
+  const candidates = await db
+    .select({ id: mediaVectors.mediaFileId, embedding: mediaVectors.embedding })
+    .from(mediaVectors)
+    .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
+    .where(and(eq(mediaFiles.type, "image"), isNotNull(mediaVectors.embedding)))
+    .orderBy(desc(mediaFiles.createdAt))
+    .limit(CANDIDATE_CAP);
+
+  const scored = candidates
+    .filter((c) => c.id !== mediaFileId && Array.isArray(c.embedding) && c.embedding.length > 0)
+    .map((c) => ({ id: c.id, score: cosineSimilarity(selfVec, c.embedding as number[]) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, capped);
+
+  if (scored.length === 0) return { files: [], total: 0 };
+
+  const rows = await db
+    .select({
+      id: mediaFiles.id,
+      fileName: mediaFiles.fileName,
+      originalName: mediaFiles.originalName,
+      folderId: mediaFiles.folderId,
+      uploadedBy: mediaFiles.uploadedBy,
+      url: mediaFiles.url,
+      thumbnailUrl: mediaFiles.thumbnailUrl,
+      type: mediaFiles.type,
+      mimeType: mediaFiles.mimeType,
+      size: mediaFiles.size,
+      width: mediaFiles.width,
+      height: mediaFiles.height,
+      title: mediaFiles.title,
+      altText: mediaFiles.altText,
+      caption: mediaFiles.caption,
+      keywords: mediaFiles.keywords,
+      category: mediaFiles.category,
+      isFavorite: mediaFiles.isFavorite,
+      usageCount: mediaFiles.usageCount,
+      aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
+      aiQualityScore: mediaFiles.aiQualityScore,
+      aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
+      createdAt: mediaFiles.createdAt,
+    })
+    .from(mediaFiles)
+    .where(inArray(mediaFiles.id, scored.map((s) => s.id)));
+
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  const files = scored
+    .map((s) => {
+      const r = rowById.get(s.id);
+      if (!r) return null;
+      return {
+        ...r,
+        url: displayUrl(r.id, r.url),
+        proxyUrl: `/api/media/proxy/${r.id}`,
+        originalUrl: r.url,
+        relevanceScore: Math.round(Math.max(0, Math.min(1, s.score)) * 100),
+      } as SemanticSearchItem;
+    })
+    .filter(Boolean) as SemanticSearchItem[];
+
+  return { files, total: files.length };
+}

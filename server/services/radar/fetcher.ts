@@ -6,6 +6,8 @@ import Parser from "rss-parser";
 import type { RadarSource } from "@shared/schema";
 import type { NormalizedRadarItem } from "./repo";
 import { filterFreshItems, parseFeedDate } from "./parsing";
+import { filterItemsBySabqInterest, shouldApplyTopicFilter } from "./topicFilter";
+import { fetchXSource } from "./xFetcher";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_ITEMS_PER_FETCH = 30;
@@ -115,7 +117,16 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
 }
 
 export async function fetchSource(source: RadarSource): Promise<NormalizedRadarItem[]> {
-  const items = source.type === "json" ? await fetchJson(source) : await fetchRss(source);
+  let items =
+    source.type === "x"
+      ? await fetchXSource(source)
+      : source.type === "json"
+        ? await fetchJson(source)
+        : await fetchRss(source);
+  // مصادر أجنبية: اهتمام سبق فقط (سعودية / إيران-أمريكا / مونديال / نجوم / حدث كبير)
+  if (shouldApplyTopicFilter(source) && source.type !== "x") {
+    items = filterItemsBySabqInterest(items);
+  }
   // بوابة الحداثة: خلاصة تاريخها طويل (مثل Sky Sports) لا تُغرق الرادار بالقديم
   const fresh = filterFreshItems(items, {
     isFirstFetch: !source.lastFetchedAt,

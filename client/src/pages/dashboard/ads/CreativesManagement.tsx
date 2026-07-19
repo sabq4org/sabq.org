@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +39,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { 
   Upload, 
@@ -104,7 +105,7 @@ export default function CreativesManagement() {
   const { data: adGroupsRaw, isLoading: isLoadingAdGroups } = useQuery<AdGroup[]>({
     queryKey: ["/api/ads/ad-groups", { campaignId }],
     queryFn: async () => {
-      const res = await fetch(`/api/ads/ad-groups?campaignId=${campaignId}`, {
+      const res = await fetch(apiUrl(`/api/ads/ad-groups?campaignId=${campaignId}`), {
         credentials: "include"
       });
       if (!res.ok) throw new Error("فشل في جلب المجموعات الإعلانية");
@@ -172,7 +173,7 @@ export default function CreativesManagement() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/ads/creatives/upload", {
+      const response = await fetch(apiUrl("/api/ads/creatives/upload"), {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -293,10 +294,14 @@ export default function CreativesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 max-w-6xl" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         {/* Header */}
-        <div className="mb-6">
-          <Button
+        <DashboardPageHeader
+          icon={ImageIcon}
+          title="إنشاء إعلان جديد"
+          description="ارفع ملف الإعلان وأدخل التفاصيل المطلوبة."
+          titleTestId="heading-create-creative"
+          actions={<Button
             variant="ghost"
             onClick={() => {
               if (campaignId) {
@@ -305,20 +310,12 @@ export default function CreativesManagement() {
                 setLocation("/dashboard/ads/campaigns");
               }
             }}
-            className="mb-4"
             data-testid="button-back"
           >
             <ArrowRight className="h-4 w-4 ml-2" />
             العودة
-          </Button>
-
-          <h1 className="text-3xl font-bold mb-2" data-testid="heading-create-creative">
-            إنشاء إعلان جديد
-          </h1>
-          <p className="text-muted-foreground">
-            قم برفع ملف الإعلان وإدخال التفاصيل المطلوبة
-          </p>
-        </div>
+          </Button>}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form Column */}

@@ -11,9 +11,16 @@ interface DailyStat {
 interface PerformanceChartProps {
   dailyStats: DailyStat[];
   loading?: boolean;
+  title?: string;
+  description?: string;
 }
 
-export function PerformanceChart({ dailyStats, loading }: PerformanceChartProps) {
+export function PerformanceChart({
+  dailyStats,
+  loading,
+  title = "أداء المقالات",
+  description = "المشاهدات والتفاعل خلال الفترة",
+}: PerformanceChartProps) {
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
 
   const aggregated = aggregateByPeriod(dailyStats, period);
@@ -28,8 +35,8 @@ export function PerformanceChart({ dailyStats, loading }: PerformanceChartProps)
   return (
     <TrendChart
       data={chartData}
-      title="أداء المقالات"
-      description="المشاهدات والتفاعل خلال الفترة"
+      title={title}
+      description={description}
       type="area"
       height={280}
       period={period}

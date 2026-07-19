@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, MessageSquare, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search, Eye } from "lucide-react";
+import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -11,10 +11,9 @@ import { NotificationBell } from "./NotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UserAccountMenu } from "@/components/UserAccountMenu";
 import {
   Sheet,
   SheetContent,
@@ -29,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ThemeProvider";
 import logoImage from "@assets/sabq-logo.png";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
+import kingsCupEmblem from "@assets/kings-cup-logo.png";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
 import { hasPermission } from "@/hooks/useAuth";
@@ -36,9 +36,12 @@ import { hasPermission } from "@/hooks/useAuth";
 interface HeaderProps {
   user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
   onMenuClick?: () => void;
+  /** افتراضيًا الهيدر لاصق أعلى الصفحة. صفحات معيّنة (مثل لوحة المباريات) تعطّله
+   *  ليُمرَّر طبيعيًا ويختفي عند النزول مُفسحًا المجال لشريط فلاتر لاصق وحده. */
+  sticky?: boolean;
 }
 
-export function Header({ user, onMenuClick }: HeaderProps) {
+export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [location, navigate] = useLocation();
   const { toast } = useToast();
@@ -55,6 +58,13 @@ export function Header({ user, onMenuClick }: HeaderProps) {
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
+
+  // إظهار رابط كأس الملك في الهيدر فقط عند تفعيل البلوك من لوحة التحكم
+  const { data: kingsCupOverview } = useQuery<{ blockHidden?: boolean }>({
+    queryKey: ["/api/kings-cup/overview"],
+    staleTime: 5 * 60_000,
+  });
+  const showKingsCupLink = Boolean(kingsCupOverview) && kingsCupOverview?.blockHidden !== true;
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
   const handleLogout = async () => {
@@ -90,7 +100,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
   return (
     <>
-    <header role="banner" aria-label="رأس الصفحة الرئيسي" className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60" dir="rtl">
+    <header role="banner" aria-label="رأس الصفحة الرئيسي" className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60`} dir="rtl">
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
@@ -132,6 +142,25 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                 </span>
               </span>
             </Link>
+            {showKingsCupLink && (
+              <Link href="/kings-cup">
+                <span
+                  className="flex items-center hover-elevate active-elevate-2 rounded-md px-2 py-1.5 cursor-pointer border-s border-border/60 ps-3"
+                  data-testid="link-kings-cup-header"
+                  aria-label="تغطية كأس خادم الحرمين الشريفين"
+                >
+                  <span className="rounded-md p-0.5 bg-white">
+                    <img
+                      src={kingsCupEmblem}
+                      alt="كأس خادم الحرمين الشريفين"
+                      className="h-9 w-auto object-contain"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </span>
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Logo */}
@@ -173,6 +202,25 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                 </span>
               </span>
             </Link>
+            {showKingsCupLink && (
+              <Link href="/kings-cup">
+                <span
+                  className="flex items-center hover-elevate active-elevate-2 rounded-md px-1.5 py-1 cursor-pointer border-s border-border/60 ps-2.5"
+                  data-testid="link-kings-cup-header-mobile"
+                  aria-label="تغطية كأس خادم الحرمين الشريفين"
+                >
+                  <span className="rounded-md p-0.5 bg-white">
+                    <img
+                      src={kingsCupEmblem}
+                      alt="كأس خادم الحرمين الشريفين"
+                      className="h-8 w-auto object-contain"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </span>
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Main Navigation - Center (Desktop only) */}
@@ -224,22 +272,11 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             {/* Mobile Actions */}
             <div className="md:hidden flex items-center gap-0.5 max-sm:gap-0">
               <SearchDialog />
-              <Link href="/lite">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hover-elevate active-elevate-2"
-                  data-testid="button-quick-browse-mobile"
-                  aria-label="تصفح سريع"
-                >
-                  <Zap className="h-5 w-5" aria-hidden="true" />
-                </Button>
-              </Link>
               <LanguageSwitcher />
               <ThemeToggle />
 
-              {/* Notification Bell - Mobile - TEMPORARILY HIDDEN */}
-              {/* {user && <NotificationBell />} */}
+              {/* Notification Bell - Mobile */}
+              {user && <NotificationBell />}
 
               {user ? (
                 <DropdownMenu>
@@ -263,64 +300,12 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{user.name}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                    <DropdownMenuSeparator />
-                    {hasPermission(user as any, "dashboard.view") && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <a href="/dashboard" className="flex w-full items-center cursor-pointer" data-testid="link-dashboard-mobile">
-                            <LayoutDashboard className="ml-2 h-4 w-4" aria-hidden="true" />
-                            لوحة التحكم
-                          </a>
-                        </DropdownMenuItem>
-                        {hasPermission(user as any, "dashboard.view_messages") && (
-                          <DropdownMenuItem asChild>
-                            <a href="/dashboard/communications" className="flex w-full items-center cursor-pointer" data-testid="link-communications-mobile">
-                              <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
-                              قنوات الاتصال
-                            </a>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                      </>
-                    )}
-                    <DropdownMenuItem asChild>
-                      <a href="/daily-brief" className="flex w-full items-center cursor-pointer" data-testid="link-daily-brief-mobile">
-                        <Newspaper className="ml-2 h-4 w-4" aria-hidden="true" />
-                        ملخصي اليومي
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href="/profile" className="flex w-full items-center cursor-pointer" data-testid="link-profile-mobile">
-                        <User className="ml-2 h-4 w-4" aria-hidden="true" />
-                        الملف الشخصي
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href="/focus/weekly" className="flex w-full items-center cursor-pointer" data-testid="link-focus-weekly-mobile">
-                        <Eye className="ml-2 h-4 w-4" aria-hidden="true" />
-                        تقرير القراءة الأسبوعي
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href="/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings-mobile">
-                        <Bell className="ml-2 h-4 w-4" aria-hidden="true" />
-                        إعدادات الإشعارات
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={handleLogout}
-                      className="flex w-full items-center cursor-pointer" 
-                      data-testid="link-logout-mobile"
-                    >
-                      <LogOut className="ml-2 h-4 w-4" aria-hidden="true" />
-                      تسجيل الخروج
-                    </DropdownMenuItem>
+                  <DropdownMenuContent align="end" className="w-72">
+                    <UserAccountMenu
+                      user={user}
+                      onLogout={handleLogout}
+                      testIdSuffix="-mobile"
+                    />
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
@@ -340,8 +325,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               <VariantSwitcher />
               <ThemeToggle />
               
-              {/* Notification Bell - Desktop - TEMPORARILY HIDDEN */}
-              {/* {user && <NotificationBell />} */}
+              {/* Notification Bell - Desktop */}
+              {user && <NotificationBell />}
 
               {user ? (
                 <DropdownMenu>
@@ -365,64 +350,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{user.name}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                    <DropdownMenuSeparator />
-                    {hasPermission(user as any, "dashboard.view") && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <a href="/dashboard" className="flex w-full items-center cursor-pointer" data-testid="link-dashboard">
-                            <LayoutDashboard className="ml-2 h-4 w-4" aria-hidden="true" />
-                            لوحة التحكم
-                          </a>
-                        </DropdownMenuItem>
-                        {hasPermission(user as any, "dashboard.view_messages") && (
-                          <DropdownMenuItem asChild>
-                            <a href="/dashboard/communications" className="flex w-full items-center cursor-pointer" data-testid="link-communications">
-                              <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
-                              قنوات الاتصال
-                            </a>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                      </>
-                    )}
-                    <DropdownMenuItem asChild>
-                      <a href="/daily-brief" className="flex w-full items-center cursor-pointer" data-testid="link-daily-brief">
-                        <Newspaper className="ml-2 h-4 w-4" aria-hidden="true" />
-                        ملخصي اليومي
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href="/profile" className="flex w-full items-center cursor-pointer" data-testid="link-profile">
-                        <User className="ml-2 h-4 w-4" aria-hidden="true" />
-                        الملف الشخصي
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href="/focus/weekly" className="flex w-full items-center cursor-pointer" data-testid="link-focus-weekly">
-                        <Eye className="ml-2 h-4 w-4" aria-hidden="true" />
-                        تقرير القراءة الأسبوعي
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href="/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings">
-                        <Bell className="ml-2 h-4 w-4" aria-hidden="true" />
-                        إعدادات الإشعارات
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={handleLogout}
-                      className="flex w-full items-center cursor-pointer" 
-                      data-testid="link-logout"
-                    >
-                      <LogOut className="ml-2 h-4 w-4" aria-hidden="true" />
-                      تسجيل الخروج
-                    </DropdownMenuItem>
+                  <DropdownMenuContent align="start" className="w-72">
+                    <UserAccountMenu user={user} onLogout={handleLogout} />
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
@@ -439,10 +368,13 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
       {/* Mobile menu sheet */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="right" className="w-[300px] flex flex-col p-0">
-          <SheetHeader className="flex-shrink-0 p-4 border-b">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-right text-lg font-bold">القائمة</SheetTitle>
+        <SheetContent
+          side="right"
+          dir="rtl"
+          className="w-[300px] flex flex-col p-0 text-right [&>button]:left-4 [&>button]:right-auto"
+        >
+          <SheetHeader className="flex-shrink-0 p-4 pl-12 border-b text-right sm:text-right">
+            <div className="flex items-center gap-3">
               <Link href="/" onClick={(e) => {
                 setMobileMenuOpen(false);
                 if (window.location.pathname === '/') {
@@ -460,13 +392,14 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                   decoding="async"
                 />
               </Link>
+              <SheetTitle className="flex-1 text-right text-lg font-bold">القائمة</SheetTitle>
             </div>
           </SheetHeader>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto text-right [&_a]:block [&_a>span]:w-full">
             {/* التصفح الرئيسي - Main Navigation */}
             <div className="p-3">
-              <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                 التصفح الرئيسي
               </h3>
               <div className="space-y-1">
@@ -540,7 +473,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
             {/* استكشف أكثر - Discover More */}
             <div className="p-3 border-t">
-              <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                 استكشف أكثر
               </h3>
               <div className="space-y-1">
@@ -569,7 +502,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                   .map((category) => (
                     <Link key={category.id} href={`/category/${category.englishSlug || category.slug}`}>
                       <span
-                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium bg-muted/50 hover-elevate active-elevate-2 cursor-pointer"
+                        className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 text-xs font-medium text-foreground hover-elevate active-elevate-2 cursor-pointer"
                         onClick={() => setMobileMenuOpen(false)}
                         data-testid={`link-mobile-category-${category.slug}`}
                       >
@@ -584,7 +517,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             {/* أدواتي - My Tools (Logged-in users) */}
             {user && (
               <div className="p-3 border-t">
-                <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                   أدواتي
                 </h3>
                 <div className="space-y-1">
@@ -647,7 +580,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
             {/* النمط البصري - Visual Style */}
             <div className="p-3 border-t">
-              <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                 النمط البصري
               </h3>
               <VariantSwitcher inline onSelect={() => setMobileMenuOpen(false)} />
@@ -655,7 +588,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
             {/* إعدادات الوصول - Accessibility Settings */}
             <div className="p-3 border-t">
-              <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                 إعدادات الوصول
               </h3>
               <div className="px-3">

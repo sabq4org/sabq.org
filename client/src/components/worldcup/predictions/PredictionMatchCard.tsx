@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Check, Clock, Lock, LogIn, Radio, Trophy, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatKickoffTime, countdownTo, type WcTeam } from "../wcTypes";
+import { formatKickoffTime, countdownTo, penaltyOutcome, type WcTeam } from "../wcTypes";
+import { formatNumber } from "@/lib/format";
+import { LiveMinute } from "../LiveMinute";
 import { ScoreStepper } from "./ScoreStepper";
 import type { PredictableMatch } from "./predictionsTypes";
 
@@ -44,6 +46,17 @@ interface Props {
   onRequireLogin: () => void;
 }
 
+// نطابق على roundEn الإنجليزي (مصدر موثوق يطابق الخادم) لا على الاسم العربي
+// المُعرَّب الهشّ. مونديال 2026 يبدأ خروج المغلوب بـ«دور الـ32». المزوّد قد
+// يُذيّل الاسم برقم ("Round of 16 - 1") فنطابق بالبادئة.
+const KNOCKOUT_ROUND_PREFIXES = ["Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "3rd Place Final", "Final"];
+const DRAW_NOT_ALLOWED_MESSAGE = "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة";
+
+function isKnockoutRound(roundEn: string): boolean {
+  const r = (roundEn ?? "").trim();
+  return KNOCKOUT_ROUND_PREFIXES.some((prefix) => r === prefix || r.startsWith(prefix));
+}
+
 export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSubmit, onRequireLogin }: Props) {
   const { fixture, myPrediction, settlement, locked, predictionsCount } = match;
   const settled = settlement?.status === "settled";
@@ -62,6 +75,16 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
   const dirty = !myPrediction || myPrediction.predHome !== home || myPrediction.predAway !== away;
   const isWin = settled && myPrediction?.status === "correct";
+  // نتيجة ركلات الترجيح من الـfixture الحيّ (متاح في لوحة اليوم حتى بعد التسوية).
+  const penOutcome = penaltyOutcome(fixture);
+  // التعادل ممنوع في خروج المغلوب — نُظهر التنبيه فورًا (حتى لتوقّع محفوظ مسبقًا
+  // بتعادل) ونُعطِّل الحفظ حتى يختار المستخدم فائزًا.
+  const drawNotAllowed = home === away && isKnockoutRound(fixture.roundEn);
+
+  const submit = () => {
+    if (drawNotAllowed) return;
+    onSubmit(fixture.id, home, away);
+  };
 
   return (
     <Card className="overflow-hidden border-0 dark:border dark:border-card-border" data-testid={`wc-pred-card-${fixture.id}`}>
@@ -71,7 +94,7 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
         {fixture.status.live ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
             <Radio className="h-2.5 w-2.5 animate-pulse" />
-            {fixture.status.elapsed != null ? `${fixture.status.elapsed}'` : "مباشر"}
+            {fixture.status.elapsed != null ? <LiveMinute status={fixture.status} /> : "مباشر"}
           </span>
         ) : settled ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -95,12 +118,21 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
           <div className="flex flex-1 flex-col items-center justify-center pt-1">
             {settled || started ? (
-              // النتيجة الفعلية (حيّة أو نهائية) — RTL: رقم المضيف يمين (تحت علمه)؛ لا تضِف dir="ltr" وإلا انقلبت النتيجة تحت الأعلام
-              <div className="flex items-center gap-3 text-4xl font-black tabular-nums">
-                <span>{settled ? settlement!.finalHome : fixture.goals.home ?? 0}</span>
-                <span className="text-muted-foreground text-2xl">-</span>
-                <span>{settled ? settlement!.finalAway : fixture.goals.away ?? 0}</span>
-              </div>
+              <>
+                {/* النتيجة الفعلية (حيّة أو نهائية) — RTL: رقم المضيف يمين (تحت علمه)؛ لا تضِف dir="ltr" وإلا انقلبت النتيجة تحت الأعلام */}
+                <div className="flex items-center gap-3 text-4xl font-black tabular-nums">
+                  <span>{settled ? settlement!.finalHome : fixture.goals.home ?? 0}</span>
+                  <span className="text-muted-foreground text-2xl">-</span>
+                  <span>{settled ? settlement!.finalAway : fixture.goals.away ?? 0}</span>
+                </div>
+                {/* خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح. */}
+                {penOutcome && (
+                  <span className="mt-1 text-center text-[11px] font-bold text-emerald-600 dark:text-emerald-400" dir="rtl">
+                    فاز {penOutcome.winnerName} بالترجيح{" "}
+                    <span dir="ltr">({penOutcome.winnerScore}-{penOutcome.loserScore})</span>
+                  </span>
+                )}
+              </>
             ) : (
               // عدّادات الإدخال
               <div className="flex items-center gap-3">
@@ -125,8 +157,8 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
             <LockedFooter match={match} />
           ) : isAuthenticated ? (
             <Button
-              onClick={() => onSubmit(fixture.id, home, away)}
-              disabled={isSubmitting || (!dirty && !!myPrediction)}
+              onClick={submit}
+              disabled={isSubmitting || drawNotAllowed || (!dirty && !!myPrediction)}
               className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
               data-testid={`wc-pred-submit-${fixture.id}`}
             >
@@ -146,9 +178,15 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
             </Button>
           )}
 
+          {drawNotAllowed && !locked && !settled && (
+            <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-center text-xs font-semibold text-red-600 dark:text-red-300">
+              {DRAW_NOT_ALLOWED_MESSAGE}
+            </p>
+          )}
+
           {/* عدد المشاركين + العدّاد التنازلي */}
           <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>{predictionsCount > 0 ? `${predictionsCount.toLocaleString("ar-SA")} توقّعوا` : "كن أول المتوقّعين"}</span>
+            <span>{predictionsCount > 0 ? `${formatNumber(predictionsCount)} توقّعوا` : "كن أول المتوقّعين"}</span>
             {!started && !settled && <Countdown timestamp={fixture.timestamp} />}
           </div>
         </div>
@@ -188,7 +226,7 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
       <p className="rounded-lg bg-muted/60 px-3 py-2 text-center text-xs text-muted-foreground">
         لم تشارك بتوقّع لهذه المباراة
         {settlement && settlement.winnersCount > 0 && (
-          <> · فاز {settlement.winnersCount.toLocaleString("ar-SA")} متوقّع</>
+          <> · فاز {formatNumber(settlement.winnersCount)} متوقّع</>
         )}
       </p>
     );
@@ -220,7 +258,7 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
         </span>
         {isWin ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-black text-white">
-            <Trophy className="h-3 w-3" /> +{myPrediction.pointsAwarded.toLocaleString("ar-SA")} نقطة
+            <Trophy className="h-3 w-3" /> +{formatNumber(myPrediction.pointsAwarded)} نقطة
           </span>
         ) : (
           <span className="text-xs font-semibold text-muted-foreground">لم تُصب النتيجة</span>
@@ -228,8 +266,8 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
       </div>
       {isWin && settlement && settlement.winnersCount > 1 && (
         <p className="mt-1.5 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
-          شاركك الفوز {(settlement.winnersCount - 1).toLocaleString("ar-SA")} — قُسِّمت الجائزة:{" "}
-          {settlement.pointsPerWinner.toLocaleString("ar-SA")} نقطة لكل فائز
+          شاركك الفوز {formatNumber(settlement.winnersCount - 1)} — قُسِّمت الجائزة:{" "}
+          {formatNumber(settlement.pointsPerWinner)} نقطة لكل فائز
         </p>
       )}
     </div>

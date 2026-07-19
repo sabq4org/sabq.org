@@ -404,8 +404,8 @@ struct AdminArticleEditorView: View {
 
     private var opinionPill: some View {
         HStack(spacing: 6) {
-            Image(systemName: "text.quote").font(.system(size: 12, weight: .bold))
-            Text("مقال رأي").font(.system(size: 13, weight: .heavy))
+            Image(systemName: "text.quote").font(SabqFonts.app(size: 12, weight: .bold))
+            Text("مقال رأي").font(SabqFonts.app(size: 13, weight: .heavy))
         }
         .foregroundStyle(SabqTheme.primaryEnd)
         .padding(.horizontal, 12).padding(.vertical, 7)
@@ -416,12 +416,12 @@ struct AdminArticleEditorView: View {
         sectionCard("الأساسي", icon: "textformat") {
             field("العنوان") {
                 TextField("عنوان الخبر", text: $vm.title, axis: .vertical)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
             }
             if !vm.isOpinion {
                 field("العنوان الفرعي") {
                     TextField("اختياري", text: $vm.subtitle, axis: .vertical)
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                 }
             }
         }
@@ -459,7 +459,7 @@ struct AdminArticleEditorView: View {
                 showProofSheet = true
             }
             Text("اكتب المحتوى أولاً لتفعيل التوليد")
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .opacity(vm.liveHTMLLength < 100 ? 1 : 0)
         }
@@ -511,11 +511,11 @@ struct AdminArticleEditorView: View {
             } label: {
                 HStack {
                     Text(vm.categoryName ?? "اختر تصنيفاً")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(vm.categoryName == nil ? SabqTheme.secondaryInk : SabqTheme.ink)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 .padding(12)
@@ -533,11 +533,11 @@ struct AdminArticleEditorView: View {
                 HStack {
                     let name = vm.isOpinion ? vm.authorName : vm.reporterName
                     Text(name ?? (vm.isOpinion ? "اختر الكاتب" : "اختر المراسل"))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(((vm.isOpinion ? vm.authorName : vm.reporterName) == nil) ? SabqTheme.secondaryInk : SabqTheme.ink)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 .padding(12)
@@ -572,7 +572,7 @@ struct AdminArticleEditorView: View {
             .disabled(vm.isGeneratingImage)
             if vm.isGeneratingImage {
                 Text("يُرجى الانتظار وعدم إغلاق الشاشة حتى تكتمل الصورة")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             let uploading = vm.isUploadingImage
@@ -584,7 +584,7 @@ struct AdminArticleEditorView: View {
             .disabled(uploading)
             field("رابط الصورة") {
                 TextField("https://", text: $vm.imageUrl, axis: .vertical)
-                    .font(.system(size: 13))
+                    .font(SabqFonts.app(size: 13))
                     .textInputAutocapitalization(.never)
             }
         }
@@ -616,11 +616,11 @@ struct AdminArticleEditorView: View {
             .disabled(vm.isGeneratingSEO)
             field("عنوان Meta") {
                 TextField("≤ 70 حرفاً", text: $vm.seoTitle, axis: .vertical)
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
             }
             field("وصف Meta") {
                 TextField("≤ 160 حرفاً", text: $vm.seoDescription, axis: .vertical)
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                     .lineLimit(2...4)
             }
             keywordsField
@@ -633,9 +633,9 @@ struct AdminArticleEditorView: View {
             if !vm.keywords.isEmpty {
                 FlowChips(items: vm.keywords) { kw in
                     HStack(spacing: 5) {
-                        Text(kw).font(.system(size: 12, weight: .semibold))
+                        Text(kw).font(SabqFonts.app(size: 12, weight: .semibold))
                         Button { vm.removeKeyword(kw) } label: {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+                            Image(systemName: "xmark.circle.fill").font(SabqFonts.app(size: 12))
                         }
                         .buttonStyle(.plain)
                     }
@@ -646,12 +646,12 @@ struct AdminArticleEditorView: View {
             }
             HStack(spacing: 8) {
                 TextField("أضف كلمة", text: $newKeyword)
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                     .onSubmit { vm.addKeyword(newKeyword); newKeyword = "" }
                 Button {
                     vm.addKeyword(newKeyword); newKeyword = ""
                 } label: {
-                    Image(systemName: "plus.circle.fill").font(.system(size: 20)).foregroundStyle(SabqTheme.sky)
+                    Image(systemName: "plus.circle.fill").font(SabqFonts.app(size: 20)).foregroundStyle(SabqTheme.sky)
                 }
                 .buttonStyle(.plain)
             }
@@ -677,7 +677,7 @@ struct AdminArticleEditorView: View {
             .disabled(vm.isSummarizing)
             field("الموجز") {
                 TextField("ملخّص ذكي للخبر", text: $vm.aiSummary, axis: .vertical)
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                     .lineLimit(2...5)
             }
         }
@@ -691,11 +691,11 @@ struct AdminArticleEditorView: View {
             }
             if vm.status == .scheduled {
                 Toggle("تحديد موعد الجدولة", isOn: $vm.hasSchedule)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .tint(SabqTheme.sky)
                 if vm.hasSchedule {
                     DatePicker("الموعد", selection: $vm.scheduledAt)
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                         .environment(\.locale, Locale(identifier: "ar"))
                 }
             }
@@ -710,9 +710,9 @@ struct AdminArticleEditorView: View {
                 }
             }
             Toggle("خبر مميّز", isOn: $vm.isFeatured)
-                .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.gold)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.gold)
             Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
-                .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.coral)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.coral)
         }
     }
 
@@ -732,7 +732,7 @@ struct AdminArticleEditorView: View {
             if vm.isSaving {
                 ProgressView()
             } else {
-                Text("حفظ").font(.system(size: 16, weight: .bold))
+                Text("حفظ").font(SabqFonts.app(size: 16, weight: .bold))
             }
         }
         .disabled(vm.isSaving || vm.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -741,14 +741,14 @@ struct AdminArticleEditorView: View {
     private var errorState: some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40, weight: .light))
+                .font(SabqFonts.app(size: 40, weight: .light))
                 .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
             Text(vm.error ?? "تعذّر تحميل الخبر")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
             Button { Task { await vm.load() } } label: {
                 Text("إعادة المحاولة")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.sky)
                     .padding(.horizontal, 20).padding(.vertical, 8)
                     .background(Capsule().fill(SabqTheme.sky.opacity(0.12)))
@@ -764,8 +764,8 @@ struct AdminArticleEditorView: View {
     private func sectionCard<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: icon).font(.system(size: 14, weight: .bold)).foregroundStyle(SabqTheme.sky)
-                Text(title).font(.system(size: 15, weight: .heavy, design: .rounded)).foregroundStyle(SabqTheme.ink)
+                Image(systemName: icon).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(SabqTheme.sky)
+                Text(title).font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(SabqTheme.ink)
             }
             content()
         }
@@ -776,7 +776,7 @@ struct AdminArticleEditorView: View {
     }
 
     private func fieldLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 13, weight: .heavy)).foregroundStyle(SabqTheme.ink)
+        Text(text).font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(SabqTheme.ink)
     }
 
     /// Pill label for an AI/upload action button (with optional spinner).
@@ -785,9 +785,9 @@ struct AdminArticleEditorView: View {
             if loading {
                 ProgressView().controlSize(.small)
             } else {
-                Image(systemName: systemImage).font(.system(size: 13, weight: .bold))
+                Image(systemName: systemImage).font(SabqFonts.app(size: 13, weight: .bold))
             }
-            Text(title).font(.system(size: 13, weight: .bold))
+            Text(title).font(SabqFonts.app(size: 13, weight: .bold))
         }
         .foregroundStyle(SabqTheme.sky)
         .frame(maxWidth: .infinity)
@@ -886,9 +886,9 @@ struct SabqEditorToolbar: View {
         Button(action: action) {
             Group {
                 if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: 15, weight: .bold))
+                    Image(systemName: systemImage).font(SabqFonts.app(size: 15, weight: .bold))
                 } else if let label {
-                    Text(label).font(.system(size: 14, weight: .heavy))
+                    Text(label).font(SabqFonts.app(size: 14, weight: .heavy))
                 }
             }
             .foregroundStyle(SabqTheme.ink)
@@ -960,10 +960,10 @@ struct AdminProofIssuesSheet: View {
                 if issues.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 42, weight: .light))
+                            .font(SabqFonts.app(size: 42, weight: .light))
                             .foregroundStyle(SabqTheme.teal)
                         Text("لا توجد أخطاء إملائية")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(SabqFonts.app(size: 15, weight: .bold))
                             .foregroundStyle(SabqTheme.ink)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -977,16 +977,16 @@ struct AdminProofIssuesSheet: View {
                                             .strikethrough()
                                             .foregroundStyle(SabqTheme.coral)
                                         Image(systemName: "arrow.left")
-                                            .font(.system(size: 11, weight: .bold))
+                                            .font(SabqFonts.app(size: 11, weight: .bold))
                                             .foregroundStyle(SabqTheme.secondaryInk)
                                         Text(issue.suggestion)
                                             .fontWeight(.bold)
                                             .foregroundStyle(SabqTheme.teal)
                                     }
-                                    .font(.system(size: 14))
+                                    .font(SabqFonts.app(size: 14))
                                     if let ex = issue.explanation, !ex.isEmpty {
                                         Text(ex)
-                                            .font(.system(size: 12))
+                                            .font(SabqFonts.app(size: 12))
                                             .foregroundStyle(SabqTheme.secondaryInk)
                                     }
                                 }
@@ -1036,7 +1036,7 @@ struct AdminUserPickerSheet: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundStyle(SabqTheme.secondaryInk)
                     TextField("بحث بالاسم", text: $query)
-                        .font(.system(size: 15))
+                        .font(SabqFonts.app(size: 15))
                         .onSubmit { Task { await reload() } }
                 }
                 .padding(12)
@@ -1048,7 +1048,7 @@ struct AdminUserPickerSheet: View {
                     ProgressView().frame(maxWidth: .infinity, minHeight: 200)
                 } else if users.isEmpty {
                     Text("لا توجد نتائج")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(SabqFonts.app(size: 14, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .frame(maxWidth: .infinity, minHeight: 200)
                 } else {
@@ -1058,11 +1058,11 @@ struct AdminUserPickerSheet: View {
                                 Button { onPick(user); dismiss() } label: {
                                     HStack(spacing: 10) {
                                         Image(systemName: "person.circle.fill")
-                                            .font(.system(size: 26)).foregroundStyle(SabqTheme.secondaryInk)
+                                            .font(SabqFonts.app(size: 26)).foregroundStyle(SabqTheme.secondaryInk)
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(user.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.ink)
+                                            Text(user.name).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.ink)
                                             if let e = user.email, !e.isEmpty {
-                                                Text(e).font(.system(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
+                                                Text(e).font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
                                             }
                                         }
                                         Spacer(minLength: 0)

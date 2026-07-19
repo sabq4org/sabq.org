@@ -14,6 +14,7 @@ export type ArticleAngle = typeof articleAngles.$inferSelect;
 export type ImageAsset = typeof imageAssets.$inferSelect;
 
 export type AngleWriter = {
+  id?: string | null;
   name: string;
   avatar: string | null;
   slug: string | null;

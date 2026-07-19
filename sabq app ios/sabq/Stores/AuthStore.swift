@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// مصدر رسالة الخطأ في ورقة الدخول — حتى تظهر تحت الزر/التبويب الصحيح فقط.
+enum AuthErrorSource { case none, credentials, phone, social }
+
 @Observable
 final class AuthStore {
     private(set) var currentUser: APIUser?
@@ -7,8 +10,9 @@ final class AuthStore {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private(set) var successMessage: String?
-    private(set) var unreadNotifications = 0
     private(set) var registrationPending = false
+    /// مصدر آخر خطأ مصادقة — يوجّه عرض الرسالة تحت تبويب الجوال أو البريد.
+    private(set) var errorSource: AuthErrorSource = .none
     /// True when the last login attempt hit a `pending` account — drives
     /// the "إعادة إرسال رمز التفعيل" affordance on the login sheet so
     /// users with an unverified email don't reach a dead end.
@@ -24,37 +28,66 @@ final class AuthStore {
     /// finishes editing their profile or picks at least one interest.
     var needsProfileCompletion: Bool = false
 
-    private var loginAttempts = 0
-    private var lastLoginAttempt: Date?
+    /// يُضبط من LoginSheet لتفادي غطاء الاسم المزدوج أثناء ورقة الدخول.
+    var isAuthSheetPresented = false
+
+    /// حساب بلا اسم عرض (دخول جوال) — يُطلب إكماله قبل إغلاق ورقة الدخول.
+    var needsDisplayName: Bool {
+        guard isLoggedIn, let user = currentUser else { return false }
+        return (user.firstName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // عدّاد القفل مثابر في UserDefaults — كان في الذاكرة فقط، فإغلاق التطبيق
+    // وإعادة فتحه يتجاوز قفل المحاولات كليًّا. (الحماية الفعلية في rate limit
+    // الخادم؛ هذه طبقة تجربة تصير الآن صادقة.)
+    private var loginAttempts: Int {
+        get { UserDefaults.standard.integer(forKey: "sabq_login_attempts") }
+        set { UserDefaults.standard.set(newValue, forKey: "sabq_login_attempts") }
+    }
+    private var lastLoginAttempt: Date? {
+        get { UserDefaults.standard.object(forKey: "sabq_last_login_attempt") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "sabq_last_login_attempt") }
+    }
     private var lastAuthenticatedAt: Date?
     private static let maxLoginAttempts = 5
     private static let loginLockoutDuration: TimeInterval = 120 // 2 minutes
     private static let sessionTimeoutDuration: TimeInterval = 30 * 24 * 3600 // 30 days
 
-    init() {
-        Task { await checkAuth() }
-    }
+    // لا آثار جانبية في init: قيمة @State الابتدائية تُنشأ مع كل إعادة تقييم
+    // لجسم sabqApp (تبديل مظهر/عودة من الخلفية) وتُهمل النسخ الزائدة — كان
+    // فحص الجلسة ينطلق من كل نسخة مهملة. ContentView.task يستدعي checkAuth.
 
     func checkAuth() async {
         guard await APIClient.shared.hasSession else { return }
 
-        // Session timeout check
-        if let lastAuth = UserDefaults.standard.object(forKey: "sabq_last_auth_date") as? Date,
-           Date().timeIntervalSince(lastAuth) > Self.sessionTimeoutDuration {
-            await MainActor.run {
-                currentUser = nil
-                isLoggedIn = false
+        // مهلة الجلسة — نافذة منزلقة من آخر نشاط موثّق لا من آخر تسجيل دخول:
+        // كانت تُحسب من الدخول التفاعلي فقط فيُطرد المستخدم النشط يوميًّا في
+        // اليوم 31 بلا سبب.
+        if let lastAuth = UserDefaults.standard.object(forKey: "sabq_last_auth_date") as? Date {
+            if Date().timeIntervalSince(lastAuth) > Self.sessionTimeoutDuration {
+                await MainActor.run {
+                    currentUser = nil
+                    isLoggedIn = false
+                }
+                await APIClient.shared.markLoggedOut()
+                return
             }
-            await APIClient.shared.markLoggedOut()
-            return
+        } else {
+            // توكن Keychain بلا تاريخ (إعادة تثبيت أبقت الجلسة ومسحت
+            // UserDefaults): نبذر بـ«الآن» بدل تخطي فحص المهلة للأبد.
+            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
         }
 
         await fetchFullProfile()
         // Returning session — re-register the APNs token so a stale token
         // gets refreshed lastActiveAt-wise and a new token (if iOS rotated)
         // is linked to the user.
-        if isLoggedIn, let token = NotificationsStore.shared.deviceToken {
-            await NotificationsStore.shared.registerWithBackend(token: token)
+        if isLoggedIn {
+            // جلسة نشطة مؤكدة من الخادم — تنزلق نافذة المهلة.
+            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+            if let token = NotificationsStore.shared.deviceToken {
+                await NotificationsStore.shared.registerWithBackend(token: token)
+            }
         }
     }
 
@@ -66,53 +99,120 @@ final class AuthStore {
 
     @MainActor
     func login(email: String, password: String) async {
+        await loginWithCredentials(identifier: email, password: password)
+    }
+
+    /// دخول بحساب سبق (بريد أو جوال + كلمة مرور).
+    @MainActor
+    func loginWithCredentials(identifier: String, password: String) async {
+        let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         if isLoginLockedOut {
             let remaining = Int(Self.loginLockoutDuration - Date().timeIntervalSince(lastLoginAttempt!))
             errorMessage = "محاولات كثيرة. حاول مرة أخرى بعد \(remaining) ثانية"
+            errorSource = .credentials
+            return
+        }
+        guard !id.isEmpty, !password.isEmpty else {
+            errorMessage = "أدخل البريد الإلكتروني أو الجوال وكلمة المرور"
+            errorSource = .credentials
             return
         }
 
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
         loginAttempts += 1
         lastLoginAttempt = Date()
         do {
-            let response = try await APIClient.shared.login(email: email, password: password)
-            loginAttempts = 0
-            if let token = response.token {
-                await APIClient.shared.setAuthToken(token)
-            }
-            await APIClient.shared.markAuthenticated()
-            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
-            if let loginUser = response.user {
-                currentUser = loginUser
-                isLoggedIn = true
-                SabqAnalytics.setUserId(loginUser.id)
-                SabqAnalytics.login(method: "email")
-            }
-            await fetchFullProfile()
-            // Request push permission + register the device token. Permission
-            // is asked once per install — if the user previously granted or
-            // denied, the system surfaces no prompt and the call completes
-            // immediately. Editorial pushes route through this token.
-            await registerPushTokenAfterAuth()
+            let response = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            try await applySession(response, analyticsMethod: id.contains("@") ? "email" : "phone_password")
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
-            // Account exists but is still pending email verification.
-            // Remember the userId + email so the login sheet can show
-            // the "resend activation" affordance and the action knows
-            // which account to target.
+            errorSource = .credentials
             if case let .accountPendingActivation(_, userId) = apiError {
                 pendingActivationUserId = userId
-                pendingActivationEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                pendingActivationEmail = id.contains("@") ? id : nil
             }
         } catch {
             errorMessage = "حدث خطأ في تسجيل الدخول"
+            errorSource = .credentials
         }
         isLoading = false
+    }
+
+    // MARK: - دخول/تسجيل بالجوال (Twilio Verify)
+
+    /// إرسال رمز التحقّق للجوال. يرجع (نجاح، رسالة) للعرض في الواجهة.
+    @MainActor
+    func sendPhoneCode(_ phone: String) async -> (ok: Bool, message: String) {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .none
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.sendPhoneCode(phone)
+            let msg = resp.message ?? (resp.success ? "تم إرسال رمز التحقق" : "تعذّر إرسال رمز التحقق")
+            if !resp.success {
+                errorMessage = msg
+                errorSource = .phone
+            }
+            return (resp.success, msg)
+        } catch let apiError as APIError {
+            let msg = apiError.errorDescription ?? "تعذّر إرسال رمز التحقق"
+            errorMessage = msg
+            errorSource = .phone
+            return (false, msg)
+        } catch {
+            let msg = "تعذّر إرسال رمز التحقق"
+            errorMessage = msg
+            errorSource = .phone
+            return (false, msg)
+        }
+    }
+
+    /// التحقّق من الرمز وتثبيت الجلسة عند النجاح.
+    @MainActor
+    func verifyPhoneCode(_ phone: String, code: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .phone
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.verifyPhoneCode(phone, code: code)
+            try await applySession(response, analyticsMethod: "phone")
+            return true
+        } catch let apiError as APIError {
+            errorMessage = apiError.errorDescription
+            errorSource = .phone
+            return false
+        } catch {
+            errorMessage = "رمز التحقق غير صحيح"
+            errorSource = .phone
+            return false
+        }
+    }
+
+    /// تثبيت الجلسة بعد أي مسار دخول ناجح (بريد/جوال/OTP).
+    @MainActor
+    private func applySession(_ response: APILoginResponse, analyticsMethod: String) async throws {
+        guard let token = response.token, !token.isEmpty else {
+            throw APIError.apiMessage(response.message ?? "بيانات الدخول غير صحيحة")
+        }
+        loginAttempts = 0
+        await APIClient.shared.setAuthToken(token)
+        await APIClient.shared.markAuthenticated()
+        UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+        if let loginUser = response.user {
+            currentUser = loginUser
+            isLoggedIn = true
+            SabqAnalytics.setUserId(loginUser.id)
+            SabqAnalytics.login(method: analyticsMethod)
+        }
+        await fetchFullProfile()
+        await registerPushTokenAfterAuth()
     }
 
     /// Re-send the activation email for the account whose login attempt
@@ -163,6 +263,7 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
         do {
@@ -183,8 +284,10 @@ final class AuthStore {
             await registerPushTokenAfterAuth()
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
+            errorSource = .social
         } catch {
             errorMessage = "تعذر تسجيل الدخول عبر Google"
+            errorSource = .social
         }
         isLoading = false
     }
@@ -203,6 +306,7 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
         do {
@@ -228,8 +332,10 @@ final class AuthStore {
             await registerPushTokenAfterAuth()
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
+            errorSource = .social
         } catch {
             errorMessage = "تعذر تسجيل الدخول عبر Apple"
+            errorSource = .social
         }
         isLoading = false
     }
@@ -357,14 +463,24 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        // نفس تفكيك logout: ألغِ تسجيل جهاز الدفع قبل هدم الجلسة (بعدها يرفض
+        // الخادم النداء بـ401) — كان الجهاز يبقى مستهدفًا بإشعارات حساب
+        // محذوف، وأحداث GA4 اللاحقة تُنسب لمعرّفه. عند فشل الحذف (كلمة مرور
+        // خاطئة مثلًا) نعيد التسجيل كي لا يخسر المستخدم إشعاراته.
+        await NotificationsStore.shared.unregisterCurrentToken()
         do {
             try await APIClient.shared.deleteAccount(password: password)
             currentUser = nil
             isLoggedIn = false
-            unreadNotifications = 0
+            needsProfileCompletion = false
+            SabqAnalytics.setUserId(nil)
+            NotificationsStore.shared.unreadCount = 0
             successMessage = "تم حذف الحساب بنجاح"
         } catch {
             errorMessage = error.localizedDescription
+            if let token = NotificationsStore.shared.deviceToken {
+                await NotificationsStore.shared.registerWithBackend(token: token)
+            }
         }
         isLoading = false
     }
@@ -417,7 +533,7 @@ final class AuthStore {
         isLoggedIn = false
         needsProfileCompletion = false
         SabqAnalytics.setUserId(nil)
-        unreadNotifications = 0
+        NotificationsStore.shared.unreadCount = 0
         successMessage = nil
         errorMessage = nil
     }
@@ -426,6 +542,7 @@ final class AuthStore {
     func clearMessages() {
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         registrationPending = false
         pendingActivationUserId = nil
         pendingActivationEmail = nil
@@ -440,12 +557,8 @@ final class AuthStore {
     func setExternalAuthError(_ message: String) {
         errorMessage = message
         successMessage = nil
+        errorSource = .social
         isLoading = false
-    }
-
-    @MainActor
-    func markAllNotificationsReadLocally() {
-        unreadNotifications = 0
     }
 
     private func fetchFullProfile() async {
@@ -464,7 +577,6 @@ final class AuthStore {
                 }
                 SabqAnalytics.setUserId(user.id)
             }
-            await refreshUnreadCount()
         } catch {
             // Only clear the session on an authoritative auth failure
             // (401/403 from the server). Previously ANY error — including
@@ -499,9 +611,4 @@ final class AuthStore {
         }
     }
 
-    func refreshUnreadCount() async {
-        guard isLoggedIn else { return }
-        let count = (try? await APIClient.shared.fetchUnreadCount()) ?? 0
-        await MainActor.run { unreadNotifications = count }
-    }
 }

@@ -1,5 +1,5 @@
 import Redis from "ioredis";
-import { memoryCache } from "../memoryCache";
+import { memoryCache, sseConnectionManager } from "../memoryCache";
 import { purgeHomepage, purgeBreakingNews, purgeArticle } from "./cloudflarePurge";
 
 /**
@@ -134,6 +134,19 @@ export function invalidatePublishedContent(
     memoryCache.invalidatePatterns(PUBLISHED_CONTENT_PATTERNS);
   } catch (e: any) {
     console.error("[ContentInvalidation] memory invalidation failed:", e?.message);
+  }
+
+  // Always bump `/api/cache-invalidation/check` pollers. `invalidatePatterns`
+  // only broadcasts when this pod actually had matching keys — on a cold or
+  // idle pod (common with Railway autoscale) the signal never fires and the
+  // iOS home hero stays stale until a manual pull.
+  try {
+    sseConnectionManager.broadcast({
+      type: "cache_invalidated",
+      patterns: ["published-content"],
+    });
+  } catch (e: any) {
+    console.error("[ContentInvalidation] poll-signal broadcast failed:", e?.message);
   }
 
   publishRemoteInvalidation();

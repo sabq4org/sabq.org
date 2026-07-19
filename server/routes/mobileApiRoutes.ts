@@ -10,8 +10,24 @@
  * - Member profile
  */
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
+import { userHasAnyRole } from "../rbac";
+import {
+  canSelfAssignSchedule,
+  getWriterDayLoads,
+  getWriterScheduleBanner,
+  selfAssignWriterSchedule,
+} from "../services/opinionWritersService";
+import {
+  coachWriterIdea,
+  generateWriterIdeas,
+  getOpinionAuthorWorkspace,
+  getWriterStyleProfile,
+  reviewWriterArticle,
+} from "../services/opinionAuthorWorkspaceService";
 import { db, pool } from "../db";
+import { log } from "../utils/logger";
 import {
   categories,
   articles,
@@ -37,8 +53,12 @@ import {
   bookmarks,
   socialFollows,
   articleDailyStats,
+  contactMessages,
+  contactMessageReplies,
+  opinionTickets,
+  opinionTicketMessages,
 } from "@shared/schema";
-import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
+import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -46,11 +66,15 @@ import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray, 
 const reporterUsers = aliasedTable(users, "reporter_user");
 // Separate alias for the opinion author (articles.authorId) in the editor detail.
 const authorUsers = aliasedTable(users, "author_user");
+// Used when returning the sender of a reply to an admin contact message.
+const contactReplyUsers = aliasedTable(users, "contact_reply_user");
 import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
+import { newsImageStorageService } from "../services/newsImageStorageService";
 import { summarizeText } from "../ai-content-tools";
 import { generateSeoMetadata } from "../seo-generator";
 import { summarizeArticle, generateSmartContent } from "../openai";
@@ -59,9 +83,56 @@ import { classifyArticle } from "../ai-classifier";
 import { generateAndUploadImage } from "../services/nanoBananaService";
 import { autoGenerateImage } from "../services/autoImageGenerationService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
+import { bufferArticleViewIncrement } from "../services/articleViewCounterService";
 import { invalidateArticleWrite } from "../services/contentInvalidation";
 import { notifySearchEngines } from "../indexNow";
 import oauthMobileRouter from "./v1/oauthMobile";
+import { isWorldCupConfigured } from "../services/worldCupService";
+import {
+  submitPrediction,
+  getMyPredictions,
+  getLeaderboard,
+  getLeaderboardMeta as getWcLeaderboardMeta,
+  getUpcomingPredictableMatches,
+  getMatchPredictionsSummary,
+} from "../services/wcPredictionsService";
+import {
+  getWcLongPredictions,
+  submitWcLongPrediction,
+  type WcLongKind,
+} from "../services/wcLongPredictionsService";
+import { isGcPredictionsEnabled } from "../services/gcFeatureFlags";
+import {
+  createMajlis as gcCreateMajlis,
+  joinMajlis as gcJoinMajlis,
+  leaveMajlis as gcLeaveMajlis,
+  getMyMajalis as gcGetMyMajalis,
+  getMajlisLeaderboard as gcGetMajlisLeaderboard,
+} from "../services/gcMajlisService";
+import {
+  getMajlisChampionPicks as gcGetMajlisChampionPicks,
+  getMajlisFantasy as gcGetMajlisFantasy,
+  getMajlisHarvest as gcGetMajlisHarvest,
+  getMajlisInvitePreview as gcGetMajlisInvitePreview,
+  getMajlisMatchday as gcGetMajlisMatchday,
+  getMajlisNotificationPreference as gcGetMajlisNotificationPreference,
+  setMajlisNotificationPreference as gcSetMajlisNotificationPreference,
+} from "../services/gcMajlisSocialService";
+import {
+  actOnMajlisDuel as gcActOnMajlisDuel,
+  createMajlisDuel as gcCreateMajlisDuel,
+  listMajlisDuels as gcListMajlisDuels,
+} from "../services/gcDuelsService";
+import {
+  getFantasyPool as gcGetFantasyPool,
+  getMyFantasy as gcGetMyFantasy,
+  saveFantasySquad as gcSaveFantasySquad,
+  getFantasyLeaderboard as gcGetFantasyLeaderboard,
+  FANTASY_BUDGET as GC_FANTASY_BUDGET,
+  FANTASY_SQUAD_SIZE as GC_FANTASY_SQUAD_SIZE,
+} from "../services/gcFantasyService";
+import { getMotmBoard as gcGetMotmBoard, voteMotm as gcVoteMotm } from "../services/gcMotmService";
+import { resolveGenericDeviceRegistrationPolicy } from "../services/deviceRegistrationPolicy";
 
 const router = Router();
 
@@ -416,12 +487,11 @@ router.post("/articles/:id/view", async (req: Request, res: Response) => {
     // Increment views counter (same as web: 5-10 random boost)
     const boostOptions = [5, 6, 7, 8, 9, 10];
     const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-    await db.update(articles)
-      .set({ views: sql`${articles.views} + ${randomBoost}` })
-      .where(eq(articles.id, articleId));
+    bufferArticleViewIncrement(articleId, randomBoost);
 
-    // Log for analytics (console only for anonymous users)
-    console.log(`[Mobile API] View tracked: article=${articleId}, platform=${platform}, device=${deviceId || 'unknown'}, version=${appVersion || 'unknown'}`);
+    // Per-view analytics line — very high frequency. Gate behind debug so it
+    // no longer floods production logs (set LOG_VERBOSE=1 to re-enable).
+    log.debug(`[Mobile API] View tracked: article=${articleId}, platform=${platform}, device=${deviceId || 'unknown'}, version=${appVersion || 'unknown'}`);
 
     res.json({ 
       success: true,
@@ -471,32 +541,14 @@ router.post("/articles/batch-view", async (req: Request, res: Response) => {
     }
 
     let successCount = 0;
-    let failCount = invalidCount;
+    const failCount = invalidCount;
 
     if (aggregatedViews.size > 0) {
-      try {
-        const paramValues: any[] = [];
-        const placeholders: string[] = [];
-        let i = 0;
-        for (const [id, totalBoost] of aggregatedViews) {
-          placeholders.push(`($${i * 2 + 1}, $${i * 2 + 2}::integer)`);
-          paramValues.push(id, totalBoost);
-          i++;
-        }
-        
-        await pool.query(
-          `UPDATE articles AS a
-           SET views = a.views + v.increment
-           FROM (VALUES ${placeholders.join(',')}) AS v(id, increment)
-           WHERE a.id = v.id`,
-          paramValues
-        );
-        successCount = viewsToProcess.length - invalidCount;
-        console.log(`[Mobile API] Batch view: bulk updated ${aggregatedViews.size} unique articles (${successCount} views)`);
-      } catch (err) {
-        failCount += viewsToProcess.length - invalidCount;
-        console.error("[Mobile API] Batch view bulk update failed:", err);
+      for (const [id, totalBoost] of aggregatedViews) {
+        bufferArticleViewIncrement(id, totalBoost);
       }
+      successCount = viewsToProcess.length - invalidCount;
+      log.debug(`[Mobile API] Batch view buffered ${aggregatedViews.size} unique articles (${successCount} views)`);
     }
 
     res.json({ 
@@ -531,8 +583,16 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       locale,
       language, // alias for locale (مبرمج التطبيقات يرسل language)
       timezone,
-      userId 
+      bundleId, // معرّف الحزمة (apns-topic) لتوجيه التطبيقات المتعددة
+      installationId, // IDFV — يوحّد سبق وفارا على نفس الجهاز
     } = req.body;
+
+    // userId from the public body is intentionally ignored. Ownership comes
+    // exclusively from a valid mobile Bearer session below.
+    const safeInstallationId =
+      typeof installationId === "string" && installationId.length > 0 && installationId.length <= 128
+        ? installationId
+        : undefined;
 
     // Support both 'token' and 'deviceToken' field names
     const finalToken = deviceToken || token;
@@ -559,6 +619,38 @@ router.post("/devices/register", async (req: Request, res: Response) => {
     // Determine token provider: iOS uses APNs, Android uses FCM
     // Accept provided tokenProvider or determine from platform
     const tokenProvider = providedTokenProvider || (platform === 'ios' ? 'apns' : 'fcm');
+    const session = await verifyMemberSession(req);
+    const basePolicy = resolveGenericDeviceRegistrationPolicy({
+      sessionUserId: session?.userId,
+      untrustedBodyUserId: req.body?.userId,
+      requestedBundleId: bundleId,
+    });
+    const effectiveUserId = basePolicy.effectiveUserId;
+    const safeBundleId = basePolicy.safeBundleId;
+
+    // Keep one active token per user/platform/app bundle. APNs tokens can
+    // rotate across reinstalls or restores; if we leave the old rows active,
+    // the same sports alert can fan out as duplicate banners on iOS.
+    if (effectiveUserId && safeInstallationId) {
+      // Token rotation belongs to one installation. Never deactivate another
+      // phone merely because it serves the same user/platform/bundle.
+      const deactivated = await db
+        .update(pushDevices)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(and(
+          eq(pushDevices.userId, effectiveUserId),
+          eq(pushDevices.platform, platform),
+          sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
+          eq(pushDevices.installationId, safeInstallationId),
+          sql`${pushDevices.deviceToken} != ${finalToken}`,
+          eq(pushDevices.isActive, true)
+        ))
+        .returning({ id: pushDevices.id });
+
+      if (deactivated.length > 0) {
+        console.log(`[Mobile API] Deactivated ${deactivated.length} old tokens for user ${effectiveUserId}`);
+      }
+    }
 
     // Check if device already exists
     const [existing] = await db
@@ -568,11 +660,16 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       .limit(1);
 
     if (existing) {
+      const policy = resolveGenericDeviceRegistrationPolicy({
+        sessionUserId: session?.userId,
+        untrustedBodyUserId: req.body?.userId,
+        requestedBundleId: bundleId,
+        existingBundleId: existing.bundleId,
+      });
       // Update existing device
-      await db
-        .update(pushDevices)
-        .set({
-          userId: userId || existing.userId,
+      const updatePayload: Record<string, unknown> = {
+          // Explicit null is privacy-critical on logout → guest transition.
+          userId: policy.effectiveUserId,
           tokenProvider,
           platform,
           deviceName,
@@ -580,11 +677,28 @@ router.post("/devices/register", async (req: Request, res: Response) => {
           appVersion,
           locale: deviceLocale,
           timezone,
+          ...(policy.bundleIdUpdate !== undefined ? { bundleId: policy.bundleIdUpdate } : {}),
           isActive: true,
           lastActiveAt: new Date(),
           updatedAt: new Date(),
-        })
-        .where(eq(pushDevices.deviceToken, finalToken));
+      };
+      try {
+        await db
+          .update(pushDevices)
+          .set({
+            ...updatePayload,
+            ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
+          } as any)
+          .where(eq(pushDevices.deviceToken, finalToken));
+      } catch (err: any) {
+        // عمود installation_id قد لا يكون مطبّقاً بعد — لا نكسر تسجيل التوكن.
+        if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
+        console.warn("[Mobile API] devices/register: installation_id missing — updating without it");
+        await db
+          .update(pushDevices)
+          .set(updatePayload as any)
+          .where(eq(pushDevices.deviceToken, finalToken));
+      }
 
       console.log(`[Mobile API] Device updated: ${platform} (${tokenProvider}) ${existing.id}`);
       return res.json({ 
@@ -594,40 +708,38 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       });
     }
 
-    // IMPORTANT: Deactivate old tokens for the same user/device before registering new one
-    // This prevents duplicate notifications and ensures only the latest token is used
-    if (userId) {
-      // Deactivate all other tokens for this user on the same platform
-      const deactivated = await db
-        .update(pushDevices)
-        .set({ isActive: false, updatedAt: new Date() })
-        .where(and(
-          eq(pushDevices.userId, userId),
-          eq(pushDevices.platform, platform),
-          sql`${pushDevices.deviceToken} != ${finalToken}`
-        ))
-        .returning({ id: pushDevices.id });
-      
-      if (deactivated.length > 0) {
-        console.log(`[Mobile API] Deactivated ${deactivated.length} old tokens for user ${userId}`);
-      }
-    }
-
     // Create new device
-    const [newDevice] = await db
-      .insert(pushDevices)
-      .values({
+    const insertPayload = {
         deviceToken: finalToken,
         tokenProvider,
-        userId,
+        userId: effectiveUserId,
         platform,
         deviceName,
         osVersion,
         appVersion,
         locale: deviceLocale,
         timezone,
-      })
-      .returning({ id: pushDevices.id });
+        ...(safeBundleId ? { bundleId: safeBundleId } : {}),
+    };
+    let newDevice: { id: string };
+    try {
+      const [row] = await db
+        .insert(pushDevices)
+        .values({
+          ...insertPayload,
+          ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
+        } as any)
+        .returning({ id: pushDevices.id });
+      newDevice = row;
+    } catch (err: any) {
+      if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
+      console.warn("[Mobile API] devices/register: installation_id missing — inserting without it");
+      const [row] = await db
+        .insert(pushDevices)
+        .values(insertPayload as any)
+        .returning({ id: pushDevices.id });
+      newDevice = row;
+    }
 
     console.log(`[Mobile API] New device registered: ${platform} (${tokenProvider}) ${newDevice.id}`);
 
@@ -843,7 +955,7 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   
   const [session] = await db
-    .select({ userId: appMemberSessions.memberId })
+    .select({ userId: appMemberSessions.memberId, lastUsedAt: appMemberSessions.lastUsedAt })
     .from(appMemberSessions)
     .where(and(
       eq(appMemberSessions.tokenHash, tokenHash),
@@ -853,12 +965,23 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
     .limit(1);
   
   if (session) {
-    await db.update(appMemberSessions)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(appMemberSessions.tokenHash, tokenHash));
+    // خنق كتابة lastUsedAt — مرة كل 5 دقائق للجلسة بدل كتابة لكل طلب،
+    // فاستطلاعات الموبايل المتكررة كانت تضغط كتابة دائمة على القاعدة.
+    const LAST_USED_WRITE_THROTTLE_MS = 5 * 60 * 1000;
+    const lastUsedMs = session.lastUsedAt?.getTime() ?? 0;
+    if (Date.now() - lastUsedMs > LAST_USED_WRITE_THROTTLE_MS) {
+      try {
+        await db.update(appMemberSessions)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(appMemberSessions.tokenHash, tokenHash));
+      } catch (err) {
+        console.warn("[auth] lastUsedAt update failed:", err);
+      }
+    }
+    return { userId: session.userId };
   }
   
-  return session || null;
+  return null;
 }
 
 // ==========================================
@@ -1471,6 +1594,14 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     const resetToken = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
+    // A new reset request invalidates older unused codes for the same user.
+    await db.update(passwordResetTokens)
+      .set({ used: true })
+      .where(and(
+        eq(passwordResetTokens.userId, user.id),
+        eq(passwordResetTokens.used, false)
+      ));
+
     // Store reset token
     await db.insert(passwordResetTokens).values({
       userId: user.id,
@@ -1489,8 +1620,6 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
         ? "تم إرسال رمز استعادة كلمة المرور إلى بريدك الإلكتروني"
         : "تم إنشاء رمز استعادة كلمة المرور",
       emailSent,
-      resetCode: resetToken, // Remove in production
-      userId: user.id, // Remove in production
     });
   } catch (error) {
     console.error("[Mobile API] auth/forgot-password error:", error);
@@ -1646,6 +1775,9 @@ router.get("/members/profile", async (req: Request, res: Response) => {
         // The OAuth login endpoints set this to "apple" or "google" — iOS
         // shows different copy depending on the provider when present.
         authProvider: users.authProvider,
+        // نُشتقّ منه hasPassword فقط (لا نُعيده) — يقرّر التطبيق هل يطلب كلمة
+        // المرور عند حذف الحساب (Apple/الجوال بلا كلمة مرور).
+        passwordHash: users.passwordHash,
       })
       .from(users)
       .where(eq(users.id, session.userId))
@@ -1666,8 +1798,9 @@ router.get("/members/profile", async (req: Request, res: Response) => {
 
     // Diagnostic: log the resolved role payload so we can confirm a
     // particular user (e.g. malakalhazmi7@gmail.com) actually has the
-    // expected RBAC mapping arriving from the backend.
-    console.log(
+    // expected RBAC mapping arriving from the backend. Fires on every profile
+    // fetch — gate behind debug (set LOG_VERBOSE=1) to keep it for triage.
+    log.debug(
       `[Mobile API] /members/profile role data — userId=${session.userId} email=${user.email} legacyRole=${user.role ?? "null"} resolvedRole=${rolePayload.role} rbacRoles=${JSON.stringify(rolePayload.roles)}`
     );
 
@@ -1683,12 +1816,15 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       .leftJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, session.userId));
 
+    // نستبعد passwordHash من الاستجابة ونُبقي إشارة hasPassword فقط.
+    const { passwordHash, ...safeUser } = user;
     res.json({
       success: true,
       user: {
-        ...user,
+        ...safeUser,
         ...rolePayload,
         phone: user.phoneNumber,
+        hasPassword: !!passwordHash,
         interests: interests.map(i => ({
           id: i.categoryId,
           name: i.categoryName,
@@ -1719,8 +1855,10 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     }
 
     const {
-      firstName,
-      lastName,
+      firstName: rawFirstName,
+      lastName: rawLastName,
+      name,
+      email: rawEmail,
       profileImageUrl,
       gender,
       birthDate,
@@ -1730,6 +1868,18 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       locale
     } = req.body;
 
+    // Accept a single `name` (VARA / phone-signup clients) and split it
+    // into firstName/lastName when the split fields weren't sent.
+    let firstName: string | undefined =
+      typeof rawFirstName === "string" ? rawFirstName.trim() || undefined : undefined;
+    let lastName: string | undefined =
+      typeof rawLastName === "string" ? rawLastName.trim() || undefined : undefined;
+    if (!firstName && !lastName && typeof name === "string" && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.length > 1 ? parts.slice(1).join(" ") : undefined;
+    }
+
     // Pull the current name so we know whether the lock applies. The
     // names are write-once: once a non-empty value exists in the row,
     // the column becomes readonly and any later edit is silently
@@ -1737,7 +1887,11 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     // could otherwise rename it to impersonate a different commenter,
     // turning the comments archive into a deniability laundromat.
     const [currentRow] = await db
-      .select({ firstName: users.firstName, lastName: users.lastName })
+      .select({
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
       .from(users)
       .where(eq(users.id, session.userId))
       .limit(1);
@@ -1765,6 +1919,51 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     if (typeof country === "string") updates.country = country.trim();
     if (typeof locale === "string") updates.locale = locale;
 
+    // Allow replacing a synthetic phone email (p966…@phone.sabq.org) with a
+    // real address. Real emails stay write-once here — change-email flows
+    // that need verification live elsewhere.
+    if (typeof rawEmail === "string" && rawEmail.trim()) {
+      const { isSyntheticPhoneEmail } = await import("../services/phoneAuth");
+      const nextEmail = rawEmail.trim().toLowerCase();
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail);
+      if (!emailOk) {
+        return res.status(400).json({
+          success: false,
+          message: "صيغة البريد الإلكتروني غير صحيحة",
+        });
+      }
+      if (isSyntheticPhoneEmail(nextEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: "أدخل بريداً إلكترونياً حقيقياً",
+        });
+      }
+      const currentIsSynthetic = isSyntheticPhoneEmail(currentRow?.email);
+      if (!currentIsSynthetic && currentRow?.email?.trim()) {
+        // Already has a real email — ignore silently (same spirit as name lock).
+      } else if (nextEmail !== currentRow?.email?.trim().toLowerCase()) {
+        const [taken] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, nextEmail))
+          .limit(1);
+        if (taken && taken.id !== session.userId) {
+          return res.status(409).json({
+            success: false,
+            message: "هذا البريد مستخدم بالفعل",
+          });
+        }
+        updates.email = nextEmail;
+        updates.emailVerified = false;
+      }
+    }
+
+    // الاسم الأول كافٍ لاكتمال الملف (حسابات الجوال). الاسم العائلي اختياري.
+    const nextFirst = ((updates.firstName as string | undefined) ?? currentRow?.firstName ?? "").trim();
+    if (nextFirst.length >= 2) {
+      updates.isProfileComplete = true;
+    }
+
     if (Object.keys(updates).length > 0) {
       await db.update(users).set(updates).where(eq(users.id, session.userId));
     }
@@ -1789,6 +1988,8 @@ router.put("/members/profile", async (req: Request, res: Response) => {
         locale: users.locale,
         emailVerified: users.emailVerified,
         phoneVerified: users.phoneVerified,
+        isProfileComplete: users.isProfileComplete,
+        authProvider: users.authProvider,
         role: users.role,
         jobTitle: users.jobTitle,
         department: users.department,
@@ -2338,14 +2539,7 @@ router.delete("/members/account", async (req: Request, res: Response) => {
 
     const { password } = req.body;
 
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "كلمة المرور مطلوبة لتأكيد الحذف",
-      });
-    }
-
-    // Verify password (and capture profile image URL for Cloudflare cleanup).
+    // (نلتقط أيضًا رابط صورة الملف لتنظيف Cloudflare لاحقًا.)
     const [user] = await db
       .select({
         passwordHash: users.passwordHash,
@@ -2355,19 +2549,30 @@ router.delete("/members/account", async (req: Request, res: Response) => {
       .where(eq(users.id, session.userId))
       .limit(1);
 
-    if (!user?.passwordHash) {
-      return res.status(401).json({
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        message: "كلمة المرور غير صحيحة",
+        message: "الحساب غير موجود",
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "كلمة المرور غير صحيحة",
-      });
+    // المستخدمون بكلمة مرور: نتحقّق منها. أمّا حسابات Apple/الجوال (بلا passwordHash)
+    // فالجلسة (Bearer) إثبات هوية كافٍ — إلزام كلمة مرور غير موجودة كان يمنعهم من
+    // الحذف ويخالف بند أبل 5.1.1(v). المطلوب فقط أن يكون الحذف ممكنًا داخل التطبيق.
+    if (user.passwordHash) {
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message: "كلمة المرور مطلوبة لتأكيد الحذف",
+        });
+      }
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: "كلمة المرور غير صحيحة",
+        });
+      }
     }
 
     const userId = session.userId;
@@ -2642,15 +2847,13 @@ function formatArticleForMobile(row: any, baseUrl: string) {
   };
 }
 
-const memoryCache = new Map<string, { data: any; expiry: number }>();
+import { memoryCache as sharedMemoryCache } from "../memoryCache";
+
 function getCached(key: string) {
-  const entry = memoryCache.get(key);
-  if (entry && entry.expiry > Date.now()) return entry.data;
-  memoryCache.delete(key);
-  return null;
+  return sharedMemoryCache.get(key);
 }
 function setCache(key: string, data: any, ttlMs: number) {
-  memoryCache.set(key, { data, expiry: Date.now() + ttlMs });
+  sharedMemoryCache.set(key, data, ttlMs);
 }
 
 /**
@@ -2754,10 +2957,81 @@ router.get("/articles", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/v1/news/paginated (homepage news feed — load-more)
+//
+// Compatibility alias for the iOS client's `fetchPaginatedNews(page:)`, which
+// still targets the legacy `/news/paginated` path. The Android client already
+// migrated to `/api/v1/articles`; iOS has not, so without this route every
+// app launch floods the server with 404s. The response shape matches the
+// `/articles` endpoint (decoded by iOS `APIPaginatedList<APIArticle>` via the
+// `articles` key). The filter mirrors the web `/api/news/paginated`: published,
+// shown on homepage, excluding opinion pieces and AI-sourced items.
+router.get("/news/paginated", async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const page = parseInt(req.query.page as string) || 0;
+    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
+
+    const conditions = [
+      eq(articles.status, "published"),
+      eq(articles.hideFromHomepage, false),
+      or(isNull(articles.articleType), ne(articles.articleType, "opinion")),
+      or(isNull(articles.source), ne(articles.source, "ai")),
+    ];
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(articles)
+      .where(and(...conditions));
+
+    const total = Number(countResult?.count || 0);
+
+    const results = await db
+      .select({
+        article: articleCardSelect,
+        category: { nameAr: categories.nameAr, id: categories.id },
+        author: {
+          firstName: users.firstName,
+          lastName: users.lastName,
+        },
+        reporter: {
+          firstName: reporterUsers.firstName,
+          lastName: reporterUsers.lastName,
+        },
+      })
+      .from(articles)
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+      .where(and(...conditions))
+      .orderBy(desc(articles.publishedAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({
+      articles: results.map((r) => formatArticleForMobile(r, BASE_URL)),
+      total,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /news/paginated error:", error);
+    res.status(500).json({
+      error: { code: "SERVER_ERROR", message: "فشل في جلب الأخبار", status: 500 },
+    });
+  }
+});
+
 // GET /api/v1/articles/:id (single article detail)
-router.get("/articles/:id", async (req: Request, res: Response) => {
+router.get("/articles/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const articleId = req.params.id;
+
+    // "my-revisions" has a dedicated handler registered later in this file.
+    // Without this guard the :id matcher treats it as a slug, finds no
+    // published article, and 404s (route shadowing). Fall through instead.
+    if (articleId === "my-revisions") return next();
 
     let condition;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
@@ -3595,6 +3869,9 @@ router.get("/homepage", async (req: Request, res: Response) => {
       if (cached) return res.json(cached);
     }
 
+    // Align hero selection/order with web (`getHeroArticles` / homepage-lite):
+    // editors reorder via displayOrder; sorting by publishedAt alone made
+    // pull-to-refresh look broken — fresh JSON, same carousel order.
     const heroArticles = await db
       .select({
         article: articleCardSelect,
@@ -3610,10 +3887,26 @@ router.get("/homepage", async (req: Request, res: Response) => {
         and(
           eq(articles.status, "published"),
           eq(articles.hideFromHomepage, false),
-          eq(articles.isFeatured, true)
+          or(
+            eq(articles.newsType, "breaking"),
+            eq(articles.isFeatured, true)
+          ),
+          or(
+            isNull(articles.articleType),
+            ne(articles.articleType, "opinion"),
+            eq(articles.isFeatured, true)
+          ),
+          or(
+            isNull(articles.aiGenerated),
+            eq(articles.aiGenerated, false),
+            eq(articles.isFeatured, true)
+          )
         )
       )
-      .orderBy(desc(articles.publishedAt))
+      .orderBy(
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
+        desc(articles.publishedAt)
+      )
       .limit(5);
 
     const latestArticles = await db
@@ -3812,42 +4105,42 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
         })
         .where(eq(comments.id, created.id));
       await incrementSuspiciousWordFlagCount(wordIds);
+
+      const { logSuspiciousWordMatches, notifyCommentRejected } = await import(
+        "../services/commentInsightsService"
+      );
+      await logSuspiciousWordMatches(created.id, created.content, suspiciousCheck.foundWords, autoReject);
+      if (autoReject) {
+        await notifyCommentRejected({
+          userId: session.userId,
+          commentId: created.id,
+          reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+        });
+      }
     }
 
-    // Fire-and-forget AI moderation. The status the mobile client receives
-    // here will be the initial DB default ("pending"); the AI job flips it to
-    // approved/rejected within a few seconds and the next list refresh shows
-    // the final state.
+    // Fire-and-forget AI moderation + sentiment via the unified pipeline. The
+    // status the mobile client receives here will be the initial DB default
+    // ("pending"); the pipeline flips it to approved/rejected within a few
+    // seconds and the next list refresh shows the final state.
     const commentId = created.id;
     const commentContent = created.content;
     void (async () => {
       try {
-        const { moderateComment, getStatusFromClassification } = await import(
-          "../ai/commentModeration"
+        const { runCommentModerationPipeline } = await import(
+          "../services/commentInsightsService"
         );
-        const moderationResult = await moderateComment(commentContent);
-        const aiStatus = getStatusFromClassification(moderationResult.classification);
-        const newStatus = blockedBySuspiciousWords ? "pending" : aiStatus;
-        await db
-          .update(comments)
-          .set({
-            aiModerationScore: moderationResult.score,
-            aiClassification: moderationResult.classification,
-            aiDetectedIssues: moderationResult.detected,
-            aiModerationReason: moderationResult.reason,
-            aiAnalyzedAt: new Date(),
-            ...(newStatus !== "pending"
-              ? {
-                  status: newStatus,
-                  moderatedAt: new Date(),
-                  moderationReason:
-                    moderationResult.classification === "safe"
-                      ? "تم الاعتماد تلقائياً بواسطة الذكاء الاصطناعي"
-                      : `تم الرفض تلقائياً - ${moderationResult.reason}`,
-                }
-              : {}),
-          })
-          .where(eq(comments.id, commentId));
+        await runCommentModerationPipeline({
+          commentId,
+          content: commentContent,
+          userId: session.userId,
+          articleId: article.id,
+          suspiciousHeld: blockedBySuspiciousWords && !suspiciousCheck.shouldAutoReject,
+          suspiciousAutoRejected: blockedBySuspiciousWords && suspiciousCheck.shouldAutoReject,
+          suspiciousWordsNote: suspiciousCheck.foundWords.length
+            ? suspiciousCheck.foundWords.map((w) => w.word).join(", ")
+            : undefined,
+        });
       } catch (error) {
         console.error("[Mobile API] AI moderation failed:", error);
       }
@@ -3923,24 +4216,21 @@ router.post("/contact", async (req: Request, res: Response) => {
       })
       .returning();
 
-    // Email notification to info@sabq.org — best-effort, never fails the
-    // request. Same MailerSend template the web route uses (kept inline so
-    // a future template tweak only happens in one place: that file).
+    // Email notification to info@sabq.org — best-effort, never fails the request.
     try {
-      const { MailerSend, EmailParams, Sender, Recipient } = await import("mailersend");
-      const mailerSend = new MailerSend({ apiKey: process.env.MAILERSEND_API_KEY || "" });
       const attachmentsList = validated.attachments.length > 0
         ? `<div style="margin-top:16px;padding:12px;background:#f5f5f5;border-radius:8px;"><strong>المرفقات:</strong><ul style="margin:8px 0 0 0;padding-right:20px;">${validated.attachments.map(a => `<li><a href="https://sabq.org${a.url}">${a.name}</a></li>`).join("")}</ul></div>`
         : "";
       const html = `<div dir="rtl" style="font-family:Segoe UI,Tahoma,Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:24px;border-radius:12px 12px 0 0;"><h1 style="color:#fff;margin:0;font-size:24px;">📩 رسالة جديدة من نموذج التواصل (تطبيق الجوال)</h1></div><div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;width:120px;"><strong>الاسم:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;">${validated.name}</td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>البريد:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;"><a href="mailto:${validated.email}">${validated.email}</a></td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>الهاتف:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;" dir="ltr">${validated.phone}</td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>الموضوع:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;">${validated.subject}</td></tr></table><div style="margin-top:20px;"><strong style="color:#666;">نص الرسالة:</strong><div style="margin-top:12px;padding:16px;background:#f8f9fa;border-radius:8px;border-right:4px solid #0d6efd;white-space:pre-wrap;">${validated.message}</div></div>${attachmentsList}<div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color:#0d6efd;">عرض في لوحة التحكم</a></div></div></div>`;
 
-      const params = new EmailParams()
-        .setFrom(new Sender("sabqai@sabq.org", "نموذج التواصل - سبق"))
-        .setTo([new Recipient("info@sabq.org", "فريق سبق")])
-        .setSubject(`رسالة جديدة (تطبيق): ${validated.subject} - من ${validated.name}`)
-        .setHtml(html);
-
-      await mailerSend.email.send(params);
+      const result = await sendEmailNotification({
+        to: "info@sabq.org",
+        subject: `رسالة جديدة (تطبيق): ${validated.subject} - من ${validated.name}`,
+        html,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to send contact notification");
+      }
       console.log("[Mobile API] /contact email notification sent");
     } catch (emailError) {
       console.error("[Mobile API] /contact email notify failed:", emailError);
@@ -4338,6 +4628,22 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       kind = data.kind || "news";
     }
 
+    // بوابة يوم النشر: كاتب الرأي لا يرسل مقالاً قبل اختيار يومه الأسبوعي.
+    // الواجهة تعرض منتقي اليوم قبل الإرسال، لكن الخادم هو الحكم النهائي —
+    // عميل معدَّل لا يستطيع تجاوزها. تخص دور opinion_author حصراً لأن نظام
+    // الجدولة الأسبوعية مربوط به.
+    if (
+      kind === "opinion" &&
+      roleNames.has("opinion_author") &&
+      (await canSelfAssignSchedule(session.userId))
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "SCHEDULE_DAY_REQUIRED",
+        message: "اختر يومك الأسبوعي للنشر أولاً، ثم أرسل مقالك.",
+      });
+    }
+
     // Image-count rules per the user request:
     //   Opinion: one hero image at most.
     //   News: multiple (first = hero, rest = album).
@@ -4349,7 +4655,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       });
     }
 
-    // Upload images to CF Images. We treat the order client-side as the
+    // Upload images to the canonical news-image service. We treat the order client-side as the
     // intended display order: index 0 → hero, the rest → albumImages[].
     //
     // Images are validated first (cheap, synchronous), then uploaded in
@@ -4360,7 +4666,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
     // image instead of the sum.
     const uploadedUrls: string[] = [];
     if (imagePayload.length > 0) {
-      if (!cloudflareImagesService.isCloudflareConfigured()) {
+      if (!newsImageStorageService.isUploadAvailable()) {
         return res.status(502).json({ success: false, message: "خدمة رفع الصور غير مهيأة حالياً" });
       }
 
@@ -4380,9 +4686,8 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
         const mimeType = `image/${ext === "heif" ? "heic" : ext}`;
         const buffer = Buffer.from(matches[2], "base64");
 
-        // 20 MB per image cap — CF Images max is 10 MB for free, 20 MB Pro;
-        // we leave the actual upper bound to CF but stop egregiously large
-        // payloads early.
+        // 20 MB per image cap keeps oversized payloads from reaching either
+        // storage provider.
         if (buffer.length > 20 * 1024 * 1024) {
           return res.status(413).json({
             success: false,
@@ -4396,12 +4701,14 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       const batchStamp = Date.now();
       const results = await Promise.all(
         decoded.map((img, i) =>
-          cloudflareImagesService.uploadToCloudflare(
-            img.buffer,
-            `submission-${session.userId}-${batchStamp}-${i}.${img.ext}`,
-            { type: "mobile-article-submission", userId: session.userId, slot: String(i) },
-            img.mimeType
-          )
+          newsImageStorageService.upload({
+            buffer: img.buffer,
+            filename: `submission-${session.userId}-${batchStamp}-${i}.${img.ext}`,
+            mimeType: img.mimeType,
+            purpose: "mobile-article-submission",
+            metadata: { userId: session.userId, slot: String(i), source: "mobile-app" },
+            rolloutKey: `${session.userId}:${batchStamp}:${i}`,
+          })
         )
       );
 
@@ -4409,7 +4716,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
         if (!result.success || !result.deliveryUrl) {
-          console.error("[Mobile API] /articles/submit CF Images upload failed:", result.error);
+          console.error("[Mobile API] /articles/submit image upload failed:", result.error);
           return res.status(502).json({
             success: false,
             message: `تعذر رفع الصورة ${i + 1}. حاول لاحقاً.`,
@@ -4461,6 +4768,9 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       articleType: kind,
       newsType: "regular",
       status: "draft",
+      // يطابق إرسال الويب وإعادة الإرسال بعد التعديل — بدونها تبقى حالة
+      // الالتزام «لم يرسل» رغم وصول المسودة لغرفة الأخبار.
+      reviewStatus: "pending_review",
       imageUrl: heroImage,
       albumImages,
       source: (() => {
@@ -4759,20 +5069,21 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       });
     }
 
-    // Hero + album handling. New base64 images go to Cloudflare
-    // Images via the same helper /articles/submit uses; existing URLs
-    // (already on imagedelivery.net) pass through.
-    const uploadDataUrlToCf = async (dataUrl: string, idHint: string): Promise<string | null> => {
+    // Hero + album handling. New base64 images use the same canonical
+    // R2-rollout service as /articles/submit; existing HTTPS URLs pass through.
+    const uploadDataUrl = async (dataUrl: string, idHint: string): Promise<string | null> => {
       const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
       if (!m) return null;
       const mimeType = `image/${m[1].toLowerCase() === "heif" ? "heic" : m[1].toLowerCase()}`;
       const buffer = Buffer.from(m[2], "base64");
-      const result = await cloudflareImagesService.uploadToCloudflare(
+      const result = await newsImageStorageService.upload({
         buffer,
-        `${idHint}.${m[1]}`,
-        { type: "mobile-article-revision" },
+        filename: `${idHint}.${m[1]}`,
         mimeType,
-      );
+        purpose: "mobile-article-revision",
+        metadata: { source: "mobile-app", articleId },
+        rolloutKey: `${session.userId}:${idHint}`,
+      });
       return result.success && result.deliveryUrl ? result.deliveryUrl : null;
     };
 
@@ -4780,7 +5091,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
     if (data.heroImage !== undefined) {
       if (data.heroImage.startsWith("data:")) {
         try {
-          const url = await uploadDataUrlToCf(
+          const url = await uploadDataUrl(
             data.heroImage,
             `mobile-revision-${articleId}-hero-${Date.now()}`,
           );
@@ -4799,7 +5110,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       for (const img of data.albumImages) {
         if (img.startsWith("data:")) {
           try {
-            const url = await uploadDataUrlToCf(
+            const url = await uploadDataUrl(
               img,
               `mobile-revision-${articleId}-album-${Date.now()}-${albumUrls.length}`,
             );
@@ -5099,9 +5410,7 @@ router.post("/behavior/track", async (req: Request, res: Response) => {
       // /articles/:id/view so trending stays internally consistent).
       const boostOptions = [5, 6, 7, 8, 9, 10];
       const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-      await db.update(articles)
-        .set({ views: sql`${articles.views} + ${randomBoost}` })
-        .where(eq(articles.id, data.articleId));
+      bufferArticleViewIncrement(data.articleId, randomBoost);
 
       // Seed a reading_history row so insights/today and trending can
       // count this open. We do NOT upsert here — every open is a
@@ -5355,8 +5664,13 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       appVersion: z.string().optional(),
       locale: z.string().optional(),
       timezone: z.string().optional(),
+      bundleId: z.string().max(255).optional(),
+      installationId: z.string().max(128).optional(),
     });
     const data = schema.parse(req.body);
+    const safeBundleId = data.bundleId && data.bundleId.length > 0 ? data.bundleId : undefined;
+    const safeInstallationId =
+      data.installationId && data.installationId.length > 0 ? data.installationId : undefined;
 
     const existing = await db
       .select({ id: pushDevices.id })
@@ -5377,6 +5691,7 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       userId: session.userId,
       tokenProvider: data.provider,
       platform: data.platform,
+      ...(safeBundleId ? { bundleId: safeBundleId } : {}),
       deviceName: data.deviceName,
       osVersion: data.osVersion,
       appVersion: data.appVersion,
@@ -5386,16 +5701,52 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       lastActiveAt: new Date(),
       updatedAt: new Date(),
     };
+    const baseWithInstall = {
+      ...baseValues,
+      ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
+    };
 
-    if (existing.length > 0) {
-      await db.update(pushDevices)
-        .set(baseValues)
-        .where(eq(pushDevices.id, existing[0].id));
-    } else {
-      await db.insert(pushDevices).values({
-        ...baseValues,
-        deviceToken: data.token,
-      });
+    // دوران token يخص تثبيتًا واحدًا، لا كل أجهزة المستخدم. عند غياب
+    // installationId لا نخمّن: إبقاء الجهاز الثاني فعالًا أهم من تنظيف token
+    // قديم، وسيتولى رد المزود غير الصالح تعطيله لاحقًا.
+    const deactivated = safeInstallationId
+      ? await db
+          .update(pushDevices)
+          .set({ isActive: false, updatedAt: new Date() })
+          .where(and(
+            eq(pushDevices.userId, session.userId),
+            eq(pushDevices.platform, data.platform),
+            sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
+            eq(pushDevices.installationId, safeInstallationId),
+            sql`${pushDevices.deviceToken} != ${data.token}`,
+            eq(pushDevices.isActive, true)
+          ))
+          .returning({ id: pushDevices.id })
+      : [];
+
+    if (deactivated.length > 0) {
+      console.log(`[Mobile API] /push-token deactivated ${deactivated.length} old tokens for user=${session.userId}`);
+    }
+
+    const persist = async (values: Record<string, unknown>) => {
+      if (existing.length > 0) {
+        await db.update(pushDevices)
+          .set(values as any)
+          .where(eq(pushDevices.id, existing[0].id));
+      } else {
+        await db.insert(pushDevices).values({
+          ...values,
+          deviceToken: data.token,
+        } as any);
+      }
+    };
+
+    try {
+      await persist(baseWithInstall);
+    } catch (err: any) {
+      if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
+      console.warn("[Mobile API] /push-token: installation_id missing — saving without it");
+      await persist(baseValues);
     }
 
     console.log(`[Mobile API] /push-token registered (user=${session.userId} provider=${data.provider})`);
@@ -5437,13 +5788,322 @@ router.delete("/members/push-token", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// Sports follows + match-event alert preferences (native apps)
+// GET/POST/DELETE /api/v1/sports/follows
+// GET/PUT        /api/v1/sports/alert-prefs
+// ==========================================
+// النسخة المعتمِدة على جلسة العضو (Bearer) من مسارات الويب /api/sports/follows
+// (التي تتطلّب جلسة Passport). متابعة الفريق + تفضيلات أنواع أحداث الإشعار العامّة
+// (انطلاق/أهداف/بطاقات/فار/نهاية) تُغذّي جوب التنبيهات الرياضية.
+router.get("/sports/follows", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { listFollows } = await import("../services/sportsFollowsService");
+    const follows = await listFollows(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, follows });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/follows error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب متابعاتك حاليًا" });
+  }
+});
+
+router.post("/sports/follows", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { addFollow, isValidFollowKind } = await import("../services/sportsFollowsService");
+    const { kind, refId, refName, refLogo } = req.body ?? {};
+    if (!isValidFollowKind(kind) || !refId || !refName) {
+      return res.status(400).json({ success: false, message: "بيانات المتابعة غير مكتملة" });
+    }
+    const follow = await addFollow(session.userId, {
+      kind,
+      refId: String(refId),
+      refName: String(refName),
+      refLogo: refLogo ? String(refLogo) : null,
+    });
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, follow });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/follows error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ المتابعة حاليًا" });
+  }
+});
+
+router.delete("/sports/follows", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { removeFollow, isValidFollowKind } = await import("../services/sportsFollowsService");
+    const kind = (req.query.kind ?? req.body?.kind) as unknown;
+    const refId = (req.query.refId ?? req.body?.refId) as unknown;
+    if (!isValidFollowKind(kind) || !refId) {
+      return res.status(400).json({ success: false, message: "بيانات إلغاء المتابعة غير مكتملة" });
+    }
+    await removeFollow(session.userId, kind, String(refId));
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /sports/follows error:", error);
+    res.status(502).json({ success: false, message: "تعذر إلغاء المتابعة حاليًا" });
+  }
+});
+
+router.get("/sports/alert-prefs", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { getPrefs } = await import("../services/sportsAlertPrefsService");
+    const preferences = await getPrefs(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/alert-prefs error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب تفضيلات الإشعارات" });
+  }
+});
+
+router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { upsertPrefs } = await import("../services/sportsAlertPrefsService");
+    const body = req.body ?? {};
+    const patch: Record<string, boolean> = {};
+    for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime", "transfersSaudi", "transfersGlobal", "smartSnaps"] as const) {
+      if (typeof body[key] === "boolean") patch[key] = body[key];
+    }
+    const preferences = await upsertPrefs(session.userId, patch);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error("[Mobile API] PUT /sports/alert-prefs error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ تفضيلات الإشعارات" });
+  }
+});
+
+router.get("/sports/snaps", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { isSportsSnapsEnabled } = await import("../services/sportsSnaps/config");
+    if (!isSportsSnapsEnabled()) return res.status(404).json({ success: false, message: "غير متاح" });
+    const { getCachedUserFeed, SNAPS_FEED_CACHE_TTL_MS } = await import("../services/sportsSnaps/feed");
+    const snaps = await getCachedUserFeed(session.userId);
+    // الخادم يكاش الخلاصة 30 ثانية (single-flight عبر withSWR)، فالترويسة
+    // تعكس الواقع: كاش خاص قصير بنفس مدة TTL بدل no-store.
+    res.set("Cache-Control", `private, max-age=${Math.floor(SNAPS_FEED_CACHE_TTL_MS / 1000)}`);
+    res.json({ success: true, snaps });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/snaps error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب اللقطات الذكية", snaps: [] });
+  }
+});
+
+router.post("/sports/engagement", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const body = req.body ?? {};
+    if (body.kind !== "match_view") {
+      return res.status(400).json({ success: false, message: "نوع التفاعل غير مدعوم" });
+    }
+    const fixtureId = Number(body.fixtureId);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ success: false, message: "معرّف المباراة غير صالح" });
+    }
+    const { recordMatchView } = await import("../services/sportsSnaps/engagement");
+    await recordMatchView(session.userId, {
+      fixtureId,
+      homeId: body.homeId == null ? null : Number(body.homeId),
+      awayId: body.awayId == null ? null : Number(body.awayId),
+      competitionSlug: body.competitionSlug ? String(body.competitionSlug) : null,
+    });
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/engagement error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ التفاعل" });
+  }
+});
+
+// ==========================================
+// محرّك الذكاء الرياضي (VARA Intelligence) — نظائر الموبايل.
+//   GET  /api/v1/sports/intel/digest   الموجز المخصّص (جلسة العضو)
+//   POST /api/v1/sports/intel/ask      المساعد المحادثي (عام)
+// «المشهد/بطاقة المباراة/قصص الموسم» عامة تُقرأ مباشرة من /api/sports/intel/*
+// (طرق GET بلا حماية CSRF)؛ الموجز يحتاج متابعات العضو، والمساعد POST فيلزم
+// إعفاء CSRF المتوفّر لكل مسارات /api/v1/*.
+// ==========================================
+router.get("/sports/intel/digest", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { isSaudiLeagueConfigured } = await import("../services/saudiLeagueService");
+    const { buildDigest } = await import("../services/sportsIntelligence");
+    if (!isSaudiLeagueConfigured()) return res.json({ success: true, configured: false, digest: null });
+    const digest = await buildDigest(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, configured: true, digest });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/intel/digest error:", error);
+    res.status(502).json({ success: false, message: "تعذّر تجهيز موجزك حاليًا" });
+  }
+});
+
+router.post("/sports/intel/ask", async (req: Request, res: Response) => {
+  try {
+    const { isSaudiLeagueConfigured } = await import("../services/saudiLeagueService");
+    const { askCopilot } = await import("../services/sportsIntelligence");
+    const question = String(req.body?.question ?? "").trim();
+    if (!question) return res.status(400).json({ success: false, message: "اكتب سؤالك أولاً" });
+    if (question.length > 400) return res.status(400).json({ success: false, message: "السؤال طويل جدًا" });
+    if (!isSaudiLeagueConfigured()) return res.json({ success: true, configured: false, answer: null });
+    const result = await askCopilot(question);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, configured: true, ...(result ?? { answer: null }) });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/intel/ask error:", error);
+    res.status(502).json({ success: false, message: "تعذّر الإجابة حاليًا" });
+  }
+});
+
+// ==========================================
+// توقّعات المباريات (المجتمع) — نظائر الموبايل لمسارات /api/sports/*/predict
+// المحميّة بـrequireAuth (Passport)؛ هنا بجلسة العضو (Bearer) عبر verifyMemberSession.
+//   GET  /api/v1/sports/match/:id/predict   توقّعي لمباراة
+//   POST /api/v1/sports/match/:id/predict   إرسال/تعديل (يُقفل عند الانطلاق)
+//   GET  /api/v1/sports/predictions/me       توقّعاتي + إحصاءاتي
+// ==========================================
+const clampPredGoals = (v: unknown): number | null => {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 && n <= 30 ? n : null;
+};
+
+// ==========================================
+// Live Activity push tokens (iOS lock-screen live match)
+// POST /api/v1/live-activity/register   { fixtureId, token }
+// POST /api/v1/live-activity/end        { token }
+// PUT  /api/v1/live-activity/start-token { token, deviceId? }
+// DELETE /api/v1/live-activity/start-token { token }
+// ==========================================
+// عام (لا يتطلب تسجيل دخول): النشاط المباشر قد يعمل لزائر غير مسجّل. نلتقط
+// userId إن وُجدت جلسة فقط. التوكن هنا توكن ActivityKit (مختلف عن توكن الجهاز).
+router.post("/live-activity/register", async (req: Request, res: Response) => {
+  try {
+    const { registerLiveActivityToken } = await import("../services/liveActivityService");
+    const fixtureId = Number(req.body?.fixtureId);
+    const token = typeof req.body?.token === "string" ? req.body.token : null;
+    const bundleId =
+      typeof req.body?.bundleId === "string" && req.body.bundleId.length > 0 && req.body.bundleId.length <= 255
+        ? req.body.bundleId
+        : null;
+    if (!Number.isFinite(fixtureId) || !token || token.length < 20) {
+      return res.status(400).json({ success: false, message: "fixtureId/token مطلوبان" });
+    }
+    if (token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[")) {
+      return res.status(400).json({ success: false, message: "توكن غير صالح" });
+    }
+
+    let userId: string | null = null;
+    try {
+      const session = await verifyMemberSession(req);
+      userId = session?.userId ?? null;
+    } catch { /* زائر */ }
+
+    await registerLiveActivityToken(fixtureId, token, userId, bundleId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] /live-activity/register error:", error);
+    res.status(500).json({ success: false, message: "تعذر تسجيل النشاط المباشر" });
+  }
+});
+
+router.post("/live-activity/end", async (req: Request, res: Response) => {
+  try {
+    const { endLiveActivityToken } = await import("../services/liveActivityService");
+    const token = typeof req.body?.token === "string" ? req.body.token : null;
+    if (!token) {
+      return res.status(400).json({ success: false, message: "token مطلوب" });
+    }
+    await endLiveActivityToken(token);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] /live-activity/end error:", error);
+    res.status(500).json({ success: false, message: "تعذر إنهاء النشاط المباشر" });
+  }
+});
+
+router.put("/live-activity/start-token", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const token = typeof req.body?.token === "string" ? req.body.token.trim().toLowerCase() : "";
+    const rawDeviceId = typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+    const deviceId = rawDeviceId.length > 0 && rawDeviceId.length <= 255 ? rawDeviceId : null;
+    // ActivityKit tokens are raw bytes represented as lowercase hexadecimal.
+    if (!/^[0-9a-f]{40,512}$/.test(token)) {
+      return res.status(400).json({ success: false, message: "توكن ActivityKit غير صالح" });
+    }
+    const { registerLiveActivityStartToken } = await import("../services/liveActivityStartService");
+    await registerLiveActivityStartToken({
+      userId: session.userId,
+      pushToken: token,
+      bundleId: process.env.APNS_SPORTS_BUNDLE_ID || "com.sabq.sports",
+      deviceId,
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] PUT /live-activity/start-token error:", error);
+    res.status(500).json({ success: false, message: "تعذر تسجيل البدء التلقائي" });
+  }
+});
+
+router.delete("/live-activity/start-token", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const token = typeof req.body?.token === "string" ? req.body.token.trim().toLowerCase() : "";
+    if (!token) return res.status(400).json({ success: false, message: "token مطلوب" });
+    const { deleteLiveActivityStartToken } = await import("../services/liveActivityStartService");
+    await deleteLiveActivityStartToken(session.userId, token);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /live-activity/start-token error:", error);
+    res.status(500).json({ success: false, message: "تعذر إيقاف البدء التلقائي" });
+  }
+});
+
+// ==========================================
 // Editorial notifications history + preferences
 // GET    /api/v1/notifications                 — last 50 events for the user
 // POST   /api/v1/notifications/:id/read        — mark a single entry read
 // POST   /api/v1/notifications/read-all        — mark every unread row read
 // GET    /api/v1/notifications/preferences     — current per-type toggles
 // PUT    /api/v1/notifications/preferences     — update toggles
+// GET    /api/v1/surveys/mine                  — دعوات الاستطلاع المفتوحة لبطاقة «بانتظارك»
 // ==========================================
+router.get("/surveys/mine", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const { getOpenInvitationsForUser } = await import("../services/surveyService");
+    const items = await getOpenInvitationsForUser(session.userId);
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error("[Mobile API] GET /surveys/mine error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الاستطلاعات" });
+  }
+});
+
 router.get("/notifications", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);
@@ -6401,13 +7061,28 @@ router.get("/bookmarks", async (req: Request, res: Response) => {
   }
 });
 
+// يقبل بعض عملاء الموبايل الـslug بدل معرّف المقال (UUID)، فيفشل قيد المفتاح
+// الأجنبي bookmarks_article_id_articles_id_fk. نحوّل أي مدخل (معرّف أو slug) إلى
+// المعرّف الحقيقي قبل الكتابة، ونعيد المعرّف نفسه إن كان UUID صالحًا أصلًا.
+async function resolveArticleId(idOrSlug: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: articles.id })
+    .from(articles)
+    .where(or(eq(articles.id, idOrSlug), eq(articles.slug, idOrSlug)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
 router.post("/bookmarks/:articleId", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);
     if (!session) {
       return res.status(401).json({ success: false, message: "غير مسجل" });
     }
-    const articleId = req.params.articleId;
+    const articleId = await resolveArticleId(req.params.articleId);
+    if (!articleId) {
+      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    }
     const [existing] = await db
       .select({ id: bookmarks.id })
       .from(bookmarks)
@@ -6429,10 +7104,12 @@ router.delete("/bookmarks/:articleId", async (req: Request, res: Response) => {
     if (!session) {
       return res.status(401).json({ success: false, message: "غير مسجل" });
     }
-    const articleId = req.params.articleId;
+    // نحذف بكلا القيمتين (المعرّف المُحوَّل والمدخل الخام) لتغطية أي محفوظات قديمة.
+    const resolvedId = await resolveArticleId(req.params.articleId);
+    const ids = [req.params.articleId, ...(resolvedId ? [resolvedId] : [])];
     await db
       .delete(bookmarks)
-      .where(and(eq(bookmarks.articleId, articleId), eq(bookmarks.userId, session.userId)));
+      .where(and(inArray(bookmarks.articleId, ids), eq(bookmarks.userId, session.userId)));
     res.json({ success: true, isBookmarked: false });
   } catch (error) {
     console.error("[Mobile API] DELETE /bookmarks error:", error);
@@ -7138,7 +7815,7 @@ router.post("/admin/seo/generate", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/v1/admin/media/upload — رفع صورة (base64 → Cloudflare Images)
+// POST /api/v1/admin/media/upload — رفع صورة خبر (base64 → التخزين المعتمد)
 router.post("/admin/media/upload", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
@@ -7158,21 +7835,23 @@ router.post("/admin/media/upload", async (req: Request, res: Response) => {
     if (buffer.length > 10 * 1024 * 1024) {
       return res.status(400).json({ success: false, message: "حجم الصورة يجب أن يكون أقل من 10 ميجابايت" });
     }
-    if (!cloudflareImagesService.isCloudflareConfigured()) {
+    if (!newsImageStorageService.isUploadAvailable()) {
       return res.status(502).json({ success: false, message: "خدمة رفع الصورة غير مهيأة حالياً" });
     }
     const filename = `admin-article-${admin.userId}-${Date.now()}.${ext}`;
-    const cfResult = await cloudflareImagesService.uploadToCloudflare(
+    const imageResult = await newsImageStorageService.upload({
       buffer,
       filename,
-      { type: "article-image", userId: admin.userId },
-      `image/${ext}`,
-    );
-    if (!cfResult.success || !cfResult.deliveryUrl) {
-      console.error("[Mobile API] CF Images admin upload failed:", cfResult.error);
+      mimeType: `image/${ext}`,
+      purpose: "mobile-article-admin",
+      metadata: { userId: admin.userId, source: "mobile-admin" },
+      rolloutKey: `${admin.userId}:${filename}`,
+    });
+    if (!imageResult.success || !imageResult.deliveryUrl) {
+      console.error("[Mobile API] admin image upload failed:", imageResult.error);
       return res.status(502).json({ success: false, message: "تعذر رفع الصورة" });
     }
-    res.json({ success: true, url: cfResult.deliveryUrl });
+    res.json({ success: true, url: imageResult.deliveryUrl });
   } catch (error) {
     console.error("[Mobile API] POST /admin/media/upload error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في رفع الصورة" });
@@ -7581,6 +8260,390 @@ router.delete("/admin/articles/:id/permanent", async (req: Request, res: Respons
 });
 
 // ==========================================
+// Admin inbox — opinion tickets + contact messages
+// ==========================================
+// These are mobile-session counterparts to the web dashboard systems. They
+// intentionally use the same strict `verifyAdminSession` guard as the rest
+// of the iOS newsroom dashboard: only platform admins can access visitor
+// contact data or writer/editorial conversations.
+
+const ADMIN_CONTACT_STATUSES = ["pending", "read", "replied"] as const;
+const ADMIN_TICKET_STATUSES = ["open", "answered", "closed"] as const;
+
+function displayName(firstName?: string | null, lastName?: string | null): string | null {
+  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return name || null;
+}
+
+function escapeEmailHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// GET /api/v1/admin/contact-messages — paginated inbox with status/search filters.
+router.get("/admin/contact-messages", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const status = String(req.query.status ?? "all");
+    const search = String(req.query.search ?? "").trim().slice(0, 120);
+    const conditions = [] as any[];
+
+    if ((ADMIN_CONTACT_STATUSES as readonly string[]).includes(status)) {
+      conditions.push(eq(contactMessages.status, status));
+    }
+    if (search) {
+      const term = `%${search}%`;
+      conditions.push(or(
+        ilike(contactMessages.name, term),
+        ilike(contactMessages.email, term),
+        ilike(contactMessages.subject, term),
+      ));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [messages, counts] = await Promise.all([
+      db.select().from(contactMessages).where(where).orderBy(desc(contactMessages.createdAt)).limit(limit).offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)::int` }).from(contactMessages).where(where),
+    ]);
+    const total = counts[0]?.count ?? 0;
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      messages,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/contact-messages error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل رسائل التواصل" });
+  }
+});
+
+// GET /api/v1/admin/contact-messages/:id — detail plus every recorded reply.
+// Opening a pending message marks it read, just as an inbox should, without
+// changing messages that were already replied to.
+router.get("/admin/contact-messages/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+
+    const [message] = await db.select().from(contactMessages)
+      .where(eq(contactMessages.id, req.params.id)).limit(1);
+    if (!message) return res.status(404).json({ success: false, message: "الرسالة غير موجودة" });
+
+    if (message.status === "pending") {
+      await db.update(contactMessages).set({ status: "read" }).where(eq(contactMessages.id, message.id));
+      message.status = "read";
+    }
+
+    const replies = await db
+      .select({
+        id: contactMessageReplies.id,
+        messageId: contactMessageReplies.messageId,
+        replyText: contactMessageReplies.replyText,
+        repliedBy: contactMessageReplies.repliedBy,
+        createdAt: contactMessageReplies.createdAt,
+        updatedAt: contactMessageReplies.updatedAt,
+        isEdited: contactMessageReplies.isEdited,
+        responderFirstName: contactReplyUsers.firstName,
+        responderLastName: contactReplyUsers.lastName,
+      })
+      .from(contactMessageReplies)
+      .leftJoin(contactReplyUsers, eq(contactMessageReplies.repliedBy, contactReplyUsers.id))
+      .where(eq(contactMessageReplies.messageId, message.id))
+      .orderBy(asc(contactMessageReplies.createdAt));
+
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      message,
+      replies: replies.map((reply) => ({
+        ...reply,
+        responderName: displayName(reply.responderFirstName, reply.responderLastName),
+      })),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/contact-messages/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل الرسالة" });
+  }
+});
+
+// PATCH /api/v1/admin/contact-messages/:id — update inbox state.
+router.patch("/admin/contact-messages/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const status = String(req.body?.status ?? "");
+    if (!(ADMIN_CONTACT_STATUSES as readonly string[]).includes(status)) {
+      return res.status(400).json({ success: false, message: "حالة الرسالة غير صالحة" });
+    }
+
+    const updates: Partial<typeof contactMessages.$inferInsert> = { status };
+    if (status === "replied") {
+      updates.repliedAt = new Date();
+      updates.repliedBy = admin.userId;
+    }
+    const [message] = await db.update(contactMessages).set(updates)
+      .where(eq(contactMessages.id, req.params.id)).returning();
+    if (!message) return res.status(404).json({ success: false, message: "الرسالة غير موجودة" });
+    res.json({ success: true, message: "تم تحديث حالة الرسالة", data: message });
+  } catch (error) {
+    console.error("[Mobile API] PATCH /admin/contact-messages/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحديث حالة الرسالة" });
+  }
+});
+
+// POST /api/v1/admin/contact-messages/:id/reply — records the reply and sends
+// it to the visitor. Email input is escaped before interpolation so a contact
+// form submission can never alter the outgoing email markup.
+router.post("/admin/contact-messages/:id/reply", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const replyText = typeof req.body?.replyText === "string" ? req.body.replyText.trim() : "";
+    if (!replyText || replyText.length > 10_000) {
+      return res.status(400).json({ success: false, message: "نص الرد مطلوب ولا يتجاوز 10000 حرف" });
+    }
+
+    const [message] = await db.select().from(contactMessages)
+      .where(eq(contactMessages.id, req.params.id)).limit(1);
+    if (!message) return res.status(404).json({ success: false, message: "الرسالة غير موجودة" });
+
+    const name = escapeEmailHtml(message.name);
+    const subject = escapeEmailHtml(message.subject);
+    const original = escapeEmailHtml(message.message);
+    const reply = escapeEmailHtml(replyText);
+    const emailResult = await sendEmailNotification({
+      to: message.email,
+      subject: `رد على رسالتك: ${message.subject}`,
+      text: `مرحباً ${message.name}،\n\nشكراً لتواصلك معنا.\n\nرسالتك الأصلية:\n${message.message}\n\nردنا:\n${replyText}\n\nمع تحيات،\nصحيفة سبق الإلكترونية`,
+      html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>رد على رسالتك</h2><p>مرحباً ${name}،</p><p>شكراً لتواصلك معنا.</p><div style="padding:12px;background:#f5f5f5;border-radius:8px"><strong>موضوع رسالتك:</strong> ${subject}<br/>${original}</div><div style="margin-top:16px;padding:12px;background:#ecfdf5;border-right:4px solid #10b981;border-radius:8px"><strong>ردنا:</strong><br/>${reply}</div><p>صحيفة سبق الإلكترونية</p></div>`,
+    });
+    if (!emailResult.success) {
+      console.error("[Mobile API] contact reply email failed:", emailResult.error);
+      return res.status(502).json({ success: false, message: "تعذّر إرسال الرد بالبريد الإلكتروني" });
+    }
+
+    const now = new Date();
+    const [createdReply] = await db.insert(contactMessageReplies).values({
+      messageId: message.id,
+      replyText,
+      repliedBy: admin.userId,
+    }).returning();
+    const [updatedMessage] = await db.update(contactMessages).set({
+      status: "replied",
+      repliedAt: now,
+      repliedBy: admin.userId,
+      replyText,
+    }).where(eq(contactMessages.id, message.id)).returning();
+
+    res.status(201).json({ success: true, message: "تم إرسال الرد بنجاح", data: updatedMessage, reply: createdReply, emailSent: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/contact-messages/:id/reply error:", error);
+    res.status(500).json({ success: false, message: "تعذّر إرسال الرد" });
+  }
+});
+
+// GET /api/v1/admin/opinion-tickets — editorial ticket inbox.
+router.get("/admin/opinion-tickets", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const status = String(req.query.status ?? "all");
+    const search = String(req.query.search ?? "").trim().slice(0, 120);
+    const conditions = [] as any[];
+    if ((ADMIN_TICKET_STATUSES as readonly string[]).includes(status)) {
+      conditions.push(eq(opinionTickets.status, status));
+    }
+    if (search) {
+      const term = `%${search}%`;
+      conditions.push(or(
+        ilike(opinionTickets.title, term),
+        ilike(users.firstName, term),
+        ilike(users.lastName, term),
+        ilike(users.email, term),
+      ));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [rows, counts] = await Promise.all([
+      db.select({
+        id: opinionTickets.id,
+        writerId: opinionTickets.writerId,
+        title: opinionTickets.title,
+        status: opinionTickets.status,
+        lastMessageAt: opinionTickets.lastMessageAt,
+        lastReadByAdminAt: opinionTickets.lastReadByAdminAt,
+        createdAt: opinionTickets.createdAt,
+        updatedAt: opinionTickets.updatedAt,
+        writerFirstName: users.firstName,
+        writerLastName: users.lastName,
+        writerEmail: users.email,
+      }).from(opinionTickets).leftJoin(users, eq(opinionTickets.writerId, users.id))
+        .where(where).orderBy(desc(opinionTickets.lastMessageAt)).limit(limit).offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)::int` }).from(opinionTickets)
+        .leftJoin(users, eq(opinionTickets.writerId, users.id)).where(where),
+    ]);
+    const total = counts[0]?.count ?? 0;
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      tickets: rows.map((ticket) => ({
+        id: ticket.id,
+        writerId: ticket.writerId,
+        writerName: displayName(ticket.writerFirstName, ticket.writerLastName),
+        writerEmail: ticket.writerEmail,
+        title: ticket.title,
+        status: ticket.status,
+        lastMessageAt: ticket.lastMessageAt,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+        hasUnread: !ticket.lastReadByAdminAt || ticket.lastMessageAt > ticket.lastReadByAdminAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/opinion-tickets error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل استفسارات الرأي" });
+  }
+});
+
+// GET /api/v1/admin/opinion-tickets/:id — ticket thread and read marker.
+router.get("/admin/opinion-tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const [ticket] = await db.select({
+      id: opinionTickets.id,
+      writerId: opinionTickets.writerId,
+      title: opinionTickets.title,
+      status: opinionTickets.status,
+      lastMessageAt: opinionTickets.lastMessageAt,
+      createdAt: opinionTickets.createdAt,
+      updatedAt: opinionTickets.updatedAt,
+      writerFirstName: users.firstName,
+      writerLastName: users.lastName,
+      writerEmail: users.email,
+    }).from(opinionTickets).leftJoin(users, eq(opinionTickets.writerId, users.id))
+      .where(eq(opinionTickets.id, req.params.id)).limit(1);
+    if (!ticket) return res.status(404).json({ success: false, message: "الاستفسار غير موجود" });
+
+    const messages = await db.select({
+      id: opinionTicketMessages.id,
+      ticketId: opinionTicketMessages.ticketId,
+      senderId: opinionTicketMessages.senderId,
+      senderRole: opinionTicketMessages.senderRole,
+      message: opinionTicketMessages.message,
+      parentMessageId: opinionTicketMessages.parentMessageId,
+      createdAt: opinionTicketMessages.createdAt,
+      senderFirstName: users.firstName,
+      senderLastName: users.lastName,
+    }).from(opinionTicketMessages).leftJoin(users, eq(opinionTicketMessages.senderId, users.id))
+      .where(eq(opinionTicketMessages.ticketId, ticket.id)).orderBy(asc(opinionTicketMessages.createdAt));
+    await db.update(opinionTickets).set({ lastReadByAdminAt: new Date() }).where(eq(opinionTickets.id, ticket.id));
+
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      ticket: {
+        id: ticket.id,
+        writerId: ticket.writerId,
+        writerName: displayName(ticket.writerFirstName, ticket.writerLastName),
+        writerEmail: ticket.writerEmail,
+        title: ticket.title,
+        status: ticket.status,
+        lastMessageAt: ticket.lastMessageAt,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+      },
+      messages: messages.map((message) => ({
+        ...message,
+        senderName: displayName(message.senderFirstName, message.senderLastName),
+      })),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/opinion-tickets/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل الاستفسار" });
+  }
+});
+
+// POST /api/v1/admin/opinion-tickets/:id/messages — editorial reply.
+router.post("/admin/opinion-tickets/:id/messages", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const text = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!text || text.length > 10_000) {
+      return res.status(400).json({ success: false, message: "نص الرد مطلوب ولا يتجاوز 10000 حرف" });
+    }
+    const [ticket] = await db.select().from(opinionTickets).where(eq(opinionTickets.id, req.params.id)).limit(1);
+    if (!ticket) return res.status(404).json({ success: false, message: "الاستفسار غير موجود" });
+    if (ticket.status === "closed") return res.status(400).json({ success: false, message: "تم إغلاق هذا الاستفسار" });
+
+    const parentMessageId = typeof req.body?.parentMessageId === "string" ? req.body.parentMessageId : null;
+    if (parentMessageId) {
+      const [parent] = await db.select({ ticketId: opinionTicketMessages.ticketId }).from(opinionTicketMessages)
+        .where(eq(opinionTicketMessages.id, parentMessageId)).limit(1);
+      if (!parent || parent.ticketId !== ticket.id) {
+        return res.status(400).json({ success: false, message: "مرجع الرد غير صالح" });
+      }
+    }
+
+    const now = new Date();
+    const [message] = await db.insert(opinionTicketMessages).values({
+      ticketId: ticket.id,
+      senderId: admin.userId,
+      senderRole: "admin",
+      message: text,
+      parentMessageId,
+    }).returning();
+    await db.update(opinionTickets).set({
+      lastMessageAt: now,
+      lastReadByAdminAt: now,
+      updatedAt: now,
+      ...(ticket.status === "open" ? { status: "answered" } : {}),
+    }).where(eq(opinionTickets.id, ticket.id));
+    res.status(201).json({ success: true, message: "تم إرسال الرد بنجاح", data: message });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/opinion-tickets/:id/messages error:", error);
+    res.status(500).json({ success: false, message: "تعذّر إرسال الرد" });
+  }
+});
+
+// PATCH /api/v1/admin/opinion-tickets/:id/status — open / answered / closed.
+router.patch("/admin/opinion-tickets/:id/status", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const status = String(req.body?.status ?? "");
+    if (!(ADMIN_TICKET_STATUSES as readonly string[]).includes(status)) {
+      return res.status(400).json({ success: false, message: "حالة الاستفسار غير صالحة" });
+    }
+    const [ticket] = await db.update(opinionTickets).set({ status, updatedAt: new Date() })
+      .where(eq(opinionTickets.id, req.params.id)).returning();
+    if (!ticket) return res.status(404).json({ success: false, message: "الاستفسار غير موجود" });
+    res.json({ success: true, ticket });
+  } catch (error) {
+    console.error("[Mobile API] PATCH /admin/opinion-tickets/:id/status error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحديث حالة الاستفسار" });
+  }
+});
+
+// ==========================================
 // Contributor Dashboard Analytics (writer / reporter)
 // GET /api/v1/contributor/analytics
 // ==========================================
@@ -7609,10 +8672,22 @@ router.get("/contributor/analytics", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "هذه اللوحة خاصة بالكتّاب والمراسلين" });
     }
 
-    // Fetch articles based on role
+    // Fetch articles based on role.
+    // أعمدة محددة فقط — select() الكامل كان يجلب نصوص المقالات وحقول SEO
+    // لكل أرشيف الكاتب، وهو سبب بطء فتح لوحة الأداء في التطبيق.
     const isOpinionAuthor = roleNames.includes("opinion_author");
     const myArticles = await db
-      .select()
+      .select({
+        id: articles.id,
+        title: articles.title,
+        status: articles.status,
+        reviewStatus: articles.reviewStatus,
+        reviewNotes: articles.reviewNotes,
+        views: articles.views,
+        publishedAt: articles.publishedAt,
+        createdAt: articles.createdAt,
+        updatedAt: articles.updatedAt,
+      })
       .from(articles)
       .where(
         isOpinionAuthor
@@ -7806,6 +8881,66 @@ router.get("/contributor/analytics", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// GET /api/v1/contributor/schedule
+// موعد كاتب الرأي الأسبوعي: البانر بحالاته، أو بيانات اختيار اليوم لمن لا يوم له
+// ==========================================
+router.get("/contributor/schedule", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const userId = session.userId;
+    if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
+      return res.json({ success: true, banner: null, canChoose: false });
+    }
+    const banner = await getWriterScheduleBanner(userId);
+    if (banner) {
+      return res.json({ success: true, banner, canChoose: false });
+    }
+    const canChoose = await canSelfAssignSchedule(userId);
+    res.json({
+      success: true,
+      banner: null,
+      canChoose,
+      dayLoads: canChoose ? await getWriterDayLoads() : [],
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/schedule error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب موعد النشر" });
+  }
+});
+
+// ==========================================
+// POST /api/v1/contributor/schedule
+// الكاتب يختار يومه بنفسه — مرة واحدة فقط، والتغيير بعدها للإدارة
+// ==========================================
+router.post("/contributor/schedule", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const userId = session.userId;
+    if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
+      return res.status(403).json({ success: false, message: "هذه الخاصية لكتّاب الرأي" });
+    }
+    const weekday = Number(req.body?.weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      return res.status(400).json({ success: false, message: "اليوم المحدد غير صالح" });
+    }
+    const result = await selfAssignWriterSchedule(userId, weekday);
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+    res.json({ success: true, schedule: result.schedule });
+  } catch (error) {
+    console.error("[Mobile API] POST /contributor/schedule error:", error);
+    res.status(500).json({ success: false, message: "تعذر حفظ اليوم المحدد" });
+  }
+});
+
+// ==========================================
 // Contributor Ranking
 // GET /api/v1/contributor/ranking
 // ==========================================
@@ -7837,6 +8972,751 @@ router.get("/contributor/ranking", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] GET /contributor/ranking error:", error);
     res.status(500).json({ success: false, message: "فشل في جلب الترتيب" });
+  }
+});
+
+// ==========================================
+// مساحة الكاتب في التطبيق — نظيرة /api/opinion-author/* بمصادقة جلسة العضو
+// (verifyMemberSession) بدل Passport. تستهلك نفس opinionAuthorWorkspaceService
+// فتبقى لوحة الويب والتطبيق متطابقتين. خاصة بدور opinion_author.
+// ==========================================
+
+async function requireOpinionAuthorSession(req: Request): Promise<{ userId: string } | null> {
+  const session = await verifyMemberSession(req);
+  if (!session) return null;
+  if (!(await userHasAnyRole(session.userId, ["opinion_author"]))) return null;
+  return session;
+}
+
+// حد لطلبات الذكاء الاصطناعي — تكلفتها حقيقية، بنفس سقف نسخة الويب (30/ربع ساعة)
+const mobileWriterAiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "أخذ المساعد استراحة قصيرة؛ حاول بعد دقائق" },
+});
+
+// GET /api/v1/contributor/workspace — المكتب، التتبع، نبض القراء، المتابعة، التقويم، موجز الشهر
+router.get("/contributor/workspace", async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const workspace = await getOpinionAuthorWorkspace(session.userId);
+    res.json({ success: true, ...workspace });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/workspace error:", error);
+    res.status(500).json({ success: false, message: "تعذر تجهيز مساحة الكاتب" });
+  }
+});
+
+// GET /api/v1/contributor/ideas — ثلاث أفكار مقترحة (AI، عند الطلب فقط)
+router.get("/contributor/ideas", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const result = await generateWriterIdeas(session.userId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/ideas error:", error);
+    res.status(502).json({ success: false, message: "تعذر توليد الأفكار الآن" });
+  }
+});
+
+// POST /api/v1/contributor/idea-coach — «تحدث مع فكرتك»
+router.post("/contributor/idea-coach", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const idea = String(req.body?.idea || "").trim();
+    if (idea.length < 12 || idea.length > 3000) {
+      return res.status(400).json({ success: false, message: "اكتب فكرتك بتفصيل بسيط أولًا" });
+    }
+    const result = await coachWriterIdea(session.userId, idea);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Mobile API] POST /contributor/idea-coach error:", error);
+    res.status(502).json({ success: false, message: "تعذر تطوير الفكرة الآن" });
+  }
+});
+
+// POST /api/v1/contributor/article-review — «قارئ سبق الأول» لمقال يملكه الكاتب
+router.post("/contributor/article-review", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const articleId = String(req.body?.articleId || "").trim();
+    if (!articleId) return res.status(400).json({ success: false, message: "بيانات المقال غير صالحة" });
+    const result = await reviewWriterArticle(session.userId, articleId, {});
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof Error && error.message === "ARTICLE_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "المقال غير موجود أو لا تملكه" });
+    }
+    console.error("[Mobile API] POST /contributor/article-review error:", error);
+    res.status(502).json({ success: false, message: "تعذرت مراجعة المقال الآن" });
+  }
+});
+
+// GET /api/v1/contributor/style-profile — بصمة الكاتب الأسلوبية
+router.get("/contributor/style-profile", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const result = await getWriterStyleProfile(session.userId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/style-profile error:", error);
+    res.status(502).json({ success: false, message: "تعذر بناء ملف الأسلوب الآن" });
+  }
+});
+
+// ==========================================
+// مسابقة توقّعات كأس العالم — نسخة الموبايل (Bearer)
+// ==========================================
+//
+// نظيرة /api/world-cup/predictions/* لكن بمصادقة جلسة العضو (verifyMemberSession)
+// بدل Passport. تستهلك نفس wcPredictionsService فالنتائج/التسوية موحّدة بين
+// الويب والتطبيق. القراءات العامة (leaderboard/match) متاحة بلا دخول؛ today
+// تُرفق توقّع المستخدم متى كان مسجّلًا؛ POST/mine تتطلّب جلسة.
+
+const WC_PRED_NOT_CONFIGURED = { configured: false, message: "مسابقة التوقّعات غير مفعّلة حاليًا" };
+
+function wcPredGuard(res: Response): boolean {
+  if (!isWorldCupConfigured()) {
+    res.status(503).json(WC_PRED_NOT_CONFIGURED);
+    return false;
+  }
+  return true;
+}
+
+// توقّعات البطولة طويلة المدى (البطل/الهدّاف) — خلف نفس علم الويب المستقل
+// WC_LONG_PREDICTIONS_ENABLED (إطلاق ويب-أولًا متدرّج، انظر wcPredictions.ts).
+function wcLongGuard(res: Response): boolean {
+  if (!wcPredGuard(res)) return false;
+  if (process.env.WC_LONG_PREDICTIONS_ENABLED !== "true") {
+    res.status(503).json({ enabled: false, message: "توقّعات البطولة قيد الإطلاق" });
+    return false;
+  }
+  return true;
+}
+
+router.get("/world-cup/predictions/today", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    const matches = await getUpcomingPredictableMatches(session?.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ matches });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] today error:", error);
+    res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
+  }
+});
+
+router.post("/world-cup/predictions", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const fixtureId = Number(req.body?.fixtureId);
+    const predHome = Number(req.body?.predHome);
+    const predAway = Number(req.body?.predAway);
+    if (!Number.isFinite(fixtureId)) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const result = await submitPrediction(session.userId, fixtureId, predHome, predAway);
+    if (!result.ok) {
+      const map = {
+        NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+        LOCKED: { code: 409, message: "أُغلق التوقّع — انطلقت المباراة" },
+        INVALID: { code: 400, message: "نتيجة غير صالحة" },
+        DRAW_NOT_ALLOWED: { code: 400, message: "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ prediction: result.prediction });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+router.get("/world-cup/predictions/mine", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ predictions: await getMyPredictions(session.userId) });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] mine error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعاتك حاليًا" });
+  }
+});
+
+router.get("/world-cup/predictions/leaderboard", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  try {
+    // مسؤولو النظام مخفيّون عن بقية الزوار (انظر wcPredictionsService.getLeaderboard) —
+    // نحدّد صاحب الجلسة (إن وُجدت) ليبقى ظاهرًا لنفسه فقط، ولا نُخزّن الرد في
+    // الكاش العام حين يكون مخصّصًا لمستخدم مسجَّل.
+    const session = await verifyMemberSession(req);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    // نفس عقد نقطة الويب: ?limit= (افتراضي 100، مقصوص 10..500) + العدد الكلي
+    // + صف الزائر ورتبته الحقيقية حتى لو كان خارج الصفحة المعروضة.
+    const limitRaw = Number(req.query?.limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.max(Math.trunc(limitRaw), 10), 500) : 100;
+    const [leaders, meta] = await Promise.all([
+      getLeaderboard(limit, session?.userId),
+      getWcLeaderboardMeta(session?.userId),
+    ]);
+    res.json({ leaders, total: meta.total, viewer: meta.viewer });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] leaderboard error:", error);
+    res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
+  }
+});
+
+router.get("/world-cup/predictions/match/:fixtureId", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId)) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  try {
+    res.set("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
+    res.json(await getMatchPredictionsSummary(fixtureId));
+  } catch (error) {
+    console.error("[Mobile WC Predictions] match summary error:", error);
+    res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
+  }
+});
+
+// ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ─────────────────────────
+// نظيرة /api/world-cup/predictions/long على الويب — نفس wcLongPredictionsService.
+
+router.get("/world-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!wcLongGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    res.json(await getWcLongPredictions(session?.userId));
+  } catch (error) {
+    console.error("[Mobile WC Predictions] long error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعات البطولة حاليًا" });
+  }
+});
+
+router.post("/world-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!wcLongGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const kind = String(req.body?.kind) as WcLongKind;
+    const teamId = req.body?.teamId != null ? Number(req.body.teamId) : undefined;
+    const playerId = req.body?.playerId != null ? Number(req.body.playerId) : undefined;
+    const result = await submitWcLongPrediction(session.userId, kind, { teamId, playerId });
+    if (!result.ok) {
+      const map = {
+        LOCKED: { code: 409, message: "أُغلق هذا التوقّع — تجاوزنا موعده في البطولة" },
+        INVALID: { code: 400, message: "اختيار غير صالح" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] long submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+// ==========================================
+// بوابة ميزات خليجي الاجتماعية — نفس علم GC_PREDICTIONS_ENABLED (من gcFeatureFlags)
+const GC_PRED_NOT_CONFIGURED = {
+  configured: false,
+  message: "ميزات خليجي 27 غير مفعّلة حاليًا",
+};
+
+function gcPredGuard(res: Response): boolean {
+  if (!isGcPredictionsEnabled()) {
+    res.status(503).json(GC_PRED_NOT_CONFIGURED);
+    return false;
+  }
+  return true;
+}
+
+// خليجي 27 — مرايا الموبايل: المجالس · الفانتازي · رجل المباراة (Bearer)
+// ==========================================
+// نظيرة مسارات الويب نفسها لكن بـ verifyMemberSession — الخدمات مشتركة.
+
+const GC_MAJLIS_REASONS: Record<string, { code: number; message: string }> = {
+  INVALID_NAME: { code: 400, message: "اسم المجلس بين حرفين و60 حرفًا" },
+  INVALID_CODE: { code: 400, message: "رمز الدعوة غير صالح" },
+  NOT_FOUND: { code: 404, message: "المجلس غير موجود — تأكد من الرمز" },
+  NOT_MEMBER: { code: 403, message: "هذا المجلس لأعضائه فقط" },
+  FULL: { code: 409, message: "اكتمل المجلس (50 عضوًا)" },
+  LIMIT_OWNED: { code: 409, message: "بلغت حدّ 5 مجالس" },
+  CODE_COLLISION: { code: 500, message: "تعذّر توليد رمز — حاول مجددًا" },
+  ACTIVE_DUELS: { code: 409, message: "أنه تحديات المجلس النشطة قبل المغادرة أو الحذف" },
+  INVALID_DATE: { code: 400, message: "صيغة التاريخ المطلوبة YYYY-MM-DD" },
+  INVALID_STAKE: { code: 400, message: "الرهان من 10 إلى 100 نقطة وبمضاعفات 10" },
+  SELF_CHALLENGE: { code: 400, message: "اختر عضوًا آخر للتحدي" },
+  FIXTURE_NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+  TARGET_NOT_MEMBER: { code: 400, message: "العضو المختار ليس في هذا المجلس" },
+  LOCKED: { code: 409, message: "أُغلق التحدي لانطلاق المباراة" },
+  DAILY_CAP: { code: 409, message: "بلغت سقف الرهان اليومي (200 نقطة)" },
+  INSUFFICIENT_POINTS: { code: 402, message: "رصيد نقاط الولاء غير كافٍ" },
+  DUPLICATE: { code: 409, message: "يوجد تحدٍ بينكما لهذه المباراة" },
+  NOT_ALLOWED: { code: 403, message: "لا تملك صلاحية تنفيذ هذا الإجراء" },
+  INVALID_STATE: { code: 409, message: "حالة التحدي لا تسمح بهذا الإجراء" },
+  EXPIRED: { code: 409, message: "انتهت مهلة التحدي وأُعيد الرهان" },
+};
+
+const mobileGcMajlisInviteLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { message: "طلبات كثيرة لرموز الدعوة. حاول بعد دقيقة." },
+});
+
+const mobileGcMajlisJoinLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { message: "طلبات انضمام كثيرة. حاول بعد دقيقة." },
+});
+
+router.get("/gulf-cup/majlis/invite/:code", mobileGcMajlisInviteLookupLimiter, async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    const result = await gcGetMajlisInvitePreview(String(req.params.code ?? ""));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الدعوة" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] invite preview error:", error);
+    res.status(502).json({ message: "تعذّر جلب بطاقة الدعوة حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/majlis", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcCreateMajlis(session.userId, String(req.body?.name ?? ""));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر إنشاء المجلس" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.status(201).json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] create error:", error);
+    res.status(502).json({ message: "تعذّر إنشاء المجلس حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/majlis/join", mobileGcMajlisJoinLimiter, async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcJoinMajlis(session.userId, String(req.body?.code ?? ""));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر الانضمام" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] join error:", error);
+    res.status(502).json({ message: "تعذّر الانضمام حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/mine", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ majalis: await gcGetMyMajalis(session.userId) });
+  } catch (error) {
+    console.error("[Mobile GC Majlis] mine error:", error);
+    res.status(502).json({ message: "تعذّر جلب مجالسك حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/leaderboard", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisLeaderboard(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الترتيب" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] leaderboard error:", error);
+    res.status(502).json({ message: "تعذّر جلب ترتيب المجلس حاليًا" });
+  }
+});
+
+router.delete("/gulf-cup/majlis/:id", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcLeaveMajlis(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر تنفيذ الطلب" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] leave error:", error);
+    res.status(502).json({ message: "تعذّر تنفيذ الطلب حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/matchday", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const date = typeof req.query?.date === "string" ? req.query.date : undefined;
+    const result = await gcGetMajlisMatchday(session.userId, String(req.params.id), date);
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب يوم المجلس" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] matchday error:", error);
+    res.status(502).json({ message: "تعذّر جلب يوم المجلس حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/fantasy", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisFantasy(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الفانتازي" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] fantasy error:", error);
+    res.status(502).json({ message: "تعذّر جلب فانتازي المجلس حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/champion-picks", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisChampionPicks(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب توقعات البطل" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] champion picks error:", error);
+    res.status(502).json({ message: "تعذّر جلب توقعات البطل حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/harvest", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisHarvest(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الحصاد" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] harvest error:", error);
+    res.status(502).json({ message: "تعذّر جلب حصاد المجلس حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/duels", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcListMajlisDuels(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب التحديات" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] duels list error:", error);
+    res.status(502).json({ message: "تعذّر جلب تحديات المجلس حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/majlis/:id/duels", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcCreateMajlisDuel({
+      challengerId: session.userId,
+      majlisId: String(req.params.id),
+      fixtureId: Number(req.body?.fixtureId),
+      challengedUserId: String(req.body?.challengedUserId ?? ""),
+      stake: Number(req.body?.stake),
+    });
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر إنشاء التحدي" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.status(201).json({ duel: result.data });
+  } catch (error) {
+    console.error("[Mobile GC Majlis] duel create error:", error);
+    res.status(502).json({ message: "تعذّر إنشاء التحدي حاليًا" });
+  }
+});
+
+for (const action of ["accept", "decline", "cancel"] as const) {
+  router.post(`/gulf-cup/majlis/duels/:duelId/${action}`, async (req: Request, res: Response) => {
+    if (!gcPredGuard(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+    res.set("Cache-Control", "private, no-store");
+    try {
+      const result = await gcActOnMajlisDuel(session.userId, String(req.params.duelId), action);
+      if (!result.ok) {
+        const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر تحديث التحدي" };
+        return res.status(m.code).json({ message: m.message, reason: result.reason });
+      }
+      res.json({ duel: result.data });
+    } catch (error) {
+      console.error(`[Mobile GC Majlis] duel ${action} error:`, error);
+      res.status(502).json({ message: "تعذّر تحديث التحدي حاليًا" });
+    }
+  });
+}
+
+router.get("/gulf-cup/majlis/notification-preference", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json(await gcGetMajlisNotificationPreference(session.userId));
+  } catch (error) {
+    console.error("[Mobile GC Majlis] notification preference error:", error);
+    res.status(502).json({ message: "تعذّر جلب إعداد الإشعارات" });
+  }
+});
+
+router.put("/gulf-cup/majlis/notification-preference", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ message: "enabled يجب أن تكون boolean" });
+  try {
+    res.json(await gcSetMajlisNotificationPreference(session.userId, req.body.enabled));
+  } catch (error) {
+    console.error("[Mobile GC Majlis] notification preference update error:", error);
+    res.status(502).json({ message: "تعذّر حفظ إعداد الإشعارات" });
+  }
+});
+
+const GC_FANTASY_REASONS: Record<string, string> = {
+  SIZE: `اختر ${GC_FANTASY_SQUAD_SIZE} لاعبين بالضبط`,
+  DUPLICATE: "لا تكرّر اللاعب نفسه",
+  CAPTAIN: "اختر قائدًا من ضمن تشكيلتك",
+  POOL_EMPTY: "قائمة اللاعبين غير متاحة بعد",
+  UNKNOWN_PLAYER: "أحد اللاعبين خارج قائمة البطولة",
+  OVER_BUDGET: `تجاوزت الميزانية (${GC_FANTASY_BUDGET} نقطة)`,
+};
+
+router.get("/gulf-cup/fantasy/pool", async (_req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1200");
+    res.json({
+      budget: GC_FANTASY_BUDGET,
+      squadSize: GC_FANTASY_SQUAD_SIZE,
+      players: await gcGetFantasyPool(),
+    });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] pool error:", error);
+    res.status(502).json({ message: "تعذّر جلب قائمة اللاعبين حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/fantasy/mine", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ squad: await gcGetMyFantasy(session.userId) });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] mine error:", error);
+    res.status(502).json({ message: "تعذّر جلب تشكيلتك حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/fantasy", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcSaveFantasySquad(session.userId, req.body?.playerIds, req.body?.captainId);
+    if (!result.ok) {
+      return res
+        .status(400)
+        .json({ message: GC_FANTASY_REASONS[result.reason] ?? "تعذّر حفظ التشكيلة" });
+    }
+    res.json({ saved: true, spent: result.data.spent });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] save error:", error);
+    res.status(502).json({ message: "تعذّر حفظ التشكيلة حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/fantasy/leaderboard", async (_req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1200");
+    res.json({ leaders: await gcGetFantasyLeaderboard() });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] leaderboard error:", error);
+    res.status(502).json({ message: "تعذّر جلب ترتيب الفانتازي حاليًا" });
+  }
+});
+
+const GC_MOTM_REASONS: Record<string, { code: number; message: string }> = {
+  INVALID_PLAYER: { code: 400, message: "اختر لاعبًا صالحًا" },
+  NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+  TOO_EARLY: { code: 409, message: "التصويت يُفتح من الشوط الثاني" },
+  NOT_STARTED: { code: 409, message: "التصويت يُفتح بعد انطلاق المباراة" },
+  CLOSED: { code: 409, message: "أُغلق التصويت لهذه المباراة" },
+};
+
+router.get("/gulf-cup/motm/:fixtureId", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  try {
+    const session = await verifyMemberSession(req);
+    if (session) res.set("Cache-Control", "private, no-store");
+    else res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+    res.json(await gcGetMotmBoard(fixtureId, session?.userId));
+  } catch (error) {
+    console.error("[Mobile GC MOTM] board error:", error);
+    res.status(502).json({ message: "تعذّر جلب التصويت حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/motm/:fixtureId", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcVoteMotm(
+      session.userId,
+      fixtureId,
+      String(req.body?.playerId ?? ""),
+      String(req.body?.playerName ?? ""),
+    );
+    if (!result.ok) {
+      const m = GC_MOTM_REASONS[result.reason] ?? { code: 500, message: "تعذّر حفظ الصوت" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ saved: true });
+  } catch (error) {
+    console.error("[Mobile GC MOTM] vote error:", error);
+    res.status(502).json({ message: "تعذّر حفظ الصوت حاليًا" });
+  }
+});
+
+// ==========================================
+// سجلّ البطولات الموحّد (Sabq Sports 2.0)
+// GET /api/v1/sports/tournaments — البطولات المرئية للتطبيق (visibleApp)
+// GET /api/v1/sports/hub         — payload مجمّع بطلب واحد: بطولات + مباريات
+//                                  قادمة/نتائج + متصدّر/هدّاف + «مباشر الآن»
+// نفس مصدر حقيقة الويب (sports_tournaments) — تغيير الداشبورد يسري خلال
+// دقيقة بدون تحديث من الستور. لا تمسّ endpoints القائمة أعلاه إطلاقًا.
+// ==========================================
+router.get("/sports/tournaments", async (_req: Request, res: Response) => {
+  try {
+    const { listVisibleTournaments } = await import("../services/sportsTournamentsService");
+    const tournaments = await listVisibleTournaments("app");
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json({ tournaments });
+  } catch (error) {
+    console.error("[Mobile Sports] tournaments error:", error);
+    res.json({ tournaments: [] });
+  }
+});
+
+router.get("/sports/hub", async (_req: Request, res: Response) => {
+  try {
+    const { getSportsHub } = await import("../services/sportsHubService");
+    const hub = await getSportsHub("app");
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json(hub);
+  } catch (error) {
+    console.error("[Mobile Sports] hub error:", error);
+    res.status(502).json({ message: "تعذر جلب هب الرياضة حاليًا" });
   }
 });
 

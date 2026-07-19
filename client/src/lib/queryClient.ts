@@ -24,6 +24,30 @@ export function apiUrl(path: string): string {
   return path;
 }
 
+/**
+ * بوابة الرياضة ومركز الانتقالات والمونديال يختارون ar/en من ?lang= أو Accept-Language.
+ * متصفح إنجليزي على sabq.org العربي كان يستلم تسميات إنجليزية (منتخبات/ملاعب/
+ * جولات المونديال ونوافذ الانتقالات) رغم الواجهة العربية. نفرض لغة المسار:
+ * /en → en، وإلا ar — ما لم يُمرَّر lang صراحةً.
+ */
+export function withSportsLang(path: string): string {
+  const needsLang =
+    path.includes("/api/sports") ||
+    path.includes("/api/transfer-center") ||
+    path.includes("/api/world-cup") ||
+    path.includes("/api/rsl") ||
+    path.includes("/api/kings-cup") ||
+    path.includes("/api/gulf-cup") ||
+    path.includes("/api/asian-cup");
+  if (!needsLang) return path;
+  if (/[?&]lang=/.test(path)) return path;
+  const lang =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/en")
+      ? "en"
+      : "ar";
+  return path + (path.includes("?") ? "&" : "?") + `lang=${lang}`;
+}
+
 function getCsrfTokenFromCookie(): string | null {
   const match = document.cookie.match(/csrf-token=([^;]+)/);
   return match ? match[1] : null;
@@ -497,7 +521,7 @@ export async function apiRequest<T = any>(
         reject(new Error('Network error'));
       });
 
-      xhr.open(options?.method || 'POST', apiUrl(url));
+      xhr.open(options?.method || 'POST', apiUrl(withSportsLang(url)));
       xhr.withCredentials = true;
       
       const token = getCsrfToken();
@@ -527,7 +551,7 @@ export async function apiRequest<T = any>(
       headers["x-csrf-token"] = currentCsrfToken;
     }
     
-    const res = await fetch(apiUrl(url), {
+    const res = await fetch(apiUrl(withSportsLang(url)), {
       method,
       headers,
       body: typeof options?.body === 'string' ? options.body : undefined,
@@ -568,7 +592,7 @@ export function getQueryFn<T = unknown>(options: {
   silent?: boolean;
 }): QueryFunction<T> {
   const { on401: unauthorizedBehavior, silent = false } = options;
-  return async ({ queryKey }) => {
+  return async ({ queryKey, signal }) => {
     let url = '';
     const params: Record<string, string> = {};
     
@@ -589,8 +613,9 @@ export function getQueryFn<T = unknown>(options: {
       url += (url.includes('?') ? '&' : '?') + queryString;
     }
     
-    const res = await fetch(apiUrl(url), {
+    const res = await fetch(apiUrl(withSportsLang(url)), {
       credentials: "include",
+      signal,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

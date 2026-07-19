@@ -13,6 +13,34 @@ const CLOUDFLARE_BLOCKED_PATHS = [
 ];
 
 const ALLOWED_EXTERNAL_HOSTS = ['sabq.org'];
+const NEWS_IMAGES_R2_HOSTS = ['media.sabq.org'];
+
+const NEWS_IMAGES_R2_WIDTHS = [480, 960, 1600] as const;
+
+function isNewsImagesR2Url(url: URL): boolean {
+  return NEWS_IMAGES_R2_HOSTS.includes(url.hostname.toLowerCase()) &&
+    /^\/news\/\d{4}\/\d{2}\/[a-f0-9-]+\/w\d+\.webp$/i.test(url.pathname);
+}
+
+function availableNewsImagesR2Widths(url: URL): number[] {
+  const deliveredWidth = Number(url.pathname.match(/\/w(\d+)\.webp$/i)?.[1]);
+  if (!Number.isFinite(deliveredWidth) || deliveredWidth <= 0) return [];
+  return Array.from(new Set([
+    ...NEWS_IMAGES_R2_WIDTHS.filter((width) => width < deliveredWidth),
+    deliveredWidth,
+  ])).sort((a, b) => a - b);
+}
+
+function buildNewsImagesR2Variant(url: URL, requestedWidth?: number): string {
+  if (!requestedWidth || !isNewsImagesR2Url(url)) return url.toString();
+  const availableWidths = availableNewsImagesR2Widths(url);
+  const variantWidth =
+    availableWidths.find((width) => width >= requestedWidth) ||
+    availableWidths[availableWidths.length - 1];
+  if (!variantWidth) return url.toString();
+  url.pathname = url.pathname.replace(/\/w\d+\.webp$/i, `/w${variantWidth}.webp`);
+  return url.toString();
+}
 
 export function normalizeImageSrc(src: string): string {
   if (!src) return src;
@@ -56,6 +84,9 @@ export function buildCloudflareUrl(src: string, options?: CloudflareUrlOptions):
   if (src.startsWith('http')) {
     try {
       const url = new URL(src);
+      if (isNewsImagesR2Url(url)) {
+        return buildNewsImagesR2Variant(url, options?.width);
+      }
       const isAllowedHost = ALLOWED_EXTERNAL_HOSTS.some(host => url.hostname.endsWith(host));
       if (!isAllowedHost) return src;
       imagePath = url.pathname + url.search;
@@ -91,6 +122,19 @@ export const RESPONSIVE_WIDTHS = [320, 640, 960, 1280, 1920] as const;
 
 export function generateResponsiveSrcSet(src: string, quality: number = 85): string {
   if (!src) return '';
+
+  try {
+    const r2Url = new URL(src);
+    if (isNewsImagesR2Url(r2Url)) {
+      return availableNewsImagesR2Widths(r2Url).map((width) => {
+        const variant = new URL(r2Url.toString());
+        variant.pathname = variant.pathname.replace(/\/w\d+\.webp$/i, `/w${width}.webp`);
+        return `${variant.toString()} ${width}w`;
+      }).join(', ');
+    }
+  } catch {
+    // Relative paths continue through the existing Cloudflare Image Resizing path.
+  }
 
   if (src.startsWith('http') && !src.includes('imagedelivery.net') && !ALLOWED_EXTERNAL_HOSTS.some(host => src.includes(host))) return '';
   if (src.startsWith('data:') || src.startsWith('blob:')) return '';

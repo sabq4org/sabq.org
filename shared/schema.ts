@@ -899,6 +899,10 @@ export const articles = pgTable("articles", {
   
   isFeatured: boolean("is_featured").default(false).notNull(),
   views: integer("views").default(0).notNull(),
+  /** Manual override for avg read time (seconds); when set, ai-insights uses this instead of reading_history AVG */
+  avgReadTimeOverride: integer("avg_read_time_override"),
+  /** Manual override for completion rate (0–100); when set, ai-insights uses this instead of estimated calculation */
+  completionRateOverride: integer("completion_rate_override"),
   displayOrder: bigint("display_order", { mode: "number" }).default(0).notNull(),
   seo: jsonb("seo").$type<{
     metaTitle?: string;
@@ -1073,21 +1077,53 @@ export const rssFeeds = pgTable("rss_feeds", {
 export const radarSources = pgTable("radar_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  // لرصدات إكس الرابط اصطناعي فريد بصيغة x:{xType}:{xValue} — يمنع تكرار الرصدة
   url: text("url").notNull().unique(),
-  type: text("type").notNull().default("rss"), // rss | json
+  type: text("type").notNull().default("rss"), // rss | json | x (رصدة إكس)
   language: text("language").notNull().default("en"), // لغة المصدر (en, es, tr, fr, ...)
   categorySlug: text("category_slug"), // تلميح تصنيف افتراضي لمواد هذا المصدر
   fetchIntervalMinutes: integer("fetch_interval_minutes").notNull().default(15),
   isActive: boolean("is_active").notNull().default(true),
   lastFetchedAt: timestamp("last_fetched_at"),
   lastError: text("last_error"), // null = آخر جلب نجح
+  // ---- رصدات إكس (type = "x") — «نغذيه بكلمة ويبدأ يرصد» ----
+  xType: text("x_type"), // keyword | hashtag | account | query | trend
+  xValue: text("x_value"), // الكلمة/الهاشتاق/الحساب/استعلام البحث، أو woeid للترند
+  xProvider: text("x_provider"), // auto (افتراضي) | official | twitterapiio — القرار الهجين
+  xSinceId: text("x_since_id"), // مؤشر آخر تغريدة — يجلب الجديد فقط فيخفض الفاتورة
+  // ---- طبقة التشغيل (حزم البذر / الفرز) — additive اختياري ----
+  tier: text("tier"), // A | B | C — أولوية الجلب والعرض
+  region: text("region"), // us | gulf | global | …
+  weight: real("weight").notNull().default(1), // وزن في الزخم/العرض (سعودي/خليجي أعلى)
+  packId: text("pack_id"), // اسم حزمة البذر للتتبع (us-wires, x-news-accounts, …)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+/** قصص مجمّعة عبر المصادر — وحدة الزخم/الصلة/الفجوات v2 */
+export const radarStories = pgTable("radar_stories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fingerprint: text("fingerprint").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  status: text("status").notNull().default("active"), // active | archived
+  sourceCount: integer("source_count").notNull().default(1),
+  topNewsValue: integer("top_news_value").notNull().default(0),
+  saudiRelevance: integer("saudi_relevance").notNull().default(0), // 0–100
+  momentumScore: integer("momentum_score").notNull().default(0), // 0–100
+  embedding: jsonb("embedding").$type<number[]>(), // متجه مخزّن لتفادي إعادة التضمين
+  firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_radar_stories_status_seen").on(table.status, table.lastSeenAt.desc()),
+  index("idx_radar_stories_fingerprint").on(table.fingerprint),
+]);
+
 export const radarItems = pgTable("radar_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sourceId: varchar("source_id").references(() => radarSources.id, { onDelete: "cascade" }).notNull(),
+  storyId: varchar("story_id").references(() => radarStories.id, { onDelete: "set null" }),
   guid: text("guid").notNull(), // معرف المادة لدى المصدر (guid/link) — أساس منع التكرار
   link: text("link").notNull(),
   originalTitle: text("original_title").notNull(),
@@ -1111,6 +1147,13 @@ export const radarItems = pgTable("radar_items", {
   translatedTitle: text("translated_title"), // ترجمة تفسيرية لا حرفية
   translatedSummary: text("translated_summary"),
   suggestedCategorySlug: text("suggested_category_slug"),
+  // تفاعل X مهيكل (likes/retweets/replies/views) — additive
+  metrics: jsonb("metrics").$type<{
+    likes?: number;
+    retweets?: number;
+    replies?: number;
+    views?: number;
+  }>(),
   // مسودة التحويل التحريري الكامل — تطابق حقول فورم النشر
   draft: jsonb("draft").$type<{
     title: string;
@@ -1137,6 +1180,18 @@ export const radarItems = pgTable("radar_items", {
   uniqueIndex("uq_radar_items_source_guid").on(table.sourceId, table.guid),
   index("idx_radar_items_status").on(table.status, table.fetchedAt.desc()),
   index("idx_radar_items_news_value").on(table.newsValue),
+  index("idx_radar_items_story").on(table.storyId),
+]);
+
+export const radarStorySnapshots = pgTable("radar_story_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storyId: varchar("story_id").references(() => radarStories.id, { onDelete: "cascade" }).notNull(),
+  capturedAt: timestamp("captured_at").defaultNow().notNull(),
+  mentionCount: integer("mention_count").notNull(),
+  sourceCount: integer("source_count").notNull(),
+  xEngagement: integer("x_engagement").notNull().default(0),
+}, (table) => [
+  index("idx_snapshots_story_time").on(table.storyId, table.capturedAt.desc()),
 ]);
 
 export const radarAlertRules = pgTable("radar_alert_rules", {
@@ -1154,6 +1209,7 @@ export const insertRadarSourceSchema = createInsertSchema(radarSources).omit({
   id: true,
   lastFetchedAt: true,
   lastError: true,
+  xSinceId: true, // حالة داخلية للجالب لا يحددها العميل
   createdAt: true,
   updatedAt: true,
 });
@@ -1167,6 +1223,74 @@ export type InsertRadarSource = z.infer<typeof insertRadarSourceSchema>;
 export type RadarItem = typeof radarItems.$inferSelect;
 export type RadarAlertRule = typeof radarAlertRules.$inferSelect;
 export type InsertRadarAlertRule = z.infer<typeof insertRadarAlertRuleSchema>;
+
+// ============================================
+// رادار الفجوات التحريرية (Coverage Gap Radar) — مواضيع رائجة خارجيًا رصدها
+// الرادار الذكي بلا تغطية داخلية مقابلة (منشور/مسودة/مجدول).
+// المحرك: server/services/coverageGapMatcher.ts — المسارات: server/routes/coverageGaps.ts
+// ============================================
+
+export const coverageGaps = pgTable("coverage_gaps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  radarItemId: varchar("radar_item_id").references(() => radarItems.id, { onDelete: "cascade" }).notNull(),
+  // فجوات v2: وحدة القصة (additive) — عند التفعيل تُنشأ/تُحدَّث فجوة واحدة لكل قصة
+  storyId: varchar("story_id").references(() => radarStories.id, { onDelete: "set null" }),
+  topicFingerprint: text("topic_fingerprint").notNull(), // مفتاح موضوع مُطبَّع للمطابقة ومنع التكرار
+  heatScore: integer("heat_score").notNull().default(0), // حرارة الموضوع (من قيمة الرادار الإخبارية)
+  relevanceScore: integer("relevance_score"), // صلة سعودية 0–100 (v2)
+  momentumScore: integer("momentum_score"), // زخم 0–100 (v2)
+  gapReason: jsonb("gap_reason").$type<string[]>(), // أسباب مهيكلة للواجهة
+  // open → drafting → scheduled → covered | dismissed
+  status: text("status").notNull().default("open"),
+  firstDetectedAt: timestamp("first_detected_at").defaultNow().notNull(),
+  coveredByArticleId: varchar("covered_by_article_id").references(() => articles.id, { onDelete: "set null" }),
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),
+  dismissedBy: varchar("dismissed_by").references(() => users.id, { onDelete: "set null" }),
+  dismissedAt: timestamp("dismissed_at"),
+  dismissReason: text("dismiss_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_coverage_gaps_radar_item").on(table.radarItemId),
+  index("idx_coverage_gaps_status").on(table.status, table.firstDetectedAt.desc()),
+  index("idx_coverage_gaps_fingerprint").on(table.topicFingerprint),
+  index("idx_coverage_gaps_story").on(table.storyId),
+]);
+
+export const coverageGapsRelations = relations(coverageGaps, ({ one }) => ({
+  radarItem: one(radarItems, {
+    fields: [coverageGaps.radarItemId],
+    references: [radarItems.id],
+  }),
+  story: one(radarStories, {
+    fields: [coverageGaps.storyId],
+    references: [radarStories.id],
+  }),
+  coveredByArticle: one(articles, {
+    fields: [coverageGaps.coveredByArticleId],
+    references: [articles.id],
+  }),
+  assignee: one(users, {
+    fields: [coverageGaps.assignedTo],
+    references: [users.id],
+  }),
+  dismissedByUser: one(users, {
+    fields: [coverageGaps.dismissedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertCoverageGapSchema = createInsertSchema(coverageGaps).omit({
+  id: true,
+  firstDetectedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CoverageGap = typeof coverageGaps.$inferSelect;
+export type InsertCoverageGap = z.infer<typeof insertCoverageGapSchema>;
+export type RadarStory = typeof radarStories.$inferSelect;
+export type RadarStorySnapshot = typeof radarStorySnapshots.$inferSelect;
 
 // User reading history for recommendations (ENHANCED for advanced analytics)
 export const readingHistory = pgTable("reading_history", {
@@ -1385,7 +1509,10 @@ export const userPreferences = pgTable("user_preferences", {
   preferredAuthors: jsonb("preferred_authors").$type<string[]>(), // array of user IDs
   blockedCategories: jsonb("blocked_categories").$type<string[]>(), // array of category IDs to hide
   recommendationFrequency: text("recommendation_frequency").default("daily"), // daily, weekly, never
-  
+
+  /** Personal dashboard shell theme; null/undefined = follow org default from system_settings */
+  dashboardThemeId: text("dashboard_theme_id"),
+
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -1731,6 +1858,14 @@ export const userNotificationPrefs = pgTable("user_notification_prefs", {
   mostRead: boolean("most_read").default(true).notNull(),
   webPush: boolean("web_push").default(false).notNull(),
   dailyDigest: boolean("daily_digest").default(false).notNull(),
+  // إشعارات مجالس توقّعات خليجي (تذكير الإقفال/تغيّر الترتيب/انضمام عضو).
+  gulfCupMajlis: boolean("gulf_cup_majlis").default(true).notNull(),
+  // «وضع المباريات فقط» — عند التفعيل يكتم الملخص اليومي وإشعارات المقالات الجديدة
+  // (ArticlePublished + متابعة الكلمات) ويُبقي إشعارات المباريات (sports.*) والعاجل.
+  matchesOnly: boolean("matches_only").default(false).notNull(),
+  // إشعارات غرفة الأخبار التحريرية (مسودات المراسلين «DraftSubmitted») — للمحررين
+  // والأدمن فقط. افتراضيًا مفعّلة؛ إيقافها يكتم هذه الإشعارات بصرف النظر عن matchesOnly.
+  editorialDrafts: boolean("editorial_drafts").default(true).notNull(),
   quietHoursStart: text("quiet_hours_start").default("23:00"),
   quietHoursEnd: text("quiet_hours_end").default("08:00"),
   whatsappPhone: text("whatsapp_phone"),
@@ -1888,6 +2023,9 @@ export const wcPredictionMatches = pgTable("wc_prediction_matches", {
   awayTeamLogo: text("away_team_logo").notNull().default(""),
   finalHome: integer("final_home"),   // null until settled
   finalAway: integer("final_away"),   // null until settled
+  // ركلات الترجيح عند حسم خروج المغلوب — null ما لم تُحسم المباراة بالترجيح.
+  finalPenHome: integer("final_pen_home"),
+  finalPenAway: integer("final_pen_away"),
   // 'open' (accepting predictions) | 'locked' (kicked off) | 'settled'.
   status: text("status").notNull().default("open"),
   winnersCount: integer("winners_count").notNull().default(0),
@@ -1903,6 +2041,711 @@ export const wcPredictionMatches = pgTable("wc_prediction_matches", {
 
 export type WcPrediction = typeof wcPredictions.$inferSelect;
 export type WcPredictionMatch = typeof wcPredictionMatches.$inferSelect;
+
+// Long-term tournament predictions (champion / top scorer) for World Cup 2026.
+// One row per (userId, kind). WHY the extra `weight`/`lockedStage` vs the Gulf
+// Cup equivalent: the champion pool (10,000) is split WEIGHTED by each correct
+// voter's early-bird weight — the earlier you lock in, the bigger your share.
+// Weight is set at submit time from the live knockout stage: R32/earlier = 100,
+// R16 = 60, QF = 30, then the champion pick CLOSES at semi-final kickoff. The
+// top-scorer pool (3,000) is split EQUALLY (weight always 100) and closes at
+// quarter-final kickoff (end of round of 16). Settled once from the Final result
+// (champion) and the top-scorers board (top scorer) — same per-row settledAt
+// idempotency guard as wc_predictions.
+export const wcLongPredictions = pgTable("wc_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),         // champion pick (API-Football team id)
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerId: integer("player_id"),     // top-scorer pick (API-Football player id)
+  playerName: text("player_name"),
+  playerPhoto: text("player_photo"),
+  // Early-bird share weight as an integer percent (100 | 60 | 30). Champion
+  // only; top_scorer is always 100 (equal split).
+  weight: integer("weight").notNull().default(100),
+  // Knockout stage active when the pick was locked: 'r32' | 'r16' | 'qf'.
+  lockedStage: text("locked_stage").notNull().default("r32"),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_wc_long_user_kind").on(table.userId, table.kind),
+  index("idx_wc_long_kind").on(table.kind),
+]);
+
+export type WcLongPrediction = typeof wcLongPredictions.$inferSelect;
+
+// ============================================================================
+// Roshn Saudi League — predictions (the World-Cup engine applied to the
+// domestic league). Fixtures are NOT stored (fetched live from API-Football
+// via saudiLeagueService, league 307). Same 3-table shape and idempotency
+// guards as wc_predictions / wc_prediction_matches / wc_long_predictions.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess.
+export const rslPredictions = pgTable("rsl_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_rsl_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_rsl_pred_user").on(table.userId),
+  index("idx_rsl_pred_fixture").on(table.fixtureId),
+]);
+
+// Per-fixture settlement snapshot — same three purposes as wc_prediction_matches
+// (idempotency anchor / history display without live API / leaderboard joins).
+export const rslPredictionMatches = pgTable("rsl_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  winnersCount: integer("winners_count").notNull().default(0),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  pointsPool: integer("points_pool").notNull().default(500),
+  pointsPerWinner: integer("points_per_winner").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  index("idx_rsl_pred_match_status").on(table.status),
+]);
+
+export type RslPrediction = typeof rslPredictions.$inferSelect;
+export type RslPredictionMatch = typeof rslPredictionMatches.$inferSelect;
+
+// Season-long predictions (champion / top scorer). The champion pool (10,000)
+// splits WEIGHTED by early-bird weight measured in ROUND tiers instead of the
+// World Cup's knockout stages: rounds 1–11 = 100, 12–22 = 60, 23–29 = 30,
+// closed once round 30 kicks off. Top-scorer pool (3,000) splits equally and
+// closes once round 25 kicks off. Settled once when the season completes
+// (standings leader = champion, official scorers leader = top scorer).
+export const rslLongPredictions = pgTable("rsl_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerId: integer("player_id"),
+  playerName: text("player_name"),
+  playerPhoto: text("player_photo"),
+  weight: integer("weight").notNull().default(100), // 100 | 60 | 30 (champion)
+  lockedStage: text("locked_stage").notNull().default("early"), // early | mid | late
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_rsl_long_user_kind").on(table.userId, table.kind),
+  index("idx_rsl_long_kind").on(table.kind),
+]);
+
+export type RslLongPrediction = typeof rslLongPredictions.$inferSelect;
+
+// ============================================================================
+// Cup predictions — generic per-tournament engine (World Cup / roshn model),
+// COMPETITION-SCOPED so one table set serves كأس الملك (kings-cup) + كأس السوبر
+// (super-cup) — «توحيد» بلا تكرار جداول لكل بطولة. سلوكه مطابق لجداول rsl_*:
+// توقّع دقيق واحد لكل (مباراة، مستخدم)، وجائزة 500 نقطة تُقسَّم بالتساوي على
+// مصيبي النتيجة بالضبط. النتيجة المعكوسة لا تفوز أبدًا (يُحترم ترتيب المضيف/
+// الضيف عند التسوية). المباريات تُجلب حيّة (API-Football) — نخزّن فقط توقّعات
+// المستخدمين ولقطة تسوية كل مباراة. التوقّعات طويلة المدى (البطل/الهدّاف) تُخزَّن
+// في sports_pool_long الموحّد. مفتاح fixture_id عالمي فريد (API-Football) عبر
+// كل البطولات فيبقى أحادي التوقّع لكل مباراة.
+export const cupPredictions = pgTable("cup_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitionSlug: text("competition_slug").notNull(),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_cup_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_cup_pred_comp_user").on(table.competitionSlug, table.userId),
+  index("idx_cup_pred_fixture").on(table.fixtureId),
+]);
+
+export const cupPredictionMatches = pgTable("cup_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  competitionSlug: text("competition_slug").notNull(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  winnersCount: integer("winners_count").notNull().default(0),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  pointsPool: integer("points_pool").notNull().default(500),
+  pointsPerWinner: integer("points_per_winner").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  index("idx_cup_pred_match_comp_status").on(table.competitionSlug, table.status),
+]);
+
+export type CupPrediction = typeof cupPredictions.$inferSelect;
+export type CupPredictionMatch = typeof cupPredictionMatches.$inferSelect;
+
+// ============================================================================
+// Asian Cup 2027 — Smart Predictions Game
+// Fixtures are NOT stored (fetched live from API-Football via asianCupService).
+// Unlike the World Cup pool-split, scoring here is SKILL-BASED and per-user:
+// tier points (outcome / margin / exact) × boldness multiplier (rewards
+// correctly calling unlikely outcomes, derived from the model win-probability)
+// × streak multiplier. Each settled row stores the full breakdown so the UI can
+// explain exactly how a score was earned, and so settlement stays idempotent.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess + the
+// settled breakdown.
+export const acPredictions = pgTable("ac_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  // 'pending' until the match settles, then 'correct' (outcome hit) | 'incorrect'.
+  status: text("status").notNull().default("pending"),
+  // Per-tier hits, set at settlement (margin/exact imply outcome).
+  outcomeHit: boolean("outcome_hit").notNull().default(false),
+  marginHit: boolean("margin_hit").notNull().default(false),
+  exactHit: boolean("exact_hit").notNull().default(false),
+  // Multipliers actually applied, stored ×100 (e.g. 125 = ×1.25) for transparency.
+  boldnessMult: integer("boldness_mult").notNull().default(100),
+  streakMult: integer("streak_mult").notNull().default(100),
+  // Final skill-based points credited for this match (0 when outcome missed).
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_ac_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_ac_pred_user").on(table.userId),
+  index("idx_ac_pred_fixture").on(table.fixtureId),
+  // "user history ordered by kickoff" + streak recomputation at settlement.
+  index("idx_ac_pred_user_settled").on(table.userId, table.settledAt),
+]);
+
+// Per-fixture state. Holds the pre-kickoff model probabilities snapshot (frozen
+// once the match locks) used to price boldness, plus the settlement anchor and
+// display snapshots — same rationale as wc_prediction_matches.
+export const acPredictionMatches = pgTable("ac_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamId: integer("home_team_id").notNull().default(0),
+  awayTeamId: integer("away_team_id").notNull().default(0),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  // Model win-probabilities snapshot as whole percents (0-100), frozen at lock.
+  // boldness for a pick reads the percent of the predicted outcome from here.
+  probHome: integer("prob_home").notNull().default(33),
+  probDraw: integer("prob_draw").notNull().default(34),
+  probAway: integer("prob_away").notNull().default(33),
+  finalHome: integer("final_home"),   // null until settled
+  finalAway: integer("final_away"),   // null until settled
+  // 'open' (accepting predictions) | 'locked' (kicked off) | 'settled'.
+  status: text("status").notNull().default("open"),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  outcomeWinners: integer("outcome_winners").notNull().default(0), // got the result right
+  exactWinners: integer("exact_winners").notNull().default(0),     // nailed the scoreline
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),  // THE idempotency guard
+}, (table) => [
+  index("idx_ac_pred_match_status").on(table.status),
+]);
+
+export type AcPrediction = typeof acPredictions.$inferSelect;
+export type AcPredictionMatch = typeof acPredictionMatches.$inferSelect;
+
+// ============================================================================
+// Gulf Cup 27 "Khaleeji 27" — Shared-Pool Predictions Game
+// Fixtures come from the official static seed (gulfCupService), overlaid with
+// API-Football live results when the 2026 season appears. Scoring is a TIERED
+// PARI-MUTUEL POOL: each match funds a 1000-point pool (+ any carried jackpot),
+// split 50/30/20 across three tiers — exact scoreline / correct margin /
+// correct result — and shared EQUALLY among the winners of each tier. Reversed
+// scorelines (e.g. predicting 2-1 when the result is 1-2) are scored by the
+// SIGN of (home-away), never the magnitude, so they never win. Any tier with no
+// winners (and integer remainders) rolls over to the next match as a jackpot.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess + the
+// settled outcome and the pari-mutuel share they were paid.
+export const gcPredictions = pgTable("gc_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  // 'pending' until terminal, then 'correct' | 'incorrect' | 'void'. A void
+  // administrative/cancelled fixture never counts as played or affects accuracy.
+  status: text("status").notNull().default("pending"),
+  // Highest tier reached at settlement: 'exact' | 'margin' | 'outcome' | 'none'.
+  tier: text("tier").notNull().default("none"),
+  outcomeHit: boolean("outcome_hit").notNull().default(false),
+  marginHit: boolean("margin_hit").notNull().default(false),
+  exactHit: boolean("exact_hit").notNull().default(false),
+  // The pari-mutuel share credited from this match's pool (0 when result missed).
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  // Snapshot of the model win-% of the picked outcome at submit time (0-100) —
+  // powers the "lionheart" badge (winning a low-probability pick) without a re-fetch.
+  pickProb: integer("pick_prob").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_gc_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_gc_pred_user").on(table.userId),
+  index("idx_gc_pred_fixture").on(table.fixtureId),
+  index("idx_gc_pred_user_settled").on(table.userId, table.settledAt),
+]);
+
+// Per-fixture state: frozen model probabilities, the pool accounting (base +
+// carried-in jackpot, per-tier paid amounts, carried-out jackpot) and the
+// settlement anchor/display snapshots.
+export const gcPredictionMatches = pgTable("gc_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamId: integer("home_team_id").notNull().default(0),
+  awayTeamId: integer("away_team_id").notNull().default(0),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  probHome: integer("prob_home").notNull().default(33),
+  probDraw: integer("prob_draw").notNull().default(34),
+  probAway: integer("prob_away").notNull().default(33),
+  // Pool accounting (all in loyalty points).
+  poolBase: integer("pool_base").notNull().default(1000),
+  poolCarryIn: integer("pool_carry_in").notNull().default(0),
+  paidExact: integer("paid_exact").notNull().default(0),
+  paidMargin: integer("paid_margin").notNull().default(0),
+  paidOutcome: integer("paid_outcome").notNull().default(0),
+  carryOut: integer("carry_out").notNull().default(0),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  // 'open' (accepting) | 'locked' (kicked off) | 'settled' | 'void'.
+  status: text("status").notNull().default("open"),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  outcomeWinners: integer("outcome_winners").notNull().default(0),
+  marginWinners: integer("margin_winners").notNull().default(0),
+  exactWinners: integer("exact_winners").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),  // THE idempotency guard
+}, (table) => [
+  index("idx_gc_pred_match_status").on(table.status),
+  index("idx_gc_pred_match_kickoff").on(table.kickoffAt),
+]);
+
+// Long-term tournament predictions (champion / top scorer). One row per
+// (userId, kind). Settled from the final result (champion) or top-scorer data.
+export const gcLongPredictions = pgTable("gc_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),   // champion pick (API-Football national-team id)
+  teamName: text("team_name"),
+  playerName: text("player_name"), // top-scorer pick (free text)
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_gc_long_user_kind").on(table.userId, table.kind),
+  index("idx_gc_long_kind").on(table.kind),
+]);
+
+// Earned achievement badges. One row per (userId, badge).
+export const gcBadges = pgTable("gc_badges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  badge: text("badge").notNull(), // static codes + 'majlis_champion:<id>' | 'majlis_dean:<id>'
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  awardedAt: timestamp("awarded_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_badge_user_badge").on(table.userId, table.badge),
+  index("idx_gc_badge_user").on(table.userId),
+]);
+
+// «مجالس التوقعات» — دوريات خاصة برمز دعوة فوق مسابقة توقّعات خليجي: أنشئ
+// مجلسك، شارك رمزه مع أهل ديوانيتك وزملائك، ونافسوا في ترتيب خاص يقرأ نقاط
+// المسابقة نفسها (لا نقاط منفصلة — تجميع gc_predictions مرشّحًا بالأعضاء).
+export const gcMajalis = pgTable("gc_majalis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 60 }).notNull(),
+  // رمز الدعوة القصير (أحرف/أرقام غير ملتبسة) — فريد عالميًّا.
+  code: varchar("code", { length: 8 }).notNull(),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  membersCount: integer("members_count").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_majlis_code").on(table.code),
+  index("idx_gc_majlis_owner").on(table.ownerId),
+]);
+
+export const gcMajlisMembers = pgTable("gc_majlis_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  majlisId: varchar("majlis_id").references(() => gcMajalis.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_majlis_member").on(table.majlisId, table.userId),
+  index("idx_gc_majlis_member_user").on(table.userId),
+  index("idx_gc_majlis_member_majlis").on(table.majlisId),
+]);
+
+export type GcMajlis = typeof gcMajalis.$inferSelect;
+export type GcMajlisMember = typeof gcMajlisMembers.$inferSelect;
+
+// تحديات مباراة 1×1 داخل المجلس. الرهان يُحجز من رصيد الولاء عند إنشاء
+// التحدي/قبوله، ثم يُحوَّل أو يُسترد داخل معاملة التسوية نفسها. pairKey هو
+// الزوج المرتّب من معرّفي العضوين، ويمنع تحديين متعاكسين للمباراة نفسها.
+export const gcDuels = pgTable("gc_duels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  majlisId: varchar("majlis_id").references(() => gcMajalis.id, { onDelete: "cascade" }).notNull(),
+  fixtureId: varchar("fixture_id").notNull(),
+  challengerId: varchar("challenger_id").references(() => users.id).notNull(),
+  challengedId: varchar("challenged_id").references(() => users.id).notNull(),
+  pairKey: text("pair_key").notNull(),
+  stake: integer("stake").notNull(),
+  // pending | accepted | declined | cancelled | expired | settled | refunded
+  status: text("status").notNull().default("pending"),
+  winnerId: varchar("winner_id").references(() => users.id, { onDelete: "set null" }),
+  challengerTier: text("challenger_tier"),
+  challengedTier: text("challenged_tier"),
+  challengerHeldAt: timestamp("challenger_held_at"),
+  challengedHeldAt: timestamp("challenged_held_at"),
+  acceptedAt: timestamp("accepted_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  settledAt: timestamp("settled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_duel_pair_fixture").on(table.majlisId, table.fixtureId, table.pairKey),
+  index("idx_gc_duel_fixture_status").on(table.fixtureId, table.status),
+  index("idx_gc_duel_status_expires").on(table.status, table.expiresAt),
+  index("idx_gc_duel_majlis_created").on(table.majlisId, table.createdAt),
+  index("idx_gc_duel_challenger_status").on(table.challengerId, table.status),
+  index("idx_gc_duel_challenged_status").on(table.challengedId, table.status),
+  sql`CONSTRAINT gc_duel_distinct_members CHECK (challenger_id <> challenged_id)`,
+  sql`CONSTRAINT gc_duel_stake_check CHECK (stake BETWEEN 10 AND 100 AND stake % 10 = 0)`,
+  sql`CONSTRAINT gc_duel_status_check CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled', 'expired', 'settled', 'refunded'))`,
+]);
+
+export type GcDuel = typeof gcDuels.$inferSelect;
+
+// صندوق صادر دائم لإشعارات المجلس. خدمة الإنتاج تنشئ صفًا واحدًا بمفتاح dedupe
+// حتمي، وتستطيع إعادة محاولة push دون إنشاء إشعار inbox ثانٍ بعد نجاحه.
+export const gcMajlisNotificationDeliveries = pgTable("gc_majlis_notification_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  majlisId: varchar("majlis_id").references(() => gcMajalis.id, { onDelete: "set null" }),
+  fixtureId: varchar("fixture_id"),
+  type: text("type").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  deeplink: text("deeplink"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  status: text("status").notNull().default("pending"), // pending | sent | failed
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  inboxNotificationId: varchar("inbox_notification_id").references(() => notificationsInbox.id, { onDelete: "set null" }),
+  pushStatus: text("push_status").notNull().default("pending"),
+  scheduledAt: timestamp("scheduled_at").defaultNow().notNull(),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_majlis_delivery_dedupe").on(table.dedupeKey),
+  index("idx_gc_majlis_delivery_status_scheduled").on(table.status, table.scheduledAt),
+  index("idx_gc_majlis_delivery_user_type").on(table.userId, table.type),
+  index("idx_gc_majlis_delivery_majlis").on(table.majlisId),
+  sql`CONSTRAINT gc_majlis_delivery_status_check CHECK (status IN ('pending', 'sent', 'failed'))`,
+]);
+
+export type GcMajlisNotificationDelivery = typeof gcMajlisNotificationDeliveries.$inferSelect;
+
+// «رجل المباراة — الجمهور ضد الأرقام»: صوت واحد لكل مستخدم لكل مباراة، يُفتح
+// من الشوط الثاني وحتى 24 ساعة بعد الصافرة، ثم تُقارن غلبة الجمهور بأعلى
+// تقييم بيانات (TheSports) في الواجهة.
+export const gcMotmVotes = pgTable("gc_motm_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  // معرّف اللاعب لدى TheSports إن توفّر، وإلا مفتاح الاسم — والاسم للعرض دائمًا.
+  playerId: varchar("player_id").notNull(),
+  playerName: text("player_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_motm_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_gc_motm_fixture").on(table.fixtureId),
+]);
+
+export type GcMotmVote = typeof gcMotmVotes.$inferSelect;
+
+// «فانتازي خليجي المصغّر»: تشكيلة من 7 لاعبين ضمن ميزانية، ونقاطها من
+// تقييمات TheSports الفعلية لكل مباراة (يُضاعَف القائد). صفّ واحد لكل مستخدم.
+export const gcFantasySquads = pgTable("gc_fantasy_squads", {
+  userId: varchar("user_id").references(() => users.id).primaryKey(),
+  // معرّفات اللاعبين لدى TheSports (نصية) — 7 عناصر.
+  playerIds: jsonb("player_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  captainId: varchar("captain_id").notNull().default(""),
+  // إجمالي القيمة المصروفة وقت الحفظ (لعرض «المتبقّي» دون إعادة حساب).
+  spent: integer("spent").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type GcFantasySquad = typeof gcFantasySquads.$inferSelect;
+
+export type GcPrediction = typeof gcPredictions.$inferSelect;
+export type GcPredictionMatch = typeof gcPredictionMatches.$inferSelect;
+export type GcLongPrediction = typeof gcLongPredictions.$inferSelect;
+export type GcBadge = typeof gcBadges.$inferSelect;
+
+// ============================================================================
+// Sabq Sports — GENERALIZED tiered shared-pool predictions (any competition).
+// The same pari-mutuel engine as Gulf Cup 27, but competition-agnostic: any
+// fixture in the curated sports board (Roshn, world leagues, cups, …) funds a
+// 1000-point pool (+ any jackpot carried within the SAME competition), split
+// 50/30/20 across exact / margin / outcome tiers and shared equally among each
+// tier's winners. Reversed scorelines never win (scored by sign of home-away).
+// Fixtures come from API-Football via saudiLeagueService; probabilities are
+// frozen at submit time from getFixturePrediction (neutral fallback). Distinct
+// from the legacy `sports_predictions` (fixed 3/1/0) table, which is retained.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess + the
+// settled tier and the pari-mutuel share paid.
+export const sportsPoolPredictions = pgTable("sports_pool_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: integer("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  tier: text("tier").notNull().default("none"),          // exact | margin | outcome | none
+  outcomeHit: boolean("outcome_hit").notNull().default(false),
+  marginHit: boolean("margin_hit").notNull().default(false),
+  exactHit: boolean("exact_hit").notNull().default(false),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  // Model win-% of the picked outcome at submit time (0-100) — powers lionheart.
+  pickProb: integer("pick_prob").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_sp_pool_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_sp_pool_pred_user").on(table.userId),
+  index("idx_sp_pool_pred_fixture").on(table.fixtureId),
+  index("idx_sp_pool_pred_user_settled").on(table.userId, table.settledAt),
+]);
+
+// Per-fixture state: competition, frozen model probabilities, pool accounting
+// (base + carried-in jackpot scoped to the competition, per-tier paid amounts,
+// carried-out jackpot), and the settlement anchor + display snapshots.
+export const sportsPoolMatches = pgTable("sports_pool_matches", {
+  fixtureId: integer("fixture_id").primaryKey(),
+  competitionSlug: text("competition_slug"),
+  kickoffTs: integer("kickoff_ts").notNull(), // unix seconds — pool ordering + jackpot chain
+  homeTeamId: integer("home_team_id").notNull().default(0),
+  awayTeamId: integer("away_team_id").notNull().default(0),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  probHome: integer("prob_home").notNull().default(33),
+  probDraw: integer("prob_draw").notNull().default(34),
+  probAway: integer("prob_away").notNull().default(33),
+  poolBase: integer("pool_base").notNull().default(1000),
+  poolCarryIn: integer("pool_carry_in").notNull().default(0),
+  paidExact: integer("paid_exact").notNull().default(0),
+  paidMargin: integer("paid_margin").notNull().default(0),
+  paidOutcome: integer("paid_outcome").notNull().default(0),
+  carryOut: integer("carry_out").notNull().default(0),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  outcomeWinners: integer("outcome_winners").notNull().default(0),
+  marginWinners: integer("margin_winners").notNull().default(0),
+  exactWinners: integer("exact_winners").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"), // THE idempotency guard
+}, (table) => [
+  index("idx_sp_pool_match_status").on(table.status),
+  index("idx_sp_pool_match_kickoff").on(table.kickoffTs),
+  index("idx_sp_pool_match_comp").on(table.competitionSlug, table.kickoffTs),
+]);
+
+// Long-term per-competition predictions (champion / top scorer). One row per
+// (userId, competitionSlug, kind).
+export const sportsPoolLong = pgTable("sports_pool_long", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  competitionSlug: text("competition_slug").notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerName: text("player_name"),
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_sp_pool_long_user_comp_kind").on(table.userId, table.competitionSlug, table.kind),
+  index("idx_sp_pool_long_comp_kind").on(table.competitionSlug, table.kind),
+]);
+
+// Earned achievement badges. One row per (userId, badge).
+export const sportsPoolBadges = pgTable("sports_pool_badges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  badge: text("badge").notNull(), // 'nostradamus' | 'lionheart' | 'hot_streak' | 'sharpshooter'
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  awardedAt: timestamp("awarded_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sp_pool_badge_user_badge").on(table.userId, table.badge),
+  index("idx_sp_pool_badge_user").on(table.userId),
+]);
+
+export type SportsPoolPrediction = typeof sportsPoolPredictions.$inferSelect;
+export type SportsPoolMatch = typeof sportsPoolMatches.$inferSelect;
+export type SportsPoolLong = typeof sportsPoolLong.$inferSelect;
+export type SportsPoolBadge = typeof sportsPoolBadges.$inferSelect;
+
+// ============================================================================
+// طبقة الهدافين — توقّع من يسجّل أهداف مباراة معيّنة (Expansion Phase A).
+// مستوحاة من sports_pool_predictions لكنها بركة pari-mutuel منفصلة قائمة على
+// اللاعب لا النتيجة. لكل مباراة بركتان: «هداف المباراة» (300) و«أول هدّاف»
+// (200)، تُقسَّمان بالتساوي على المصيبين. تُسوَّى من قائمة هدّافي المباراة
+// الفعليّين المستجلَبة من API-Football.
+// ============================================================================
+
+// صفٌّ واحد لكل (fixtureId, userId, kind) — اختيار المستخدم لاعبًا واحدًا لكل
+// نوع (match_scorer | first_scorer). حارس التسوية settledAt يمنع الدفع المزدوج.
+export const sportsPoolPlayerPicks = pgTable("sports_pool_player_picks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: integer("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind").notNull(), // 'match_scorer' | 'first_scorer'
+  playerId: integer("player_id").notNull(),     // API-Football player id
+  playerName: text("player_name").notNull(),     // snapshot وقت الاختيار
+  teamId: integer("team_id").notNull().default(0),
+  teamName: text("team_name"),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"), // حارس التسوية (مثل sports_pool_predictions)
+}, (table) => [
+  uniqueIndex("uq_pool_player_pick").on(table.fixtureId, table.userId, table.kind),
+  index("idx_sp_pool_pick_user").on(table.userId),
+  index("idx_sp_pool_pick_fix").on(table.fixtureId),
+  index("idx_sp_pool_pick_settle").on(table.fixtureId, table.kind, table.settledAt),
+]);
+
+// ميتاداتا بركة الهدافين لكل مباراة: حجم البركة لكل نوع، عدد الفائزين، النصيب
+// المدفوع، وقائمة الهدافين الفعليّين (snapshot من API-Football بعد الانتهاء).
+export const sportsPoolMatchPicks = pgTable("sports_pool_match_picks", {
+  fixtureId: integer("fixture_id").primaryKey(), // = sports_pool_matches.fixture_id
+  competitionSlug: text("competition_slug"),
+  kickoffTs: integer("kickoff_ts").notNull(),
+  // بركة الهداف: 300/مباراة. بركة أول هدّاف: 200/مباراة.
+  scorerPool: integer("scorer_pool").notNull().default(300),
+  firstScorerPool: integer("first_scorer_pool").notNull().default(200),
+  paidScorer: integer("paid_scorer").notNull().default(0),
+  paidFirstScorer: integer("paid_first_scorer").notNull().default(0),
+  scorerWinners: integer("scorer_winners").notNull().default(0),
+  firstScorerWinners: integer("first_scorer_winners").notNull().default(0),
+  // قائمة الهدافين الفعليّين (snapshot): [{ playerId, name, teamId, minute }]
+  actualScorers: jsonb("actual_scorers").$type<Array<{ playerId: number; name: string; teamId: number; minute: number | null }>>(),
+  firstScorerId: integer("first_scorer_id"), // null حتى تنتهي المباراة
+  status: text("status").notNull().default("open"), // open | locked | settled
+  settledAt: timestamp("settled_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sp_pool_match_picks_status").on(table.status),
+  index("idx_sp_pool_match_picks_comp").on(table.competitionSlug, table.kickoffTs),
+]);
+
+// ============================================================================
+// الأقسام الأسبوعية (Expansion Phase B) — ترقية/هبوط بين 4 أقسام كل يوم سبت
+// 00:00 بتوقيت الرياض بناءً على نقاط الأسبوع. يعطي إحساس «الدوري» الرياضي.
+// ============================================================================
+
+// صفٌّ واحد لكل مستخدم نشط. يُعاد حسابه أسبوعيًّا (upsert) من snapshot النقاط.
+export const sportsPoolUserDivisions = pgTable("sports_pool_user_divisions", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  weekId: text("week_id").notNull(), // ISO week: '2026-W27'
+  division: integer("division").notNull().default(4), // 1=النوّاحة | 2=المحلّلون | 3=المتابعون | 4=الجمهور
+  weekPoints: integer("week_points").notNull().default(0),
+  seasonPoints: integer("season_points").notNull().default(0),
+  lastPromotedTo: integer("last_promoted_to"),
+  lastRelegatedTo: integer("last_relegated_to"),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sp_pool_div_week").on(table.weekId),
+  index("idx_sp_pool_div_div").on(table.division, table.seasonPoints),
+]);
+
+// snapshot لنقاط كل مستخدم في كل أسبوع ISO. يُغذّى من settleFinishedMatches عند
+// كل تسوية (نقاط المباراة تُضاف لصف الأسبوع الجاري). أساس ترتيب الأقسام والترقية.
+export const sportsPoolWeeklyPoints = pgTable("sports_pool_weekly_points", {
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  weekId: text("week_id").notNull(), // '2026-W27'
+  points: integer("points").notNull().default(0),
+  matchesPlayed: integer("matches_played").notNull().default(0),
+  matchesWon: integer("matches_won").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_sp_pool_weekly_user").on(table.userId, table.weekId),
+  index("idx_sp_pool_weekly_week").on(table.weekId, sql`${table.points} DESC`),
+  index("idx_sp_pool_weekly_user").on(table.userId),
+]);
+
+export type SportsPoolPlayerPick = typeof sportsPoolPlayerPicks.$inferSelect;
+export type SportsPoolMatchPick = typeof sportsPoolMatchPicks.$inferSelect;
+export type SportsPoolUserDivision = typeof sportsPoolUserDivisions.$inferSelect;
+export type SportsPoolWeeklyPoints = typeof sportsPoolWeeklyPoints.$inferSelect;
 
 // Loyalty Rewards (available rewards)
 export const loyaltyRewards = pgTable("loyalty_rewards", {
@@ -2285,6 +3128,25 @@ export const articleImpressions = pgTable("article_impressions", {
   index("idx_impressions_type").on(table.impressionType),
 ]);
 
+// Per-IP article view aggregate — answers "is this article's traffic from one IP?"
+// One row per (article, hashed IP): views_count = number of COUNTED views from that
+// IP (post 5-min dedup). The IP is stored ONLY as a salted SHA-256 hash (privacy),
+// which still allows distinct-IP counting and per-IP distribution. The table grows
+// with the number of DISTINCT IPs, not pageviews, so it stays small. Written via a
+// buffered batch UPSERT in server/services/articleViewStatsService.ts.
+export const articleIpViews = pgTable("article_ip_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  ipHash: varchar("ip_hash", { length: 64 }).notNull(),
+  userId: varchar("user_id"), // last known logged-in viewer for this IP (nullable)
+  viewsCount: integer("views_count").default(0).notNull(),
+  firstSeen: timestamp("first_seen").defaultNow().notNull(),
+  lastSeen: timestamp("last_seen").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_article_ip_views_article_ip").on(table.articleId, table.ipHash),
+  index("idx_article_ip_views_article").on(table.articleId),
+]);
+
 // Feed Recommendations - التوصيات المخصصة للعرض في الفيد
 export const feedRecommendations = pgTable("feed_recommendations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2425,6 +3287,202 @@ export const storyFollows = pgTable("story_follows", {
   index("idx_story_follows_story").on(table.storyId),
 ]);
 
+// Sports follows — متابعة المستخدم لفِرق/بطولات رياضية (شخصنة /sports2).
+// kind: 'team' | 'competition'؛ refId = معرّف الفريق (رقم كنص) أو slug البطولة.
+export const sportsFollows = pgTable("sports_follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(),
+  refId: text("ref_id").notNull(),
+  refName: text("ref_name").notNull(),
+  refLogo: text("ref_logo"),
+  notify: boolean("notify").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_follows_unique").on(table.userId, table.kind, table.refId),
+  index("idx_sports_follows_user").on(table.userId, table.createdAt.desc()),
+  index("idx_sports_follows_ref").on(table.kind, table.refId),
+]);
+
+export type SportsFollow = typeof sportsFollows.$inferSelect;
+export type InsertSportsFollow = typeof sportsFollows.$inferInsert;
+
+// مشاهدات مراكز المباريات داخل VARA — للمستخدمين المسجّلين فقط.
+// صف واحد لكل (مستخدم، مباراة) مع عدّاد تكرار؛ تُقلّم الصفوف القديمة دورياً.
+export const sportsMatchViews = pgTable("sports_match_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  fixtureId: integer("fixture_id").notNull(),
+  homeId: integer("home_id"),
+  awayId: integer("away_id"),
+  competitionSlug: text("competition_slug"),
+  viewsCount: integer("views_count").default(1).notNull(),
+  lastViewedAt: timestamp("last_viewed_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_match_views_unique").on(table.userId, table.fixtureId),
+  index("idx_sports_match_views_user").on(table.userId, table.lastViewedAt.desc()),
+  index("idx_sports_match_views_fixture").on(table.fixtureId),
+  index("idx_sports_match_views_home").on(table.homeId, table.lastViewedAt.desc()),
+  index("idx_sports_match_views_away").on(table.awayId, table.lastViewedAt.desc()),
+  index("idx_sports_match_views_last").on(table.lastViewedAt),
+]);
+
+export type SportsMatchView = typeof sportsMatchViews.$inferSelect;
+export type InsertSportsMatchView = typeof sportsMatchViews.$inferInsert;
+
+// تفضيلات تنبيهات المباريات (عامّة لكل مستخدم) — أيّ أنواع الأحداث تصله دفعيًّا
+// عن مباريات الفِرق التي يتابعها (sportsFollows). صفّ واحد لكل مستخدم؛ غياب الصفّ
+// يعني «كل الأنواع مفعّلة» (سلوك متوافق رجعيًّا مع متابعين سابقين بلا صفّ).
+// يقرؤها جوب التنبيهات الرياضية (sportsAlertsService) لترشيح المستلمين لكل حدث.
+export const sportsAlertPrefs = pgTable("sports_alert_prefs", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  kickoff: boolean("kickoff").default(true).notNull(),     // انطلاق المباراة
+  goals: boolean("goals").default(true).notNull(),         // الأهداف (يشمل ركلات الجزاء)
+  cards: boolean("cards").default(true).notNull(),          // البطاقات (صفراء + حمراء)
+  varReview: boolean("var_review").default(true).notNull(), // حالات الفار (VAR)
+  fulltime: boolean("fulltime").default(true).notNull(),    // نهاية المباراة
+  transfersSaudi: boolean("transfers_saudi").default(true).notNull(),   // إشعارات الانتقالات السعودية المؤكّدة (بثّ عام، opt-out)
+  transfersGlobal: boolean("transfers_global").default(false).notNull(), // إشعارات الانتقالات العالمية البارزة (بثّ عام، opt-in)
+  smartSnaps: boolean("smart_snaps").default(true).notNull(), // لقطات VARA الذكية (دفع فقط؛ العرض داخل التطبيق مفتاحه محلي)
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SportsAlertPref = typeof sportsAlertPrefs.$inferSelect;
+export type InsertSportsAlertPref = typeof sportsAlertPrefs.$inferInsert;
+
+// محرّك الذكاء الرياضي (Sabq Sports Intelligence) — «التقاطات» يولّدها الـAI من
+// المشهد الرياضي الحيّ ويخزّنها لتقدَّم جاهزة للواجهة (لا توليد لكل طلب).
+//   scope: نطاق اللقطة — global (المشهد العام) | competition | match | user (موجز مخصّص).
+//   refId: المعرّف داخل النطاق (competitionSlug أو fixtureId أو userId؛ "global" للعام).
+//   kind: نوع اللقطة (scene | pressure | streak | anomaly | prediction | digest | preview | live | post ...).
+//   importance: 0-100 لترتيب العرض (كلّما أعلى كان أبرز).
+//   sourceStats: الأرقام المُحقونة التي بُنيت عليها اللقطة (تأريض + تدقيق + منع الاختلاق).
+//   ttlAt: متى تصير اللقطة بائتة (تُنظَّف/تُتجاهل بعده). dedupeKey: مفتاح حتمي لمنع التكرار.
+export const sportsInsights = pgTable("sports_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scope: text("scope").notNull(),
+  refId: text("ref_id").notNull(),
+  competitionSlug: text("competition_slug"),
+  kind: text("kind").notNull(),
+  importance: integer("importance").default(50).notNull(),
+  headline: text("headline").notNull(),
+  body: text("body").notNull(),
+  entities: jsonb("entities"),
+  sourceStats: jsonb("source_stats"),
+  lang: text("lang").default("ar").notNull(),
+  dedupeKey: text("dedupe_key"),
+  ttlAt: timestamp("ttl_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_insights_dedupe").on(table.dedupeKey),
+  index("idx_sports_insights_scope").on(table.scope, table.refId, table.importance.desc()),
+  index("idx_sports_insights_comp").on(table.competitionSlug, table.createdAt.desc()),
+  index("idx_sports_insights_ttl").on(table.ttlAt),
+]);
+
+export type SportsInsight = typeof sportsInsights.$inferSelect;
+export type InsertSportsInsight = typeof sportsInsights.$inferInsert;
+
+// Sports predictions — توقّع المستخدم لنتيجة مباراة (المرحلة 4 — المجتمع).
+// توقّع واحد لكل (مستخدم، مباراة)؛ يُقفل التعديل عند انطلاق المباراة. النقاط:
+// نتيجة مطابقة تمامًا = 3، اتجاه صحيح (فوز/تعادل/خسارة) = 1، خطأ = 0.
+// points = null يعني لم تُسوَّ بعد (المباراة لم تنتهِ). أسماء/شعارات الفريقين
+// لقطة مخزّنة لعرض لوحة المتصدّرين و«توقّعاتي» دون نداء إضافي للمزوّد.
+export const sportsPredictions = pgTable("sports_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  fixtureId: integer("fixture_id").notNull(),
+  competitionSlug: text("competition_slug"),
+  kickoffTs: integer("kickoff_ts").notNull(), // طابع يونكس بالثواني لبداية المباراة
+  homeId: integer("home_id"),
+  awayId: integer("away_id"),
+  homeName: text("home_name").notNull(),
+  awayName: text("away_name").notNull(),
+  homeLogo: text("home_logo"),
+  awayLogo: text("away_logo"),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  actualHome: integer("actual_home"),
+  actualAway: integer("actual_away"),
+  points: integer("points"), // null = لم تُسوَّ بعد
+  settledAt: timestamp("settled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_predictions_unique").on(table.userId, table.fixtureId),
+  index("idx_sports_predictions_fixture").on(table.fixtureId),
+  index("idx_sports_predictions_user").on(table.userId, table.createdAt.desc()),
+  index("idx_sports_predictions_unsettled").on(table.fixtureId, table.settledAt),
+]);
+
+export type SportsPrediction = typeof sportsPredictions.$inferSelect;
+export type InsertSportsPrediction = typeof sportsPredictions.$inferInsert;
+
+// سجلّ البطولات الموحّد (Sabq Sports 2.0) — مصدر الحقيقة لظهور البطولات في هَب
+// الرياضة (/sports22) والتطبيقات معًا. يُدار من الداشبورد (بدون deploy):
+// kind: 'anchor' (روشن — يظهر دائمًا أولًا) | 'seasonal' (تظهر وتختفي حسب حالتها).
+// status: 'hidden' | 'upcoming' | 'active' | 'finished'.
+// theme: لمسة هوية اختيارية للبطولة (ألوان فوق هوية سبق الأساسية).
+// features: الميزات المفعّلة في قالب البطولة (predictions/bracket/scorers/standings/teams/news).
+// entryPath داخل features يوجّه بطولات «الجزر» القائمة (آسيا/خليجي/مونديال) لصفحاتها
+// الحالية حتى اكتمال ترحيلها للقالب الموحّد.
+export const sportsTournaments = pgTable("sports_tournaments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  apiFootballLeagueId: integer("api_football_league_id"),
+  name: text("name").notNull(),
+  shortName: text("short_name"),
+  logo: text("logo"),
+  kind: text("kind").default("seasonal").notNull(),
+  status: text("status").default("hidden").notNull(),
+  visibleWeb: boolean("visible_web").default(false).notNull(),
+  visibleApp: boolean("visible_app").default(false).notNull(),
+  featured: boolean("featured").default(false).notNull(),
+  sortOrder: integer("sort_order").default(100).notNull(),
+  season: integer("season"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  theme: jsonb("theme").$type<{
+    primary?: string;
+    accent?: string;
+    dark?: string;
+  }>(),
+  features: jsonb("features").$type<{
+    predictions?: boolean;
+    bracket?: boolean;
+    scorers?: boolean;
+    standings?: boolean;
+    teams?: boolean;
+    news?: boolean;
+    /** مسار صفحة خارجية قائمة (جزيرة لم تُرحَّل بعد) بدل القالب الموحّد */
+    entryPath?: string;
+  }>(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sports_tournaments_order").on(table.sortOrder),
+  index("idx_sports_tournaments_status").on(table.status),
+]);
+
+export type SportsTournament = typeof sportsTournaments.$inferSelect;
+export type InsertSportsTournament = typeof sportsTournaments.$inferInsert;
+
+// سجل تغييرات إعدادات البطولات — من غيّر ماذا ومتى (يُعرض في صفحة الإدارة).
+export const sportsTournamentAudit = pgTable("sports_tournament_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tournamentId: varchar("tournament_id").references(() => sportsTournaments.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  action: text("action").notNull(),
+  changes: jsonb("changes").$type<Record<string, { from: unknown; to: unknown }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sports_tournament_audit_t").on(table.tournamentId, table.createdAt.desc()),
+]);
+
+export type SportsTournamentAudit = typeof sportsTournamentAudit.$inferSelect;
+
 // Story notifications (notification log)
 export const storyNotifications = pgTable("story_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2531,7 +3589,14 @@ export const insertCategorySchema = createInsertSchema(categories).omit({
   updatedAt: true 
 }).extend({
   type: z.enum(["core", "dynamic", "smart", "seasonal"]).default("core"),
-  status: z.enum(["active", "inactive"]).default("active"),
+  // "visible" is the value every public-facing read path (homepage, /categories,
+  // mobile API, edge SEO meta — see server/routes/edgeMeta.ts "category status
+  // trap" comment) checks to decide whether a category is shown publicly.
+  // "active" is NOT public-visible despite the name; it only existed here as the
+  // schema default. Omitting "visible" from this enum used to make the dashboard
+  // form/API reject it, which is what silently downgraded "visible" categories to
+  // "active" (and made them disappear) on every edit.
+  status: z.enum(["visible", "active", "inactive"]).default("active"),
   seasonalRules: seasonalRulesSchema,
   features: categoryFeaturesSchema,
   aiConfig: aiConfigSchema,
@@ -2541,6 +3606,8 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   createdAt: true, 
   updatedAt: true,
   views: true,
+  avgReadTimeOverride: true,
+  completionRateOverride: true,
   aiGenerated: true,
   credibilityScore: true,
   credibilityAnalysis: true,
@@ -2832,6 +3899,9 @@ export const updateUserNotificationPrefsSchema = z.object({
   mostRead: z.boolean().optional(),
   webPush: z.boolean().optional(),
   dailyDigest: z.boolean().optional(),
+  gulfCupMajlis: z.boolean().optional(),
+  matchesOnly: z.boolean().optional(),
+  editorialDrafts: z.boolean().optional(),
   quietHoursStart: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "صيغة الوقت غير صحيحة").optional(),
   quietHoursEnd: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "صيغة الوقت غير صحيحة").optional(),
   whatsappPhone: z.union([
@@ -3098,6 +4168,9 @@ export const updateArticleSchema = z.object({
     z.string(),
     z.null()
   ]).optional(),
+  // عند تغيير الملخص من المحرر تُمسَح النقاط ليعاد بناؤها من النص الجديد
+  aiBullets: z.union([z.array(z.string()), z.null()]).optional(),
+  aiBulletsGeneratedAt: z.union([z.string().datetime(), z.null()]).optional(),
   isFeatured: z.boolean().optional(),
   hideFromHomepage: z.boolean().optional(),
   publishedAt: z.union([
@@ -4220,6 +5293,7 @@ export const audioNewsletters = pgTable("audio_newsletters", {
   metadata: jsonb("metadata").$type<{
     retryCount?: number;
     lastRetryAt?: string;
+    abandonedAt?: string; // set when retries are exhausted (status → failed_permanent)
     isRecurring?: boolean;
     recurrencePattern?: string; // cron pattern
     nextRecurrenceDate?: string;
@@ -5391,6 +6465,8 @@ export const enArticles = pgTable("en_articles", {
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
   views: integer("views").default(0).notNull(),
+  avgReadTimeOverride: integer("avg_read_time_override"),
+  completionRateOverride: integer("completion_rate_override"),
   displayOrder: integer("display_order").default(0).notNull(),
   seo: jsonb("seo").$type<{
     metaTitle?: string;
@@ -5497,6 +6573,8 @@ export const insertEnArticleSchema = createInsertSchema(enArticles).omit({
   updatedAt: true,
   publishedAt: true,
   views: true,
+  avgReadTimeOverride: true,
+  completionRateOverride: true,
   authorId: true, // Backend adds this from req.user.id
 }).extend({
   title: z.string().min(1, "Title is required"),
@@ -5598,6 +6676,8 @@ export const urArticles = pgTable("ur_articles", {
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
   views: integer("views").default(0).notNull(),
+  avgReadTimeOverride: integer("avg_read_time_override"),
+  completionRateOverride: integer("completion_rate_override"),
   displayOrder: integer("display_order").default(0).notNull(),
   seo: jsonb("seo").$type<{
     metaTitle?: string;
@@ -5703,6 +6783,8 @@ export const insertUrArticleSchema = createInsertSchema(urArticles).omit({
   updatedAt: true,
   publishedAt: true,
   views: true,
+  avgReadTimeOverride: true,
+  completionRateOverride: true,
   authorId: true, // Backend adds this from req.user.id
 }).extend({
   title: z.string().min(1, "Title is required"),
@@ -5857,6 +6939,11 @@ export const mediaFiles = pgTable("media_files", {
   aiQualityScore: integer("ai_quality_score"), // 0-100
   aiHasSensitiveContent: boolean("ai_has_sensitive_content").default(false).notNull(),
 
+  // Perceptual dedup (Phase 7) — 64-bit dHash as 16-char hex. Identical hash =
+  // visually identical/near-identical image; "unhashable" marks a file whose
+  // bytes couldn't be fetched or decoded so the backfill doesn't reselect it.
+  perceptualHash: varchar("perceptual_hash", { length: 16 }),
+
   // Rights & credibility (Phase 6). isAiGenerated above already records AI
   // provenance; these capture licensing + a librarian's rights clearance.
   licenseType: text("license_type"), // own_work | agency | stock | creative_commons | public_domain | unknown
@@ -5886,6 +6973,7 @@ export const mediaFiles = pgTable("media_files", {
   index("idx_media_files_category").on(table.category),
   index("idx_media_files_ai_status").on(table.aiAnalysisStatus),
   index("idx_media_files_rights_verified").on(table.rightsVerified),
+  index("idx_media_files_perceptual_hash").on(table.perceptualHash),
 ]);
 
 // Media Usage Log - track where and when media is used
@@ -8065,6 +9153,89 @@ export type NewsletterSubscription = typeof newsletterSubscriptions.$inferSelect
 export type InsertNewsletterSubscription = z.infer<typeof insertNewsletterSubscriptionSchema>;
 
 // ============================================
+// NEWSLETTER DELIVERY QUEUE - طابور تسليم النشرات
+// ============================================
+
+/**
+ * طابور دائم منفصل عن عملية الويب. كل نشرة لها job واحد، ويعالجها
+ * newsletter-worker على دفعات قابلة للاستئناف بعد restart/deploy.
+ */
+export const newsletterDeliveryJobs = pgTable("newsletter_delivery_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  newsletterId: varchar("newsletter_id")
+    .references(() => audioNewsletters.id, { onDelete: "cascade" })
+    .notNull(),
+  newsletterType: text("newsletter_type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  audioUrl: text("audio_url"),
+  articlesPerSubscriber: integer("articles_per_subscriber").default(5).notNull(),
+  status: text("status").default("queued").notNull(), // queued, processing, completed, failed
+  attempts: integer("attempts").default(0).notNull(),
+  totalRecipients: integer("total_recipients").default(0).notNull(),
+  sentCount: integer("sent_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  skippedCount: integer("skipped_count").default(0).notNull(),
+  aiCircuitOpened: boolean("ai_circuit_opened").default(false).notNull(),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("newsletter_delivery_jobs_newsletter_unique_idx").on(table.newsletterId),
+  index("newsletter_delivery_jobs_status_created_idx").on(table.status, table.createdAt),
+]);
+
+/**
+ * سجل مستقل لكل مستلم يمنع إعادة الإرسال لمن اكتمل تسليمه، ويعمل checkpoint
+ * دقيقًا بدل إعادة تشغيل القائمة من البداية عند توقف الـ worker.
+ */
+export const newsletterDeliveryRecipients = pgTable("newsletter_delivery_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id")
+    .references(() => newsletterDeliveryJobs.id, { onDelete: "cascade" })
+    .notNull(),
+  subscriptionId: varchar("subscription_id")
+    .references(() => newsletterSubscriptions.id, { onDelete: "cascade" })
+    .notNull(),
+  status: text("status").default("pending").notNull(), // pending, processing, sent, failed, skipped
+  attempts: integer("attempts").default(0).notNull(),
+  lastError: text("last_error"),
+  lockedAt: timestamp("locked_at"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("newsletter_delivery_recipients_job_subscription_unique_idx")
+    .on(table.jobId, table.subscriptionId),
+  index("newsletter_delivery_recipients_job_status_idx").on(table.jobId, table.status),
+  index("newsletter_delivery_recipients_stale_lock_idx").on(table.status, table.lockedAt),
+]);
+
+export const newsletterDeliveryJobsRelations = relations(newsletterDeliveryJobs, ({ one, many }) => ({
+  newsletter: one(audioNewsletters, {
+    fields: [newsletterDeliveryJobs.newsletterId],
+    references: [audioNewsletters.id],
+  }),
+  recipients: many(newsletterDeliveryRecipients),
+}));
+
+export const newsletterDeliveryRecipientsRelations = relations(newsletterDeliveryRecipients, ({ one }) => ({
+  job: one(newsletterDeliveryJobs, {
+    fields: [newsletterDeliveryRecipients.jobId],
+    references: [newsletterDeliveryJobs.id],
+  }),
+  subscription: one(newsletterSubscriptions, {
+    fields: [newsletterDeliveryRecipients.subscriptionId],
+    references: [newsletterSubscriptions.id],
+  }),
+}));
+
+export type NewsletterDeliveryJob = typeof newsletterDeliveryJobs.$inferSelect;
+export type NewsletterDeliveryRecipient = typeof newsletterDeliveryRecipients.$inferSelect;
+
+// ============================================
 // ARTICLE MEDIA ASSETS - تعريفات الصور في المقالات
 // ============================================
 
@@ -8206,10 +9377,18 @@ export const publishers = pgTable("publishers", {
   isActive: boolean("is_active").default(true).notNull(),
   suspendedUntil: timestamp("suspended_until"),
   suspensionReason: text("suspension_reason"),
-  
+
+  // Publishing window: after this date the publisher can no longer
+  // create/submit/publish articles (null = open-ended contract).
+  publishingEndsAt: timestamp("publishing_ends_at"),
+  // Trusted publishers skip editorial review — their articles publish
+  // directly (the old hardcoded contentManagerPublisherMap behavior,
+  // now a per-publisher flag).
+  autoPublish: boolean("auto_publish").default(false).notNull(),
+
   // Metadata
   notes: text("notes"), // Internal admin notes
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -8226,6 +9405,9 @@ export const publisherCredits = pgTable("publisher_credits", {
   totalCredits: integer("total_credits").notNull(), // Total number of articles in package
   usedCredits: integer("used_credits").default(0).notNull(), // Number of published articles
   remainingCredits: integer("remaining_credits").notNull(), // Remaining articles
+  // باقة مفتوحة: نشر غير محدود حتى تاريخ الانتهاء — usedCredits يُحصى
+  // للتقارير لكن لا خصم من remainingCredits
+  isUnlimited: boolean("is_unlimited").default(false).notNull(),
   
   // Package period
   period: text("period").notNull(), // monthly, quarterly, yearly, one-time
@@ -8278,6 +9460,48 @@ export const publisherCreditLogs = pgTable("publisher_credit_logs", {
   index("publisher_credit_logs_created_at_idx").on(table.createdAt.desc()),
 ]);
 
+// دليل الناشر: صفحات إرشادية تحررها الإدارة وتظهر في بوابة الناشر
+// (سياسات المحتوى، حقوق الصور، كيف يعمل الرصيد، ...)
+export const publisherGuideSections = pgTable("publisher_guide_sections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  // نص عادي يُعرض بأسطره كما هي (بلا HTML — أبسط وأأمن)
+  content: text("content").notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+  isPublished: boolean("is_published").default(true).notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("publisher_guide_order_idx").on(table.displayOrder),
+]);
+
+export const insertPublisherGuideSectionSchema = createInsertSchema(publisherGuideSections).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  updatedBy: true,
+});
+export type PublisherGuideSection = typeof publisherGuideSections.$inferSelect;
+
+// طلبات الناشرين للإدارة (تجديد باقة، تمديد نافذة، ...)
+export const publisherRequests = pgTable("publisher_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  publisherId: varchar("publisher_id").references(() => publishers.id, { onDelete: "cascade" }).notNull(),
+  requestedBy: varchar("requested_by").references(() => users.id),
+  type: text("type").default("renewal").notNull(), // renewal | window_extension | other
+  message: text("message"),
+  status: text("status").default("open").notNull(), // open | closed
+  handledBy: varchar("handled_by").references(() => users.id),
+  handledAt: timestamp("handled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("publisher_requests_publisher_idx").on(table.publisherId),
+  index("publisher_requests_status_idx").on(table.status),
+]);
+
+export type PublisherRequest = typeof publisherRequests.$inferSelect;
+
 // Relations
 export const publishersRelations = relations(publishers, ({ one, many }) => ({
   user: one(users, {
@@ -8320,6 +9544,9 @@ export const insertPublisherSchema = createInsertSchema(publishers).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  // يصل التاريخ من نموذج الإدارة كنص "YYYY-MM-DD"
+  publishingEndsAt: z.coerce.date().nullable().optional(),
 });
 
 export const updatePublisherSchema = z.object({
@@ -8336,6 +9563,8 @@ export const updatePublisherSchema = z.object({
   isActive: z.boolean().optional(),
   suspendedUntil: z.string().nullable().optional(),
   suspensionReason: z.string().optional(),
+  publishingEndsAt: z.string().nullable().optional(),
+  autoPublish: z.boolean().optional(),
   notes: z.string().optional(),
 });
 
@@ -8347,10 +9576,26 @@ export const insertPublisherCreditSchema = createInsertSchema(publisherCredits).
   createdAt: true,
   updatedAt: true,
 }).extend({
-  totalCredits: z.number().int().min(1, "يجب أن يكون عدد الأخبار 1 على الأقل"),
+  totalCredits: z.number().int().min(0),
   period: z.enum(["monthly", "quarterly", "yearly", "one-time"]),
   startDate: z.coerce.date({ message: "تاريخ البداية مطلوب" }),
   expiryDate: z.coerce.date({ message: "تاريخ النهاية غير صحيح" }).optional().nullable(),
+}).superRefine((data, ctx) => {
+  // الباقة المفتوحة بلا عدّاد (totalCredits=0) وحدها الوحيد تاريخ الانتهاء
+  if (!data.isUnlimited && data.totalCredits < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["totalCredits"],
+      message: "يجب أن يكون عدد الأخبار 1 على الأقل",
+    });
+  }
+  if (data.isUnlimited && !data.expiryDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["expiryDate"],
+      message: "الباقة المفتوحة تحتاج تاريخ انتهاء",
+    });
+  }
 });
 
 export const insertPublisherCreditLogSchema = createInsertSchema(publisherCreditLogs).omit({
@@ -10486,10 +11731,26 @@ export const correspondentApplications = pgTable("correspondent_applications", {
   email: text("email").notNull(), // البريد الإلكتروني
   phone: text("phone").notNull(), // رقم الهاتف
   jobTitle: text("job_title").default("مراسل صحفي").notNull(), // المسمى الوظيفي
-  bio: text("bio"), // السيرة الذاتية (اختياري)
+  bio: text("bio"), // نبذة (اختياري)
   city: text("city").notNull(), // المدينة
   profilePhotoUrl: text("profile_photo_url").notNull(), // رابط الصورة الشخصية
-  
+
+  // — نموذج التقديم الموسّع (2026-07-18). الأعمدة nullable لأن الطلبات القديمة
+  // لا تحملها؛ الإلزام يفرضه مسار التقديم على الطلبات الجديدة فقط. —
+  nationalId: text("national_id"), // رقم الهوية/الإقامة (10 أرقام تبدأ بـ1 أو 2)
+  region: text("region"), // المنطقة الإدارية
+  licenseNumber: text("license_number"), // رقم الترخيص المهني (هيئة تنظيم الإعلام)
+  licenseExpiresAt: timestamp("license_expires_at"), // تاريخ انتهاء الترخيص (اختياري)
+  // مفاتيح ملفات في التخزين الخاص (R2/S3) — ليست روابط عامة؛ تُفتح فقط عبر
+  // مسار الأدمن المحمي /api/admin/correspondent-applications/:id/file/:kind
+  licenseFileKey: text("license_file_key"), // صورة الترخيص المهني
+  cvFileKey: text("cv_file_key"), // السيرة الذاتية (PDF)
+  specializations: text("specializations"), // مجالات التغطية (مفصولة بفواصل)
+  portfolioLinks: text("portfolio_links"), // روابط أعمال منشورة (سطر لكل رابط)
+  yearsOfExperience: integer("years_of_experience"), // سنوات الخبرة (اختياري)
+  currentEmployer: text("current_employer"), // جهة العمل الحالية/الأخيرة (اختياري)
+  consentAt: timestamp("consent_at"), // وقت الإقرار بصحة البيانات والموافقة على معالجتها
+
   // حالة الطلب
   status: text("status").default("pending").notNull(), // pending, approved, rejected
   
@@ -10545,6 +11806,10 @@ export type CorrespondentApplicationWithDetails = CorrespondentApplication & {
     lastName: string | null;
     email: string;
   } | null;
+  // Role of an existing users row with the same email (null = no account).
+  // 'reader' means the applicant already has a reader membership that will be
+  // upgraded in place upon approval.
+  existingUserRole?: string | null;
 };
 
 // ============================================
@@ -12088,6 +13353,12 @@ export const pushDevices = pgTable("push_devices", {
   deviceToken: text("device_token").notNull().unique(),
   tokenProvider: varchar("token_provider", { length: 10 }).default("fcm").notNull(), // fcm, expo
   platform: varchar("platform", { length: 20 }).default("ios").notNull(), // ios, android
+  // معرّف حزمة التطبيق (apns-topic). يميّز تطبيقات APNs المتعددة على نفس الخادم
+  // (الأخبار com.sabq.sabqorg، الرياضة com.sabq.sports). فارغ = الـbundle الافتراضي.
+  bundleId: text("bundle_id"),
+  // معرّف التثبيت/الجهاز (IDFV على iOS). يوحّد توكنات سبق وفارا على نفس الجهاز
+  // لمنع تكرار إشعار المباراة عبر حسابين مختلفين على هاتف واحد.
+  installationId: text("installation_id"),
   deviceName: text("device_name"),
   osVersion: text("os_version"),
   appVersion: text("app_version"),
@@ -12103,7 +13374,85 @@ export const pushDevices = pgTable("push_devices", {
   index("idx_push_devices_active").on(table.isActive),
   index("idx_push_devices_platform").on(table.platform),
   index("idx_push_devices_provider").on(table.tokenProvider),
+  index("idx_push_devices_installation").on(table.installationId),
 ]);
+
+/**
+ * iOS Live Activity push tokens (ActivityKit push-to-update).
+ *
+ * كل نشاط مباشر (Live Activity) لمباراة يصدر توكن APNs خاص به (مختلف عن
+ * توكن جهاز push_devices). يرسله التطبيق هنا مع معرّف المباراة، فيستطيع
+ * الخادم دفع تحديثات شاشة القفل (النتيجة/الشوط) عبر apns-push-type:
+ * liveactivity دون الحاجة لفتح التطبيق. عامل liveActivityWorker يستطلع
+ * المباريات النشطة ويدفع التغييرات، ويُلغي التفعيل عند انتهاء المباراة أو
+ * رفض APNs للتوكن.
+ */
+export const liveActivityTokens = pgTable("live_activity_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: integer("fixture_id").notNull(),
+  pushToken: text("push_token").notNull().unique(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  // bundle التطبيق المُصدِر للنشاط — يحدّد apns-topic للدفع
+  // (`<bundleId>.push-type.liveactivity`). فارغ = الـbundle الافتراضي للخادم.
+  bundleId: text("bundle_id"),
+  // بصمة آخر حالة دُفعت — لتفادي دفع تحديث مكرّر بلا تغيير.
+  lastContentHash: text("last_content_hash"),
+  lastPushedAt: timestamp("last_pushed_at"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_la_tokens_fixture").on(table.fixtureId),
+  index("idx_la_tokens_active").on(table.isActive),
+  index("idx_la_tokens_token").on(table.pushToken),
+]);
+
+/**
+ * iOS ActivityKit push-to-start tokens (one rotating token per app install).
+ *
+ * Unlike `live_activity_tokens`, this token is not tied to a fixture. It lets
+ * the server automatically create a new match Live Activity for a signed-in
+ * user who follows that match. Tokens rotate, so registration identifies the
+ * installation with `deviceId` and deactivates its previous token.
+ */
+export const liveActivityStartTokens = pgTable("live_activity_start_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  pushToken: text("push_token").notNull().unique(),
+  bundleId: text("bundle_id").notNull(),
+  deviceId: text("device_id"),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_la_start_tokens_user").on(table.userId),
+  index("idx_la_start_tokens_active").on(table.isActive),
+  index("idx_la_start_tokens_device").on(table.userId, table.deviceId),
+]);
+
+/** Durable idempotency ledger for remote Live Activity starts. */
+export const liveActivityStartDeliveries = pgTable("live_activity_start_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  startTokenId: varchar("start_token_id")
+    .references(() => liveActivityStartTokens.id, { onDelete: "cascade" })
+    .notNull(),
+  fixtureId: integer("fixture_id").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  apnsId: text("apns_id"),
+  error: text("error"),
+  attemptedAt: timestamp("attempted_at").defaultNow().notNull(),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_la_start_deliveries_unique").on(table.startTokenId, table.fixtureId),
+  index("idx_la_start_deliveries_fixture").on(table.fixtureId),
+  index("idx_la_start_deliveries_status").on(table.status, table.attemptedAt),
+]);
+
+export type LiveActivityStartToken = typeof liveActivityStartTokens.$inferSelect;
+export type InsertLiveActivityStartToken = typeof liveActivityStartTokens.$inferInsert;
 
 /**
  * Per-user log of every targeted push notification we've sent for editorial
@@ -12394,6 +13743,8 @@ export const appMemberSessions = pgTable("app_member_sessions", {
   index("idx_app_sessions_member").on(table.memberId),
   index("idx_app_sessions_active").on(table.isActive),
   index("idx_app_sessions_expires").on(table.expiresAt),
+  // فهرس البحث بالتوكن — verifyMemberSession يستعلم به في كل طلب Bearer
+  index("idx_app_sessions_token_hash").on(table.tokenHash),
 ]);
 
 // Type for mobile app sessions
@@ -12514,13 +13865,12 @@ export const imageMigrations = pgTable("image_migrations", {
 ]);
 
 // ============================================
-// OPINION WRITER ↔ EDITORIAL TICKETS
+// CONTRIBUTOR ↔ EDITORIAL TICKETS (مراسلون + كتّاب رأي/زوايا)
 // ============================================
-// Internal ticket/messaging system between opinion-column writers
-// (role: opinion_author) and editorial admins. Each ticket is a thread of
-// messages; messages can optionally reply to another message in the same
-// ticket (parentMessageId) for nested replies. lastReadByWriterAt /
-// lastReadByAdminAt drive the "new reply" badge.
+// صندوق تذاكر واحد (`opinion_tickets`) بين المساهمين (opinion_author /
+// angle_writer / reporter) وإدارة التحرير. لا جدول منفصل للمراسل —
+// التمييز في الواجهة عبر دور المستخدم (authorKind). كل تذكرة سلسلة
+// رسائل؛ parentMessageId للردود المتداخلة. lastReadBy* لشارة الجديد.
 
 export const opinionTicketStatuses = ["open", "answered", "closed"] as const;
 export type OpinionTicketStatus = (typeof opinionTicketStatuses)[number];
@@ -12595,6 +13945,36 @@ export type InsertOpinionTicketMessage = z.infer<typeof insertOpinionTicketMessa
 
 export type ImageMigration = typeof imageMigrations.$inferSelect;
 
+// ── Opinion Writer Schedules (اليوم الأسبوعي المخصص لكل كاتب رأي) ──
+// weekday بمصطلح JS: 0=الأحد .. 6=السبت، والوقت HH:mm بتوقيت الرياض.
+export const opinionWriterSchedules = pgTable("opinion_writer_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  writerId: varchar("writer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  weekday: integer("weekday").notNull(),
+  publishTime: varchar("publish_time", { length: 5 }).default("06:00").notNull(),
+  active: boolean("active").default(true).notNull(),
+  notes: text("notes"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_opinion_writer_schedules_writer").on(table.writerId),
+  index("idx_opinion_writer_schedules_weekday").on(table.weekday),
+]);
+
+export const upsertOpinionWriterScheduleSchema = z.object({
+  weekday: z.number().int().min(0).max(6),
+  publishTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "صيغة الوقت يجب أن تكون HH:mm")
+    .optional(),
+  active: z.boolean().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+export type OpinionWriterSchedule = typeof opinionWriterSchedules.$inferSelect;
+export type UpsertOpinionWriterSchedule = z.infer<typeof upsertOpinionWriterScheduleSchema>;
+
 // ── Article Daily Stats (time-series for contributor dashboards) ──
 export const articleDailyStats = pgTable("article_daily_stats", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -12623,3 +14003,548 @@ export const wcPlayerNames = pgTable("wc_player_names", {
 });
 
 export type WcPlayerName = typeof wcPlayerNames.$inferSelect;
+
+// ── طبقة الأسماء الرياضية الموحّدة (كل أنواع الكيانات) ──
+// تعميم wc_player_names: صفّ واحد لكل (نوع كيان، مزوّد، اسم مصدر) يُعرَّب مرة
+// واحدة (AI أو يدويًا) ثم يُخدَم للأبد. status: pending (بانتظار الترجمة —
+// يلتقطه الكرون الليلي) | auto (ترجمة آلية) | verified (اعتماد تحريري يتقدّم
+// على الآلي). hits يرتّب طابور المراجعة بالأهمية. انظر services/sportsNamesService.ts
+export const sportsNameTranslations = pgTable("sports_name_translations", {
+  id: serial("id").primaryKey(),
+  entityType: text("entity_type").notNull(), // team|league|venue|city|coach|referee|source|player
+  provider: text("provider").notNull().default("apifootball"),
+  providerId: text("provider_id"), // معرّف المزوّد إن توفّر (للوحة والتتبّع؛ المفتاح الفعلي الاسم)
+  source: text("source").notNull(), // الاسم كما يرسله المزوّد (لاتيني)
+  arabic: text("arabic").notNull(), // يساوي source للصفوف pending
+  status: text("status").notNull().default("auto"),
+  origin: text("origin").notNull().default("ai"), // ai|manual|import|thesports
+  hits: integer("hits").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_names_type_source").on(table.entityType, table.provider, table.source),
+  index("idx_sports_names_status").on(table.status),
+  index("idx_sports_names_type_status").on(table.entityType, table.status),
+]);
+
+export type SportsNameTranslation = typeof sportsNameTranslations.$inferSelect;
+
+// ============================================
+// SABQ AI HUB — central gateway for all AI usage
+// ============================================
+// Single entry point (server/ai/gateway/) routes every AI call through
+// DB-driven model configs with automatic failover + circuit breaker.
+// See docs: issue #589.
+
+export const aiHubProviders = ["openai", "anthropic", "gemini", "elevenlabs"] as const;
+export type AiHubProviderName = (typeof aiHubProviders)[number];
+
+export const aiHubCapabilities = ["complete", "embed", "image", "tts"] as const;
+export const aiHubPricingUnits = ["tokens", "chars", "image"] as const;
+export const aiHubUsageStatuses = ["success", "fallback", "failed"] as const;
+export const aiHubHealthStatuses = ["healthy", "degraded", "quota_exceeded", "down"] as const;
+
+// Model catalog: providers' models with pricing. Pricing is editable from the
+// dashboard; cost math depends on pricingUnit (tokens → per-1M in/out tokens,
+// chars → per-1M input chars, image → costPerUnit per generated image).
+export const aiModels = pgTable("ai_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  displayName: varchar("display_name", { length: 128 }).notNull(),
+  capabilities: jsonb("capabilities").$type<string[]>().default([]).notNull(),
+  pricingUnit: varchar("pricing_unit", { length: 16 }).default("tokens").notNull(),
+  costPer1MInput: real("cost_per_1m_input").default(0).notNull(),
+  costPer1MOutput: real("cost_per_1m_output").default(0).notNull(),
+  costPerUnit: real("cost_per_unit").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(100).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_models_provider_model").on(table.provider, table.modelId),
+]);
+
+// Per-feature routing config. fallbackChain holds ai_models.id values in
+// failover order. allowFailover=false pins the feature to its primary model
+// (embeddings MUST stay pinned — vectors are incompatible across models).
+export const aiFeatureConfigs = pgTable("ai_feature_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureKey: varchar("feature_key", { length: 64 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 128 }).notNull(),
+  category: varchar("category", { length: 32 }).default("general").notNull(),
+  primaryModelId: varchar("primary_model_id").references(() => aiModels.id),
+  fallbackChain: jsonb("fallback_chain").$type<string[]>().default([]).notNull(),
+  maxTokens: integer("max_tokens"),
+  temperature: real("temperature"),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  allowFailover: boolean("allow_failover").default(true).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Raw per-call log. Grows fast: rolled up nightly into ai_usage_daily and
+// pruned after 90 days by server/jobs/aiUsageRollup.ts.
+export const aiUsageLogs = pgTable("ai_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureKey: varchar("feature_key", { length: 64 }).notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 16 }).default("complete").notNull(),
+  inputTokens: integer("input_tokens").default(0).notNull(),
+  outputTokens: integer("output_tokens").default(0).notNull(),
+  unitCount: integer("unit_count").default(0).notNull(),
+  estimatedCostUsd: real("estimated_cost_usd").default(0).notNull(),
+  latencyMs: integer("latency_ms").default(0).notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  errorCode: varchar("error_code", { length: 32 }),
+  errorMessage: text("error_message"),
+  userId: varchar("user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_usage_logs_created").on(table.createdAt),
+  index("idx_ai_usage_logs_feature").on(table.featureKey, table.createdAt),
+  index("idx_ai_usage_logs_provider").on(table.provider, table.createdAt),
+  index("idx_ai_usage_logs_status").on(table.status, table.createdAt),
+]);
+
+// Daily rollup — dashboard charts read from here, never from raw logs.
+export const aiUsageDaily = pgTable("ai_usage_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: date("date").notNull(),
+  featureKey: varchar("feature_key", { length: 64 }).notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 16 }).default("complete").notNull(),
+  requests: integer("requests").default(0).notNull(),
+  successCount: integer("success_count").default(0).notNull(),
+  fallbackCount: integer("fallback_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  inputTokens: bigint("input_tokens", { mode: "number" }).default(0).notNull(),
+  outputTokens: bigint("output_tokens", { mode: "number" }).default(0).notNull(),
+  unitCount: integer("unit_count").default(0).notNull(),
+  estimatedCostUsd: real("estimated_cost_usd").default(0).notNull(),
+  avgLatencyMs: real("avg_latency_ms").default(0).notNull(),
+  p50LatencyMs: real("p50_latency_ms").default(0).notNull(),
+  p95LatencyMs: real("p95_latency_ms").default(0).notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_usage_daily_unique").on(
+    table.date, table.featureKey, table.provider, table.modelId, table.operation,
+  ),
+  index("idx_ai_usage_daily_date").on(table.date),
+]);
+
+// Circuit-breaker state, persisted so it survives restarts and is shared
+// across instances; the dashboard's live provider strip reads from here.
+export const aiProviderHealth = pgTable("ai_provider_health", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  status: varchar("status", { length: 24 }).default("healthy").notNull(),
+  failCount: integer("fail_count").default(0).notNull(),
+  lastError: text("last_error"),
+  lastErrorCode: varchar("last_error_code", { length: 32 }),
+  cooldownUntil: timestamp("cooldown_until"),
+  lastCheckedAt: timestamp("last_checked_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_provider_health_unique").on(table.provider, table.modelId),
+]);
+
+// Audit trail for config changes made from the dashboard (who switched which
+// model, when) — multiple admins manage the hub, accountability is required.
+export const aiConfigAudit = pgTable("ai_config_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: varchar("entity_type", { length: 32 }).notNull(),
+  entityKey: varchar("entity_key", { length: 128 }).notNull(),
+  action: varchar("action", { length: 32 }).notNull(),
+  changes: jsonb("changes").$type<Record<string, { from: unknown; to: unknown }>>(),
+  userId: varchar("user_id"),
+  userName: varchar("user_name", { length: 128 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_config_audit_created").on(table.createdAt),
+  index("idx_ai_config_audit_entity").on(table.entityType, table.entityKey),
+]);
+
+// Monthly budget limits (global / per provider / per feature) with 80%/100%
+// alert thresholds. lastAlertMonth+lastAlertLevel throttle repeat alerts.
+export const aiBudgets = pgTable("ai_budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scope: varchar("scope", { length: 16 }).notNull(),
+  scopeKey: varchar("scope_key", { length: 64 }).default("").notNull(),
+  monthlyLimitUsd: real("monthly_limit_usd").notNull(),
+  alertAt80: boolean("alert_at_80").default(true).notNull(),
+  alertAt100: boolean("alert_at_100").default(true).notNull(),
+  lastAlertMonth: varchar("last_alert_month", { length: 7 }),
+  lastAlertLevel: integer("last_alert_level").default(0).notNull(),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_budgets_scope").on(table.scope, table.scopeKey),
+]);
+
+export type AiModel = typeof aiModels.$inferSelect;
+export type InsertAiModel = typeof aiModels.$inferInsert;
+export type AiFeatureConfig = typeof aiFeatureConfigs.$inferSelect;
+export type InsertAiFeatureConfig = typeof aiFeatureConfigs.$inferInsert;
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+export type InsertAiUsageLog = typeof aiUsageLogs.$inferInsert;
+export type AiUsageDailyRow = typeof aiUsageDaily.$inferSelect;
+export type AiProviderHealthRow = typeof aiProviderHealth.$inferSelect;
+export type AiConfigAuditRow = typeof aiConfigAudit.$inferSelect;
+export type AiBudget = typeof aiBudgets.$inferSelect;
+
+// ============================================================================
+// المنصة المركزية لتوقعات سبق الرياضي — Prediction Core
+// ============================================================================
+// المرجع: مقترح المنصة المركزية v2. جميع الجداول هنا إضافية ولا تمس جداول
+// المحركات القديمة (wc_*, rsl_*, gc_*, ac_*, cup_*, sports_pool_*). القيم
+// المقيَّدة نصوص موثقة (عرف المستودع — لا pgEnum)، والقوائم المسموحة في
+// shared/predictions.ts. كأس العالم 2026 خارج هذا النظام كليًا حتى نهايته.
+
+// البطولة — الحاوية التجارية (الدوري السعودي، كأس الخليج، ...).
+export const predictionCompetitions = pgTable("prediction_competitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 64 }).notNull(),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en"),
+  seasonKey: varchar("season_key", { length: 32 }).notNull(),
+  // draft | active | paused | completed
+  status: text("status").notNull().default("draft"),
+  // competition | season | none
+  leaderboardMode: text("leaderboard_mode").notNull().default("competition"),
+  sourceProvider: text("source_provider"),
+  timezone: text("timezone").notNull().default("Asia/Riyadh"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_comp_slug").on(table.slug),
+  index("idx_pred_comp_status").on(table.status),
+]);
+
+// ملف الاحتساب المُرقّم الإصدار — لا يُعدَّل ملف مستخدم؛ التغيير = إصدار جديد.
+export const predictionScoringProfiles = pgTable("prediction_scoring_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // null = ملف عام يصلح لأي بطولة لا تملك ملفًا خاصًا
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id),
+  // match_score | match_scorer | first_scorer | champion | top_scorer
+  contestType: text("contest_type").notNull(),
+  // tiered_pool | shared_pool | fixed_points | skill_weighted | player_pool | long_term_pool
+  strategyKey: text("strategy_key").notNull(),
+  version: integer("version").notNull(),
+  params: jsonb("params").$type<Record<string, unknown>>().notNull(),
+  // draft | active | retired
+  status: text("status").notNull().default("draft"),
+  effectiveFrom: timestamp("effective_from"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_profile_version").on(table.competitionId, table.contestType, table.version),
+  index("idx_pred_profile_lookup").on(table.competitionId, table.contestType, table.status),
+]);
+
+// مسابقة توقع واحدة قابلة للإغلاق والتسوية (مباراة، بطل، هداف...).
+export const predictionContests = pgTable("prediction_contests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id).notNull(),
+  // معرف المباراة/الجولة لدى مصدر النتائج (fixtureId أو season-champion...)
+  externalRef: varchar("external_ref", { length: 128 }).notNull(),
+  contestType: text("contest_type").notNull(),
+  scoringProfileId: varchar("scoring_profile_id").references(() => predictionScoringProfiles.id).notNull(),
+  opensAt: timestamp("opens_at").notNull(),
+  locksAt: timestamp("locks_at").notNull(),
+  // draft | open | locked | ready | settled | void
+  status: text("status").notNull().default("draft"),
+  resultPayload: jsonb("result_payload").$type<Record<string, unknown>>(),
+  resultVersion: integer("result_version").notNull().default(0),
+  settledAt: timestamp("settled_at"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_contest_external").on(table.competitionId, table.contestType, table.externalRef),
+  index("idx_pred_contest_status").on(table.status, table.locksAt),
+  index("idx_pred_contest_competition").on(table.competitionId, table.status),
+]);
+
+// مشاركة المستخدم — توقع نشط واحد لكل (مسابقة، مستخدم) مع Upsert قبل الإغلاق.
+export const predictionEntries = pgTable("prediction_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contestId: varchar("contest_id").references(() => predictionContests.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predictionPayload: jsonb("prediction_payload").$type<Record<string, unknown>>().notNull(),
+  // تثبيت إصدار القاعدة الفعال وقت الإرسال — لا يتأثر بتعديل لاحق
+  scoringProfileId: varchar("scoring_profile_id").references(() => predictionScoringProfiles.id).notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // active | withdrawn | invalid
+  status: text("status").notNull().default("active"),
+  // web | ios | android
+  sourcePlatform: text("source_platform").notNull().default("web"),
+}, (table) => [
+  uniqueIndex("idx_pred_entry_contest_user").on(table.contestId, table.userId),
+  index("idx_pred_entry_user").on(table.userId),
+]);
+
+// سجل تشغيل التسوية — صف واحد لكل (مسابقة، نسخة نتيجة). إعادة التشغيل بعد
+// فشل تستأنف الصف نفسه ولا تنشئ صفًا جديدًا، وحالة settled نهائية.
+export const predictionSettlements = pgTable("prediction_settlements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contestId: varchar("contest_id").references(() => predictionContests.id).notNull(),
+  resultVersion: integer("result_version").notNull(),
+  strategyKey: text("strategy_key").notNull(),
+  strategyVersion: integer("strategy_version").notNull(),
+  // sha256 للنتيجة + إصدار القاعدة + معرفات التوقعات — لكشف تغير المدخلات
+  inputHash: varchar("input_hash", { length: 64 }).notNull(),
+  // processing | settled | failed | reversed
+  status: text("status").notNull().default("processing"),
+  summary: jsonb("summary").$type<{
+    entries: number;
+    winners: number;
+    poolAvailable: number;
+    poolAwarded: number;
+    poolCarried: number;
+    poolRemainder: number;
+  }>(),
+  errorCode: text("error_code"),
+  // عند التصحيح: التسوية العكسية تشير إلى الأصلية
+  reversesSettlementId: varchar("reverses_settlement_id"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("idx_pred_settlement_run").on(table.contestId, table.resultVersion, table.strategyVersion),
+  index("idx_pred_settlement_status").on(table.status),
+]);
+
+// سجل النقاط Append-only — المرجع النهائي لنقاط البطولات. لا تعديل ولا حذف؛
+// التصحيح بقيد عكسي يشير إلى القيد الأصلي عبر reverses_ledger_id.
+export const predictionPointsLedger = pgTable("prediction_points_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settlementId: varchar("settlement_id").references(() => predictionSettlements.id).notNull(),
+  contestId: varchar("contest_id").references(() => predictionContests.id).notNull(),
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id).notNull(),
+  entryId: varchar("entry_id").references(() => predictionEntries.id),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  // موجب للمنح، سالب للقيد العكسي فقط
+  points: integer("points").notNull(),
+  // competition | fantasy
+  pointScope: text("point_scope").notNull().default("competition"),
+  // exact | margin | outcome | scorer | first_scorer | champion | top_scorer | skill | reversal | legacy_import
+  reasonCode: text("reason_code").notNull(),
+  breakdown: jsonb("breakdown").$type<Record<string, unknown>>(),
+  reversesLedgerId: varchar("reverses_ledger_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_ledger_award").on(
+    table.settlementId, table.userId, table.entryId, table.pointScope, table.reasonCode,
+  ),
+  index("idx_pred_ledger_user_comp").on(table.userId, table.competitionId),
+  index("idx_pred_ledger_competition").on(table.competitionId, table.pointScope),
+  index("idx_pred_ledger_contest").on(table.contestId),
+]);
+
+// رصيد الترحيل (Jackpot) لكل (بطولة، نوع مسابقة) مع أثر الحركة في كل تسوية.
+export const predictionPoolState = pgTable("prediction_pool_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id).notNull(),
+  contestType: text("contest_type").notNull(),
+  carryBalance: integer("carry_balance").notNull().default(0),
+  lastSettlementId: varchar("last_settlement_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_pool_state_key").on(table.competitionId, table.contestType),
+]);
+
+// صندوق الصادر لمحفظة الولاء — يفصل نجاح التسوية عن التسليم. التسليم عبر
+// awardPoints حصرًا (source = prediction:<ledgerId>) فتبقى ضمانات المحفظة
+// (السقوف ومنع التكرار) سارية. مضاعف العضوية يُطبق هنا فقط، لا في نقاط البطولة.
+export const predictionAwardOutbox = pgTable("prediction_award_outbox", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ledgerId: varchar("ledger_id").references(() => predictionPointsLedger.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  basePoints: integer("base_points").notNull(),
+  // مضاعف طبقة الولاء وقت المنح ×100 (مثال: 120 = ×1.2)
+  multiplierSnapshot: integer("multiplier_snapshot").notNull().default(100),
+  walletPoints: integer("wallet_points").notNull(),
+  // pending | delivered | failed
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastError: text("last_error"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_outbox_ledger").on(table.ledgerId),
+  index("idx_pred_outbox_pending").on(table.status, table.nextAttemptAt),
+]);
+
+export const insertPredictionCompetitionSchema = createInsertSchema(predictionCompetitions)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPredictionScoringProfileSchema = createInsertSchema(predictionScoringProfiles)
+  .omit({ id: true, createdAt: true });
+export const insertPredictionContestSchema = createInsertSchema(predictionContests)
+  .omit({ id: true, createdAt: true, updatedAt: true, settledAt: true, resultVersion: true });
+
+export type PredictionCompetition = typeof predictionCompetitions.$inferSelect;
+export type PredictionScoringProfile = typeof predictionScoringProfiles.$inferSelect;
+export type PredictionContest = typeof predictionContests.$inferSelect;
+export type PredictionEntry = typeof predictionEntries.$inferSelect;
+export type PredictionSettlement = typeof predictionSettlements.$inferSelect;
+export type PredictionPointsLedgerEntry = typeof predictionPointsLedger.$inferSelect;
+export type PredictionPoolState = typeof predictionPoolState.$inferSelect;
+export type PredictionAwardOutboxRow = typeof predictionAwardOutbox.$inferSelect;
+
+// ============================================
+// SURVEYS PLATFORM - منصة استطلاعات الرأي الداخلية
+// استبيانات موجّهة (كتّاب الرأي أولًا) برابط شخصي لكل مدعو
+// ============================================
+
+export const surveys = pgTable("surveys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(), // عنوان الاستطلاع الداخلي
+  purpose: text("purpose"), // شارة الهدف أعلى صفحة الاستجابة، مثل: تطوير قسم الرأي
+  welcomeTitle: text("welcome_title"), // عنوان الترحيب — {name} تُستبدل باسم المدعو
+  welcomeMessage: text("welcome_message"),
+  thankYouTitle: text("thank_you_title"),
+  thankYouMessage: text("thank_you_message"),
+  status: text("status").default("draft").notNull(), // draft, active, closed
+  // الاستهداف بنفس نمط internalAnnouncements: أدوار و/أو مستخدمون محددون
+  audienceRoles: jsonb("audience_roles").$type<string[]>(),
+  audienceUserIds: jsonb("audience_user_ids").$type<string[]>(),
+  channels: jsonb("channels").default(["email", "dashboard"]).notNull().$type<string[]>(),
+  // عرض إحصاءات أعمال المدعو (مقالاته وقراءاته) في الترحيب
+  showRecipientStats: boolean("show_recipient_stats").default(true).notNull(),
+  closesAt: timestamp("closes_at"),
+  sentAt: timestamp("sent_at"),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_surveys_status").on(table.status),
+  index("idx_surveys_created_by").on(table.createdBy),
+]);
+
+export const surveyQuestions = pgTable("survey_questions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(), // single, multi, short_text, long_text, stars, scale
+  text: text("text").notNull(),
+  hint: text("hint"),
+  required: boolean("required").default(true).notNull(),
+  options: jsonb("options").$type<string[]>(), // لأسئلة الاختيار
+  settings: jsonb("settings").$type<{
+    maxChoices?: number;
+    scaleMin?: number;
+    scaleMax?: number;
+    minLabel?: string;
+    maxLabel?: string;
+  }>(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_survey_questions_survey").on(table.surveyId, table.sortOrder),
+]);
+
+// دعوة شخصية لكل مدعو: التوكن هو الرابط العام /survey/{token}
+export const surveyInvitations = pgTable("survey_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  email: text("email"),
+  emailStatus: text("email_status").default("pending").notNull(), // pending, sent, failed, skipped
+  notifiedAt: timestamp("notified_at"), // إشعار لوحة الكاتب
+  openedAt: timestamp("opened_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_survey_invitations_survey_user").on(table.surveyId, table.userId),
+  index("idx_survey_invitations_survey").on(table.surveyId),
+  index("idx_survey_invitations_token").on(table.token),
+]);
+
+export const surveyResponses = pgTable("survey_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  invitationId: varchar("invitation_id").references(() => surveyInvitations.id, { onDelete: "cascade" }).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  // questionId -> قيمة الإجابة (فهرس، فهارس، رقم، أو نص)
+  answers: jsonb("answers").notNull().$type<Record<string, number | number[] | string>>(),
+  durationSeconds: integer("duration_seconds"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_survey_responses_survey").on(table.surveyId),
+  index("idx_survey_responses_user").on(table.userId),
+]);
+
+// تحليل الذكاء الاصطناعي للإجابات وتوصياته للمسؤول
+export const surveyAnalyses = pgTable("survey_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  status: text("status").default("completed").notNull(), // completed, failed
+  model: text("model"),
+  responsesCount: integer("responses_count").default(0).notNull(),
+  summary: text("summary"), // ملخص تنفيذي
+  sentiment: jsonb("sentiment").$type<{ positive: number; neutral: number; negative: number; note?: string }>(),
+  themes: jsonb("themes").$type<{ theme: string; evidence: string; mentions?: number }[]>(),
+  recommendations: jsonb("recommendations").$type<{ title: string; detail: string; priority: "high" | "medium" | "low"; basedOn?: string }[]>(),
+  quickWins: jsonb("quick_wins").$type<string[]>(),
+  error: text("error"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_survey_analyses_survey").on(table.surveyId, table.createdAt),
+]);
+
+export const surveysRelations = relations(surveys, ({ one, many }) => ({
+  createdByUser: one(users, { fields: [surveys.createdBy], references: [users.id] }),
+  questions: many(surveyQuestions),
+  invitations: many(surveyInvitations),
+  responses: many(surveyResponses),
+  analyses: many(surveyAnalyses),
+}));
+
+export const surveyQuestionsRelations = relations(surveyQuestions, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyQuestions.surveyId], references: [surveys.id] }),
+}));
+
+export const surveyInvitationsRelations = relations(surveyInvitations, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyInvitations.surveyId], references: [surveys.id] }),
+  user: one(users, { fields: [surveyInvitations.userId], references: [users.id] }),
+}));
+
+export const surveyResponsesRelations = relations(surveyResponses, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyResponses.surveyId], references: [surveys.id] }),
+  invitation: one(surveyInvitations, { fields: [surveyResponses.invitationId], references: [surveyInvitations.id] }),
+  user: one(users, { fields: [surveyResponses.userId], references: [users.id] }),
+}));
+
+export const surveyAnalysesRelations = relations(surveyAnalyses, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyAnalyses.surveyId], references: [surveys.id] }),
+}));
+
+export const insertSurveySchema = createInsertSchema(surveys).omit({
+  id: true,
+  sentAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSurveyQuestionSchema = createInsertSchema(surveyQuestions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Survey = typeof surveys.$inferSelect;
+export type InsertSurvey = z.infer<typeof insertSurveySchema>;
+export type SurveyQuestion = typeof surveyQuestions.$inferSelect;
+export type InsertSurveyQuestion = z.infer<typeof insertSurveyQuestionSchema>;
+export type SurveyInvitation = typeof surveyInvitations.$inferSelect;
+export type SurveyResponse = typeof surveyResponses.$inferSelect;
+export type SurveyAnalysis = typeof surveyAnalyses.$inferSelect;

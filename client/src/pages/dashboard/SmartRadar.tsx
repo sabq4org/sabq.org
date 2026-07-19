@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -58,7 +59,6 @@ import {
   Globe,
   Plus,
   Radar,
-  RefreshCw,
   RotateCcw,
   Satellite,
   Send,
@@ -86,6 +86,8 @@ interface RadarItemRow {
   id: string;
   sourceId: string;
   sourceName: string | null;
+  sourceType: "rss" | "json" | "x" | null;
+  xValue: string | null;
   link: string;
   originalTitle: string;
   originalExcerpt: string | null;
@@ -106,13 +108,29 @@ interface RadarSourceRow {
   id: string;
   name: string;
   url: string;
-  type: "rss" | "json";
+  type: "rss" | "json" | "x";
   language: string;
   categorySlug: string | null;
   fetchIntervalMinutes: number;
   isActive: boolean;
   lastFetchedAt: string | null;
   lastError: string | null;
+  xType?: string | null;
+  xValue?: string | null;
+  xProvider?: string | null;
+  tier?: string | null;
+  region?: string | null;
+  weight?: number | null;
+  packId?: string | null;
+}
+
+interface RadarHealthResponse {
+  active: number;
+  rss: number;
+  xWatches: number;
+  withError: number;
+  neverFetched: number;
+  errors: Array<{ id: string; name: string; type: string; lastError: string | null; tier: string | null }>;
 }
 
 interface RadarRuleRow {
@@ -173,6 +191,7 @@ export default function SmartRadar() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("inbox");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [channelFilter, setChannelFilter] = useState<"all" | "feed" | "x">("all");
   const [limit, setLimit] = useState(30);
 
   const tabParams = TABS.find((t) => t.id === activeTab)?.params ?? {};
@@ -191,7 +210,12 @@ export default function SmartRadar() {
   }>({
     queryKey: [
       "/api/radar/items",
-      { ...tabParams, sourceId: sourceFilter === "all" ? undefined : sourceFilter, limit },
+      {
+        ...tabParams,
+        sourceId: sourceFilter === "all" ? undefined : sourceFilter,
+        channel: channelFilter === "all" ? undefined : channelFilter,
+        limit,
+      },
     ],
     refetchInterval: 60_000,
   });
@@ -201,7 +225,14 @@ export default function SmartRadar() {
   const { data: sourcesRaw } = useQuery<{ sources: RadarSourceRow[] }>({
     queryKey: ["/api/radar/sources"],
   });
-  const sources = Array.isArray(sourcesRaw?.sources) ? sourcesRaw.sources : [];
+  const allSources = Array.isArray(sourcesRaw?.sources) ? sourcesRaw.sources : [];
+  const sources = allSources.filter((s) => s.type !== "x");
+  const xWatches = allSources.filter((s) => s.type === "x");
+
+  const { data: health } = useQuery<RadarHealthResponse>({
+    queryKey: ["/api/radar/health"],
+    refetchInterval: 120_000,
+  });
 
   const { data: rulesRaw } = useQuery<{ rules: RadarRuleRow[] }>({
     queryKey: ["/api/radar/alert-rules"],
@@ -260,23 +291,6 @@ export default function SmartRadar() {
       toast({ title: "❌ فشلت الاستعادة", description: error.message, variant: "destructive" }),
   });
 
-  const runMutation = useMutation({
-    mutationFn: () => apiRequest<{ summary: any }>("/api/radar/run", { method: "POST" }),
-    onSuccess: (data) => {
-      invalidateRadar();
-      queryClient.invalidateQueries({ queryKey: ["/api/radar/sources"] });
-      const s = data?.summary;
-      toast({
-        title: "✅ اكتملت دورة الرادار",
-        description: s
-          ? `مصادر: ${s.sourcesFetched} · جديد: ${s.newItems} · حُلِّل: ${s.analyzed} · تنبيهات: ${s.alertsSent}`
-          : undefined,
-      });
-    },
-    onError: (error: Error) =>
-      toast({ title: "❌ فشلت دورة الرادار", description: error.message, variant: "destructive" }),
-  });
-
   const pendingItemId =
     transformMutation.isPending || exportMutation.isPending
       ? (transformMutation.variables ?? exportMutation.variables)
@@ -284,33 +298,27 @@ export default function SmartRadar() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         {/* ---------- الترويسة ---------- */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <Radar className="h-7 w-7 text-primary" />
-              رادار سبق الذكي
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              رصد المصادر العالمية بأي لغة، فلترة بالقيمة الإخبارية، وتحويل تحريري بمعيار سبق —
-              جاهز للنشر بضغطة زر
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => runMutation.mutate()}
-              disabled={runMutation.isPending}
-            >
-              <RefreshCw className={`ml-1 h-4 w-4 ${runMutation.isPending ? "animate-spin" : ""}`} />
-              {runMutation.isPending ? "جارٍ الرصد..." : "تشغيل دورة الآن"}
-            </Button>
+        <DashboardPageHeader
+          icon={Radar}
+          title="رادار سبق الذكي"
+          description="الرصد الآلي والجلب اليدوي متوقفان إجبارياً. يمكن مراجعة المواد والمصادر الموجودة فقط."
+          actions={
+            <>
             <SourcesSheet sources={sources} categories={categories} />
+            <WatchesSheet watches={xWatches} categories={categories} />
             <RulesDialog rules={rules} telegramConfigured={stats?.telegramConfigured ?? false} />
+            </>
+          }
+        />
+
+        {health && health.withError > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            {health.withError} مصدر/رصدة بخطأ جلب — راجع «المصادر» أو «رصدات X». شبكة نشطة:{" "}
+            {health.rss} RSS · {health.xWatches} X
           </div>
-        </div>
+        )}
 
         {/* ---------- مؤشرات سريعة ---------- */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -332,9 +340,10 @@ export default function SmartRadar() {
         </div>
 
         {/* ---------- التبويبات والفلاتر ---------- */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="w-full overflow-x-auto sm:w-auto">
           <Tabs value={activeTab} onValueChange={(value) => { setActiveTab(value); setLimit(30); }}>
-            <TabsList>
+            <TabsList className="w-max">
               {TABS.map((tab) => (
                 <TabsTrigger key={tab.id} value={tab.id}>
                   {tab.label}
@@ -345,19 +354,35 @@ export default function SmartRadar() {
               ))}
             </TabsList>
           </Tabs>
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="كل المصادر" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل المصادر</SelectItem>
-              {sources.map((source) => (
-                <SelectItem key={source.id} value={source.id}>
-                  {source.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Select
+              value={channelFilter}
+              onValueChange={(value) => setChannelFilter(value as "all" | "feed" | "x")}
+            >
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="القناة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="feed">صحف / RSS</SelectItem>
+                <SelectItem value="x">إكس فقط</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="كل المصادر" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المصادر</SelectItem>
+                {allSources.map((source) => (
+                  <SelectItem key={source.id} value={source.id}>
+                    {source.type === "x" ? `X · ${source.name}` : source.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* ---------- شبكة البطاقات ---------- */}
@@ -374,7 +399,7 @@ export default function SmartRadar() {
               <p className="text-muted-foreground">{EMPTY_MESSAGES[activeTab]}</p>
               {sources.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  ابدأ من زر «المصادر» أعلاه — أو شغّل سكربت البذر scripts/seed-radar-sources.ts
+                  ابدأ من «المصادر» / «رصدات X» — أو: npx tsx scripts/seed-radar-pack.ts --all
                 </p>
               )}
             </CardContent>
@@ -468,7 +493,19 @@ function RadarItemCard({
             </Badge>
           )}
           <Badge variant="secondary">{item.sourceName ?? "مصدر"}</Badge>
+          {item.sourceType === "x" ? (
+            <Badge className="bg-sky-600 text-white hover:bg-sky-600">
+              X{item.xValue ? ` · ${item.xValue}` : ""}
+            </Badge>
+          ) : (
+            <Badge variant="outline">{item.sourceType === "json" ? "JSON" : "RSS"}</Badge>
+          )}
           {item.originalLanguage && <Badge variant="outline">{item.originalLanguage}</Badge>}
+          {!item.translatedTitle && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300">
+              بانتظار الترجمة
+            </Badge>
+          )}
           {/* «نُشر» = تاريخ المصدر الحقيقي؛ غيابه يُعلن صراحةً بوقت الرصد —
               عرض وقت الجلب كأنه وقت النشر أوهم بأن خبرًا قديمًا «منذ دقائق» */}
           <span className="text-muted-foreground">
@@ -586,6 +623,7 @@ function SourcesSheet({
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/radar/sources"] });
     queryClient.invalidateQueries({ queryKey: ["/api/radar/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/health"] });
   };
 
   const createMutation = useMutation({
@@ -597,7 +635,7 @@ function SourcesSheet({
     onSuccess: () => {
       invalidate();
       setForm(EMPTY_SOURCE_FORM);
-      toast({ title: "✅ أُضيف المصدر — سيُجلب في الدورة القادمة" });
+      toast({ title: "✅ أُضيف المصدر (الجلب متوقف إجبارياً)" });
     },
     onError: (error: Error) =>
       toast({ title: "❌ فشلت إضافة المصدر", description: error.message, variant: "destructive" }),
@@ -612,18 +650,6 @@ function SourcesSheet({
     onSuccess: invalidate,
     onError: (error: Error) =>
       toast({ title: "❌ فشل التعديل", description: error.message, variant: "destructive" }),
-  });
-
-  const fetchNowMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<{ inserted: number }>(`/api/radar/sources/${id}/fetch`, { method: "POST" }),
-    onSuccess: (data) => {
-      invalidate();
-      queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
-      toast({ title: `✅ اكتمل الجلب — ${data?.inserted ?? 0} مادة جديدة` });
-    },
-    onError: (error: Error) =>
-      toast({ title: "❌ فشل الجلب", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -649,7 +675,7 @@ function SourcesSheet({
         <SheetHeader className="text-right">
           <SheetTitle>مصادر الرادار</SheetTitle>
           <SheetDescription>
-            RSS أو JSON API بأي لغة — لكل مصدر فترة جلب خاصة، والرادار يتولى الباقي
+            RSS أو JSON — حزم جاهزة: npx tsx scripts/seed-radar-pack.ts us-nationals us-broadcast
           </SheetDescription>
         </SheetHeader>
 
@@ -774,31 +800,14 @@ function SourcesSheet({
                   كل {source.fetchIntervalMinutes} د
                   {source.lastFetchedAt ? ` · آخر جلب ${timeAgo(source.lastFetchedAt)}` : " · لم يُجلب بعد"}
                 </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    disabled={fetchNowMutation.isPending}
-                    onClick={() => fetchNowMutation.mutate(source.id)}
-                  >
-                    <RefreshCw
-                      className={`h-3.5 w-3.5 ${
-                        fetchNowMutation.isPending && fetchNowMutation.variables === source.id
-                          ? "animate-spin"
-                          : ""
-                      }`}
-                    />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-red-500"
-                    onClick={() => setDeleteId(source.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-red-500"
+                  onClick={() => setDeleteId(source.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
               {source.lastError && (
                 <p className="mt-1 text-xs text-red-500 line-clamp-2" dir="ltr">
@@ -820,6 +829,302 @@ function SourcesSheet({
               <AlertDialogTitle>حذف المصدر؟</AlertDialogTitle>
               <AlertDialogDescription>
                 سيُحذف المصدر وكل مواده المرصودة غير المُصدَّرة. لا تراجع عن هذا الإجراء.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-red-600 hover:bg-red-700"
+                onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              >
+                حذف
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ---------- رصدات إكس ----------
+
+const EMPTY_WATCH_FORM = {
+  value: "",
+  label: "",
+  type: "auto" as "auto" | "keyword" | "hashtag" | "account" | "query" | "trend",
+  provider: "auto" as "auto" | "official" | "twitterapiio",
+  language: "en",
+  categorySlug: "",
+  fetchIntervalMinutes: 1,
+};
+
+function WatchesSheet({
+  watches,
+  categories,
+}: {
+  watches: RadarSourceRow[];
+  categories: CategoryRow[];
+}) {
+  const { toast } = useToast();
+  const [form, setForm] = useState(EMPTY_WATCH_FORM);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const activeCategories = useMemo(
+    () => categories.filter((c) => !c.status || c.status === "active"),
+    [categories]
+  );
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/sources"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/watches"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/health"] });
+  };
+
+  const createMutation = useMutation({
+    mutationFn: (body: typeof EMPTY_WATCH_FORM) =>
+      apiRequest<{ watch: RadarSourceRow; inserted: number | null; fetchError: string | null }>(
+        "/api/radar/watches",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            value: body.value.trim(),
+            label: body.label.trim() || undefined,
+            type: body.type === "auto" ? undefined : body.type,
+            provider: body.provider,
+            language: body.language || "en",
+            categorySlug: body.categorySlug || undefined,
+            fetchIntervalMinutes: body.fetchIntervalMinutes,
+          }),
+        }
+      ),
+    onSuccess: () => {
+      invalidate();
+      setForm(EMPTY_WATCH_FORM);
+      toast({ title: "✅ أُضيفت الرصدة (الجلب متوقف إجبارياً)" });
+    },
+    onError: (error: Error) =>
+      toast({ title: "❌ فشلت إضافة الرصدة", description: error.message, variant: "destructive" }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest(`/api/radar/sources/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive }),
+      }),
+    onSuccess: invalidate,
+    onError: (error: Error) =>
+      toast({ title: "❌ فشل التعديل", description: error.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/radar/sources/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      setDeleteId(null);
+      toast({ title: "تم حذف الرصدة" });
+    },
+    onError: (error: Error) =>
+      toast({ title: "❌ فشل الحذف", description: error.message, variant: "destructive" }),
+  });
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Zap className="ml-1 h-4 w-4" />
+          رصدات X ({watches.length})
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-full overflow-y-auto sm:max-w-lg" dir="rtl">
+        <SheetHeader className="text-right">
+          <SheetTitle>رصدات إكس</SheetTitle>
+          <SheetDescription>
+            حساب أو كلمة أو هاشتاق أو ترند — الجلب الآلي واليدوي متوقفان إجبارياً حالياً
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4 space-y-3 rounded-lg border p-4">
+          <h4 className="flex items-center gap-1 text-sm font-bold">
+            <Plus className="h-4 w-4" /> إضافة رصدة
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <Label className="text-xs">القيمة</Label>
+              <Input
+                dir="ltr"
+                value={form.value}
+                onChange={(e) => setForm({ ...form, value: e.target.value })}
+                placeholder="@AP أو #الهلال أو رؤية 2030"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs">الاسم (اختياري)</Label>
+              <Input
+                value={form.label}
+                onChange={(e) => setForm({ ...form, label: e.target.value })}
+                placeholder="AP Breaking"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">النوع</Label>
+              <Select
+                value={form.type}
+                onValueChange={(value) =>
+                  setForm({ ...form, type: value as typeof form.type })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">تخمين تلقائي</SelectItem>
+                  <SelectItem value="account">حساب</SelectItem>
+                  <SelectItem value="keyword">كلمة</SelectItem>
+                  <SelectItem value="hashtag">هاشتاق</SelectItem>
+                  <SelectItem value="query">استعلام</SelectItem>
+                  <SelectItem value="trend">ترند</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">المزوّد</Label>
+              <Select
+                value={form.provider}
+                onValueChange={(value) =>
+                  setForm({ ...form, provider: value as typeof form.provider })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">تلقائي</SelectItem>
+                  <SelectItem value="official">رسمي</SelectItem>
+                  <SelectItem value="twitterapiio">twitterapi.io</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">لغة</Label>
+              <Input
+                dir="ltr"
+                value={form.language}
+                onChange={(e) => setForm({ ...form, language: e.target.value })}
+                placeholder="en"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">الفترة (دقائق)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={form.fetchIntervalMinutes}
+                onChange={(e) =>
+                  setForm({ ...form, fetchIntervalMinutes: Number(e.target.value) || 1 })
+                }
+              />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs">تصنيف افتراضي</Label>
+              <Select
+                value={form.categorySlug || "none"}
+                onValueChange={(value) =>
+                  setForm({ ...form, categorySlug: value === "none" ? "" : value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="بلا" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">يحدده الذكاء</SelectItem>
+                  {activeCategories.map((category) => (
+                    <SelectItem key={category.slug} value={category.slug}>
+                      {category.nameAr}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="w-full"
+            disabled={!form.value.trim() || createMutation.isPending}
+            onClick={() => createMutation.mutate(form)}
+          >
+            {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة الرصدة"}
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {watches.map((watch) => (
+            <div key={watch.id} className="rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      !watch.isActive ? "bg-gray-300" : watch.lastError ? "bg-red-500" : "bg-green-500"
+                    }`}
+                  />
+                  <span className="font-medium">{watch.name}</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {watch.xType ?? "x"}
+                  </Badge>
+                  {watch.tier && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      Tier {watch.tier}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-[10px]" dir="ltr">
+                    {watch.xValue}
+                  </Badge>
+                </div>
+                <Switch
+                  checked={watch.isActive}
+                  onCheckedChange={(checked) =>
+                    toggleMutation.mutate({ id: watch.id, isActive: checked })
+                  }
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  كل {watch.fetchIntervalMinutes} د
+                  {watch.lastFetchedAt ? ` · آخر جلب ${timeAgo(watch.lastFetchedAt)}` : " · لم يُجلب بعد"}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-red-500"
+                    onClick={() => setDeleteId(watch.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              {watch.lastError && (
+                <p className="mt-1 text-xs text-red-500 line-clamp-2" dir="ltr">
+                  {watch.lastError}
+                </p>
+              )}
+            </div>
+          ))}
+          {watches.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              لا رصدات بعد — أضف @AP أعلاه أو: npx tsx scripts/seed-radar-pack.ts x-news-accounts
+            </p>
+          )}
+        </div>
+
+        <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader className="text-right">
+              <AlertDialogTitle>حذف الرصدة؟</AlertDialogTitle>
+              <AlertDialogDescription>
+                سيُحذف الرصدة وكل موادها غير المُصدَّرة.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

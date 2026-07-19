@@ -277,6 +277,34 @@ data class ApiBreakingHeadline(
     val publishedAt: String? = null,
 )
 
+/**
+ * Dashboard-curated "شريط الأخبار العاجلة" — `GET /api/breaking-ticker/
+ * active` (server/routes.ts → storage.getActiveBreakingTicker). The
+ * payload is `{ topic: {...}, headlines: [...] }` with camelCase keys,
+ * or a bare `null` when no topic is active (decoding then fails and
+ * callers treat it as "no ticker" via runCatching). Distinct from
+ * [ApiBreakingTicker] (`/api/v1/breaking`), which returns breaking-type
+ * *articles*. iOS counterpart: `APIBreakingTicker`
+ * (Services/APIModels.swift:417).
+ */
+@Serializable
+data class ApiBreakingTickerActive(
+    val headlines: List<ApiBreakingTickerHeadline> = emptyList(),
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiBreakingTickerHeadline(
+    val id: String = "",
+    val headline: String = "",
+    @JsonNames("linked_article_slug")
+    val linkedArticleSlug: String? = null,
+    @JsonNames("linked_article_id")
+    val linkedArticleId: String? = null,
+    @JsonNames("external_url")
+    val externalUrl: String? = null,
+)
+
 /** Single entry from `GET /api/trending-keywords`. */
 @Serializable
 data class ApiTrendingKeyword(
@@ -533,5 +561,211 @@ data class ApiContributorRanking(
     val myViews: Int = 0,
     @JsonNames("isTopTen", "is_top_ten")
     val isTopTen: Boolean = false,
+)
+
+// -- موعد النشر الأسبوعي لكاتب الرأي ------------------------------
+
+/** بانر الموعد بثلاث حالات: ok | reminder | late */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterScheduleBanner(
+    val weekday: Int = 0,
+    @JsonNames("publishTime", "publish_time")
+    val publishTime: String = "06:00",
+    @JsonNames("nextPublishAt", "next_publish_at")
+    val nextPublishAt: String? = null,
+    @JsonNames("submitDeadline", "submit_deadline")
+    val submitDeadline: String? = null,
+    val state: String = "ok",
+    @JsonNames("hasUpcoming", "has_upcoming")
+    val hasUpcoming: Boolean = false,
+)
+
+/** بانر لمن له يوم، أو canChoose + ازدحام الأيام لمن لا يوم له */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterScheduleResponse(
+    val success: Boolean = true,
+    val banner: ApiWriterScheduleBanner? = null,
+    @JsonNames("canChoose", "can_choose")
+    val canChoose: Boolean = false,
+    @JsonNames("dayLoads", "day_loads")
+    val dayLoads: List<Int> = emptyList(),
+)
+
+@Serializable
+data class WriterSchedulePickRequest(val weekday: Int)
+
+// -- مساحة الكاتب (لوحة الكاتب بأربعة تبويبات — مرآة WriterWorkspaceView في iOS) --
+
+@Serializable
+data class ApiWriterDeskItem(
+    val id: String = "",
+    val title: String = "",
+    val status: String = "draft",
+    @JsonNames("reviewStatus", "review_status")
+    val reviewStatus: String? = null,
+    @JsonNames("reviewNotes", "review_notes")
+    val reviewNotes: String? = null,
+    @JsonNames("nextAction", "next_action")
+    val nextAction: String = "متابعة الكتابة",
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterTrackingArticle(
+    val id: String = "",
+    val title: String = "",
+    val status: String = "draft",
+    @JsonNames("reviewStatus", "review_status")
+    val reviewStatus: String? = null,
+    @JsonNames("reviewNotes", "review_notes")
+    val reviewNotes: String? = null,
+    @JsonNames("scheduledAt", "scheduled_at")
+    val scheduledAt: String? = null,
+    @JsonNames("publishedAt", "published_at")
+    val publishedAt: String? = null,
+    @JsonNames("updatedAt", "updated_at")
+    val updatedAt: String? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterPulseComment(
+    val content: String = "",
+    @JsonNames("articleTitle", "article_title")
+    val articleTitle: String = "مقالك",
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterReaderPulse(
+    @JsonNames("commentsCount", "comments_count")
+    val commentsCount: Int = 0,
+    @JsonNames("positiveShare", "positive_share")
+    val positiveShare: Int = 0,
+    @JsonNames("highlightedComment", "highlighted_comment")
+    val highlightedComment: ApiWriterPulseComment? = null,
+    val message: String = "",
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterFollowUp(
+    @JsonNames("articleId", "article_id")
+    val articleId: String = "",
+    val title: String = "",
+    val prompt: String = "",
+)
+
+@Serializable
+data class ApiWriterCalendarItem(
+    val id: String = "",
+    val name: String = "",
+    val date: String = "",
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterMonthlyBrief(
+    @JsonNames("publishedCount", "published_count")
+    val publishedCount: Int = 0,
+    val views: Int = 0,
+    val message: String = "",
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterWorkspace(
+    val success: Boolean = true,
+    val desk: List<ApiWriterDeskItem> = emptyList(),
+    val tracking: List<ApiWriterTrackingArticle> = emptyList(),
+    @JsonNames("readerPulse", "reader_pulse")
+    val readerPulse: ApiWriterReaderPulse? = null,
+    @JsonNames("followUp", "follow_up")
+    val followUp: ApiWriterFollowUp? = null,
+    val calendar: List<ApiWriterCalendarItem> = emptyList(),
+    @JsonNames("monthlyBrief", "monthly_brief")
+    val monthlyBrief: ApiWriterMonthlyBrief? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterIdea(
+    val id: String = "",
+    val title: String = "",
+    val angle: String = "",
+    @JsonNames("whyNow", "why_now")
+    val whyNow: String = "",
+    val audience: String = "",
+    val kind: String = "specialty",
+)
+
+@Serializable
+data class ApiWriterIdeasResponse(
+    val success: Boolean = true,
+    val ideas: List<ApiWriterIdea> = emptyList(),
+)
+
+@Serializable
+data class IdeaCoachRequest(val idea: String)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterCoachResult(
+    val success: Boolean = true,
+    val reflection: String? = null,
+    val questions: List<String> = emptyList(),
+    @JsonNames("thesisOptions", "thesis_options")
+    val thesisOptions: List<String> = emptyList(),
+    val outline: List<String> = emptyList(),
+    val counterpoint: String? = null,
+    @JsonNames("sourcesToSeek", "sources_to_seek")
+    val sourcesToSeek: List<String> = emptyList(),
+    val cautions: List<String> = emptyList(),
+)
+
+@Serializable
+data class ArticleReviewRequest(val articleId: String)
+
+@Serializable
+data class ApiWriterReviewCheck(
+    val key: String = "",
+    val label: String = "",
+    val score: Int = 0,
+    val note: String = "",
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterReviewResult(
+    val success: Boolean = true,
+    @JsonNames("overallScore", "overall_score")
+    val overallScore: Int? = null,
+    val summary: String? = null,
+    val checks: List<ApiWriterReviewCheck> = emptyList(),
+    @JsonNames("headlineSuggestions", "headline_suggestions")
+    val headlineSuggestions: List<String> = emptyList(),
+    @JsonNames("sourceFlags", "source_flags")
+    val sourceFlags: List<String> = emptyList(),
+    @JsonNames("sensitiveClaims", "sensitive_claims")
+    val sensitiveClaims: List<String> = emptyList(),
+    val strengths: List<String> = emptyList(),
+)
+
+@Serializable
+data class ApiWriterStyleProfile(
+    val success: Boolean = true,
+    val ready: Boolean = false,
+    val message: String? = null,
+    val signature: String? = null,
+    val traits: List<String> = emptyList(),
+    val guidance: List<String> = emptyList(),
+)
+
+@Serializable
+data class ApiWriterSchedulePickResponse(
+    val success: Boolean = false,
+    val message: String? = null,
 )
 

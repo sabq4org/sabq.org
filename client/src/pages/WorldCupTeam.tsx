@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog } from "lucide-react";
+import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog, Wallet, Landmark, Award, Bandage, BarChart3, MapPin, Shirt } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -13,11 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MatchCard } from "@/components/worldcup/MatchCard";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
 import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
-import type {
-  WcFixture,
-  WcSquadPlayer,
-  WcStandingRow,
-  WcTeamProfile,
+import {
+  formatMarketValue,
+  type WcFixture,
+  type WcSquadPlayer,
+  type WcStandingRow,
+  type WcTeamProfile,
 } from "@/components/worldcup/wcTypes";
 
 const POSITION_SECTIONS = [
@@ -120,7 +121,14 @@ function SquadPlayerButton({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold truncate">{player.name}</p>
-        {player.age != null && <p className="text-[10px] text-muted-foreground">{player.age} سنة</p>}
+        <div className="flex items-center gap-1.5">
+          {player.age != null && <span className="text-[10px] text-muted-foreground">{player.age} سنة</span>}
+          {player.marketValue != null && player.marketValue > 0 && (
+            <span className="text-[10px] font-bold text-emerald-600 tabular-nums">
+              {formatMarketValue(player.marketValue, player.marketValueCurrency)}
+            </span>
+          )}
+        </div>
       </div>
       <span className="text-sm font-black text-muted-foreground tabular-nums shrink-0">
         {player.number ?? "—"}
@@ -158,6 +166,7 @@ export default function WorldCupTeam() {
   const upcoming = fixtures.filter((f) => !f.status.live && !f.status.finished);
   const finished = fixtures.filter((f) => f.status.finished).slice().reverse();
   const squad = Array.isArray(data?.squad) ? data.squad : [];
+  const injuries = Array.isArray(data?.injuries) ? data.injuries : [];
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -203,10 +212,57 @@ export default function WorldCupTeam() {
                         {data.group.group}
                       </span>
                     )}
-                    {data.coach && (
+                    {(data.coach || data.coachInfo) && (
                       <span className="inline-flex items-center gap-1.5">
-                        <UserCog className="h-4 w-4" />
-                        المدرّب: {data.coach}
+                        {data.coachInfo?.photo ? (
+                          <img
+                            src={data.coachInfo.photo}
+                            alt={data.coach || data.coachInfo.name}
+                            className="h-5 w-5 rounded-full object-cover ring-1 ring-white/40 bg-white/20"
+                          />
+                        ) : (
+                          <UserCog className="h-4 w-4" />
+                        )}
+                        المدرّب: {data.coach || data.coachInfo?.name}
+                      </span>
+                    )}
+                    {data.coachInfo?.formation && (
+                      <span className="inline-flex items-center gap-1.5" title="الخطة المفضّلة للمدرّب">
+                        <Shirt className="h-4 w-4" />
+                        <span dir="ltr">{data.coachInfo.formation}</span>
+                      </span>
+                    )}
+                    {data.venue?.name && (
+                      <span className="inline-flex items-center gap-1.5" title="ملعب المنتخب">
+                        <MapPin className="h-4 w-4" />
+                        {data.venue.name}
+                      </span>
+                    )}
+                    {data.fifaRank && (
+                      <span className="inline-flex items-center gap-1.5" title="تصنيف فيفا للمنتخبات">
+                        <Award className="h-4 w-4" />
+                        تصنيف فيفا #{data.fifaRank.rank}
+                        {data.fifaRank.change != null && data.fifaRank.change !== 0 && (
+                          <span
+                            dir="ltr"
+                            className={data.fifaRank.change > 0 ? "text-emerald-200" : "text-rose-200"}
+                          >
+                            {data.fifaRank.change > 0 ? "▲" : "▼"}
+                            {Math.abs(data.fifaRank.change)}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {data.extra?.marketValue != null && (
+                      <span className="inline-flex items-center gap-1.5" title="القيمة السوقية للتشكيلة">
+                        <Wallet className="h-4 w-4" />
+                        {formatMarketValue(data.extra.marketValue, data.extra.marketValueCurrency)}
+                      </span>
+                    )}
+                    {data.extra?.foundation != null && (
+                      <span className="inline-flex items-center gap-1.5" title="سنة التأسيس">
+                        <Landmark className="h-4 w-4" />
+                        تأسّس {data.extra.foundation}
                       </span>
                     )}
                   </div>
@@ -249,6 +305,124 @@ export default function WorldCupTeam() {
                       <div className="space-y-1">
                         {data.group.rows.map((row) => (
                           <GroupRow key={row.team.id} row={row} currentTeamId={data.team.id} />
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* الملعب */}
+            {data.venue?.name && (
+              <section className="py-8 border-b border-border/60">
+                <div className="container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <MapPin className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <h2 className="text-xl font-bold">الملعب</h2>
+                  </div>
+                  <Card className="border-0 dark:border dark:border-card-border">
+                    <CardContent className="p-4 flex items-center gap-4 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-base font-bold truncate">{data.venue.name}</p>
+                        {(data.venue.city || data.venue.country) && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {[data.venue.city, data.venue.country].filter(Boolean).join("، ")}
+                          </p>
+                        )}
+                      </div>
+                      {data.venue.capacity != null && (
+                        <div className="text-center shrink-0">
+                          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                            {data.venue.capacity.toLocaleString("ar-EG")}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">سعة المقاعد</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* الإصابات والغيابات */}
+            {injuries.length > 0 && (
+              <section className="py-8 border-b border-border/60">
+                <div className="container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-rose-500/10">
+                      <Bandage className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                    </div>
+                    <h2 className="text-xl font-bold">الإصابات والغيابات</h2>
+                  </div>
+                  <Card className="border-0 dark:border dark:border-card-border">
+                    <CardContent className="p-4">
+                      <ul className="divide-y divide-border/60">
+                        {injuries.map((inj, i) => (
+                          <li key={`${inj.player}-${i}`} className="flex items-center gap-3 py-2.5">
+                            <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold truncate">{inj.player}</p>
+                              {inj.reason && (
+                                <p className="text-xs text-muted-foreground truncate">{inj.reason}</p>
+                              )}
+                            </div>
+                            <div className="text-left shrink-0">
+                              {inj.status && (
+                                <Badge variant="secondary" className="text-[10px] font-bold">
+                                  {inj.status}
+                                </Badge>
+                              )}
+                              {inj.until && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  العودة: {inj.until}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* إحصاء المنتخب في البطولة (TheSports) */}
+            {data.seasonStats?.available && data.seasonStats.items.length > 0 && (
+              <section className="py-8 border-b border-border/60">
+                <div className="container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold">إحصاء المنتخب في البطولة</h2>
+                      {data.seasonStats.matches > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          من {data.seasonStats.matches} مباراة
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Card className="border-0 dark:border dark:border-card-border">
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {data.seasonStats.items.map((s, i) => (
+                          <div
+                            key={`${s.label}-${i}`}
+                            className="rounded-xl bg-muted/40 px-3 py-2.5 text-center"
+                          >
+                            <p className="text-lg font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+                              {s.value}
+                              {s.percent ? "%" : ""}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                              {s.label}
+                            </p>
+                          </div>
                         ))}
                       </div>
                     </CardContent>

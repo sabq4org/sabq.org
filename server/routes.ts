@@ -1,14 +1,29 @@
 // Reference: javascript_object_storage blueprint
-import type { Express, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import * as Sentry from "@sentry/node";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
-import { verifyImageMagicBytes } from "./utils/imageVerify";
+import {
+  needsWebpTranscode,
+  normalizeImageForUpload,
+  verifyImageMagicBytes,
+} from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
+import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
+import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
+import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
+import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
+import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
+import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
+import {
+  getEnArticleAnalyticsDetail,
+  searchEnArticlesForAnalytics,
+} from "./services/articleAnalyticsSearchService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -59,6 +74,7 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
+import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish } from "./services/publisherPortalService";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -85,6 +101,7 @@ import { notifyAuthorTopicPublished, notifyAuthorTopicRejected } from "./service
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
 import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
+import { isNewsImagePurpose, newsImageStorageService } from './services/newsImageStorageService';
 import { getArticleEventsWithActor, logArticleEvent } from './services/articleEventsService';
 import { extractGeoLocations } from "./services/geoExtractionService";
 import { analyzeSentiment, detectLanguage } from './sentiment-analyzer';
@@ -94,8 +111,9 @@ import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } fro
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
+import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import pLimit from 'p-limit';
-import { db } from "./db";
+import { db, executeWithStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt } from "drizzle-orm";
 import bcrypt from "bcrypt";
@@ -112,11 +130,14 @@ import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { getRealIp, cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
 
-// A genuine article view counts ONCE per visitor per article within this window.
-// Rapid repeats (refresh-mashing, scripted replays of POST /api/articles/:id/view)
-// are accepted but not counted, so they can no longer inflate the view counter.
-// Tunable: lower it to allow legitimate re-reads to recount sooner.
-const VIEW_DEDUP_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+// A genuine article view counts ONCE per visitor (logged-in user, else real
+// client IP) per article within this window. Rapid repeats (refresh-mashing,
+// scripted replays of POST /api/articles/:id/view) are accepted but not counted,
+// so they can no longer inflate the view counter. After the window elapses, the
+// same IP/user is allowed to count again — each counted view still adds the
+// 5-10 random boost. Tunable: lower it to allow legitimate re-reads to recount
+// sooner.
+const VIEW_DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (once per IP per 5 min)
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -126,6 +147,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+});
+
+// إرسال رمز الجوال (SMS) — أصرم: 5 لكل رقم/نافذة (منع قصف الرسائل والتكلفة).
+const phoneOtpSendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // ساعة
+  max: 5,
+  message: { message: "تجاوزت الحد المسموح لإرسال الرموز. حاول بعد قليل." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => normalizePhone(req.body?.phone) || cfKeyGenerator(req),
   validate: cfValidate,
 });
 
@@ -286,7 +318,6 @@ import {
   emailWebhookLogs,
   userSegmentAssignments,
   userSegmentDefinitions,
-  legacyRedirects,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -449,8 +480,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
   const aiBulletsInFlight = new Map<string, Promise<string[]>>();
 
-  // Article view counts are written directly in POST /api/articles/:id/view
-  // (immediate 5-10 boost), so no view buffer/flush is needed here.
+  // Article view counts: buffered in articleViewCounterService (init below).
 
   const behaviorLogBuffer: Array<{ userId: string; eventType: string; metadata: any }> = [];
   let behaviorFlushTimer: NodeJS.Timeout | null = null;
@@ -484,6 +514,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   }
 
   behaviorFlushTimer = setInterval(flushBehaviorBuffer, 30_000);
+
+  // Per-IP article view aggregate — buffered batch UPSERT (see service).
+  initArticleViewStats();
+
+  initArticleViewCounters();
 
   process.on('SIGTERM', async () => {
     console.log('[Buffers] SIGTERM received, flushing...');
@@ -540,8 +575,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // SETUP ROUTES (Protected, one-time use) — moved to server/routes/setup.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
-
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // AUTH ROUTES
@@ -603,15 +636,28 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // استراتيجيات OAuth تُسجَّل في setupAuth() فقط عند اكتمال متغيرات البيئة
+  // (APPLE_*/GOOGLE_*). استدعاء authenticate() على استراتيجية غير مسجلة يرمي
+  // «Unknown authentication strategy» — 500 للمستخدم وضجيج في Sentry. الحارس
+  // يحوّل الحالة إلى تحويل نظيف لصفحة الدخول مع سجل تشغيلي واضح.
+  const requireOAuthStrategy = (name: string) =>
+    (req: any, res: Response, next: any) => {
+      if ((passport as any)._strategy(name)) return next();
+      console.error(`❌ OAuth "${name}" غير مهيأة — تحقق من متغيرات البيئة على الخادم`);
+      return res.redirect(`/ar/login?error=${name}_auth_failed`);
+    };
+
   // Google OAuth Routes
-  app.get("/api/auth/google", 
+  app.get("/api/auth/google",
+    requireOAuthStrategy("google"),
     passport.authenticate("google", { scope: ["profile", "email"] })
   );
 
-  app.get("/api/auth/google/callback", 
-    passport.authenticate("google", { 
+  app.get("/api/auth/google/callback",
+    requireOAuthStrategy("google"),
+    passport.authenticate("google", {
       failureRedirect: "/ar/login?error=google_auth_failed",
-      failureMessage: true 
+      failureMessage: true
     }),
     (req, res) => {
       console.log("✅ Google OAuth callback successful");
@@ -626,11 +672,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   );
 
   // Apple OAuth Routes
-  app.get("/api/auth/apple", 
+  app.get("/api/auth/apple",
+    requireOAuthStrategy("apple"),
     passport.authenticate("apple")
   );
 
   app.post("/api/auth/apple/callback",
+    requireOAuthStrategy("apple"),
     passport.authenticate("apple", {
       failureRedirect: "/ar/login?error=apple_auth_failed",
       failureMessage: true
@@ -855,6 +903,62 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
+  // ==========================================
+  // دخول/تسجيل بالجوال (Twilio Verify) — جلسة كوكيز عبر req.logIn (نفس آلية الويب).
+  // يعيد استخدام منطق OTP وإنشاء المستخدم المشترك مع الموبايل (services/phoneAuth).
+  // ==========================================
+  app.post("/api/auth/phone/send", phoneOtpSendLimiter, async (req, res) => {
+    try {
+      const e164 = normalizePhone(req.body?.phone);
+      if (!e164) {
+        return res.status(400).json({
+          message: "رقم جوال غير صحيح. أدخل الرقم بصيغة دولية مثل +9665XXXXXXXX.",
+        });
+      }
+      const result = await varaSendOtp(e164);
+      return res.status(result.success ? 200 : 502).json(result);
+    } catch (error) {
+      console.error("❌ /api/auth/phone/send error:", error);
+      return res.status(500).json({ message: "تعذّر إرسال رمز التحقق" });
+    }
+  });
+
+  app.post("/api/auth/phone/verify", authLimiter, async (req, res) => {
+    try {
+      const e164 = normalizePhone(req.body?.phone);
+      const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
+      if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
+      if (code.length < 4) return res.status(400).json({ message: "رمز التحقق غير صحيح" });
+
+      const check = await varaVerifyOtp(e164, code);
+      if (!check.valid) return res.status(401).json({ message: check.message });
+
+      const result = await findOrCreatePhoneUser(e164);
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+
+      // جلسة كوكيز عبر Passport (نفس نمط /api/register).
+      req.logIn(result.user as any, (err) => {
+        if (err) {
+          console.error("❌ phone login session error:", err);
+          return res.status(500).json({ message: "تم التحقق ولكن فشل تسجيل الدخول" });
+        }
+        return res.json({
+          message: "تم تسجيل الدخول عبر الجوال",
+          user: {
+            id: result.user.id,
+            email: result.user.email,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            phone: result.user.phoneNumber,
+          },
+        });
+      });
+    } catch (error) {
+      console.error("❌ /api/auth/phone/verify error:", error);
+      return res.status(500).json({ message: "خطأ داخلي في الخادم" });
+    }
+  });
+
   // News Analytics Endpoint - Smart statistics and insights
 
   // Verify Email
@@ -945,6 +1049,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Hash token before storing (security: never store plaintext tokens)
       const tokenHash = await bcrypt.hash(plaintextToken, 12);
+
+      // Invalidate any older unused reset links for this account. A fresh
+      // request should leave only one usable reset path.
+      await db
+        .update(passwordResetTokens)
+        .set({ used: true })
+        .where(and(eq(passwordResetTokens.userId, user.id), eq(passwordResetTokens.used, false)));
 
       // Save hashed token to database
       const [inserted] = await db.insert(passwordResetTokens).values({
@@ -1220,17 +1331,31 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const userId = req.user.id;
-      const user = await storage.getUser(userId);
+
+      // Fires on every page load (web + dashboard) and costs ~6 DB queries,
+      // so the composed payload is cached for 60s. Role/permission changes
+      // bust it via invalidateUserPermissionCache; profile edits bust it in
+      // PATCH /api/auth/user and PUT /api/profile/image below.
+      const authUserCacheKey = `auth-user:${userId}`;
+      const cachedPayload = memoryCache.get(authUserCacheKey);
+      if (cachedPayload) {
+        return res.json(cachedPayload);
+      }
+
+      const [user, userRolesResult, dbPermissions] = await Promise.all([
+        storage.getUser(userId),
+        // All user's roles from RBAC system, fallback to user.role from users table
+        db
+          .select({ roleName: roles.name, roleNameAr: roles.nameAr })
+          .from(userRoles)
+          .innerJoin(roles, eq(userRoles.roleId, roles.id))
+          .where(eq(userRoles.userId, userId)),
+        // User permissions from RBAC system (includes permission overrides)
+        getUserPermissions(userId),
+      ]);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-
-      // Get all user's roles from RBAC system, fallback to user.role from users table
-      const userRolesResult = await db
-        .select({ roleName: roles.name, roleNameAr: roles.nameAr })
-        .from(userRoles)
-        .innerJoin(roles, eq(userRoles.roleId, roles.id))
-        .where(eq(userRoles.userId, userId));
 
       // Get all roles as array
       const rolesArray = userRolesResult.map(r => r.roleName);
@@ -1262,10 +1387,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         || user.jobTitle
         || "قارئ";
 
-      // Get user permissions from RBAC system (includes permission overrides)
-      // استخدام الدالة الموحدة التي تشمل الاستثناءات الشخصية
-      const dbPermissions = await getUserPermissions(userId);
-      
       // Also derive permissions from role-based mapping (for permissions defined in code but not yet in DB)
       const { getPermissionsForRoles } = await import("@shared/rbac-constants");
       const roleBasedPermissions = getPermissionsForRoles(allRoles);
@@ -1273,15 +1394,33 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Merge both sources
       const permissionsArray = [...new Set([...dbPermissions, ...roleBasedPermissions])];
 
+      // الناشر الموثوق (auto_publish) يستخدم المحرر الأساسي وينشر منه —
+      // نمنحه articles.publish ديناميكياً ما دامت بوابة نشره مفتوحة، حتى
+      // تظهر له أزرار النشر في الواجهة (الفحص الخادمي له مساره الخاص).
+      if (
+        !permissionsArray.includes("articles.publish") &&
+        (allRoles.includes("publisher") || user.linkedPublisherId)
+      ) {
+        try {
+          if (await trustedPublisherCanPublish(user.id)) {
+            permissionsArray.push("articles.publish");
+          }
+        } catch (err) {
+          console.error("[auth/user] trusted publisher check failed:", err);
+        }
+      }
+
       // SECURITY: Never send passwordHash to client
       const { passwordHash, twoFactorSecret, ...safeUser } = user;
-      res.json({
+      const payload = {
         ...safeUser,
         role,
         roles: allRoles,
         roleLabel,
         permissions: permissionsArray,
-      });
+      };
+      memoryCache.set(authUserCacheKey, payload, 60 * 1000);
+      res.json(payload);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -1319,6 +1458,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const user = await storage.updateUser(userId, data);
+      memoryCache.delete(`auth-user:${userId}`);
       res.json(user);
     } catch (error) {
       console.error("Error updating user:", error);
@@ -1377,6 +1517,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const user = await storage.updateUser(userId, {
         profileImageUrl: objectPath
       });
+      memoryCache.delete(`auth-user:${userId}`);
 
       console.log("[Profile Image] User updated with new image:", user.profileImageUrl);
 
@@ -1575,8 +1716,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // - Files with gs:// URLs (private) use proxy URL
       // - Keep originalUrl for storage in articles
       const filesWithUrls = deduplicatedItems.map(item => {
-        const displayUrl = item.url.startsWith('https://') 
-          ? item.url 
+        const displayUrl = item.url.startsWith('https://') || item.url.startsWith('/uploads/')
+          ? item.url
           : `/api/media/proxy/${item.id}`;
         
         return {
@@ -1611,26 +1752,46 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     },
     fileFilter: (req, file, cb) => {
       // GIF removed (security audit M8, 2026-05-11).
+      // HEIC/HEIF accepted then transcoded to WebP (iPhone Camera default).
       const allowedTypes = [
         'image/jpeg',
         'image/jpg',
         'image/png',
         'image/webp',
+        'image/avif',
+        'image/heic',
+        'image/heif',
+        'image/heic-sequence',
+        'image/heif-sequence',
       ];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP'));
+        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, AVIF, HEIC'));
       }
     },
   });
+
+  // Multer rejects unsupported types before the async route handler starts.
+  // Convert those expected validation failures to useful 400 responses instead
+  // of letting the production error handler mask them as an internal 500.
+  const parseMediaUpload = (req: Request, res: Response, next: NextFunction) => {
+    mediaUpload.single('file')(req, res, (error: unknown) => {
+      if (!error) return next();
+      if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: "الملف كبير جداً. الحد الأقصى 10MB" });
+      }
+      const message = error instanceof Error ? error.message : "تعذّر قراءة الملف المرفوع";
+      return res.status(400).json({ message });
+    });
+  };
 
 
   // NOTE: platform-wide generic image upload pipe (avatars, category/topic
   // images, rich editor, angle-writer topic images) — NOT just the media library.
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
-  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, mediaUpload.single('file'), async (req: any, res) => {
+  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
     try {
       const userId = req.user.id;
 
@@ -1650,10 +1811,51 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // (security audit M1, 2026-05-11). multer's fileFilter only
       // trusts the client-declared header; sharp reads the real format.
       if (req.file.mimetype.startsWith('image/')) {
-        const verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        let verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        // iPhone / some browsers mislabel HEIC/AVIF as image/jpeg. If the
+        // bytes are clearly HEIF/AVIF, trust the bytes and continue to
+        // WebP transcode instead of a confusing 400/500.
+        if (
+          !verify.ok &&
+          (verify.detectedFormat === "heif" || verify.detectedFormat === "avif")
+        ) {
+          req.file.mimetype = verify.detectedFormat === "avif" ? "image/avif" : "image/heic";
+          verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        }
         if (!verify.ok) {
           console.warn("[Media Upload] Magic byte verification failed:", verify.reason);
-          return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
+          const detected = verify.detectedFormat ? ` (المكتشف: ${verify.detectedFormat})` : "";
+          return res.status(400).json({
+            message: `صيغة الصورة غير مدعومة أو لا تطابق نوع الملف المُعلَن${detected}. استخدم JPEG أو PNG أو WEBP (أو HEIC من الآيفون وسيُحوَّل تلقائياً).`,
+          });
+        }
+      }
+
+      // AVIF / HEIC → WebP/JPEG before Cloudflare Images or R2 variants.
+      // Phone exports often fail a strict decode; normalizeImageForUpload
+      // walks a soft fallback ladder before we give up.
+      const transcodeKind = needsWebpTranscode(req.file.mimetype);
+      if (transcodeKind) {
+        try {
+          const normalized = await normalizeImageForUpload(req.file.buffer);
+          req.file.buffer = normalized.buffer;
+          req.file.mimetype = normalized.mimeType;
+          req.file.size = normalized.buffer.length;
+          req.file.originalname = req.file.originalname.replace(
+            /\.(avif|heic|heif)$/i,
+            `.${normalized.extension}`,
+          );
+          if (!/\.(webp|jpe?g)$/i.test(req.file.originalname)) {
+            req.file.originalname = `${req.file.originalname}.${normalized.extension}`;
+          }
+        } catch (transcodeErr) {
+          console.warn(
+            `[Media Upload] ${transcodeKind.toUpperCase()} normalize failed:`,
+            transcodeErr instanceof Error ? transcodeErr.message : transcodeErr,
+          );
+          return res.status(400).json({
+            message: "تعذّر قراءة هذه الصورة. صدّرها كـ JPEG أو PNG من تطبيق الصور ثم أعد الرفع.",
+          });
         }
       }
 
@@ -1677,23 +1879,41 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const objectPath = `uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
 
-      // Try Cloudflare Images first for image uploads. When CF succeeds we
-      // skip GCS entirely — GCS is only reached for non-images, or as a
-      // fallback when CF is not configured / failed.
+      // The platform-wide endpoint is shared with avatars/categories/logos.
+      // Only explicit article purposes join the R2 rollout; every other image
+      // keeps the existing Cloudflare Images behavior.
       let cloudflareUrl: string | null = null;
-      if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
-        console.log("[Media Upload] Cloudflare Images configured, attempting upload...");
-        const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          req.file.buffer,
-          req.file.originalname,
-          { uploadedBy: userId.toString(), type: 'media' },
-          req.file.mimetype
-        );
-        if (cfResult.success && cfResult.deliveryUrl) {
-          cloudflareUrl = cfResult.deliveryUrl;
-          console.log("[Media Upload] Cloudflare upload successful:", { url: cloudflareUrl, imageId: cfResult.imageId });
+      const uploadPurpose = String(req.body?.purpose || req.body?.entityType || '').trim();
+      const isEditorialImage = isNewsImagePurpose(uploadPurpose);
+      if (
+        req.file.mimetype.startsWith('image/') &&
+        (isEditorialImage
+          ? newsImageStorageService.isUploadAvailable()
+          : cloudflareImagesService.isCloudflareConfigured())
+      ) {
+        const imageResult = isEditorialImage
+          ? await newsImageStorageService.upload({
+              buffer: req.file.buffer,
+              filename: req.file.originalname,
+              mimeType: req.file.mimetype,
+              purpose: uploadPurpose,
+              metadata: { uploadedBy: userId.toString(), source: 'web-media' },
+              rolloutKey: `${userId}:${objectId}`,
+            })
+          : await cloudflareImagesService.uploadToCloudflare(
+              req.file.buffer,
+              req.file.originalname,
+              { uploadedBy: userId.toString(), type: 'media' },
+              req.file.mimetype,
+            );
+        if (imageResult.success && imageResult.deliveryUrl) {
+          cloudflareUrl = imageResult.deliveryUrl;
+          console.log("[Media Upload] Image upload successful:", {
+            provider: ('provider' in imageResult && imageResult.provider) || 'cloudflare-images',
+            imageId: imageResult.imageId,
+          });
         } else {
-          console.log("[Media Upload] Cloudflare upload failed, will try GCS fallback:", cfResult.error);
+          console.log("[Media Upload] Primary image upload failed, will try GCS fallback:", imageResult.error);
         }
       }
 
@@ -1714,38 +1934,62 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           bucketId = parts[0];
         }
 
+        // في التطوير المحلي (بدون Cloudflare Images وبدون GCS يعمل) نحفظ على
+        // القرص — مجلد uploads/ يُقدَّم ثابتاً من نفس السيرفر عبر /uploads.
+        // الإنتاج لا يصل لهذا المسار أبداً (القرص على Railway مؤقت).
+        const isDev = process.env.NODE_ENV !== 'production';
+        const saveToLocalDisk = async (): Promise<string> => {
+          const fsp = await import('fs/promises');
+          const localDir = path.join(process.cwd(), 'uploads', 'media', String(year), month);
+          await fsp.mkdir(localDir, { recursive: true });
+          await fsp.writeFile(path.join(localDir, `${objectId}.${fileExtension}`), req.file.buffer);
+          return `/uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
+        };
+
         if (!bucketId) {
-          return res.status(500).json({
-            message: "خدمة رفع الصور غير متاحة. المتغيرات الخاصة بـ Cloudflare Images أو PRIVATE_OBJECT_DIR غير مضبوطة.",
-          });
-        }
-
-        try {
-          const { objectStorageClient } = await import('./objectStorage');
-          const bucket = objectStorageClient.bucket(bucketId);
-          const file = bucket.file(objectPath);
-
-          await file.save(req.file.buffer, {
-            contentType: req.file.mimetype,
-            metadata: { cacheControl: 'public, max-age=31536000' },
-          });
-
-          let isPublic = false;
-          try {
-            await file.makePublic();
-            isPublic = true;
-          } catch (error) {
-            console.warn("[Media Upload] Could not make file public:", error);
+          if (!isDev) {
+            return res.status(500).json({
+              message: "خدمة رفع الصور غير متاحة. المتغيرات الخاصة بـ Cloudflare Images أو PRIVATE_OBJECT_DIR غير مضبوطة.",
+            });
           }
+          storagePath = await saveToLocalDisk();
+          console.log("[Media Upload] Dev fallback: saved to local disk:", storagePath);
+        } else {
+          try {
+            const { objectStorageClient } = await import('./objectStorage');
+            const bucket = objectStorageClient.bucket(bucketId);
+            const file = bucket.file(objectPath);
 
-          const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
-          const gsPath = `gs://${bucketId}/${objectPath}`;
-          storagePath = isPublic ? publicGcsUrl : gsPath;
-        } catch (gcsError) {
-          console.error("[Media Upload] GCS upload failed and no Cloudflare fallback available:", gcsError);
-          return res.status(502).json({
-            message: "تعذّر رفع الملف. خدمة التخزين السحابي غير متاحة حالياً.",
-          });
+            await file.save(req.file.buffer, {
+              contentType: req.file.mimetype,
+              metadata: { cacheControl: 'public, max-age=31536000' },
+            });
+
+            let isPublic = false;
+            try {
+              await file.makePublic();
+              isPublic = true;
+            } catch (error) {
+              console.warn("[Media Upload] Could not make file public:", error);
+            }
+
+            const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
+            const gsPath = `gs://${bucketId}/${objectPath}`;
+            storagePath = isPublic ? publicGcsUrl : gsPath;
+          } catch (gcsError) {
+            if (!isDev) {
+              console.error("[Media Upload] GCS upload failed and no Cloudflare fallback available:", gcsError);
+              return res.status(502).json({
+                message: "تعذّر رفع الملف. خدمة التخزين السحابي غير متاحة حالياً.",
+              });
+            }
+            console.warn(
+              "[Media Upload] GCS unavailable in dev — saving to local disk:",
+              gcsError instanceof Error ? gcsError.message : gcsError,
+            );
+            storagePath = await saveToLocalDisk();
+            console.log("[Media Upload] Dev fallback: saved to local disk:", storagePath);
+          }
         }
       }
 
@@ -1803,7 +2047,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Save to media_files table with storage path
+      // Save to media_files. IMPORTANT: return ONLY columns that predate recent
+      // media-library phases. Bare `.returning()` expands to every schema column
+      // (including perceptual_hash from #888). If production hasn't run
+      // push-to-production.sh yet, Postgres rejects RETURNING that column and
+      // the whole upload 500s with "فشل في رفع ملف الوسائط" even after the file
+      // landed in R2/Cloudflare.
       const [mediaFile] = await db
         .insert(mediaFiles)
         .values({
@@ -1827,22 +2076,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           usedIn: entityId ? [entityId] : [],
           usageCount: entityId ? 1 : 0,
         })
-        .returning();
-
-      // Auto-save to mediaUsageLog if entityId provided
-      if (entityType && entityId) {
-        await db.insert(mediaUsageLog).values({
-          mediaId: mediaFile.id,
-          entityType,
-          entityId,
-          usedBy: userId,
-        });
-      }
-
-      // Fetch complete details with folder and uploader
-      // Note: We keep the gs:// path in the database for the proxy to use
-      const [mediaFileWithDetails] = await db
-        .select({
+        .returning({
           id: mediaFiles.id,
           fileName: mediaFiles.fileName,
           originalName: mediaFiles.originalName,
@@ -1861,33 +2095,86 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           keywords: mediaFiles.keywords,
           isFavorite: mediaFiles.isFavorite,
           category: mediaFiles.category,
-          aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
-          aiQualityScore: mediaFiles.aiQualityScore,
-          aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
-          isAiGenerated: mediaFiles.isAiGenerated,
-          licenseType: mediaFiles.licenseType,
-          creditText: mediaFiles.creditText,
-          copyrightHolder: mediaFiles.copyrightHolder,
-          rightsVerified: mediaFiles.rightsVerified,
-          rightsNote: mediaFiles.rightsNote,
           usedIn: mediaFiles.usedIn,
           usageCount: mediaFiles.usageCount,
           uploadedBy: mediaFiles.uploadedBy,
           createdAt: mediaFiles.createdAt,
           updatedAt: mediaFiles.updatedAt,
-          folder: mediaFolders,
-          uploader: {
-            id: users.id,
-            email: users.email,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            profileImageUrl: users.profileImageUrl,
-          },
-        })
-        .from(mediaFiles)
-        .leftJoin(mediaFolders, eq(mediaFiles.folderId, mediaFolders.id))
-        .leftJoin(users, eq(mediaFiles.uploadedBy, users.id))
-        .where(eq(mediaFiles.id, mediaFile.id));
+        });
+
+      // Auto-save to mediaUsageLog if entityId provided (best-effort)
+      if (entityType && entityId) {
+        try {
+          await db.insert(mediaUsageLog).values({
+            mediaId: mediaFile.id,
+            entityType,
+            entityId,
+            usedBy: userId,
+          });
+        } catch (usageErr) {
+          console.warn("[Media Upload] mediaUsageLog insert failed:", usageErr instanceof Error ? usageErr.message : usageErr);
+        }
+      }
+
+      // Enrich with folder/uploader + newer library columns. Best-effort: if
+      // production is mid-schema-rollout (missing ai_*/rights_* columns), fall
+      // back to the row we just inserted so the client still gets a usable URL.
+      let mediaFileWithDetails: any = mediaFile;
+      try {
+        const [enriched] = await db
+          .select({
+            id: mediaFiles.id,
+            fileName: mediaFiles.fileName,
+            originalName: mediaFiles.originalName,
+            folderId: mediaFiles.folderId,
+            url: mediaFiles.url,
+            thumbnailUrl: mediaFiles.thumbnailUrl,
+            type: mediaFiles.type,
+            mimeType: mediaFiles.mimeType,
+            size: mediaFiles.size,
+            width: mediaFiles.width,
+            height: mediaFiles.height,
+            title: mediaFiles.title,
+            description: mediaFiles.description,
+            altText: mediaFiles.altText,
+            caption: mediaFiles.caption,
+            keywords: mediaFiles.keywords,
+            isFavorite: mediaFiles.isFavorite,
+            category: mediaFiles.category,
+            aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
+            aiQualityScore: mediaFiles.aiQualityScore,
+            aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
+            isAiGenerated: mediaFiles.isAiGenerated,
+            licenseType: mediaFiles.licenseType,
+            creditText: mediaFiles.creditText,
+            copyrightHolder: mediaFiles.copyrightHolder,
+            rightsVerified: mediaFiles.rightsVerified,
+            rightsNote: mediaFiles.rightsNote,
+            usedIn: mediaFiles.usedIn,
+            usageCount: mediaFiles.usageCount,
+            uploadedBy: mediaFiles.uploadedBy,
+            createdAt: mediaFiles.createdAt,
+            updatedAt: mediaFiles.updatedAt,
+            folder: mediaFolders,
+            uploader: {
+              id: users.id,
+              email: users.email,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              profileImageUrl: users.profileImageUrl,
+            },
+          })
+          .from(mediaFiles)
+          .leftJoin(mediaFolders, eq(mediaFiles.folderId, mediaFolders.id))
+          .leftJoin(users, eq(mediaFiles.uploadedBy, users.id))
+          .where(eq(mediaFiles.id, mediaFile.id));
+        if (enriched) mediaFileWithDetails = enriched;
+      } catch (enrichErr) {
+        console.warn(
+          "[Media Upload] Detail enrich failed; returning base row:",
+          enrichErr instanceof Error ? enrichErr.message : enrichErr,
+        );
+      }
 
       console.log("[Media Upload] Media file created:", mediaFileWithDetails.id);
 
@@ -1899,16 +2186,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // Return appropriate URL:
-      // - If public: use stored public URL
+      // - If public (https:// or local-dev /uploads/): use stored URL directly
       // - If not public: use proxy URL
-      const responseUrl = mediaFileWithDetails.url.startsWith('https://') 
-        ? mediaFileWithDetails.url 
+      const responseUrl = mediaFileWithDetails.url.startsWith('https://') || mediaFileWithDetails.url.startsWith('/uploads/')
+        ? mediaFileWithDetails.url
         : `/api/media/proxy/${mediaFile.id}`;
-      
+
+      // Phase 7: perceptual-hash dedup — persist the hash and surface an
+      // existing visually-identical file so the client can warn the uploader.
+      // assignPerceptualHash is already best-effort (swallows missing-column).
+      let duplicateOf = null;
+      if (fileType === 'image') {
+        try {
+          const { assignPerceptualHash } = await import("./services/mediaHashService");
+          duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer);
+        } catch (hashErr) {
+          console.warn("[Media Upload] Hash step failed:", hashErr instanceof Error ? hashErr.message : hashErr);
+        }
+      }
+
       res.json({
         ...mediaFileWithDetails,
         url: responseUrl,
         proxyUrl: `/api/media/proxy/${mediaFile.id}`,
+        duplicateOf,
       });
     } catch (error: any) {
       console.error("Error uploading media file:", error);
@@ -1919,6 +2220,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       if (error.message?.includes('نوع الملف')) {
         return res.status(400).json({ message: error.message });
+      }
+
+      // Schema drift (e.g. perceptual_hash / ai_* columns in code but not in prod DB)
+      const pgMessage = String(error?.message || error?.cause?.message || "");
+      if (/perceptual_hash|ai_analysis_status|rights_verified|column .* does not exist/i.test(pgMessage)) {
+        return res.status(500).json({
+          message: "فشل في رفع ملف الوسائط — مخطط قاعدة البيانات غير محدَّث. شغّل ./push-to-production.sh ثم أعد المحاولة.",
+          code: "SCHEMA_DRIFT",
+        });
       }
 
       res.status(500).json({ message: "فشل في رفع ملف الوسائط" });
@@ -1958,6 +2268,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Type 2: Public object paths (/public-objects/) - redirect to public route
       if (storagePath.startsWith('/public-objects/')) {
+        return res.redirect(storagePath);
+      }
+
+      // Type 2b: Local dev uploads (/uploads/) — served by the static uploads middleware
+      if (storagePath.startsWith('/uploads/')) {
         return res.redirect(storagePath);
       }
       
@@ -2028,63 +2343,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!res.headersSent) {
         res.status(500).json({ message: "فشل في تحميل الملف" });
       }
-    }
-  });
-
-
-  // POST /api/media/save-existing - Save existing image to media library (JSON endpoint for auto-save from editor)
-  app.post("/api/media/save-existing", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const { url, fileName, title, description, category } = req.body;
-
-      // Validation
-      if (!url || !fileName) {
-        return res.status(400).json({ message: "URL والاسم مطلوبان" });
-      }
-      // Only accept URLs from our own storage origins (prevents storing an
-      // attacker-controlled URL that the media proxy would later redirect to).
-      if (typeof url !== 'string' || !isAllowedMediaUrl(url, req.get('host'))) {
-        return res.status(400).json({ message: "رابط غير صالح" });
-      }
-
-      // Reuse the existing row if this URL is already registered — stops the
-      // unbounded duplicate rows that accumulated on every article edit/save.
-      const [existing] = await db
-        .select()
-        .from(mediaFiles)
-        .where(eq(mediaFiles.url, url))
-        .limit(1);
-      if (existing) {
-        return res.json(existing);
-      }
-
-      // Infer the mime type from the extension instead of hardcoding jpeg.
-      const ext = (String(fileName).split('.').pop() || '').toLowerCase();
-      const extMime: Record<string, string> = {
-        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-        webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif',
-      };
-      const mimeType = extMime[ext] || 'image/jpeg';
-
-      // Create media file record
-      const [mediaFile] = await db.insert(mediaFiles).values({
-        fileName,
-        originalName: fileName,
-        url,
-        type: "image",
-        mimeType,
-        size: 0, // Unknown for externally-referenced URLs
-        title: title || fileName,
-        description,
-        category: category || "articles",
-        uploadedBy: userId,
-      }).returning();
-
-      res.json(mediaFile);
-    } catch (error) {
-      console.error("Error saving media metadata:", error);
-      res.status(500).json({ message: "فشل حفظ البيانات" });
     }
   });
 
@@ -5190,14 +5448,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json(updatedUser);
     } catch (error: any) {
       console.error("Error updating user:", error);
-      
-      // Handle duplicate press ID number
-      if (error.code === '23505' && error.constraint === 'users_press_id_number_idx') {
-        return res.status(400).json({ 
-          message: "رقم البطاقة الصحفية موجود مسبقاً. يرجى استخدام رقم آخر." 
-        });
+      // Drizzle يلفّ أخطاء PG؛ extractPgError يفك code/constraint.
+      const pg = extractPgError(error);
+      if (pg.code === '23505') {
+        if (pg.constraint === 'users_press_id_number_idx') return res.status(400).json({ message: "رقم البطاقة الصحفية موجود مسبقاً. يرجى استخدام رقم آخر." });
+        if (pg.constraint === 'users_email_unique' || pg.constraint === 'users_email_lower_unique') return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل" });
       }
-      
       res.status(500).json({ message: "Failed to update user" });
     }
   });
@@ -5447,7 +5703,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!createdBy) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-
       const parsed = adminCreateUserSchema.safeParse(req.body);
 
       if (!parsed.success) {
@@ -5457,6 +5712,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // Pre-check lower(email) قبل الإدراج (يطابق /api/register، يقلل الضغط).
+      const normalizedEmail = parsed.data.email.trim().toLowerCase();
+      const existingUser = await storage.getUserByEmailBasic(normalizedEmail);
+      if (existingUser) {
+        console.log("ℹ️ [CREATE USER] Email already registered", { email: normalizedEmail, existingUserId: existingUser.id });
+        return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", existingUser });
+      }
       console.log("✅ [CREATE USER] Creating new user with roles", {
         email: parsed.data.email,
         roleIds: parsed.data.roleIds,
@@ -5468,7 +5730,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           email: parsed.data.email,
           firstName: parsed.data.firstName,
           lastName: parsed.data.lastName,
+          firstNameEn: parsed.data.firstNameEn,
+          lastNameEn: parsed.data.lastNameEn,
           phoneNumber: parsed.data.phoneNumber,
+          profileImageUrl: parsed.data.profileImageUrl,
           roleIds: parsed.data.roleIds,
           status: parsed.data.status,
           emailVerified: parsed.data.emailVerified,
@@ -5489,7 +5754,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Auto-create staff record if user has reporter role
       const hasReporterRole = userRoles.some(r => r.name === 'reporter');
       if (hasReporterRole) {
-    try {
+        try {
           console.log("🔍 [AUTO-CREATE STAFF] New user has reporter role, creating staff record");
           const staffRecord = await storage.ensureReporterStaffRecord(newUser.id);
           console.log("✅ [AUTO-CREATE STAFF] Staff record created for new reporter", { 
@@ -5498,10 +5763,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         } catch (staffError) {
           console.error("❌ [AUTO-CREATE STAFF] FAILED to create staff record:", staffError);
-          return res.status(500).json({ 
-            message: "تم إنشاء المستخدم لكن فشل إنشاء صفحة المراسل. يرجى المحاولة مرة أخرى.",
-            error: staffError instanceof Error ? staffError.message : "Unknown error"
-          });
+          // لا نفشل إنشاء المستخدم بعد نجاحه بسبب سجل المراسل؛ يمكن تعديل بيانات
+          // الموظف لاحقًا من نفس لوحة الإدارة، وإلا يرى المستخدم 500 رغم إنشاء الحساب.
         }
       }
 
@@ -5515,11 +5778,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
     } catch (error: any) {
       console.error("❌ [CREATE USER] Error creating user:", error);
-      
-      if (error.message?.includes("duplicate") || error.code === "23505") {
-        return res.status(409).json({ message: "User with this email already exists" });
+      // Drizzle يلفّ أخطاء PG؛ extractPgError يفك code/constraint.
+      const pg = extractPgError(error);
+      if (pg.code === "23505") {
+        const isEmailDup = pg.constraint === "users_email_unique" || pg.constraint === "users_email_lower_unique" || !pg.constraint;
+        if (isEmailDup) { // race: المستخدم أُنشئ بين pre-check والإدراج.
+          const raceUser = await storage.getUserByEmailBasic(String(req.body?.email ?? "").trim().toLowerCase());
+          return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", ...(raceUser ? { existingUser: raceUser } : {}) });
+        }
+        if (pg.constraint === "users_press_id_number_idx") {
+          return res.status(400).json({ message: "رقم البطاقة الصحفية موجود مسبقاً. يرجى استخدام رقم آخر." });
+        }
+        return res.status(409).json({ message: pg.constraint ? `القيد الفريد "${pg.constraint}" منتهك` : "هناك تعارض في البيانات" });
       }
-      
       res.status(500).json({ message: "Failed to create user" });
     }
   });
@@ -5994,7 +6265,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .where(eq(users.emailVerified, true));
       const emailVerified = emailVerifiedResult?.count || 0;
 
-      // Get suspended users count
+      // Get users with a registered phone number
+      const [withPhoneResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(
+          sql`${users.phoneNumber} is not null`,
+          sql`btrim(${users.phoneNumber}) <> ''`,
+        ));
+      const withPhone = withPhoneResult?.count || 0;
+
+      // Get suspended users count (kept for compatibility)
       const [suspendedResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
@@ -6036,19 +6317,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ? ((recentVerified.count - previousVerified.count) / previousVerified.count) * 100 
         : recentVerified.count > 0 ? 100 : 0;
 
-      // Suspended trend
-      const [recentSuspended] = await db
+      // Phone registrations trend (new accounts with phone in last 7d vs prior 7d)
+      const [recentWithPhone] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
         .where(and(
-          eq(users.status, 'suspended'),
-          or(
-            gte(users.suspendedUntil || sql`now()`, sevenDaysAgo),
-            sql`${users.suspendedUntil} IS NULL`
-          )
+          sql`${users.phoneNumber} is not null`,
+          sql`btrim(${users.phoneNumber}) <> ''`,
+          gte(users.createdAt, sevenDaysAgo),
         ));
 
-      const suspendedTrend = suspended > 0 ? 5 : 0; // Mock trend
+      const [previousWithPhone] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(
+          sql`${users.phoneNumber} is not null`,
+          sql`btrim(${users.phoneNumber}) <> ''`,
+          gte(users.createdAt, fourteenDaysAgo),
+          sql`${users.createdAt} < ${sevenDaysAgo}`,
+        ));
+
+      const withPhoneTrend = previousWithPhone.count > 0
+        ? ((recentWithPhone.count - previousWithPhone.count) / previousWithPhone.count) * 100
+        : recentWithPhone.count > 0 ? 100 : 0;
 
       // Banned trend
       const [recentBanned] = await db
@@ -6068,8 +6359,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         total,
         emailVerified,
         emailVerifiedTrend: Number(verifiedTrend.toFixed(1)),
+        withPhone,
+        withPhoneTrend: Number(withPhoneTrend.toFixed(1)),
         suspended,
-        suspendedTrend: Number(suspendedTrend.toFixed(1)),
+        suspendedTrend: 0,
         banned,
         bannedTrend: Number(bannedTrend.toFixed(1)),
       });
@@ -6617,15 +6910,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const total = Number(countResult?.count || 0);
 
       // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
+      // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
+      // reordering from the dashboard persists after refetch instead of snapping back to date order
       let orderClauses;
       if (status === "archived") {
-        orderClauses = [desc(articles.updatedAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "draft") {
-        orderClauses = [desc(articles.updatedAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "scheduled") {
-        orderClauses = [desc(articles.scheduledAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.scheduledAt), desc(articles.createdAt)];
       } else {
-        orderClauses = [desc(articles.publishedAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
       query = query.orderBy(...orderClauses)
@@ -6671,11 +6966,21 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get article by ID for editing (admin only)
-  app.get("/api/admin/articles/:id", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
+  app.get("/api/admin/articles/:id", requireAuth, requireAnyPermission(
+    "articles.view",
+    "articles.edit",
+    "articles.edit_any",
+    "articles.edit_own",
+    "opinion.view",
+    "opinion.edit_own",
+    "opinion.edit_any",
+  ), async (req: any, res) => {
     try {
       const articleId = req.params.id;
+      const userId = req.user?.id;
 
       const reporterAlias = aliasedTable(users, 'reporter');
+      const submitterAlias = aliasedTable(users, 'submitter');
 
       const [result] = await db
         .select({
@@ -6697,11 +7002,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             lastNameEn: reporterAlias.lastNameEn,
             email: reporterAlias.email,
           },
+          submitter: {
+            id: submitterAlias.id,
+            firstName: submitterAlias.firstName,
+            lastName: submitterAlias.lastName,
+            firstNameEn: submitterAlias.firstNameEn,
+            lastNameEn: submitterAlias.lastNameEn,
+            email: submitterAlias.email,
+          },
         })
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
         .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
+        .leftJoin(submitterAlias, eq(articles.submitterId, submitterAlias.id))
         .leftJoin(publishers, eq(articles.publisherId, publishers.id))
         .where(eq(articles.id, articleId))
         .limit(1);
@@ -6710,11 +7024,42 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
+      // Own-only roles (edit_own / opinion.edit_own without broader view/edit)
+      // may only open articles they authored, reported, or submitted.
+      const userPermissions = await getUserPermissions(userId);
+      const canViewAny =
+        userPermissions.includes("articles.view") ||
+        userPermissions.includes("articles.edit") ||
+        userPermissions.includes("articles.edit_any") ||
+        userPermissions.includes("opinion.view") ||
+        userPermissions.includes("opinion.edit_any") ||
+        userPermissions.includes("system.admin");
+      if (!canViewAny) {
+        const isOwner =
+          result.article.authorId === userId ||
+          result.article.reporterId === userId ||
+          result.article.submitterId === userId;
+        if (!isOwner) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
+      }
+
+      // لمقالات الرأي: authorId = كاتب الرأي الظاهر للقارئ، وsubmitterId = من أدخل المادة.
+      // لا نُرجع author كـ enteredBy حتى لا يُعرض الكاتب على أنه «المحرر».
+      const isOpinion = result.article.articleType === "opinion";
+      const enteredBy = result.submitter?.id
+        ? result.submitter
+        : isOpinion
+          ? null
+          : result.author;
+
       res.json({
         ...result.article,
         category: result.category,
         author: result.reporter || result.author,
         reporter: result.reporter,
+        opinionAuthor: isOpinion ? result.author : null,
+        enteredBy,
       });
     } catch (error) {
       console.error("Error fetching article:", error);
@@ -6807,7 +7152,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
 
-        // Use the selected opinion author as the authorId
+        // Use the selected opinion author as the authorId (public byline).
+        // Preserve the logged-in editor as submitterId so the editor banner
+        // can distinguish «من أدخل المادة» عن «كاتب الرأي».
         authorId = opinionAuthorId;
       }
 
@@ -6845,8 +7192,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       // Check publish permission if status is "published"
       if (parsed.data.status === 'published') {
+        // Publisher-agency accounts have a publishing window (publishers.
+        // publishing_ends_at); once it passes, publishing is blocked even
+        // though the role/permission still allows it.
+        const gate = await getPublishingGate(req.user.id);
+        if (gate.publisher && !gate.allowed) {
+          return res.status(403).json({ message: gate.message, code: gate.code });
+        }
+
         const userPermissions = await getUserPermissions(req.user.id);
-        const canPublish = userPermissions.includes("articles.publish");
+        // الناشر الموثوق (auto_publish) ينشر من المحرر الأساسي دون
+        // articles.publish العامة — بوابته المفتوحة هي التفويض
+        const canPublish = userPermissions.includes("articles.publish")
+          || (gate.allowed && gate.publisher?.autoPublish === true);
         if (!canPublish) {
           return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
         }
@@ -6858,6 +7216,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...parsed.data,
         authorId,
       };
+
+      // Opinion: authorId may be the writer; track the entering editor separately.
+      if (
+        parsed.data.articleType === "opinion" &&
+        authorId !== req.user.id &&
+        !articleData.submitterId
+      ) {
+        articleData.submitterId = req.user.id;
+      }
+
+      // Contributor creation can save and submit in one request. Without
+      // this, the client navigates away believing the new article is pending
+      // while the database still has a plain draft.
+      if (req.body?.submitForReview === true) {
+        const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
+        if (isContributor) {
+          articleData.reviewStatus = "pending_review";
+          articleData.status = "draft";
+        }
+      }
       
       if (articleData.status === 'published' && !articleData.publishedAt) {
         articleData.publishedAt = new Date();
@@ -7040,13 +7418,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             await logActivity({
               userId: newArticle.reporterId!,
               action: 'draft_submitted',
-              targetType: 'article',
-              targetId: newArticle.id,
+              entityType: 'article',
+              entityId: newArticle.id,
               metadata: {
                 articleTitle: newArticle.title,
                 reporterName,
               },
-            } as any);
+            });
           } catch (err) {
             console.error("[DRAFT NOTIFY] Error:", err);
           }
@@ -7305,6 +7683,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           updateData[field] = new Date(updateData[field]);
         }
       });
+
+      // الموجز العام يُحرَّر عبر `excerpt`؛ صندوق «الموجز» يقرأ `aiSummary`/`aiBullets`.
+      // عند حفظ الملخص نزامن المصدر ونبطل النقاط القديمة حتى لا يبقى نص قديم على الصفحة.
+      if (Object.prototype.hasOwnProperty.call(parsed.data, "excerpt")) {
+        const nextSummary =
+          typeof parsed.data.excerpt === "string" ? parsed.data.excerpt.trim() || null : null;
+        updateData.excerpt = nextSummary;
+        if (updateData.aiSummary === undefined) {
+          updateData.aiSummary = nextSummary;
+        }
+        if (updateData.aiBullets === undefined) {
+          updateData.aiBullets = null;
+          updateData.aiBulletsGeneratedAt = null;
+        }
+        aiBulletsCache.delete(articleId);
+        aiBulletsInFlight.delete(articleId);
+      }
       
       // Handle republish feature
       if (req.body.republish === true) {
@@ -7384,8 +7779,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
 
-        // Update authorId for opinion articles
+        // Update authorId for opinion articles (public byline = writer).
+        // If no submitter yet, keep the entering editor (current user or previous authorId).
         updateData.authorId = opinionAuthorId;
+        if (!existingArticle.submitterId) {
+          if (req.user.id !== opinionAuthorId) {
+            updateData.submitterId = req.user.id;
+          } else if (
+            existingArticle.authorId &&
+            existingArticle.authorId !== opinionAuthorId
+          ) {
+            updateData.submitterId = existingArticle.authorId;
+          }
+        }
         console.log('[UPDATE ARTICLE] Updated authorId for opinion article:', opinionAuthorId);
       }
 
@@ -7769,7 +8175,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Publish article
-  app.post("/api/admin/articles/:id/publish", requireAuth, requirePermission("articles.publish"), async (req: any, res) => {
+  // الحارس مخصص: articles.publish أو ناشر موثوق (auto_publish) بوابته
+  // مفتوحة — الموثوق ينشر مواده من المحرر الأساسي وتُخصم من رصيده أدناه.
+  const requirePublishCapability = async (req: any, res: any, next: any) => {
+    try {
+      const perms = await getUserPermissions(req.user.id);
+      if (perms.includes("articles.publish")) return next();
+      if (await trustedPublisherCanPublish(req.user.id)) return next();
+      return res.status(403).json({ message: "ليست لديك صلاحية نشر المقالات" });
+    } catch (err) {
+      console.error("[publish capability] check failed:", err);
+      return res.status(500).json({ message: "تعذر التحقق من الصلاحيات" });
+    }
+  };
+  app.post("/api/admin/articles/:id/publish", requireAuth, requirePublishCapability, async (req: any, res) => {
     try {
       const userId = req.user?.id;
       if (!userId) {
@@ -7802,40 +8221,64 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Check if user is linked to a publisher (for automatic credit deduction)
-      const [currentUser] = await db
-        .select({ linkedPublisherId: users.linkedPublisherId })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      // مالك الوكالة أو موظف مرتبط (linkedPublisherId) — إحصاء/خصم الرصيد
+      const agencyPublisher = await storage.getPublisherByUserId(userId);
 
       let publisherId: string | null = null;
       let updatedArticle: typeof article | null = null;
 
-      if (currentUser?.linkedPublisherId) {
-        // User is linked to a publisher - use transaction for atomic credit deduction
-        publisherId = currentUser.linkedPublisherId;
+      if (agencyPublisher?.isActive) {
+        publisherId = agencyPublisher.id;
+
+        // Enforce the agency publishing window before spending a credit
+        const gate = await getPublishingGate(userId);
+        if (!gate.allowed) {
+          return res.status(403).json({ message: gate.message, code: gate.code });
+        }
 
         try {
           const result = await db.transaction(async (tx) => {
-            // Atomically find and decrement credits in one query
+            const now = new Date();
+            // باقة واحدة فقط: مفتوحة أولاً ثم الأقرب لانتهاء
+            const [selectedPackage] = await tx
+              .select()
+              .from(publisherCredits)
+              .where(
+                and(
+                  eq(publisherCredits.publisherId, agencyPublisher.id),
+                  eq(publisherCredits.isActive, true),
+                  or(
+                    eq(publisherCredits.isUnlimited, true),
+                    gt(publisherCredits.remainingCredits, 0),
+                  ),
+                  or(
+                    isNull(publisherCredits.expiryDate),
+                    gte(publisherCredits.expiryDate, now),
+                  ),
+                ),
+              )
+              .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
+              .limit(1);
+
+            if (!selectedPackage) {
+              throw new Error("NO_CREDITS");
+            }
+
+            const wasUnlimited = selectedPackage.isUnlimited;
             const [decrementedPackage] = await tx
               .update(publisherCredits)
               .set({
                 usedCredits: sql`${publisherCredits.usedCredits} + 1`,
-                remainingCredits: sql`${publisherCredits.remainingCredits} - 1`,
-                updatedAt: new Date(),
+                ...(wasUnlimited
+                  ? {}
+                  : { remainingCredits: sql`${publisherCredits.remainingCredits} - 1` }),
+                updatedAt: now,
               })
               .where(
                 and(
-                  eq(publisherCredits.publisherId, currentUser.linkedPublisherId!),
-                  eq(publisherCredits.isActive, true),
-                  gt(publisherCredits.remainingCredits, 0),
-                  or(
-                    isNull(publisherCredits.expiryDate),
-                    gte(publisherCredits.expiryDate, new Date())
-                  )
-                )
+                  eq(publisherCredits.id, selectedPackage.id),
+                  wasUnlimited ? sql`true` : gt(publisherCredits.remainingCredits, 0),
+                ),
               )
               .returning();
 
@@ -7843,32 +8286,37 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               throw new Error("NO_CREDITS");
             }
 
-            // Publish the article with publisher ID
             const [published] = await tx
               .update(articles)
               .set({
                 status: "published",
-                publishedAt: new Date(),
-                updatedAt: new Date(),
-                publisherId: currentUser.linkedPublisherId,
+                publishedAt: now,
+                updatedAt: now,
+                publisherId: agencyPublisher.id,
+                isPublisherNews: true,
               })
               .where(eq(articles.id, articleId))
               .returning();
 
-            // Log the credit usage
             await tx.insert(publisherCreditLogs).values({
-              publisherId: currentUser.linkedPublisherId!,
+              publisherId: agencyPublisher.id,
               creditPackageId: decrementedPackage.id,
               articleId,
               actionType: "credit_used",
-              creditsBefore: decrementedPackage.remainingCredits + 1,
-              creditsChanged: -1,
+              creditsBefore: wasUnlimited
+                ? decrementedPackage.remainingCredits
+                : decrementedPackage.remainingCredits + 1,
+              creditsChanged: wasUnlimited ? 0 : -1,
               creditsAfter: decrementedPackage.remainingCredits,
               performedBy: userId,
-              notes: `نشر مقال: ${article.title}`,
+              notes: wasUnlimited
+                ? `نشر مقال ضمن باقة مفتوحة: ${article.title}`
+                : `نشر مقال: ${article.title}`,
             });
 
-            console.log(`📰 [PUBLISHER] Credit deducted for publisher ${currentUser.linkedPublisherId}. Remaining: ${decrementedPackage.remainingCredits}`);
+            console.log(
+              `📰 [PUBLISHER] Credit tracked for publisher ${agencyPublisher.id}. Remaining: ${decrementedPackage.remainingCredits}`,
+            );
 
             return published;
           });
@@ -7884,7 +8332,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           throw txError;
         }
       } else {
-        // No publisher link - regular publish without credit deduction
+        // لا ارتباط بوكالة — نشر عادي بلا رصيد ناشر
         const [published] = await db
           .update(articles)
           .set({
@@ -9179,61 +9627,118 @@ Respond in valid JSON format only:
         status,
         dateFrom,
         dateTo,
-        sortBy = "views",
+        sortBy = "publishedAt",
         limit = "20",
         offset = "0"
       } = req.query;
 
-      const limitNum = Math.min(parseInt(limit) || 20, 100);
-      const offsetNum = parseInt(offset) || 0;
+      // Hard cap: never return more than 20 rows per page (keeps this admin tool light).
+      const limitNum = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 20);
+      const offsetNum = Math.max(parseInt(String(offset), 10) || 0, 0);
 
-      // Build where conditions
       const whereConditions = [];
 
       if (query) {
-        const searchQuery = query.trim();
-        whereConditions.push(
-          or(
-            ilike(articles.title, `%${searchQuery}%`),
-            ilike(articles.excerpt, `%${searchQuery}%`)
-          )
-        );
+        let searchQuery = String(query).trim();
+        // Accept pasted article URLs: /article/:slug or /en/article/:slug
+        try {
+          const path = searchQuery.includes("://")
+            ? new URL(searchQuery).pathname
+            : searchQuery;
+          const parts = path.split("/").filter(Boolean);
+          const articleIdx = parts.findIndex((p) => p === "article");
+          if (articleIdx >= 0 && parts[articleIdx + 1]) {
+            searchQuery = parts[articleIdx + 1];
+          }
+        } catch {
+          // keep raw query
+        }
+
+        if (searchQuery) {
+          const pattern = `%${searchQuery}%`;
+          // EN translations store the Arabic source id in seoMetadata.sourceArticleId
+          const enLinked = await db
+            .select({
+              sourceArticleId: sql<string>`${enArticles.seoMetadata}->>'sourceArticleId'`,
+            })
+            .from(enArticles)
+            .where(
+              and(
+                sql`${enArticles.seoMetadata}->>'sourceArticleId' IS NOT NULL`,
+                or(
+                  ilike(enArticles.title, pattern),
+                  ilike(enArticles.slug, pattern),
+                  ilike(enArticles.englishSlug, pattern),
+                ),
+              ),
+            )
+            .limit(20);
+          const linkedArIds = enLinked
+            .map((row) => row.sourceArticleId)
+            .filter((id): id is string => !!id);
+
+          const textMatch = or(
+            ilike(articles.title, pattern),
+            ilike(articles.subtitle, pattern),
+            ilike(articles.excerpt, pattern),
+            ilike(articles.slug, pattern),
+            ilike(articles.englishSlug, pattern),
+            eq(articles.id, searchQuery),
+          );
+
+          whereConditions.push(
+            linkedArIds.length > 0
+              ? or(textMatch, inArray(articles.id, linkedArIds))
+              : textMatch,
+          );
+        }
       }
       if (categoryId) {
-        whereConditions.push(eq(articles.categoryId, categoryId));
+        whereConditions.push(eq(articles.categoryId, String(categoryId)));
       }
 
       if (status && status !== "all") {
-        whereConditions.push(eq(articles.status, status));
+        whereConditions.push(eq(articles.status, String(status)));
       }
 
       if (dateFrom) {
-        const fromDate = new Date(dateFrom);
+        const fromDate = new Date(String(dateFrom));
         if (!isNaN(fromDate.getTime())) {
           whereConditions.push(gte(articles.publishedAt, fromDate));
         }
       }
 
       if (dateTo) {
-        const toDate = new Date(dateTo);
+        const toDate = new Date(String(dateTo));
         if (!isNaN(toDate.getTime())) {
           whereConditions.push(lte(articles.publishedAt, toDate));
         }
       }
 
-      // Query articles with aggregated metrics using subqueries
+      // Default browse mode (no filters): published only, newest first.
+      const hasExplicitFilters = whereConditions.length > 0;
+      if (!hasExplicitFilters) {
+        whereConditions.push(eq(articles.status, "published"));
+      }
+
+      const sortKey = String(sortBy || "publishedAt");
+      const orderClause =
+        sortKey === "views"
+          ? desc(articles.views)
+          : desc(articles.publishedAt);
+
+      // Light list query — never select full HTML content here.
       const articlesWithMetrics = await db
         .select({
           id: articles.id,
           title: articles.title,
-        subtitle: articles.subtitle,
+          subtitle: articles.subtitle,
           slug: articles.slug,
           excerpt: articles.excerpt,
           imageUrl: articles.imageUrl,
           imageFocalPoint: articles.imageFocalPoint,
           status: articles.status,
           views: articles.views,
-          content: articles.content,
           publishedAt: articles.publishedAt,
           createdAt: articles.createdAt,
           categoryId: articles.categoryId,
@@ -9242,31 +9747,47 @@ Respond in valid JSON format only:
           authorId: articles.authorId,
           authorFirstName: users.firstName,
           authorLastName: users.lastName,
+          avgReadTimeOverride: articles.avgReadTimeOverride,
+          completionRateOverride: articles.completionRateOverride,
         })
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
-        .orderBy(desc(articles.views))
+        .where(and(...whereConditions))
+        .orderBy(orderClause)
         .limit(limitNum + 1)
         .offset(offsetNum);
 
-      // Check if there are more results
       const hasMore = articlesWithMetrics.length > limitNum;
       const articlesToReturn = hasMore ? articlesWithMetrics.slice(0, limitNum) : articlesWithMetrics;
-      
-      // Get article IDs for batch queries
       const articleIds = articlesToReturn.map(a => a.id);
 
       if (articleIds.length === 0) {
+        const rawQuery = query ? String(query).trim() : "";
+        if (rawQuery) {
+          const enArticlesList = await searchEnArticlesForAnalytics({
+            query: rawQuery,
+            status: status ? String(status) : undefined,
+            limit: limitNum,
+          });
+          if (enArticlesList.length > 0) {
+            return res.json({
+              articles: enArticlesList,
+              pagination: {
+                totalCount: enArticlesList.length,
+                offset: offsetNum,
+                limit: limitNum,
+                hasMore: false,
+              },
+            });
+          }
+        }
         return res.json({
           articles: [],
-          hasMore: false,
-          totalCount: 0
+          pagination: { totalCount: 0, offset: offsetNum, limit: limitNum, hasMore: false },
         });
       }
 
-      // Batch query for likes count
       const likesCountResult = await db
         .select({
           articleId: reactions.articleId,
@@ -9281,7 +9802,6 @@ Respond in valid JSON format only:
 
       const likesMap = new Map(likesCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for saves/bookmarks count
       const savesCountResult = await db
         .select({
           articleId: bookmarks.articleId,
@@ -9293,7 +9813,6 @@ Respond in valid JSON format only:
 
       const savesMap = new Map(savesCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for shares count from shortLinks
       const sharesCountResult = await db
         .select({
           articleId: shortLinks.articleId,
@@ -9308,7 +9827,6 @@ Respond in valid JSON format only:
 
       const sharesMap = new Map(sharesCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for comments count
       const commentsCountResult = await db
         .select({
           articleId: comments.articleId,
@@ -9320,7 +9838,6 @@ Respond in valid JSON format only:
 
       const commentsMap = new Map(commentsCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for average reading time
       const readingTimeResult = await db
         .select({
           articleId: readingHistory.articleId,
@@ -9335,19 +9852,20 @@ Respond in valid JSON format only:
 
       const readingTimeMap = new Map(readingTimeResult.map(r => [r.articleId, r.avgReadingTime]));
 
-      // Calculate word count helper function
-      const calculateWordCount = (content: string | null): number => {
-        if (!content) return 0;
-        const plainText = content.replace(/<[^>]*>/g, '');
-        return plainText.split(/\s+/).filter(Boolean).length;
-      };
-
-      // Build final response with all metrics flattened
-      const articlesWithFullMetrics = articlesToReturn.map(article => ({
+      let articlesWithFullMetrics = articlesToReturn.map(article => {
+        const resolved = resolveReadingMetrics({
+          avgReadingMinutes: readingTimeMap.get(article.id) || 0,
+          avgCompletionRate: 0,
+          overrides: {
+            avgReadTimeOverride: article.avgReadTimeOverride,
+            completionRateOverride: article.completionRateOverride,
+          },
+        });
+        return {
         id: article.id,
         title: article.title,
         slug: article.slug,
-              englishSlug: (article as any).englishSlug || undefined,
+        englishSlug: (article as any).englishSlug || undefined,
         excerpt: article.excerpt,
         imageUrl: article.imageUrl,
         status: article.status,
@@ -9360,8 +9878,8 @@ Respond in valid JSON format only:
         } : null,
         author: {
           id: article.authorId,
-          name: article.authorFirstName && article.authorLastName 
-            ? `${article.authorFirstName} ${article.authorLastName}` 
+          name: article.authorFirstName && article.authorLastName
+            ? `${article.authorFirstName} ${article.authorLastName}`
             : article.authorFirstName || article.authorLastName || null
         },
         views: article.views || 0,
@@ -9369,43 +9887,34 @@ Respond in valid JSON format only:
         savesCount: savesMap.get(article.id) || 0,
         sharesCount: sharesMap.get(article.id) || 0,
         commentsCount: commentsMap.get(article.id) || 0,
-        wordCount: calculateWordCount(article.content),
-        avgReadingTime: Math.round((readingTimeMap.get(article.id) || 0) * 10) / 10
-      }));
-
-      // Sort by the requested metric
-      const sortedArticles = [...articlesWithFullMetrics].sort((a, b) => {
-        switch (sortBy) {
-          case "likes":
-            return b.likesCount - a.likesCount;
-          case "comments":
-            return b.commentsCount - a.commentsCount;
-          case "shares":
-            return b.sharesCount - a.sharesCount;
-          case "publishedAt":
-            return new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
-          case "views":
-          default:
-            return b.views - a.views;
-        }
+        wordCount: 0,
+        avgReadingTime: Math.round(resolved.avgReadingMinutes * 10) / 10,
+        locale: "ar" as const,
+      };
       });
 
-      // Get total count for pagination
-      const [{ count: totalCount }] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(articles)
-        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined);
+      // Engagement sorts apply within the current page only (avoids heavy global aggregates).
+      if (sortKey === "likes" || sortKey === "comments" || sortKey === "shares") {
+        articlesWithFullMetrics = [...articlesWithFullMetrics].sort((a, b) => {
+          if (sortKey === "likes") return b.likesCount - a.likesCount;
+          if (sortKey === "comments") return b.commentsCount - a.commentsCount;
+          return b.sharesCount - a.sharesCount;
+        });
+      }
+
       res.json({
-        articles: sortedArticles,
+        articles: articlesWithFullMetrics,
         pagination: {
-  
-          totalCount: totalCount || 0,
+          // Intentionally NOT a full table COUNT(*) — that was scanning ~1M rows.
+          totalCount: offsetNum + articlesWithFullMetrics.length + (hasMore ? 1 : 0),
           offset: offsetNum,
-          limit: limitNum
-        }
+          limit: limitNum,
+          hasMore,
+        },
       });
 
     } catch (error) {
+      console.error("[Article Analytics] Search failed:", error);
       res.status(500).json({ message: "Failed to fetch article analytics" });
     }
   });
@@ -9456,6 +9965,10 @@ Respond in valid JSON format only:
         .limit(1);
 
       if (!article) {
+        const enDetail = await getEnArticleAnalyticsDetail(articleId);
+        if (enDetail) {
+          return res.json(enDetail);
+        }
         return res.status(404).json({ message: "Article not found" });
       }
 
@@ -9532,8 +10045,15 @@ Respond in valid JSON format only:
         .from(readingHistory)
         .where(eq(readingHistory.articleId, articleId));
 
+      const readingOverrides = await getArticleReadingOverrides(articleId, "ar");
+      const resolvedReading = resolveReadingMetrics({
+        avgReadingMinutes: readingStats?.avgReadingTime || 0,
+        avgCompletionRate: readingStats?.avgCompletionRate || 0,
+        overrides: readingOverrides,
+      });
+
       // Get recent comments (last 10 comments)
-      const recentComments = await (db as any)
+      const recentComments = await db
         .select({
           id: comments.id,
           content: comments.content,
@@ -9549,7 +10069,7 @@ Respond in valid JSON format only:
         .leftJoin(users, eq(comments.userId, users.id))
         .where(eq(comments.articleId, articleId))
         .orderBy(desc(comments.createdAt))
-        .orderBy(desc(articles.publishedAt)).limit(10);
+        .limit(10);
 
       // Calculate word count
       const calculateWordCount = (content: string | null): number => {
@@ -9568,7 +10088,6 @@ Respond in valid JSON format only:
         slug: article.slug,
               englishSlug: (article as any).englishSlug || undefined,
         excerpt: article.excerpt,
-        content: article.content,
         imageUrl: article.imageUrl,
         thumbnailUrl: article.thumbnailUrl,
         status: article.status,
@@ -9591,16 +10110,17 @@ Respond in valid JSON format only:
         sharesCount,
         commentsCount: totalComments,
         wordCount,
-        avgReadingTime: Math.round((readingStats?.avgReadingTime || 0) * 10) / 10,
+        avgReadingTime: Math.round(resolvedReading.avgReadingMinutes * 10) / 10,
         reactions: reactionsMap,
         commentsBreakdown: commentsStatusMap,
         readingStats: {
-          avgReadingTime: Math.round((readingStats?.avgReadingTime || 0) * 10) / 10,
+          avgReadingTime: Math.round(resolvedReading.avgReadingMinutes * 10) / 10,
           totalReaders: readingStats?.totalReaders || 0,
           totalReadSessions: readingStats?.totalReadSessions || 0,
           avgScrollDepth: Math.round(readingStats?.avgScrollDepth || 0),
-          avgCompletionRate: Math.round(readingStats?.avgCompletionRate || 0)
+          avgCompletionRate: Math.round(resolvedReading.avgCompletionRate)
         },
+        locale: "ar" as const,
         recentComments: recentComments.map((c: any) => ({
           id: c.id,
           content: c.content,
@@ -9697,9 +10217,17 @@ Respond in valid JSON format only:
           avgReadingTime: sql<number>`COALESCE(AVG(${readingHistory.readDuration}) / 60.0, 0)`,
           totalReaders: sql<number>`COUNT(DISTINCT ${readingHistory.userId})::int`,
           avgScrollDepth: sql<number>`COALESCE(AVG(${readingHistory.scrollDepth}), 0)`,
+          avgCompletionRate: sql<number>`COALESCE(AVG(${readingHistory.completionRate}), 0)`,
         })
         .from(readingHistory)
         .where(eq(readingHistory.articleId, articleId));
+
+      const exportOverrides = await getArticleReadingOverrides(articleId, "ar");
+      const exportReading = resolveReadingMetrics({
+        avgReadingMinutes: Number(readingStats?.avgReadingTime || 0),
+        avgCompletionRate: Number(readingStats?.avgCompletionRate || 0),
+        overrides: exportOverrides,
+      });
 
       // Calculate word count from HTML content
       const content = article.content || '';
@@ -9778,7 +10306,7 @@ Respond in valid JSON format only:
           {
             columns: [
               { width: '*', stack: [{ text: 'التعليقات', style: 'statLabel', alignment: 'center' as const }, { text: totalComments.toLocaleString('ar-SA'), style: 'statValue', alignment: 'center' as const, color: '#F97316' }], margin: [0, 0, 10, 0] },
-              { width: '*', stack: [{ text: 'متوسط وقت القراءة', style: 'statLabel', alignment: 'center' as const }, { text: Number(readingStats?.avgReadingTime) > 0 ? `${Number(readingStats.avgReadingTime).toFixed(1)} دقيقة` : 'لا توجد بيانات', style: 'statValue', alignment: 'center' as const, color: '#6366F1' }], margin: [0, 0, 10, 0] },
+              { width: '*', stack: [{ text: 'متوسط وقت القراءة', style: 'statLabel', alignment: 'center' as const }, { text: exportReading.avgReadingMinutes > 0 ? `${exportReading.avgReadingMinutes.toFixed(1)} دقيقة` : 'لا توجد بيانات', style: 'statValue', alignment: 'center' as const, color: '#6366F1' }], margin: [0, 0, 10, 0] },
               { width: '*', stack: [{ text: 'إجمالي القراء', style: 'statLabel', alignment: 'center' as const }, { text: (readingStats?.totalReaders || 0).toLocaleString('ar-SA'), style: 'statValue', alignment: 'center' as const, color: '#0EA5E9' }] }
             ],
             margin: [0, 0, 0, 25]
@@ -10940,7 +11468,9 @@ Respond in valid JSON format only:
       const draftCount = myArticles.filter(a => a.status === 'draft').length;
       const pendingCount = myArticles.filter(a => a.reviewStatus === "pending_review" || a.status === "pending").length;
       const needsChangesCount = myArticles.filter(a => a.reviewStatus === "needs_changes").length;
-      const rejectedCount = myArticles.filter(a => a.status === 'rejected').length;
+      const rejectedCount = myArticles.filter(a =>
+        a.reviewStatus === "rejected" || a.status === "archived" || a.status === "rejected"
+      ).length;
       const totalViews = myArticles.reduce((sum, a) => sum + (a.views || 0), 0);
 
       const [likesResult, commentsResult, bookmarksResult] = await Promise.all([
@@ -11173,6 +11703,7 @@ Respond in valid JSON format only:
           reviewStatus: a.reviewStatus,
           reviewNotes: a.reviewNotes,
           reviewedAt: a.reviewedAt,
+          scheduledAt: a.scheduledAt,
           views: a.views,
           likes: likesMap[a.id] || 0,
           comments: commentsMap[a.id] || 0,
@@ -12039,7 +12570,7 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
   app.get("/api/news/analytics", async (req, res) => {
     try {
-      const analyticsData = await withSWR('news-analytics-ar', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
+      const analyticsData = await withSWR('news-analytics-ar-v3', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -12073,6 +12604,7 @@ Respond in valid JSON format only:
           categoryId: articles.categoryId,
           count: sql<number>`count(*)::int`,
           name: categories.nameAr,
+          slug: categories.slug,
           icon: categories.icon,
           color: categories.color,
         })
@@ -12084,7 +12616,7 @@ Respond in valid JSON format only:
             eq(articles.hideFromHomepage, false),
             or(isNull(articles.articleType), ne(articles.articleType, 'opinion'))
           ))
-          .groupBy(articles.categoryId, categories.nameAr, categories.icon, categories.color)
+          .groupBy(articles.categoryId, categories.nameAr, categories.slug, categories.icon, categories.color)
           .orderBy(sql`count(*) DESC`)
           .limit(1);
 
@@ -12143,21 +12675,23 @@ Respond in valid JSON format only:
           db.select({ count: sql<number>`count(*)::int` }).from(comments),
         ]);
 
-        const totalInteractions = (totalReactions?.count || 0) + 
-                                  (totalBookmarks?.count || 0) + 
+        const totalInteractions = (totalReactions?.count || 0) +
+                                  (totalBookmarks?.count || 0) +
                                   (totalComments?.count || 0);
 
         const insights = {
           dailySummary: "منصة سبق الذكية تواصل تقديم أحدث الأخبار والتحليلات لقرائها",
-          topTopics: [],
+          topTopics: [] as Array<{ name: string; score: number }>,
           activityTrend: growthPercentage > 5 ? "نمو ملحوظ في النشاط" : growthPercentage < -5 ? "انخفاض في النشاط" : "نشاط مستقر",
           keyHighlights: [
             `تم نشر ${todayC} خبراً اليوم`,
             topCategory[0] ? `تصنيف ${topCategory[0].name} الأكثر نشاطاً` : "تنوع في التصنيفات",
-            `إجمالي ${totalInteractions.toLocaleString('en-US')} تفاعل`
-          ]
+            `إجمالي ${totalInteractions.toLocaleString('en-US')} تفاعل`,
+          ],
         };
 
+        let pulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
+        try { pulse = await getNewsPulseExtras(monthAgo, prevMonthStart); } catch (e) { console.warn("[news/analytics] pulse extras failed", e); }
         return {
           period: { today: todayC, week: weekC, month: monthC },
           growth: {
@@ -12167,6 +12701,7 @@ Respond in valid JSON format only:
           },
           topCategory: topCategory[0] ? {
             name: topCategory[0].name,
+            slug: topCategory[0].slug,
             icon: topCategory[0].icon,
             color: topCategory[0].color,
             count: topCategory[0].count,
@@ -12179,6 +12714,7 @@ Respond in valid JSON format only:
           totalViews: totalViewsResult.total || 0,
           totalInteractions,
           aiInsights: insights,
+          ...pulse,
         };
       });
 
@@ -12194,7 +12730,12 @@ Respond in valid JSON format only:
   // News Statistics Endpoint - Statistics cards data
   app.get("/api/news/stats", async (req, res) => {
     try {
+      const cacheKey = 'news:stats';
+      const cached = memoryCache.get(cacheKey);
+      if (cached) return res.json(cached);
+
       const stats = await storage.getNewsStatistics();
+      memoryCache.set(cacheKey, stats, CACHE_TTL.SHORT);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching news stats:", error);
@@ -12884,7 +13425,14 @@ Respond in valid JSON format only:
             ]);
             usedProvider = 'elevenlabs';
           } catch (eErr) {
-            console.error('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eErr instanceof Error ? eErr.message : eErr);
+            const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
+            // نفاد رصيد ElevenLabs حالة متوقَّعة (نعتمد على Google كبديل)؛ لا نُسجّلها
+            // كخطأ حتى لا تُغرق السجلّات في كل طلب صوت. الأخطاء الأخرى تبقى تحذيرًا.
+            if (eMsg.includes('quota_exceeded')) {
+              console.log('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
+            } else {
+              console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
+            }
           }
         }
       }
@@ -12980,8 +13528,10 @@ Respond in valid JSON format only:
         return res.json({ bullets: storedBullets, source: "db" });
       }
 
-      // 2) Fallback: parse from existing aiSummary text if available
-      const existing = typeof article.aiSummary === "string" ? article.aiSummary.trim() : "";
+      // 2) Fallback: parse from existing aiSummary / excerpt text if available
+      const existing =
+        (typeof article.aiSummary === "string" ? article.aiSummary.trim() : "") ||
+        (typeof article.excerpt === "string" ? article.excerpt.trim() : "");
       if (existing) {
         const bullets = parseToBullets(existing);
         if (bullets.length > 0) {
@@ -12993,102 +13543,9 @@ Respond in valid JSON format only:
         }
       }
 
-      const cacheKey = article.id;
-      const now = Date.now();
-
-      // 3) Memory-cache hit from a recent background generation
-      const cached = aiBulletsCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) {
-        cacheBullets();
-        return res.json({ bullets: cached.bullets, source: "generated" });
-      }
-
-      // Build the source text for generation (used only by the background job)
-      const sourceText = [
-        article.title,
-        article.excerpt || "",
-        (article.content || "").replace(/<[^>]+>/g, " "),
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-        .slice(0, 6000);
-
-      if (!sourceText.trim()) {
-        noStore();
-        return res.json({ bullets: [], source: "empty" });
-      }
-
-      // 4) Generate via OpenAI — but NEVER on the request path. A synchronous
-      // LLM call was adding ~1.8s to every cold request and tripping the APM
-      // slow-request alarm. Instead we kick generation off in the background
-      // (deduped across concurrent requests via aiBulletsInFlight), persist the
-      // result to the memory cache + DB, and return an empty "pending" response
-      // with no-store. The next load (CDN/browser revalidates because of
-      // no-store) hits the fast "db"/"generated" path above. Bullets are a
-      // progressive enhancement, so a one-load delay is acceptable.
-      if (!aiBulletsInFlight.has(cacheKey)) {
-        const generationPromise: Promise<string[]> = (async () => {
-          const OpenAIMod = (await import("openai")).default;
-          const openai = new OpenAIMod({ apiKey: process.env.OPENAI_API_KEY });
-          // 8s ceiling so a stuck OpenAI call can't pin the in-flight slot forever.
-          const completion = await openai.chat.completions.create(
-            {
-              model: "gpt-4o-mini",
-              temperature: 0.3,
-              response_format: { type: "json_object" },
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "أنت محرر صحفي يلخّص الأخبار بالعربية الفصحى. أعطِ ملخصاً موجزاً جداً في 3 نقاط مختصرة (10-18 كلمة لكل نقطة) تغطي جوهر الخبر. أعد JSON فقط بالشكل: {\"bullets\": [\"...\", \"...\", \"...\"]}",
-                },
-                {
-                  role: "user",
-                  content: `لخّص الخبر التالي في 3 نقاط:\n\n${sourceText}`,
-                },
-              ],
-            },
-            { signal: AbortSignal.timeout(8_000) }
-          );
-          const raw = completion.choices?.[0]?.message?.content || "{}";
-          let bullets: string[] = [];
-          try {
-            const parsed: unknown = JSON.parse(raw);
-            const arr = (parsed && typeof parsed === "object" && "bullets" in (parsed as Record<string, unknown>))
-              ? (parsed as { bullets: unknown }).bullets
-              : null;
-            if (Array.isArray(arr)) {
-              bullets = arr
-                .map((b: unknown): string => (typeof b === "string" ? b.trim() : ""))
-                .filter((s): s is string => s.length > 0)
-                .slice(0, 3);
-            }
-          } catch {
-            bullets = parseToBullets(raw);
-          }
-          return bullets;
-        })();
-
-        aiBulletsInFlight.set(cacheKey, generationPromise);
-        generationPromise
-          .then((bullets) => {
-            aiBulletsCache.set(cacheKey, { bullets, expiresAt: Date.now() + AI_BULLETS_TTL_MS });
-            // Persist to DB so future requests skip OpenAI entirely (fire-and-forget)
-            if (bullets.length > 0) {
-              storage.updateArticle(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() } as Parameters<typeof storage.updateArticle>[1])
-                .catch((e) => console.error("[ai-bullets] failed to persist generated bullets:", e instanceof Error ? e.message : e));
-            }
-          })
-          .catch((genErr) => {
-            console.error("[ai-bullets] background generation error:", genErr instanceof Error ? genErr.message : String(genErr));
-          })
-          .finally(() => {
-            aiBulletsInFlight.delete(cacheKey);
-          });
-      }
-
+      // لا تولّد موجزاً من نص المقال إن فرّغ المحرر الملخص — الصندوق يختفي بدل أن يعود تلقائياً
       noStore();
-      return res.json({ bullets: [], source: "pending" });
+      return res.json({ bullets: [], source: "empty" });
     } catch (error) {
       console.error("Error in ai-bullets:", error);
       noStore();
@@ -13154,14 +13611,16 @@ Respond in valid JSON format only:
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      const overrides = await getArticleReadingOverrides(article.id);
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
@@ -13172,81 +13631,7 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Get articles by keyword
-  app.get("/api/keyword/:keyword", async (req, res) => {
-    try {
-      const keyword = decodeURIComponent(req.params.keyword);
-
-      const cacheKey = `keyword-tag-v2:${keyword}`;
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
-      const result = await db.execute(sql`
-        SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
-               a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
-               a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
-               a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-               a.article_type AS "articleType"
-        FROM articles a
-        INNER JOIN article_tags at ON at.article_id = a.id
-        INNER JOIN tags t ON t.id = at.tag_id
-        WHERE a.status = 'published'
-          AND t.status = 'active'
-          AND (t.slug = ${keyword} OR t.name_ar = ${keyword})
-        ORDER BY a.published_at DESC
-        LIMIT 20
-      `);
-
-      let filteredArticles = (result as any).rows || result;
-
-      // Fallback: many articles carry only free-text SEO keywords
-      // (articles.seo->'keywords') with no matching row in the `tags` table.
-      // The article page still renders those as clickable badges, so without
-      // this lookup the keyword page comes back empty. Only runs when the
-      // indexed tag join found nothing, keeping the common path fast.
-      if (!filteredArticles || filteredArticles.length === 0) {
-        const seoResult = await db.execute(sql`
-          SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
-                 a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
-                 a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
-                 a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-                 a.article_type AS "articleType"
-          FROM articles a
-          WHERE a.status = 'published'
-            AND EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
-              WHERE lower(kw) = lower(${keyword})
-            )
-          ORDER BY a.published_at DESC
-          LIMIT 20
-        `);
-        filteredArticles = (seoResult as any).rows || seoResult;
-      }
-
-      const topicsResult = await db.execute(sql`
-        SELECT t.id, t.title, t.slug, t.excerpt, t.hero_image_url AS "heroImageUrl",
-               t.published_at AS "publishedAt", t.view_count AS "viewCount",
-               a.slug AS "angleSlug", a.name_ar AS "angleNameAr", a.color_hex AS "angleColorHex"
-        FROM topics t
-        INNER JOIN angles a ON a.id = t.angle_id
-        WHERE t.status = 'published'
-          AND EXISTS (
-            SELECT 1 FROM jsonb_array_elements_text(t.seo_meta -> 'keywords') AS kw
-            WHERE lower(kw) = lower(${keyword})
-          )
-        ORDER BY t.published_at DESC
-        LIMIT 20
-      `);
-      const muqtarabTopics = (topicsResult as any).rows || topicsResult;
-
-      const payload = { articles: filteredArticles || [], muqtarabTopics: muqtarabTopics || [] };
-      memoryCache.set(cacheKey, payload, CACHE_TTL.MEDIUM);
-      res.json(payload);
-    } catch (error) {
-      console.error("Error fetching articles by keyword:", error);
-      res.status(500).json({ message: "Failed to fetch articles" });
-    }
-  });
+  // GET /api/keyword/:keyword moved to server/routes/keywordRoutes.ts (ADR-001).
 
   // Get article events history - requires authentication
   app.get("/api/articles/:id/events", isAuthenticated, async (req: any, res) => {
@@ -13285,8 +13670,14 @@ Respond in valid JSON format only:
       // no longer inflates the stored view count.
       const articleHourlyCount = memoryCache.get<number>(articleHourlyKey) || 0;
       if (articleHourlyCount >= 500) {
-        // Log suspicious activity but still allow view (soft limit)
-        console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
+        // Log suspicious activity but still allow view (soft limit). Throttle the
+        // line to once per minute per article — otherwise every view above the
+        // threshold prints, flooding the logs with thousands of identical alerts.
+        const alertThrottleKey = `view:alertlog:${articleId}`;
+        if (!memoryCache.get(alertThrottleKey)) {
+          console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
+          memoryCache.set(alertThrottleKey, true, 60 * 1000); // 1 minute
+        }
       }
       memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
 
@@ -13312,17 +13703,23 @@ Respond in valid JSON format only:
       }
       memoryCache.set(viewDedupKey, true, VIEW_DEDUP_WINDOW_MS);
 
-      // Write the 5-10 boost DIRECTLY to the DB so the increase is visible
-      // immediately on the reader's first genuine view.
+      // Buffered batch write via articleViewCounterService (~10s flush window).
       const viewIncrement = Math.floor(Math.random() * 6) + 5;
-      await db.update(articles)
-        .set({ views: sql`${articles.views} + ${viewIncrement}` })
-        .where(eq(articles.id, articleId));
+      bufferArticleViewIncrement(articleId, viewIncrement);
 
       const userId = req.user?.id;
       if (userId) {
         behaviorLogBuffer.push({ userId, eventType: "article_view", metadata: { articleId } });
       }
+
+      // Record the per-IP aggregate (hashed IP, buffered) so a counted view can
+      // later be broken down by distinct IP. Same precedence as rateLimitKey().
+      const clientIp = ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
+        || (req.headers['cf-connecting-ip'] as string)
+        || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+        || req.ip
+        || 'unknown';
+      recordArticleView(articleId, clientIp, userId);
 
       res.json({ success: true, counted: true });
     } catch (error) {
@@ -13615,6 +14012,16 @@ Respond in valid JSON format only:
 
         await incrementSuspiciousWordFlagCount(wordIds);
 
+        const { logSuspiciousWordMatches, notifyCommentRejected } = await import("./services/commentInsightsService");
+        await logSuspiciousWordMatches(comment.id, comment.content, suspiciousCheck.foundWords, autoReject);
+        if (autoReject) {
+          await notifyCommentRejected({
+            userId,
+            commentId: comment.id,
+            reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+          });
+        }
+
         console.log(
           `[Comments] Comment ${comment.id} ${autoReject ? "auto-rejected" : "held for review"} due to suspicious words: ${foundWordsStr}`
         );
@@ -13633,62 +14040,35 @@ Respond in valid JSON format only:
       }
 
 
-      // AI Moderation - تحليل التعليق بالذكاء الاصطناعي (background task)
+      // AI Moderation + sentiment - الخط الموحّد للتحليل (background task)
       const commentId = comment.id;
       const commentContent = comment.content;
       const slugForCache = articleSlug;
       const suspiciousWordsData = blockedBySuspiciousWords ? suspiciousCheck : null;
       const englishSlugForCache = article.englishSlug;
+      const articleIdForPipeline = article.id;
       (async () => {
-    try {
-          const { moderateComment, getStatusFromClassification } = await import("./ai/commentModeration");
-          const moderationResult = await moderateComment(commentContent);
-          
-          // Update moderation data
-          await storage.updateCommentModeration(commentId, {
-            aiModerationScore: moderationResult.score,
-            aiClassification: moderationResult.classification,
-            aiDetectedIssues: moderationResult.detected,
-            aiModerationReason: moderationResult.reason,
-            aiAnalyzedAt: new Date(),
+        try {
+          const { runCommentModerationPipeline } = await import("./services/commentInsightsService");
+          await runCommentModerationPipeline({
+            commentId,
+            content: commentContent,
+            userId,
+            articleId: articleIdForPipeline,
+            suspiciousHeld: !!suspiciousWordsData && !suspiciousWordsData.shouldAutoReject,
+            suspiciousAutoRejected: suspiciousWordsData?.shouldAutoReject,
+            suspiciousWordsNote: suspiciousWordsData?.foundWords.length
+              ? suspiciousWordsData.foundWords.map(w => w.word).join(", ")
+              : undefined,
+            onStatusChange: (newStatus) => {
+              // إبطال كاش التعليقات بعد تحديث الحالة (مهم للاعتماد الأوتوماتيكي)
+              memoryCache.delete(`article:comments:${slugForCache}`);
+              if (englishSlugForCache) {
+                memoryCache.delete(`article:comments:${englishSlugForCache}`);
+              }
+              console.log(`[AI Moderation] Cache invalidated after auto-${newStatus} for article: ${slugForCache}`);
+            },
           });
-          
-          // Update comment status based on AI classification
-          // إذا كان التعليق يحتوي على كلمات محظورة (action=reject) فهو مرفوض بالفعل ولا يُعاد لـ pending
-          // وإذا كان يحتوي على كلمات مشبوهة (action=review) يبقى معلقاً للمراجعة
-          const aiStatus = getStatusFromClassification(moderationResult.classification);
-          const wasAutoRejected = suspiciousWordsData?.shouldAutoReject;
-          const newStatus = wasAutoRejected ? "rejected" : (suspiciousWordsData ? "pending" : aiStatus);
-          if (newStatus !== "pending" && !wasAutoRejected) {
-            await storage.updateCommentStatus(commentId, {
-              status: newStatus,
-              moderatedAt: new Date(),
-              moderationReason: moderationResult.classification === "safe" 
-                ? "تم الاعتماد تلقائياً بواسطة الذكاء الاصطناعي"
-                : `تم الرفض تلقائياً - ${moderationResult.reason}`,
-            });
-            
-            // إبطال كاش التعليقات بعد تحديث الحالة (مهم للاعتماد الأوتوماتيكي)
-            memoryCache.delete(`article:comments:${slugForCache}`);
-            if (englishSlugForCache) {
-              memoryCache.delete(`article:comments:${englishSlugForCache}`);
-            }
-            console.log(`[AI Moderation] Cache invalidated after auto-${newStatus} for article: ${slugForCache}`);
-          }
-          
-          // إذا كان التعليق يحتوي على كلمات مشبوهة، سجل ذلك وزد العداد
-          if (suspiciousWordsData && suspiciousWordsData.foundWords.length > 0) {
-            
-            // تحديث سبب الرقابة ليشمل الكلمات المشبوهة
-            const foundWordsStr = suspiciousWordsData.foundWords.map(w => w.word).join(", ");
-            await storage.updateCommentModeration(commentId, {
-              aiDetectedIssues: [...(moderationResult.detected || []), `كلمات مشبوهة: ${foundWordsStr}`],
-              aiModerationReason: `يحتوي على كلمات مشبوهة: ${foundWordsStr}` + (moderationResult.reason ? ` - ${moderationResult.reason}` : ""),
-            });
-            console.log(`[AI Moderation] Comment ${commentId} held for suspicious words: ${foundWordsStr}`);
-          }
-          
-          console.log(`[AI Moderation] Comment ${commentId} analyzed: ${moderationResult.classification} (${moderationResult.score}%) -> status: ${newStatus}`);
         } catch (error) {
           console.error("[AI Moderation] Error analyzing comment:", error);
         }
@@ -13738,28 +14118,26 @@ Respond in valid JSON format only:
       
       // Import retry helper for rate limit handling
       const { withRetry } = await import("./openai");
-      
-      // Run AI calls SEQUENTIALLY to avoid rate limiting (429 errors)
-      // Each call has retry logic for transient failures
-      
-      console.log("[Edit+Generate API] Step 1/3: Generating smart content...");
-      const generatedContent = await withRetry(
-        () => generateSmartContent(content, language as "ar" | "en"),
-        3,
-        "SmartContent"
-      );
-      
-      console.log("[Edit+Generate API] Step 2/3: Editing content in Sabq style...");
-      const editResult = await withRetry(
-        () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
-        3,
-        "EditContent"
-      );
-      
-      console.log("[Edit+Generate API] Step 3/3: Generating newsletter subtitle (optional)...");
-      let newsletterResult: { subtitle: string | undefined; excerpt: string | undefined } = { subtitle: undefined, excerpt: undefined };
-      try {
-        newsletterResult = await withRetry(
+
+      // Run the three AI calls IN PARALLEL — they all consume the same original
+      // `content` with no inter-dependency, so total latency drops from the sum of
+      // three calls to just the slowest one (the Claude rewrite). Each call keeps
+      // its own retry/backoff, which absorbs the occasional 429 under concurrency.
+      // The newsletter subtitle is optional: its failure must not fail the request,
+      // so it resolves to empty values instead of rejecting the Promise.all.
+      console.log("[Edit+Generate API] Running smart content + Sabq edit + newsletter in parallel...");
+      const [generatedContent, editResult, newsletterResult] = await Promise.all([
+        withRetry(
+          () => generateSmartContent(content, language as "ar" | "en"),
+          3,
+          "SmartContent"
+        ),
+        withRetry(
+          () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
+          3,
+          "EditContent"
+        ),
+        withRetry(
           () => generateNewsletterSubtitle({
             title: content.substring(0, 200),
             content: content,
@@ -13767,12 +14145,12 @@ Respond in valid JSON format only:
           }),
           3,
           "Newsletter"
-        );
-      } catch (err) {
-        console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
-        // Continue without newsletter - it's optional
-      }
-      
+        ).catch((err): { subtitle: string | undefined; excerpt: string | undefined } => {
+          console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
+          return { subtitle: undefined, excerpt: undefined };
+        }),
+      ]);
+
       console.log("[Edit+Generate API] ✅ All operations completed");
       console.log("[Edit+Generate API] Quality score:", editResult.qualityScore);
       console.log("[Edit+Generate API] Title (Claude→GPT fallback):", editResult.optimized.title || generatedContent.mainTitle);
@@ -14001,8 +14379,12 @@ Respond in valid JSON format only:
     try {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
+      const assignedRoles = await storage.getUserRoles(userId).catch(() => []);
+      const roleNames = new Set([user?.role, ...assignedRoles.map((role) => role.name)].filter(Boolean));
+      const canViewEditorialStats = ["admin", "superadmin", "system_admin", "editor", "chief_editor", "content_manager", "analyst"]
+        .some((role) => roleNames.has(role));
 
-      if (!user || (user.role !== "editor" && user.role !== "admin" && user.role !== "reporter")) {
+      if (!user || !canViewEditorialStats) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -14026,19 +14408,22 @@ Respond in valid JSON format only:
         return res.status(403).json({ message: "Forbidden" });
       }
 
+      const assignedRoles = await storage.getUserRoles(userId).catch(() => []);
+      const roleNames = new Set([user.role, ...assignedRoles.map((role) => role.name)]);
+      const isReporter = roleNames.has("reporter");
+      const hasElevatedDashboardRole = ["admin", "superadmin", "system_admin", "editor", "chief_editor", "content_manager", "analyst"]
+        .some((role) => roleNames.has(role));
+      if (isReporter && !hasElevatedDashboardRole) {
+        return res.status(403).json({ message: "هذه الإحصاءات غير متاحة لدور المراسل" });
+      }
+
       // Require staff role - check both legacy and RBAC roles
-      const allowedRoles = ['admin', 'superadmin', 'editor', 'chief_editor', 'system_admin', 'moderator', 'reporter', 'comments_moderator', 'content_manager', 'publisher', 'writer', 'content_creator', 'opinion_author'];
+      const allowedRoles = ['admin', 'superadmin', 'editor', 'chief_editor', 'system_admin', 'moderator', 'comments_moderator', 'content_manager', 'publisher', 'writer', 'content_creator', 'opinion_author'];
       const hasLegacyRole = allowedRoles.includes(user.role);
       
       // Also check RBAC roles - any role that's not 'reader' is considered staff
-      let hasRbacRole = false;
-    try {
-        const userRoles = await storage.getUserRoles(userId);
-        // Check if user has any of the predefined staff roles OR any custom role
-        hasRbacRole = userRoles.some(r => allowedRoles.includes(r.name) || r.name !== 'reader');
-      } catch (e) {
-        // Ignore RBAC check errors
-      }
+      // Check if the user has any predefined staff role or custom non-reader role.
+      const hasRbacRole = assignedRoles.some(r => allowedRoles.includes(r.name) || r.name !== 'reader');
 
       if (!hasLegacyRole && !hasRbacRole) {
         return res.status(403).json({ message: "Forbidden" });
@@ -14196,9 +14581,56 @@ Respond in valid JSON format only:
   // Get all English articles with filtering (dashboard)
   app.get("/api/en/dashboard/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
-      const { search, status, articleType, categoryId, authorId, featured } = req.query;
+      const { search, status, articleType, categoryId, authorId, featured, page = "1", limit = "30" } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
+      const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
+      const whereConditions = [];
+
+      const searchQuery = typeof search === "string" ? search.trim() : "";
+      if (searchQuery) {
+        const pattern = `%${searchQuery.replace(/[%_\\]/g, "\\$&")}%`;
+        whereConditions.push(
+          or(
+            ilike(enArticles.title, pattern),
+            ilike(enArticles.subtitle, pattern),
+            ilike(enArticles.slug, pattern),
+            ilike(enArticles.englishSlug, pattern),
+            ilike(enArticles.excerpt, pattern),
+          )
+        );
+      }
+
+      if (status && status !== "all") {
+        whereConditions.push(eq(enArticles.status, status as string));
+      }
+
+      if (articleType && articleType !== "all") {
+        whereConditions.push(eq(enArticles.articleType, articleType));
+      }
+
+      if (categoryId) {
+        whereConditions.push(eq(enArticles.categoryId, categoryId));
+      }
+
+      if (authorId) {
+        whereConditions.push(eq(enArticles.authorId, authorId));
+      }
+
+      if (featured !== undefined) {
+        whereConditions.push(eq(enArticles.isFeatured, featured === "true"));
+      }
+
+      const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+      let countQuery = db.select({ count: sql<number>`count(*)` }).from(enArticles).$dynamic();
+      if (whereClause) {
+        countQuery = countQuery.where(whereClause);
+      }
+      const [countResult] = await countQuery;
+      const total = Number(countResult?.count || 0);
 
       let query = db
         .select({
@@ -14229,36 +14661,14 @@ Respond in valid JSON format only:
         .leftJoin(reporterAlias, eq(enArticles.reporterId, reporterAlias.id))
         .$dynamic();
 
-      if (search) {
-        query = query.where(
-          or(
-            ilike(enArticles.title, `%${search}%`),
-            ilike(enArticles.excerpt, `%${search}%`)
-          )
-        );
+      if (whereClause) {
+        query = query.where(whereClause);
       }
 
-      if (status && status !== "all") {
-        query = query.where(eq(enArticles.status, status));
-      }
-
-      if (articleType && articleType !== "all") {
-        query = query.where(eq(enArticles.articleType, articleType));
-      }
-
-      if (categoryId) {
-        query = query.where(eq(enArticles.categoryId, categoryId));
-      }
-
-      if (authorId) {
-        query = query.where(eq(enArticles.authorId, authorId));
-      }
-
-      if (featured !== undefined) {
-        query = query.where(eq(enArticles.isFeatured, featured === "true"));
-      }
-
-      query = query.orderBy(desc(enArticles.createdAt));
+      query = query
+        .orderBy(desc(enArticles.displayOrder), desc(enArticles.createdAt))
+        .limit(limitNum)
+        .offset(offset);
 
       const results = await query;
 
@@ -14269,7 +14679,13 @@ Respond in valid JSON format only:
         publisher: (row as any).publisher,
       }));
 
-      res.json({ articles: formattedArticles, total: formattedArticles.length });
+      res.json({
+        articles: formattedArticles,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      });
     } catch (error) {
       console.error("Error fetching English articles:", error);
       res.status(500).json({ message: "Failed to fetch English articles" });
@@ -14657,7 +15073,7 @@ Respond in valid JSON format only:
         return res.status(404).json({ message: "Article not found" });
       }
 
-      const newNewsType = article.newsType === 'breaking' ? 'standard' : 'breaking';
+      const newNewsType = article.newsType === 'breaking' ? 'regular' : 'breaking';
 
       const [updatedArticle] = await db
         .update(enArticles)
@@ -15375,11 +15791,16 @@ Respond in valid JSON format only:
       // Get user permissions from RBAC system
       const userPermissions = await getUserPermissions(userId);
       
-      // Check permissions using RBAC system
-      const canViewAny = userPermissions.includes("articles.view") || 
+      // Align with PUT /api/dashboard/articles/:id and PATCH /api/admin/articles/:id:
+      // articles.edit alone must be enough to open the editor (not only view/edit_any).
+      const canViewAny = userPermissions.includes("articles.view") ||
+                         userPermissions.includes("articles.edit") ||
                          userPermissions.includes("articles.edit_any") ||
+                         userPermissions.includes("opinion.view") ||
+                         userPermissions.includes("opinion.edit_any") ||
                          userPermissions.includes("system.admin");
-      const canViewOwn = userPermissions.includes("articles.edit_own");
+      const canViewOwn = userPermissions.includes("articles.edit_own") ||
+                         userPermissions.includes("opinion.edit_own");
       
       // Legacy role fallback
       const isLegacyAdmin = user.role === "admin" || user.role === "editor";
@@ -15396,7 +15817,7 @@ Respond in valid JSON format only:
 
       // Allow if user has view_any permission, is admin, or is the author
       const hasFullAccess = canViewAny || isLegacyAdmin;
-      const isAuthor = article.authorId === userId || article.reporterId === userId;
+      const isAuthor = article.authorId === userId || article.reporterId === userId || (article as any).submitterId === userId;
       
       if (!hasFullAccess && !isAuthor) {
         return res.status(403).json({ message: "Forbidden" });
@@ -15418,9 +15839,13 @@ Respond in valid JSON format only:
         reporter = reporterData || null;
       }
 
-      // Fetch author info (the editor who entered the article)
+      // من أدخل المادة: submitter أولاً. لمقالات الرأي لا نستخدم authorId هنا
+      // لأن authorId = كاتب الرأي الظاهر للقارئ.
       let enteredBy = null;
-      if (article.authorId) {
+      const enteredById =
+        article.submitterId ||
+        (article.articleType === "opinion" ? null : article.authorId);
+      if (enteredById) {
         const [authorData] = await db
           .select({
             id: users.id,
@@ -15429,7 +15854,7 @@ Respond in valid JSON format only:
             email: users.email,
           })
           .from(users)
-          .where(eq(users.id, article.authorId))
+          .where(eq(users.id, enteredById))
           .limit(1);
         enteredBy = authorData || null;
       }
@@ -15486,6 +15911,16 @@ Respond in valid JSON format only:
 
       console.log(`🔍 [DASHBOARD CREATE] Article created with status: ${article.status}`);
       console.log(`🔍 [DASHBOARD CREATE] Article ID: ${article.id}, Title: ${article.title}`);
+
+      // Record hero-image usage in the media library (idempotent, best-effort)
+      if (article.imageUrl) {
+        const { recordHeroImageUsage } = await import("./services/mediaUsageService");
+        void recordHeroImageUsage({ articleId: article.id, imageUrl: article.imageUrl, userId });
+        if (article.status === "published") {
+          const { ensureHeroAltText } = await import("./services/mediaGovernanceService");
+          void ensureHeroAltText({ articleId: article.id, imageUrl: article.imageUrl });
+        }
+      }
       
       // Send notification to editors when a reporter submits a draft
       if (article.status === 'draft' && article.reporterId) {
@@ -15512,13 +15947,13 @@ Respond in valid JSON format only:
             await logActivity({
               userId: article.reporterId!,
               action: 'draft_submitted',
-              targetType: 'article',
-              targetId: article.id,
+              entityType: 'article',
+              entityId: article.id,
               metadata: {
                 articleTitle: article.title,
                 reporterName,
               },
-            } as any);
+            });
           } catch (err) {
             console.error("[DRAFT NOTIFY] Error:", err);
           }
@@ -15734,7 +16169,17 @@ Respond in valid JSON format only:
 
       console.log(`🔍 [DASHBOARD UPDATE] Article updated - Old status: ${article.status}, New status: ${updated.status}`);
       console.log(`🔍 [DASHBOARD UPDATE] Article ID: ${updated.id}, Title: ${updated.title}`);
-      
+
+      // Record hero-image usage in the media library (idempotent, best-effort)
+      if (updated.imageUrl) {
+        const { recordHeroImageUsage } = await import("./services/mediaUsageService");
+        void recordHeroImageUsage({ articleId: updated.id, imageUrl: updated.imageUrl, userId });
+        if (updated.status === "published") {
+          const { ensureHeroAltText } = await import("./services/mediaGovernanceService");
+          void ensureHeroAltText({ articleId: updated.id, imageUrl: updated.imageUrl });
+        }
+      }
+
       res.json(updated);
 
       // Broadcast publish event to other editors via SSE (on transition to published)
@@ -16894,9 +17339,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       // Generate titles from 3 different AI models in parallel
       const results = await aiManager.generateMultiple(prompt, [
-        { ...AI_MODELS.GPT5, maxTokens: 512 },
-        { ...AI_MODELS.CLAUDE_SONNET, maxTokens: 512, temperature: 0.8 },
-        { ...AI_MODELS.GEMINI_FLASH, maxTokens: 512, temperature: 0.8 },
+        { ...AI_MODELS.GPT5, maxTokens: 512, feature: "content-tools" },
+        { ...AI_MODELS.CLAUDE_SONNET, maxTokens: 512, temperature: 0.8, feature: "content-tools" },
+        { ...AI_MODELS.GEMINI_FLASH, maxTokens: 512, temperature: 0.8, feature: "content-tools" },
       ]);
 
       // Clean up titles (remove quotes, extra whitespace)
@@ -17327,6 +17772,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         total: kpis.total,
         emailVerified: kpis.emailVerified,
         emailVerifiedTrend: kpis.trends?.emailVerifiedTrend || 0,
+        withPhone: kpis.withPhone,
+        withPhoneTrend: kpis.trends?.withPhoneTrend || 0,
         suspended: kpis.suspended,
         suspendedTrend: kpis.trends?.suspendedTrend || 0,
         banned: kpis.banned,
@@ -18196,9 +18643,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       console.log("[Article Image] GCS objectPath:", objectPath);
 
-      // Try to upload to Cloudflare Images for faster CDN delivery
+      // Move the legacy object upload into the canonical news-image store.
       let finalPath = objectPath;
-      if (cloudflareImagesService.isCloudflareConfigured()) {
+      if (newsImageStorageService.isUploadAvailable()) {
         try {
           // Download the file from GCS
           const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
@@ -18220,27 +18667,29 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             const [metadata] = await file.getMetadata();
             const contentType = metadata.contentType || 'image/jpeg';
             
-            // Only upload images to Cloudflare
+            // Legacy object-upload flow: route article images through the same
+            // R2 rollout + Cloudflare fallback used by current editors.
             if (contentType.startsWith('image/')) {
-              console.log("[Article Image] Uploading to Cloudflare Images...");
-              const cfResult = await cloudflareImagesService.uploadToCloudflare(
+              const imageResult = await newsImageStorageService.upload({
                 buffer,
-                gcsFilePath.split('/').pop() || 'image.jpg',
-                { uploadedBy: userId?.toString() || 'system', type: 'article' },
-                contentType
-              );
+                filename: gcsFilePath.split('/').pop() || 'image.jpg',
+                mimeType: contentType,
+                purpose: 'article-legacy-upload',
+                metadata: { uploadedBy: userId?.toString() || 'system', source: 'legacy-object-upload' },
+                rolloutKey: `${userId || 'system'}:${gcsFilePath}`,
+              });
               
-              if (cfResult.success && cfResult.deliveryUrl) {
-                finalPath = cfResult.deliveryUrl;
-                console.log("[Article Image] Cloudflare upload successful:", finalPath);
+              if (imageResult.success && imageResult.deliveryUrl) {
+                finalPath = imageResult.deliveryUrl;
+                console.log("[Article Image] Canonical upload successful");
               } else {
-                console.log("[Article Image] Cloudflare upload failed, using GCS path:", cfResult.error);
+                console.log("[Article Image] Canonical upload failed, using GCS path:", imageResult.error);
               }
             }
           }
-        } catch (cfError) {
-          console.error("[Article Image] Cloudflare re-upload error:", cfError);
-          // Continue with GCS path if Cloudflare fails
+        } catch (imageError) {
+          console.error("[Article Image] Canonical re-upload error:", imageError);
+          // Continue with the object-storage path if the canonical upload fails.
         }
       }
 
@@ -18427,77 +18876,89 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       behaviorLogBuffer.push({ userId, eventType, metadata: sanitizedMetadata });
 
+      // Fire-and-forget beacon: acknowledge immediately. The userEvent /
+      // reading-progress / loyalty writes below must NOT block the HTTP
+      // response — previously they were awaited and (worse) the success path
+      // never called res.*, so during deploy-time connection-pool saturation
+      // the request hung 25-96s and the edge proxy returned 502. Ack first,
+      // persist the analytics/loyalty side-effects in the background.
+      res.status(202).json({ ok: true });
+
       const meta = sanitizedMetadata as Record<string, any>;
 
-      // Track events in userEvents table for daily summary analytics
-      if (meta.articleId) {
-    try {
-          // Map behavior event types to userEvent types for daily summary
-          if (eventType === "article_read") {
-            await trackUserEvent({
-              userId,
-              articleId: meta.articleId,
-              eventType: 'read',
-              metadata: {
-                readDuration: meta.readTime || meta.duration,
-                scrollDepth: meta.scrollDepth,
-              },
-            });
-            
-            // Update reading_history with scroll depth for Continue Reading feature
-            if (meta.scrollDepth && typeof meta.scrollDepth === 'number') {
-              await storage.updateReadingProgress(
+      void (async () => {
+        // Track events in userEvents table for daily summary analytics
+        if (meta.articleId) {
+          try {
+            // Map behavior event types to userEvent types for daily summary
+            if (eventType === "article_read") {
+              await trackUserEvent({
                 userId,
-                meta.articleId,
-                meta.scrollDepth,
-                meta.readTime || meta.duration
-              );
+                articleId: meta.articleId,
+                eventType: 'read',
+                metadata: {
+                  readDuration: meta.readTime || meta.duration,
+                  scrollDepth: meta.scrollDepth,
+                },
+              });
+
+              // Update reading_history with scroll depth for Continue Reading feature
+              if (meta.scrollDepth && typeof meta.scrollDepth === 'number') {
+                await storage.updateReadingProgress(
+                  userId,
+                  meta.articleId,
+                  meta.scrollDepth,
+                  meta.readTime || meta.duration
+                );
+              }
+            } else if (eventType === "article_view") {
+              await trackUserEvent({
+                userId,
+                articleId: meta.articleId,
+                eventType: 'view',
+                metadata: {
+                  scrollDepth: meta.scrollDepth,
+                },
+              });
             }
-          } else if (eventType === "article_view") {
-            await trackUserEvent({
+          } catch (error) {
+            console.error("Error tracking user event:", error);
+          }
+        }
+
+        // إضافة نقاط ولاء بناءً على نوع السلوك
+        try {
+          let loyaltyAction: typeof LOYALTY_ACTIONS[keyof typeof LOYALTY_ACTIONS] | null = null;
+
+          if (eventType === "article_view") {
+            loyaltyAction = LOYALTY_ACTIONS.READ_OPEN;
+          } else if (
+            eventType === "article_read" &&
+            meta.duration &&
+            typeof meta.duration === "number" &&
+            meta.duration >= 60
+          ) {
+            loyaltyAction = LOYALTY_ACTIONS.READ_DEEP;
+          }
+
+          if (loyaltyAction) {
+            await awardPoints({
               userId,
-              articleId: meta.articleId,
-              eventType: 'view',
-              metadata: {
-                scrollDepth: meta.scrollDepth,
-              },
+              action: loyaltyAction,
+              source: (meta.articleId || meta.slug) as string | undefined,
+              metadata: meta,
             });
           }
         } catch (error) {
-          console.error("Error tracking user event:", error);
+          console.error("Error recording loyalty points:", error);
         }
-      }
-
-      // إضافة نقاط ولاء بناءً على نوع السلوك
-      try {
-        let loyaltyAction: typeof LOYALTY_ACTIONS[keyof typeof LOYALTY_ACTIONS] | null = null;
-
-        if (eventType === "article_view") {
-          loyaltyAction = LOYALTY_ACTIONS.READ_OPEN;
-        } else if (
-          eventType === "article_read" &&
-          meta.duration &&
-          typeof meta.duration === "number" &&
-          meta.duration >= 60
-        ) {
-          loyaltyAction = LOYALTY_ACTIONS.READ_DEEP;
-        }
-
-        if (loyaltyAction) {
-          await awardPoints({
-            userId,
-            action: loyaltyAction,
-            source: (meta.articleId || meta.slug) as string | undefined,
-            metadata: meta,
-          });
-        }
-      } catch (error) {
-        console.error("Error recording loyalty points:", error);
-      }
+      })();
 
     } catch (error) {
       console.error("Error logging behavior:", error);
-      res.status(500).json({ message: "Failed to log behavior" });
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to log behavior" });
+      }
     }
   });
 
@@ -18883,13 +19344,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (req.query.read === 'true') read = true;
       else if (req.query.read === 'false') read = false;
       
+      // مركز إشعارات الويب لا يعرض إشعارات نشر المقالات التحريرية (التي يُدخلها
+      // المحررون في لوحة التحكم) — يبقى مركزًا للإشعارات الشخصية/التفاعلية فقط
+      // (الرياضة، التوصيات، الردود…). الموبايل غير متأثّر (مساره منفصل).
+      const EDITORIAL_NOTIFICATION_TYPES = [
+        "ArticlePublished",
+        "ReporterArticlePublished",
+        "BreakingNews",
+        "FeaturedArticle",
+      ];
+
       // Get notifications from storage
       const result = await storage.getNotifications(userId, {
         read,
         limit,
         offset,
+        excludeTypes: EDITORIAL_NOTIFICATION_TYPES,
       });
-      
+
       res.json(result);
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -18965,6 +19437,21 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // DELETE /api/notifications/clear - Clear all notifications
+  // ⚠️ Must be registered BEFORE "/:id" or Express matches it as id="clear".
+  app.delete("/api/notifications/clear", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      await storage.clearAllNotifications(userId);
+
+      res.json({ success: true, message: "All notifications cleared" });
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+      res.status(500).json({ message: "Failed to clear notifications" });
+    }
+  });
+
   // DELETE /api/notifications/:id - Delete single notification
   app.delete("/api/notifications/:id", isAuthenticated, async (req: any, res) => {
     try {
@@ -18994,22 +19481,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     } catch (error) {
       console.error("Error deleting notification:", error);
       res.status(500).json({ message: "Failed to delete notification" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // DELETE /api/notifications/clear - Clear all notifications
-  app.delete("/api/notifications/clear", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      
-      await storage.clearAllNotifications(userId);
-      
-      res.json({ success: true, message: "All notifications cleared" });
-    } catch (error) {
-      console.error("Error clearing notifications:", error);
-      res.status(500).json({ message: "Failed to clear notifications" });
     }
   });
 
@@ -20555,7 +21026,19 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         prefs = newPrefs;
       }
 
-      res.json({ preferences: prefs });
+      // الواجهة تستخدم أسماء قديمة (enable*) مختلفة عن أعمدة الجدول — نعرض aliases
+      // لتطابق الواجهة وإلا تظهر كل المفاتيح مفعّلة افتراضياً بقيمة undefined ?? true.
+      res.json({
+        preferences: {
+          ...prefs,
+          enableRecommendations:
+            prefs.becauseYouLiked || prefs.similarToSaved || prefs.withinReads || prefs.trendingForYou,
+          enablePersonalized: prefs.becauseYouLiked,
+          enableCrossCategory: prefs.similarToSaved,
+          enableTrending: prefs.trendingForYou,
+          enableDailyDigest: prefs.dailyDigest,
+        },
+      });
     } catch (error) {
       console.error("Error getting recommendation preferences:", error);
       res.status(500).json({ message: "فشل في جلب إعدادات التوصيات" });
@@ -20568,29 +21051,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.patch("/api/recommendations/preferences", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const updates = req.body;
+      const updates = req.body || {};
       const { userRecommendationPrefs } = await import('@shared/schema');
 
-      // Filter only allowed fields to update (exclude id, userId, createdAt, updatedAt)
-      const allowedFields = [
-        'enableRecommendations',
-        'enableDailyDigest',
-        'digestTime',
-        'minSimilarityScore',
-        'enableCrossCategory',
-        'enableTrending',
-        'enablePersonalized',
-        'maxNotificationsPerDay',
-        'quietHoursStart',
-        'quietHoursEnd'
-      ];
-
+      // الواجهة ترسل أسماء قديمة (enable*) — نترجمها إلى أعمدة الجدول الفعلية.
+      // المفتاح الرئيسي enableRecommendations يضبط الأنواع الأربعة، ثم تتجاوزه المفاتيح الفردية.
       const filteredUpdates: any = {};
-      for (const field of allowedFields) {
-        if (field in updates) {
-          filteredUpdates[field] = updates[field];
-        }
+      if (typeof updates.enableRecommendations === 'boolean') {
+        filteredUpdates.becauseYouLiked = updates.enableRecommendations;
+        filteredUpdates.similarToSaved = updates.enableRecommendations;
+        filteredUpdates.withinReads = updates.enableRecommendations;
+        filteredUpdates.trendingForYou = updates.enableRecommendations;
       }
+      if (typeof updates.enablePersonalized === 'boolean') filteredUpdates.becauseYouLiked = updates.enablePersonalized;
+      if (typeof updates.enableCrossCategory === 'boolean') filteredUpdates.similarToSaved = updates.enableCrossCategory;
+      if (typeof updates.enableTrending === 'boolean') filteredUpdates.trendingForYou = updates.enableTrending;
+      if (typeof updates.enableDailyDigest === 'boolean') filteredUpdates.dailyDigest = updates.enableDailyDigest;
+      if (typeof updates.digestTime === 'string') filteredUpdates.digestTime = updates.digestTime;
+      filteredUpdates.updatedAt = new Date();
 
       // Check if preferences exist
       const existing = await db.query.userRecommendationPrefs.findFirst({
@@ -25276,6 +25754,21 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         }
       });
 
+      if (Object.prototype.hasOwnProperty.call(parsed.data, "excerpt")) {
+        const nextSummary =
+          typeof parsed.data.excerpt === "string" ? parsed.data.excerpt.trim() || null : null;
+        updateData.excerpt = nextSummary;
+        if (updateData.aiSummary === undefined) {
+          updateData.aiSummary = nextSummary;
+        }
+        if (updateData.aiBullets === undefined) {
+          updateData.aiBullets = null;
+          updateData.aiBulletsGeneratedAt = null;
+        }
+        aiBulletsCache.delete(articleId);
+        aiBulletsInFlight.delete(articleId);
+      }
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
@@ -26686,28 +27179,16 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /dashboard/
-Disallow: /admin/
-Disallow: /ifox/
-Disallow: /login
-Disallow: /register
-Disallow: /logout
-Disallow: /verify-email
-Disallow: /forgot-password
-Disallow: /reset-password
-Disallow: /set-password
-Disallow: /2fa-verify
-Disallow: /onboarding/
-Disallow: /select-interests
-Disallow: /profile
-Disallow: /bookmarks
-Disallow: /reading-history
-Disallow: /my-follows
-Disallow: /my-keywords
-Disallow: /my-votes
-Disallow: /notification-settings
-Disallow: /recommendation-settings
-Disallow: /payment/
+
+# ملاحظة: صفحات الحساب والمصادقة (login, register, logout, *-password,
+# 2fa-verify, verify-email, profile, bookmarks, reading-history, my-*,
+# notification-settings, recommendation-settings, select-interests,
+# dashboard, admin, ifox, onboarding, payment) لم تَعُد محظورة هنا عمدًا.
+# حظرها بـ robots.txt كان يُبقيها "مفهرسة رغم الحظر بواسطة robots.txt" في
+# Search Console: لأن Google لا يستطيع زحفها، فلا يرى وسم noindex ولا يُسقطها.
+# الآن يستطيع زحفها ويرى X-Robots-Tag: noindex (يضيفه وسيط Cloudflare Pages
+# لكل مسارات noindex — راجع functions/_middleware.js) فيُسقطها من الفهرس.
+# /api/ يبقى محظورًا لأنه نقاط نهاية JSON (ليست HTML) ولا يمكن وسمها بـ noindex.
 
 # Googlebot-News intentionally has NO separate group — a previous
 # "Disallow: /" (with a few Allow exceptions) blocked it from the homepage
@@ -27555,14 +28036,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      const overrides = await getArticleReadingOverrides(article.id, "en");
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
@@ -28174,7 +28657,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // 3. INTEREST ANALYSIS
       // ============================================================
 
-      const categoryBreakdown = Object.entries(categoryCounts)
+      const categoryAnalysis = Object.entries(categoryCounts)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 3)
         .map(([name, count]) => ({
@@ -28201,32 +28684,46 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .slice(0, 5)
         .map(([word]) => word);
 
-      // Get suggested categories based on user's reading patterns
+      // Get user categories to suggest articles (matches Arabic contract)
       const userCategoryIds = Array.from(new Set(
         todayEvents.filter(e => e.categoryId).map(e => e.categoryId!)
       ));
 
-      const suggestedCategoriesData = userCategoryIds.length > 0
+      const suggestedArticlesData = userCategoryIds.length > 0
         ? await db
             .select({
-              name: enCategories.name,
+              id: enArticles.id,
+              title: enArticles.title,
+              slug: enArticles.slug,
+              englishSlug: enArticles.englishSlug,
+              categoryName: enCategories.name,
+              imageUrl: enArticles.imageUrl,
             })
-            .from(enCategories)
+            .from(enArticles)
+            .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
             .where(
               and(
-                eq(enCategories.status, 'active'),
-                sql`${enCategories.id} IN (${sql.join(userCategoryIds, sql`, `)})`
+                eq(enArticles.status, 'published'),
+                sql`${enArticles.categoryId} IN (${sql.join(userCategoryIds, sql`, `)})`
               )
             )
+            .orderBy(desc(enArticles.publishedAt))
             .limit(3)
         : [];
 
-      const suggestedCategories = suggestedCategoriesData.map(cat => cat.name);
+      const suggestedArticles = suggestedArticlesData.map((article) => ({
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        englishSlug: article.englishSlug || undefined,
+        categoryName: article.categoryName || '',
+        imageUrl: article.imageUrl,
+      }));
 
       const interestAnalysis = {
-        categoryBreakdown,
+        topCategories: categoryAnalysis,
         topicsThatCatchAttention,
-        suggestedCategories,
+        suggestedArticles,
       };
 
       // ============================================================
@@ -28671,14 +29168,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      const overrides = await getArticleReadingOverrides(article.id, "ur");
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
@@ -31198,39 +31697,6 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // POST /api/admin/publishers/upload-logo - Upload publisher logo
-  app.post("/api/admin/publishers/upload-logo",
-    requireAuth,
-    requireRole('admin'),
-    upload.single('logo'),
-    async (req: any, res) => {
-    try {
-        if (!req.file) {
-          return res.status(400).json({ message: "لم يتم إرفاق صورة" });
-        }
-
-        // Validate file type
-        if (!req.file.mimetype.startsWith('image/')) {
-          return res.status(400).json({ message: "يرجى رفع صورة فقط" });
-        }
-
-        // Upload to Object Storage
-        const objectStorageService = new ObjectStorageService();
-        const fileName = `publishers/logos/${Date.now()}-${req.file.originalname}`;
-        const result = await objectStorageService.uploadFile(
-          fileName,           // path
-          req.file.buffer,    // buffer
-          req.file.mimetype,  // contentType
-          "public"            // visibility
-        );
-
-      res.json({ url: result.url });
-      } catch (error: any) {
-        console.error("Error uploading publisher logo:", error);
-        res.status(500).json({ message: "فشل في رفع الشعار" });
-      }
-    }
-  );
 
   // GET /api/admin/publishers - List all publishers (admin only)
   app.get("/api/admin/publishers", 
@@ -31301,6 +31767,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (error.name === 'ZodError') {
           return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
         }
+        // الـcatch كان يبتلع السبب الجذري (console فقط): حدث 2026-07-18
+        // وصل Sentry من الواجهة كـ«فشل في تحديث الناشر» بلا أي أثر خادمي
+        // يشرح السبب. ZodError لا يُلتقط — خطأ إدخال متوقع يكفيه الـ400.
+        Sentry.captureException(error);
         res.status(500).json({ message: "فشل في تحديث الناشر" });
       }
     }
@@ -31444,29 +31914,28 @@ Sitemap: https://sabq.org/sitemap-news.xml
   );
 
   // GET /api/admin/publishers/:id/articles - Get articles published by this publisher
+  // نفس شرط بوابة الناشر الموحّد (publisherId أو مواد المالك) حتى تظهر
+  // مواد كل موظفي الوكالة، مع ترقيم صفحات حقيقي بدل limit 50 صامت.
   app.get("/api/admin/publishers/:id/articles",
     requireAuth,
     requirePermission("publishers.view"),
     async (req: any, res) => {
       try {
-        const publisherId = req.params.id;
-        
-        const publisherArticles = await db
-          .select({
-            id: articles.id,
-            title: articles.title,
-            slug: articles.slug,
-            status: articles.status,
-            publishedAt: articles.publishedAt,
-            createdAt: articles.createdAt,
-            views: articles.views,
-          })
-          .from(articles)
-          .where(eq(articles.publisherId, publisherId))
-          .orderBy(desc(articles.publishedAt), desc(articles.createdAt))
-          .limit(50);
-        
-        res.json(publisherArticles);
+        const publisher = await storage.getPublisher(req.params.id);
+        if (!publisher) {
+          return res.status(404).json({ message: "الناشر غير موجود" });
+        }
+
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
+        const result = await getPortalArticles(publisher, {
+          page,
+          limit,
+          status: req.query.status as string | undefined,
+          searchQuery: req.query.searchQuery as string | undefined,
+        });
+
+        res.json(result);
       } catch (error: any) {
         console.error("Error fetching publisher articles:", error);
         res.status(500).json({ message: "فشل في جلب مقالات الناشر" });
@@ -31576,6 +32045,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (error.name === 'ZodError') {
           return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
         }
+        // الـcatch كان يبتلع السبب الجذري (console فقط): حدث 2026-07-18
+        // وصل Sentry من الواجهة كـ«فشل في تحديث الناشر» بلا أي أثر خادمي
+        // يشرح السبب. ZodError لا يُلتقط — خطأ إدخال متوقع يكفيه الـ400.
+        Sentry.captureException(error);
         res.status(500).json({ message: "فشل في تحديث الناشر" });
       }
     }
@@ -31610,109 +32083,6 @@ Sitemap: https://sabq.org/sitemap-news.xml
     return null;
   }
 
-
-  // GET /api/publisher/me - Get current publisher info
-  app.get("/api/publisher/me",
-    requireAuth,
-    async (req: any, res) => {
-    try {
-        const publisher = await storage.getPublisherByUserId(req.user.id);
-        if (!publisher) {
-          return res.status(404).json({ message: "لم يتم العثور على حساب الناشر" });
-        }
-
-        res.json(publisher);
-      } catch (error: any) {
-        console.error("Error fetching publisher info:", error);
-        res.status(500).json({ message: "فشل في جلب معلومات الناشر" });
-      }
-    }
-  );
-
-  // GET /api/publisher/stats - Get publisher statistics
-  app.get("/api/publisher/stats",
-    requireAuth,
-    async (req: any, res) => {
-    try {
-        const publisher = await storage.getPublisherByUserId(req.user.id);
-        if (!publisher) {
-          return res.status(404).json({ message: "لم يتم العثور على حساب الناشر" });
-        }
-
-        if (!publisher.isActive) {
-          return res.status(403).json({ message: "حساب الناشر معطل" });
-        }
-
-        const { startDate, endDate } = req.query;
-        const period = startDate && endDate ? {
-          start: new Date(startDate as string),
-          end: new Date(endDate as string),
-        } : undefined;
-
-        const stats = await storage.getPublisherStats(publisher.id, period);
-        res.json(stats);
-      } catch (error: any) {
-        console.error("Error fetching publisher stats:", error);
-        res.status(500).json({ message: "فشل في جلب إحصائيات الناشر" });
-      }
-    }
-  );
-
-  // GET /api/publisher/dashboard - Get stats (credits, articles, etc)
-  app.get("/api/publisher/dashboard", 
-    requireAuth,
-    async (req: any, res) => {
-    try {
-        const publisher = await getPublisherForUser(req.user.id);
-        if (!publisher) {
-          return res.status(404).json({ message: "لم يتم العثور على حساب الناشر" });
-        }
-        
-        if (!publisher.isActive) {
-          return res.status(403).json({ message: "حساب الناشر معطل" });
-        }
-        
-        const stats = await storage.getPublisherStats(publisher.id);
-        const activeCredit = await storage.getActivePublisherCredit(publisher.id);
-        
-      res.json({
-          publisher,
-          stats,
-          activeCredit,
-        });
-      } catch (error: any) {
-        console.error("Error fetching publisher dashboard:", error);
-        res.status(500).json({ message: "فشل في جلب بيانات لوحة التحكم" });
-      }
-    }
-  );
-
-  // GET /api/publisher/articles - Get publisher's articles
-  app.get("/api/publisher/articles", 
-    requireAuth,
-    async (req: any, res) => {
-    try {
-        const publisher = await getPublisherForUser(req.user.id);
-        if (!publisher) {
-          return res.status(404).json({ message: "لم يتم العثور على حساب الناشر" });
-        }
-        
-        const { status, searchQuery } = req.query;
-        const articles = await storage.getArticles({
-          authorId: req.user.id,
-          status: status as string,
-          searchQuery: searchQuery as string,
-        });
-        
-        res.json(articles);
-      } catch (error: any) {
-        console.error("Error fetching publisher articles:", error);
-        res.status(500).json({ message: "فشل في جلب المقالات" });
-      }
-    }
-  );
-
-  // POST /api/publisher/articles - Create article (draft only)
   app.post("/api/publisher/articles", 
     requireAuth,
     async (req: any, res) => {
@@ -31725,15 +32095,40 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (!publisher.isActive) {
           return res.status(403).json({ message: "حساب الناشر معطل" });
         }
-        
-        // Publishers can only create drafts
+
+        // نافذة النشر: بعد publishing_ends_at لا يمكن إضافة مواد جديدة
+        const gate = await getPublishingGate(req.user.id);
+        if (!gate.allowed) {
+          return res.status(403).json({ message: gate.message, code: gate.code });
+        }
+
+        // Publishers can only create drafts. Review/attribution fields are
+        // server-owned — strip them so a publisher can't forge approval state.
+        // publisherId يُختم من الناشر المحلول في الخادم منذ الإنشاء حتى تظهر
+        // المادة في طابور المراجعة وقوائم الوكالة مهما كان كاتبها.
         const articleData = insertArticleSchema.parse({
           ...req.body,
           authorId: req.user.id,
           status: 'draft',
+          publisherId: publisher.id,
+          isPublisherNews: true,
+          publisherStatus: null,
+          publisherReviewedBy: null,
+          publisherReviewedAt: null,
+          publisherReviewNotes: null,
+          publisherApprovedAt: null,
+          publisherApprovedBy: null,
+          publisherCreditDeducted: false,
         });
-        
+
         const article = await storage.createArticle(articleData);
+
+        // حفظ وإرسال للمراجعة بطلب واحد (زر «إرسال للمراجعة» في محرر البوابة).
+        // للناشر الموثوق (auto_publish) يعني ذلك النشر الفوري مع خصم الرصيد.
+        let submitResult: Awaited<ReturnType<typeof submitPortalArticle>> | null = null;
+        if (req.body?.submitForReview === true) {
+          submitResult = await submitPortalArticle(req.user.id, article.id);
+        }
         
         // Invalidate caches when articles are created
         memoryCache.invalidatePattern('^homepage');
@@ -31754,8 +32149,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
           entityId: article.id,
           newValue: articleData as any,
         });
-        
-        res.status(201).json(article);
+
+        res.status(201).json({
+          ...article,
+          submit: submitResult
+            ? {
+                ok: submitResult.ok,
+                published: submitResult.ok ? submitResult.published : false,
+                message: submitResult.message,
+              }
+            : null,
+        });
       } catch (error: any) {
         console.error("Error creating article:", error);
         if (error.name === 'ZodError') {
@@ -31796,6 +32200,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
               "authorId", "submitterId", "reporterId",
               "newsType", "isFeatured", "views",
               "publishedAt", "displayOrder", "hideFromHomepage",
+              // review/attribution state is server-owned — a publisher must
+              // not be able to forge approval or agency linkage
+              "publisherStatus", "publisherReviewedBy", "publisherReviewedAt",
+              "publisherReviewNotes", "publisherSubmittedAt",
+              "publisherApprovedAt", "publisherApprovedBy",
+              "publisherId", "isPublisherNews", "publisherCreditDeducted",
             ],
           }),
           status: 'draft' as const, // Ensure it stays draft
@@ -31863,208 +32273,6 @@ Sitemap: https://sabq.org/sitemap-news.xml
   );
 
   // GET /api/publisher/credits - Get active credit packages
-  app.get("/api/publisher/credits", 
-    requireAuth,
-    async (req: any, res) => {
-    try {
-        const publisher = await getPublisherForUser(req.user.id);
-        if (!publisher) {
-          return res.status(404).json({ message: "لم يتم العثور على حساب الناشر" });
-        }
-        
-        const activeCredits = await storage.getPublisherActiveCredits(publisher.id);
-        res.json(activeCredits);
-      } catch (error: any) {
-        console.error("Error fetching publisher active credits:", error);
-        res.status(500).json({ message: "فشل في جلب حزم الأرصدة النشطة" });
-      }
-    }
-  );
-
-  // ========================================
-  // Admin Publisher Article Management
-  // ========================================
-
-  // GET /api/admin/publisher-articles - List pending publisher articles
-  app.get("/api/admin/publisher-articles", 
-    requireAuth,
-    requireRole('admin'),
-    async (req: any, res) => {
-    try {
-        const { status } = req.query;
-        
-        // Get all publishers
-        const { publishers: publishersList } = await storage.getAllPublishers({ limit: 1000 });
-        const publisherUserIds = publishersList.map(p => p.userId);
-        
-        // Get articles from publishers
-        const publisherArticles = await db
-          .select()
-          .from(articles)
-          .where(
-            and(
-              inArray(articles.authorId, publisherUserIds),
-              status ? eq(articles.status, status as string) : undefined
-            )
-          )
-          .orderBy(desc(articles.createdAt))
-          .limit(100);
-        
-        // Enrich with publisher info
-        const enrichedArticles = await Promise.all(
-          publisherArticles.map(async (article: any) => {
-            const publisher = publishersList.find(p => p.userId === article.authorId);
-            const author = await storage.getUser(article.authorId);
-            return {
-              ...article,
-              publisher,
-              author,
-            };
-          })
-        );
-        
-        res.json(enrichedArticles);
-      } catch (error: any) {
-        console.error("Error fetching publisher articles:", error);
-        res.status(500).json({ message: "فشل في جلب مقالات الناشرين" });
-      }
-    }
-  );
-
-  // POST /api/admin/publisher-articles/:id/approve - Approve & publish (deduct credit)
-  // FIXED: Now uses transactional approvePublisherArticle to ensure atomicity
-  app.post("/api/admin/publisher-articles/:id/approve", 
-    requireAuth,
-    requireRole('admin'),
-    async (req: any, res) => {
-    try {
-        // Pre-flight checks for better error messages
-        const article = await storage.getArticleById(req.params.id);
-        if (!article) {
-          return res.status(404).json({ message: "المقال غير موجود" });
-        }
-        
-        const publisher = await storage.getPublisherByUserId(article.authorId);
-        if (!publisher) {
-          return res.status(404).json({ message: "الناشر غير موجود" });
-        }
-        
-        // CRITICAL: Use transactional method to ensure atomicity
-        // If ANY step fails (publish, credit deduction, log), entire transaction rolls back
-        const publishedArticle = await storage.approvePublisherArticle(
-          req.params.id,
-          publisher.id,
-          req.user.id
-        );
-
-        // Make the freshly-published article visible immediately on every pod + edge.
-        invalidatePublishedContent({
-          articleSlug: publishedArticle?.slug || article.slug,
-          isBreaking: (publishedArticle as any)?.newsType === 'breaking' || (article as any)?.newsType === 'breaking',
-          reason: `publisher-approve:${article.id}`,
-        });
-
-        // Log activity (outside transaction - for audit trail only)
-        await logActivity({
-          userId: req.user.id,
-          action: 'approve_publish',
-          entityType: 'publisher_article',
-          entityId: article.id,
-          oldValue: article as any,
-          newValue: {
-            status: 'published',
-            publisherId: publisher.id,
-          },
-        });
-        
-      res.json({
-          message: "تم الموافقة على المقال ونشره بنجاح",
-          article: publishedArticle,
-          creditDeducted: true,
-        });
-      } catch (error: any) {
-        console.error("Error approving publisher article:", error);
-        
-        // Handle specific error cases with clear messages
-        if (error.message?.includes('لا يوجد رصيد نشط') || error.message?.includes('No active credit')) {
-          return res.status(400).json({ message: "لا يوجد رصيد نشط متاح للناشر" });
-        }
-        if (error.message?.includes('لا يوجد رصيد متبقي') || error.message?.includes('No remaining credits')) {
-          return res.status(400).json({ message: "لا يوجد رصيد متبقي للناشر" });
-        }
-        if (error.message?.includes('منشور بالفعل')) {
-          return res.status(400).json({ message: "المقال منشور بالفعل" });
-        }
-        
-        res.status(500).json({ 
-          message: "فشل في الموافقة على المقال",
-          error: error.message 
-        });
-      }
-    }
-  );
-
-  // POST /api/admin/publisher-articles/:id/reject - Reject article
-  app.post("/api/admin/publisher-articles/:id/reject", 
-    requireAuth,
-    requireRole('admin'),
-    async (req: any, res) => {
-    try {
-        const { reason } = req.body;
-        
-        const article = await storage.getArticleById(req.params.id);
-        if (!article) {
-          return res.status(404).json({ message: "المقال غير موجود" });
-        }
-        
-        const publisher = await storage.getPublisherByUserId(article.authorId);
-        if (!publisher) {
-          return res.status(404).json({ message: "الناشر غير موجود" });
-        }
-        
-        // Archive the article (reject)
-        const rejectedArticle = await storage.updateArticle(req.params.id, {
-          status: 'archived',
-        });
-        
-        // Invalidate caches when articles are updated
-        memoryCache.invalidatePattern('^homepage');
-        memoryCache.invalidatePattern('^blocks:');
-        memoryCache.invalidatePattern('^insights:');
-        memoryCache.invalidatePattern('^opinion:');
-        memoryCache.invalidatePattern('^trending');
-        memoryCache.invalidatePattern('^article:detail:');
-        memoryCache.invalidatePattern('^article:id:');
-        memoryCache.invalidatePattern('^articles:');
-        memoryCache.invalidatePattern('^sidebar:');
-        
-        // Log activity
-        await logActivity({
-          userId: req.user.id,
-          action: 'reject',
-          entityType: 'publisher_article',
-          entityId: article.id,
-          oldValue: article as any,
-          newValue: {
-            status: 'archived',
-            publisherId: publisher.id,
-          },
-          metadata: {
-            reason,
-          },
-        });
-        
-      res.json({
-          message: "تم رفض المقال",
-          article: rejectedArticle,
-        });
-      } catch (error: any) {
-        console.error("Error rejecting publisher article:", error);
-        res.status(500).json({ message: "فشل في رفض المقال" });
-      }
-    }
-  );
-
   // GET /api/admin/publisher-reports/:publisherId - Generate performance report
   app.get("/api/admin/publisher-reports/:publisherId", 
     requireAuth,
@@ -32133,6 +32341,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
           reason: `publisher-approve:${article.id}`,
         });
 
+        // حالة المراجعة + تنبيه الناشر
+        await storage.updateArticle(article.id, {
+          publisherStatus: 'approved',
+          publisherReviewedBy: req.user.id,
+          publisherReviewedAt: new Date(),
+        } as any);
+        if (article.authorId) {
+          await notifyPublisherUser(article.authorId, {
+            title: "تمت الموافقة على مادتك ونشرها",
+            body: `«${article.title}» أصبح منشوراً الآن على سبق.`,
+          });
+        }
+
         await logActivity({
           userId: req.user.id,
           action: 'approve_publish',
@@ -32191,7 +32412,20 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
         const rejectedArticle = await storage.updateArticle(req.params.id, {
           status: 'archived',
-        });
+          publisherStatus: 'rejected',
+          publisherReviewedBy: req.user.id,
+          publisherReviewedAt: new Date(),
+          publisherReviewNotes: reason || null,
+        } as any);
+
+        if (article.authorId) {
+          await notifyPublisherUser(article.authorId, {
+            title: "رُفضت مادتك",
+            body: reason
+              ? `«${article.title}»: ${String(reason).slice(0, 180)}`
+              : `«${article.title}» رُفضت من فريق التحرير.`,
+          });
+        }
         
         // Invalidate caches when articles are updated
         memoryCache.invalidatePattern('^homepage');
@@ -33685,216 +33919,6 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
   // ============================================
-  // CORRESPONDENT REGISTRATION ROUTES - مسارات تسجيل المراسلين
-  // ============================================
-
-  // POST /api/correspondent-applications - Public registration with photo upload
-  app.post("/api/correspondent-applications", contactUploadLimiter, upload.single('profilePhoto'), async (req: any, res) => {
-    try {
-      const { arabicName, englishName, email, phone, jobTitle, bio, city } = req.body;
-
-      // Validate required fields
-      if (!arabicName || !englishName || !email || !phone || !city) {
-        return res.status(400).json({ message: "جميع الحقول المطلوبة يجب ملؤها" });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
-      }
-
-      // Upload photo to Object Storage
-      const objectStorageService = new ObjectStorageService();
-      
-      const timestamp = Date.now();
-      const imgMimeToExt: Record<string, string> = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
-      const safeExt = imgMimeToExt[req.file.mimetype] || "jpg";
-      const filename = `correspondent-applications/${timestamp}-${randomUUID()}.${safeExt}`;
-      
-      // Use the actual bucket ID directly for reliable access
-      const actualBucketId = 'replit-objstore-3dc2325c-bbbe-4e54-9a00-e6f10b243138'; // Hardcoded bucket for correspondent files
-      const objectName = `.private/${filename}`;
-
-      const bucket = objectStorageClient.bucket(actualBucketId);
-      const file = bucket.file(objectName);
-
-      await file.save(req.file.buffer, {
-        metadata: {
-          contentType: req.file.mimetype,
-        },
-      });
-
-      await setObjectAclPolicy(file, {
-        owner: 'system',
-        visibility: "public",
-      });
-
-      const profilePhotoUrl = `/objects/${filename}`;
-
-      // Create application
-      const application = await storage.createCorrespondentApplication({
-        arabicName,
-        englishName,
-        email,
-        phone,
-        jobTitle: jobTitle || "مراسل صحفي",
-        bio: bio || null,
-        city,
-        profilePhotoUrl,
-      });
-
-      console.log(`✅ Correspondent application created: ${application.id}`);
-      res.status(201).json({ 
-        message: "تم تقديم طلبك بنجاح. سيتم مراجعته والرد عليك قريباً.", 
-        applicationId: application.id 
-      });
-    } catch (error: any) {
-      console.error("Error creating correspondent application:", error);
-      res.status(500).json({ message: "حدث خطأ في تقديم الطلب: " + error.message });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // GET /api/admin/correspondent-applications - List all applications (admin only)
-  app.get("/api/admin/correspondent-applications", requireAuth, requireRole('admin', 'system_admin'), async (req: any, res) => {
-    try {
-      const { status, page = '1', limit = '10' } = req.query;
-      
-      const result = await storage.getCorrespondentApplications(
-        status as string,
-        parseInt(page as string),
-        parseInt(limit as string)
-      );
-
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error fetching correspondent applications:", error);
-      res.status(500).json({ message: "فشل في جلب الطلبات" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // GET /api/admin/correspondent-applications/:id - Get application by ID (admin only)
-  app.get("/api/admin/correspondent-applications/:id", requireAuth, requireRole('admin', 'system_admin'), async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      
-      const application = await storage.getCorrespondentApplicationById(id);
-      
-      if (!application) {
-        return res.status(404).json({ message: "الطلب غير موجود" });
-      }
-
-      res.json(application);
-    } catch (error: any) {
-      console.error("Error fetching correspondent application:", error);
-      res.status(500).json({ message: "فشل في جلب تفاصيل الطلب" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/admin/correspondent-applications/:id/approve - Approve application (admin only)
-  app.post("/api/admin/correspondent-applications/:id/approve", requireAuth, requireRole('admin', 'system_admin'), async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      const { notes } = req.body;
-      
-      const result = await storage.approveCorrespondentApplication(id, req.user.id, notes);
-
-      await logActivity({
-        userId: req.user.id,
-        action: 'approve',
-        entityType: 'correspondent_application',
-        entityId: id,
-        newValue: { status: 'approved', createdUserId: result.user.id },
-      });
-
-      // Send approval email notification (non-blocking)
-      sendCorrespondentApprovalEmail(
-        result.user.email,
-        result.application.arabicName || '',
-        result.application.englishName || '',
-        result.temporaryPassword
-      ).catch(err => console.error('Failed to send correspondent approval email:', err));
-
-      res.json({
-        message: "تمت الموافقة على الطلب وإنشاء حساب المراسل",
-        application: result.application,
-        user: {
-          id: result.user.id,
-          email: result.user.email,
-          firstName: result.user.firstName,
-          lastName: result.user.lastName,
-        },
-        temporaryPassword: result.temporaryPassword,
-      });
-    } catch (error: any) {
-      console.error("Error approving correspondent application:", error);
-      if (error.message === "Application not found") {
-        return res.status(404).json({ message: "الطلب غير موجود" });
-      }
-      if (error.message === "Application already processed") {
-        return res.status(400).json({ message: "تمت معالجة هذا الطلب مسبقاً" });
-      }
-      res.status(500).json({ message: "فشل في الموافقة على الطلب: " + error.message });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/admin/correspondent-applications/:id/reject - Reject application (admin only)
-  app.post("/api/admin/correspondent-applications/:id/reject", requireAuth, requireRole('admin', 'system_admin'), async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      const { reason } = req.body;
-
-      if (!reason) {
-        return res.status(400).json({ message: "سبب الرفض مطلوب" });
-      }
-      
-      const application = await storage.rejectCorrespondentApplication(id, req.user.id, reason);
-
-      await logActivity({
-        userId: req.user.id,
-        action: 'reject',
-        entityType: 'correspondent_application',
-        entityId: id,
-        newValue: { status: 'rejected', reason },
-      });
-
-      // Send rejection email notification (non-blocking)
-      console.log('📧 [REJECT] Attempting to send rejection email:', {
-        email: application.email,
-        arabicName: application.arabicName,
-        reason: reason
-      });
-      sendCorrespondentRejectionEmail(
-        application.email,
-        application.arabicName || '',
-        reason
-      ).then(result => {
-        console.log('📧 [REJECT] Email result:', result);
-      }).catch(err => console.error('❌ [REJECT] Failed to send correspondent rejection email:', err));
-
-      res.json({
-        message: "تم رفض الطلب",
-        application,
-      });
-    } catch (error: any) {
-      console.error("Error rejecting correspondent application:", error);
-      if (error.message === "Application not found") {
-        return res.status(404).json({ message: "الطلب غير موجود" });
-      }
-      res.status(500).json({ message: "فشل في رفض الطلب: " + error.message });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-
-  // ============================================
   // Opinion Author Applications Routes - طلبات كتّاب الرأي
   // ============================================
 
@@ -34349,17 +34373,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
         finalSubject = finalSubject.replace(placeholder, value);
       });
       
-      // Send email using SendGrid
-      const sgMail = require('@sendgrid/mail');
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      
-      await sgMail.send({
+      const { sendEmailNotification } = await import("./services/email");
+      const emailResult = await sendEmailNotification({
         to: adminEmail,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sabq.org',
         subject: `[اختبار] ${finalSubject}`,
         text: finalText,
         html: finalHtml,
       });
+      if (!emailResult.success) {
+        throw new Error(emailResult.error || "فشل إرسال البريد التجريبي");
+      }
       
       res.json({ message: "تم إرسال البريد التجريبي بنجاح", sentTo: adminEmail });
     } catch (error: any) {
@@ -34468,22 +34491,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       // إرسال نسخة من الرسالة إلى بريد الصحيفة
       try {
-        const { MailerSend, EmailParams, Sender, Recipient } = await import("mailersend");
-        const mailerSend = new MailerSend({
-          apiKey: process.env.MAILERSEND_API_KEY || "",
-        });
-
         const attachmentsList = validatedData.attachments.length > 0
           ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${att.url}">${att.name}</a></li>`).join("")}</ul></div>`
           : "";
 
-        const emailParams = new EmailParams()
-          .setFrom(new Sender("sabqai@sabq.org", "نموذج التواصل - سبق"))
-          .setTo([new Recipient("info@sabq.org", "فريق سبق")])
-          .setSubject(`رسالة جديدة: ${validatedData.subject} - من ${validatedData.name}`)
-          .setHtml(`<div dir="rtl" style="font-family: Segoe UI, Tahoma, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 24px; border-radius: 12px 12px 0 0;"><h1 style="color: #fff; margin: 0; font-size: 24px;">📩 رسالة جديدة من نموذج التواصل</h1></div><div style="background: #fff; padding: 24px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 12px 12px;"><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666; width: 120px;"><strong>الاسم:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.name}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>البريد:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;"><a href="mailto:${validatedData.email}">${validatedData.email}</a></td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الهاتف:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;" dir="ltr">${validatedData.phone}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الموضوع:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.subject}</td></tr></table><div style="margin-top: 20px;"><strong style="color: #666;">نص الرسالة:</strong><div style="margin-top: 12px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-right: 4px solid #0d6efd; white-space: pre-wrap;">${validatedData.message}</div></div>${attachmentsList}<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color: #0d6efd;">عرض في لوحة التحكم</a></div></div></div>`);
-
-        await mailerSend.email.send(emailParams);
+        const { sendEmailNotification } = await import("./services/email");
+        const result = await sendEmailNotification({
+          to: "info@sabq.org",
+          subject: `رسالة جديدة: ${validatedData.subject} - من ${validatedData.name}`,
+          html: `<div dir="rtl" style="font-family: Segoe UI, Tahoma, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 24px; border-radius: 12px 12px 0 0;"><h1 style="color: #fff; margin: 0; font-size: 24px;">📩 رسالة جديدة من نموذج التواصل</h1></div><div style="background: #fff; padding: 24px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 12px 12px;"><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666; width: 120px;"><strong>الاسم:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.name}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>البريد:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;"><a href="mailto:${validatedData.email}">${validatedData.email}</a></td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الهاتف:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;" dir="ltr">${validatedData.phone}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الموضوع:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.subject}</td></tr></table><div style="margin-top: 20px;"><strong style="color: #666;">نص الرسالة:</strong><div style="margin-top: 12px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-right: 4px solid #0d6efd; white-space: pre-wrap;">${validatedData.message}</div></div>${attachmentsList}<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color: #0d6efd;">عرض في لوحة التحكم</a></div></div></div>`,
+        });
+        if (!result.success) {
+          throw new Error(result.error || "Failed to send contact notification");
+        }
         console.log("[Contact] Email notification sent to info@sabq.org");
       } catch (emailError) {
         console.error("[Contact] Failed to send email notification:", emailError);
@@ -34544,13 +34564,27 @@ Sitemap: https://sabq.org/sitemap-news.xml
         countQuery = countQuery.where(whereClause) as typeof countQuery;
       }
 
-      const [messages, countResult] = await Promise.all([
+      const [messages, countResult, statusCountRows] = await Promise.all([
         query.orderBy(desc(contactMessages.createdAt)).limit(limit).offset(offset),
         countQuery,
+        db
+          .select({
+            status: contactMessages.status,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(contactMessages)
+          .groupBy(contactMessages.status),
       ]);
 
       const total = Number(countResult[0]?.count || 0);
       const totalPages = Math.ceil(total / limit);
+      const statusCounts = { pending: 0, read: 0, replied: 0, total: 0 };
+      for (const row of statusCountRows) {
+        const key = row.status as keyof typeof statusCounts;
+        const n = Number(row.count) || 0;
+        if (key in statusCounts && key !== "total") statusCounts[key] = n;
+        statusCounts.total += n;
+      }
 
       res.json({
         messages,
@@ -34558,6 +34592,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         page,
         limit,
         totalPages,
+        statusCounts,
       });
     } catch (error: any) {
       console.error("Error fetching contact messages:", error);
@@ -35196,8 +35231,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         enabled: z.boolean().optional(),
         email: z.string().email().optional().or(z.literal("")),
         whatsappNumber: z.string().optional(),
+        whatsappNumbers: z.array(z.string()).optional(),
         emailEnabled: z.boolean().optional(),
         whatsappEnabled: z.boolean().optional(),
+        aiCriticalAlertsEnabled: z.boolean().optional(),
       });
       const parsed = updateSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -35254,17 +35291,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // BREAKING NEWS TICKER API
   // ============================================================
 
-  // Public: Get active breaking ticker (cached)
+  // Public: Get active breaking ticker (cached). `fresh` mirrors homepage
+  // pull-to-refresh so iOS does not keep a stale SWR copy of the red strip.
   app.get("/api/breaking-ticker/active", cacheControl({ maxAge: 60, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req, res) => {
     try {
-      const data = await withSWR('breaking-ticker-active', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
-        return await storage.getActiveBreakingTicker();
-      });
-      if (data) {
-        res.json(data);
-      } else {
-        res.json(null);
-      }
+      const cc = String(req.headers?.["cache-control"] ?? "").toLowerCase();
+      const fresh = req.query?._nc != null || req.query?._t != null || cc.includes("no-cache") || cc.includes("no-store");
+      const data = await withSWR("breaking-ticker-active", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, () => storage.getActiveBreakingTicker(), fresh);
+      res.json(data ?? null);
     } catch (error) {
       console.error("Error fetching breaking ticker:", error);
       res.status(500).json({ message: "Failed to fetch breaking ticker" });
@@ -35312,7 +35346,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
       }
       const topic = await storage.createBreakingTickerTopic(parsed.data);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.status(201).json(topic);
     } catch (error) {
       console.error("Error creating breaking ticker topic:", error);
@@ -35327,7 +35361,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const topic = await storage.updateBreakingTickerTopic(id, req.body);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
       console.error("Error updating breaking ticker topic:", error);
@@ -35342,7 +35376,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       await storage.deleteBreakingTickerTopic(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json({ success: true, message: "تم حذف الموضوع" });
     } catch (error) {
       console.error("Error deleting breaking ticker topic:", error);
@@ -35357,7 +35391,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const topic = await storage.activateBreakingTickerTopic(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
       console.error("Error activating breaking ticker topic:", error);
@@ -35372,7 +35406,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const topic = await storage.deactivateBreakingTickerTopic(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
       console.error("Error deactivating breaking ticker topic:", error);
@@ -35390,7 +35424,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
       }
       const headline = await storage.createBreakingTickerHeadline(parsed.data);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.status(201).json(headline);
     } catch (error) {
       console.error("Error creating breaking ticker headline:", error);
@@ -35405,7 +35439,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const headline = await storage.updateBreakingTickerHeadline(id, req.body);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(headline);
     } catch (error) {
       console.error("Error updating breaking ticker headline:", error);
@@ -35420,7 +35454,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       await storage.deleteBreakingTickerHeadline(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json({ success: true, message: "تم حذف العنوان" });
     } catch (error) {
       console.error("Error deleting breaking ticker headline:", error);
@@ -35924,8 +35958,20 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       const words = normalizedQuery.trim().split(/\s+/).filter(w => w.length > 1);
       if (!words.length) return res.json({ results: [], query: q });
-      const tsQueryAnd = words.join(' & ');
-      const tsQueryOr  = words.length > 1 ? words.join(' | ') : tsQueryAnd;
+      // plainto_tsquery يبني tsquery تلقائياً من نص خام (آمن مع أي input، لا
+      // syntax errors كما كان يحصل مع to_tsquery على الكلمات العربية المفردة).
+      const compactQuery = normalizedQuery.replace(/\s+/g, '');
+
+      // Pure-numeric queries (e.g. "4220449") are the source of the 7s+ slow
+      // searches in prod logs: `to_tsquery('arabic', ...)` on bare digit strings
+      // matches almost nothing yet the recent→older→title ladder still runs all
+      // three timeouts back-to-back. Short-circuit them straight to the trigram
+      // title lookup (idx_articles_title_trgm), skipping both FTS passes.
+      const isNumericQuery = /^\d+$/.test(compactQuery);
+      // Live search sends partial Arabic prefixes while the user is still typing
+      // (prod logs: "تف", "تق", "تقد", "تقدي"). FTS on these short prefixes is
+      // both low-value and expensive, so keep them on the indexed title fallback.
+      const useFts = !isNumericQuery && compactQuery.length >= 5;
 
       let results: any[] = [];
 
@@ -35936,53 +35982,79 @@ Sitemap: https://sabq.org/sitemap-news.xml
         Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('search_timeout')), ms))]);
 
       // Primary FTS query (recent articles, AND-mode for precision)
-      try {
-        const recentResults: any = await searchTimeout(db.execute(sql`
+      if (useFts) try {
+        const recentResults: any = await searchTimeout(executeWithStatementTimeout(sql`
+          -- Keep FTS selection and pagination as separate optimization fences.
+          -- Otherwise Postgres can walk the date index and filter search_vector
+          -- row-by-row instead of using idx_articles_search_vector.
+          WITH matched AS MATERIALIZED (
+            SELECT id, published_at
+            FROM articles
+            WHERE status = 'published'
+              AND published_at >= ${recentCut.toISOString()}
+              AND search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
+          ),
+          top_matches AS MATERIALIZED (
+            SELECT id, published_at
+            FROM matched
+            ORDER BY published_at DESC
+            LIMIT ${limit} OFFSET ${offset}
+          )
           SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
             a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
             a.excerpt, a.category_id as "categoryId", a.views,
             c.name_ar as "categoryName", c.slug as "categorySlug"
-          FROM articles a
+          FROM top_matches m
+          JOIN articles a ON a.id = m.id
           LEFT JOIN categories c ON c.id = a.category_id
-          WHERE a.status = 'published'
-            AND a.published_at >= ${recentCut.toISOString()}
-            AND a.search_vector @@ to_tsquery('arabic', ${tsQueryAnd})
-          ORDER BY a.published_at DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `), 5000);
+          ORDER BY m.published_at DESC
+        `, 3000), 4000);
 
         const rows = recentResults?.rows || recentResults;
         results = (Array.isArray(rows) ? rows : []).map((r: any) => ({ ...r, matchType: 'title' }));
       } catch (ftsError: any) {
         if (ftsError?.message === 'search_timeout') {
-          console.warn(`[Search] Primary FTS timed out (5s) for: "${q}"`);
+          console.warn(`[Search] Primary FTS timed out (3s) for: "${q}"`);
         } else {
-          console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message);
+          // Drizzle يلفّ خطأ PG؛ السبب الفعلي على cause (code/message).
+          const c = (ftsError as any)?.cause;
+          console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message, c?.code ? { pgCode: c.code, pgMessage: c.message } : '');
         }
         // Don't wipe results — they were already empty.
       }
-
       // Supplemental: search older articles only if recent yielded few results.
-      // Errors here MUST NOT wipe the primary results.
-      if (results.length < Math.min(limit, 5)) {
+      // Errors here MUST NOT wipe the primary results. Skipped for numeric
+      // queries (handled by the trigram title fallback below).
+      if (useFts && results.length < Math.min(limit, 5)) {
         try {
           const existingIds = results.map(r => r.id);
           const remaining = Math.min(limit - results.length, 10);
 
-          const allTimeResults: any = await searchTimeout(db.execute(sql`
+          const allTimeResults: any = await searchTimeout(executeWithStatementTimeout(sql`
+            -- Use the same GIN-first plan for the older-article fallback.
+            WITH matched AS MATERIALIZED (
+              SELECT id, published_at
+              FROM articles
+              WHERE status = 'published'
+                AND published_at < ${recentCut.toISOString()}
+                AND search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
+                ${existingIds.length > 0 ? sql`AND id != ALL(${existingIds})` : sql``}
+            ),
+            top_matches AS MATERIALIZED (
+              SELECT id, published_at
+              FROM matched
+              ORDER BY published_at DESC
+              LIMIT ${remaining}
+            )
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
               a.excerpt, a.category_id as "categoryId", a.views,
               c.name_ar as "categoryName", c.slug as "categorySlug"
-            FROM articles a
+            FROM top_matches m
+            JOIN articles a ON a.id = m.id
             LEFT JOIN categories c ON c.id = a.category_id
-            WHERE a.status = 'published'
-              AND a.published_at < ${recentCut.toISOString()}
-              AND a.search_vector @@ to_tsquery('arabic', ${tsQueryOr})
-              ${existingIds.length > 0 ? sql`AND a.id != ALL(${existingIds})` : sql``}
-            ORDER BY a.published_at DESC
-            LIMIT ${remaining}
-          `), 3000);
+            ORDER BY m.published_at DESC
+          `, 2000), 3000);
           const allRows = allTimeResults?.rows || allTimeResults;
           results = [...results, ...(Array.isArray(allRows) ? allRows : []).map((r: any) => ({ ...r, matchType: 'content' }))];
         } catch (suppErr: any) {
@@ -35993,12 +36065,13 @@ Sitemap: https://sabq.org/sitemap-news.xml
         }
       }
 
-      // Fallback: direct title ILIKE search (powered by pg_trgm GIN index)
-      // Runs only when full-text search returns nothing — keeps cost low.
+      // Fallback: direct title ILIKE search (powered by the pg_trgm GIN index
+      // idx_articles_title_trgm). Runs when FTS returns nothing, and is the ONLY
+      // pass for numeric queries — keeps cost low and avoids stacked timeouts.
       if (results.length === 0 && page === 0) {
         try {
           const likePattern = `%${normalizedQuery.toLowerCase().replace(/[%_\\]/g, c => '\\' + c)}%`;
-          const titleResults = await searchTimeout(db.execute(sql`
+          const titleResults = await searchTimeout(executeWithStatementTimeout(sql`
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
               a.excerpt, a.category_id as "categoryId", a.views,
@@ -36007,9 +36080,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
             LEFT JOIN categories c ON c.id = a.category_id
             WHERE a.status = 'published'
               AND lower(a.title) LIKE ${likePattern}
-            ORDER BY a.published_at DESC NULLS LAST
-            LIMIT ${limit}
-          `), 3000);
+          ORDER BY a.published_at DESC NULLS LAST
+              LIMIT ${limit}
+          `, 2500), 3500);
           const tRows = (titleResults as any).rows || titleResults;
           results = (Array.isArray(tRows) ? tRows : []).map((r: any) => ({ ...r, matchType: 'title' }));
         } catch (likeErr: any) {
@@ -36036,105 +36109,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
+  // Admin Tools APIs moved to server/routes/adminToolsRoutes.ts (ADR-001).
 
-  // ==================== Admin Tools APIs ====================
-  
-  // Get article ID by slug
-  app.get("/api/admin/article-id/:slug", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
-    try {
-      const { slug } = req.params;
-      
-      const [article] = await db
-        .select({ id: articles.id, title: articles.title })
-        .from(articles)
-        .where(
-          or(
-            eq(articles.slug, slug),
-            eq(articles.englishSlug, slug)
-          )
-        )
-        .limit(1);
-      
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود" });
-      }
-      
-      res.json({ id: article.id, title: article.title });
-    } catch (error) {
-      console.error("Error getting article ID:", error);
-      res.status(500).json({ message: "فشل في استخراج معرف الخبر" });
-    }
-  });
-
-  // Create legacy redirect
-  app.post("/api/admin/legacy-redirects", requireAuth, requirePermission("system.settings"), async (req: any, res) => {
-    try {
-      const { oldPath, newPath, redirectType } = req.body;
-      
-      if (!oldPath || !newPath) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط القديم والجديد" });
-      }
-      
-      // Check if redirect already exists
-      const [existing] = await db
-        .select()
-        .from(legacyRedirects)
-        .where(eq(legacyRedirects.oldPath, oldPath))
-        .limit(1);
-      
-      if (existing) {
-        return res.status(409).json({ message: "هذا التحويل موجود مسبقاً" });
-      }
-      
-      const [redirect] = await db
-        .insert(legacyRedirects)
-        .values({
-          id: crypto.randomUUID(),
-          oldPath,
-          newPath,
-          redirectType: redirectType || 301,
-          isActive: true,
-          createdBy: req.user.id
-        })
-        .returning();
-      
-      res.json({ success: true, redirect });
-    } catch (error) {
-      console.error("[LegacyRedirect] Error creating redirect:", error);
-      res.status(500).json({ message: "فشل في إنشاء التحويل" });
-    }
-  });
-
-  // Update article views
-  app.post("/api/admin/update-views", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
-    try {
-      const { slug, viewCount } = req.body;
-      
-      if (!slug || viewCount === undefined) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط وعدد المشاهدات" });
-      }
-      
-      const [article] = await db
-        .update(articles)
-        .set({ views: viewCount })
-        .where(
-          or(
-            eq(articles.slug, slug),
-            eq(articles.englishSlug, slug)
-          )
-        )
-        .returning({ id: articles.id, title: articles.title, views: articles.views });
-      
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود" });
-      }
-      
-      res.json({ success: true, article });
-    } catch (error) {
-      console.error("Error updating views:", error);
-      res.status(500).json({ message: "فشل في تحديث عدد المشاهدات" });
-    }
-  });
   return httpServer;
 }

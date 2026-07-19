@@ -176,46 +176,75 @@ export async function optimizePrompt(
     throw new Error("البرومبت قصير جداً — اكتب نصاً أوضح لتحسينه");
   }
 
-  const provider: AIProvider = input.provider || "anthropic";
-  const model = PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
-  const prompt = buildMetaPrompt(input);
-
-  const res = await aiManager.generate(prompt, {
-    provider,
-    model,
-    maxTokens: 4000,
-    temperature: 0.4,
-    jsonMode: provider === "openai",
-  });
-
-  if (res.error) throw new Error(res.error);
-
-  const parsed = extractJson(res.content || "");
-  if (!parsed || typeof parsed.optimizedPrompt !== "string" || !parsed.optimizedPrompt.trim()) {
-    throw new Error("تعذّر تحليل استجابة الذكاء الاصطناعي — حاول مرة أخرى");
+  // Build the provider try-order: the requested provider (default: anthropic)
+  // first, then the others as fallbacks. We only keep providers that have a key
+  // configured, but we ALSO fall back at runtime: a key may be present yet
+  // invalid/expired (e.g. a bad Gemini key in production returns 400), so if the
+  // chosen provider throws we move on to the next instead of surfacing a 400.
+  const requested: AIProvider = input.provider || "anthropic";
+  const candidates: AIProvider[] = [requested, "anthropic", "openai", "gemini"];
+  const order: AIProvider[] = [];
+  for (const p of candidates) {
+    if (!order.includes(p) && aiManager.isProviderConfigured(p)) {
+      order.push(p);
+    }
+  }
+  if (order.length === 0) {
+    throw new Error(
+      "لا يوجد محرّك ذكاء اصطناعي مهيّأ — اضبط أحد المفاتيح: ANTHROPIC_API_KEY أو OPENAI_API_KEY أو GEMINI_API_KEY",
+    );
   }
 
-  const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0)));
-  const checklist: PromptChecklistItem[] = Array.isArray(parsed.checklist)
-    ? parsed.checklist
-        .map((item: any) => ({
-          label: String(item?.label || "").trim(),
-          pass: Boolean(item?.pass),
-          note: String(item?.note || "").trim(),
-        }))
-        .filter((item: PromptChecklistItem) => item.label)
-    : [];
-  const improvements: string[] = Array.isArray(parsed.improvements)
-    ? parsed.improvements.map((s: any) => String(s).trim()).filter(Boolean)
-    : [];
+  const prompt = buildMetaPrompt(input);
+  let lastError: Error | null = null;
 
-  return {
-    optimizedPrompt: String(parsed.optimizedPrompt).trim(),
-    score,
-    checklist,
-    improvements,
-    explanation: String(parsed.explanation || "").trim(),
-    provider: res.provider,
-    model: res.model,
-  };
+  for (const provider of order) {
+    const model = PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
+    try {
+      const res = await aiManager.generate(prompt, {
+        provider,
+        model,
+        maxTokens: 4000,
+        temperature: 0.4,
+        jsonMode: provider === "openai",
+        feature: "prompt-studio",
+      });
+
+      if (res.error) throw new Error(res.error);
+
+      const parsed = extractJson(res.content || "");
+      if (!parsed || typeof parsed.optimizedPrompt !== "string" || !parsed.optimizedPrompt.trim()) {
+        throw new Error("تعذّر تحليل استجابة الذكاء الاصطناعي");
+      }
+
+      const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0)));
+      const checklist: PromptChecklistItem[] = Array.isArray(parsed.checklist)
+        ? parsed.checklist
+            .map((item: any) => ({
+              label: String(item?.label || "").trim(),
+              pass: Boolean(item?.pass),
+              note: String(item?.note || "").trim(),
+            }))
+            .filter((item: PromptChecklistItem) => item.label)
+        : [];
+      const improvements: string[] = Array.isArray(parsed.improvements)
+        ? parsed.improvements.map((s: any) => String(s).trim()).filter(Boolean)
+        : [];
+
+      return {
+        optimizedPrompt: String(parsed.optimizedPrompt).trim(),
+        score,
+        checklist,
+        improvements,
+        explanation: String(parsed.explanation || "").trim(),
+        provider: res.provider,
+        model: res.model,
+      };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[prompt-studio] provider ${provider} failed, trying next:`, lastError.message);
+    }
+  }
+
+  throw lastError ?? new Error("فشل في تحسين البرومبت");
 }

@@ -57,6 +57,11 @@ struct sabqApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
+                .environment(SabqLiveStream.shared)
+                .task {
+                    SabqLiveStream.shared.start()
+                    await ensurePushRegistration()
+                }
                 .fullScreenCover(isPresented: .constant(!hasOnboarded)) {
                     OnboardingView()
                         .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
@@ -71,6 +76,37 @@ struct sabqApp: App {
             if newPhase == .background || newPhase == .inactive {
                 Task { await LoyaltyEventQueue.shared.flushNow() }
             }
+            // أوقف SSE في الخلفية لتوفير البطارية؛ يُعاد عند العودة.
+            if newPhase == .active {
+                SabqLiveStream.shared.start()
+                // The user may have enabled notifications in Settings while
+                // the app was backgrounded. Refresh the APNs token and link it
+                // to the active account as soon as the app becomes active.
+                Task { await ensurePushRegistration() }
+            } else if newPhase == .background {
+                SabqLiveStream.shared.stop()
+            }
+        }
+    }
+
+    /// Ask once when permission is undetermined, then register with APNs on
+    /// every launch/foreground transition when permission is already granted.
+    /// Apple can rotate device tokens, and NotificationsStore intentionally
+    /// does not persist them locally, so a returning authenticated session
+    /// must request the current token again before the backend can target it.
+    @MainActor
+    private func ensurePushRegistration() async {
+        guard hasOnboarded else { return }
+        let status = await NotificationsStore.shared.currentAuthorizationStatus()
+        switch status {
+        case .notDetermined:
+            _ = await NotificationsStore.shared.requestPermission()
+        case .authorized, .provisional, .ephemeral:
+            UIApplication.shared.registerForRemoteNotifications()
+        case .denied:
+            break
+        @unknown default:
+            break
         }
     }
 }

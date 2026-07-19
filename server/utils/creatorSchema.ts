@@ -61,6 +61,10 @@ export function muqtarabAngleUrl(baseUrl: string, slug: string): string {
   return `${baseUrl}/muqtarab/${encodeURIComponent(slug)}`;
 }
 
+export function muqtarabWriterUrl(baseUrl: string, id: string): string {
+  return `${baseUrl}/muqtarab/writer/${encodeURIComponent(id)}`;
+}
+
 /** Strip empty / invalid URLs before emitting sameAs */
 export function cleanSameAs(urls: Array<string | null | undefined>): string[] {
   return urls.filter((u): u is string => !!u && (u.startsWith("http://") || u.startsWith("https://")));

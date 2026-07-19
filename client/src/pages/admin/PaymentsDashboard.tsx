@@ -144,7 +144,7 @@ export default function PaymentsDashboard() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-        return <Badge variant="default" className="bg-green-600" data-testid={`badge-status-${status}`}><CheckCircle className="w-3 h-3 ml-1" /> مكتمل</Badge>;
+        return <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid={`badge-status-${status}`}><CheckCircle className="w-3 h-3 ml-1" /> مكتمل</Badge>;
       case "pending":
         return <Badge variant="secondary" data-testid={`badge-status-${status}`}><Clock className="w-3 h-3 ml-1" /> معلق</Badge>;
       case "failed":
@@ -159,7 +159,7 @@ export default function PaymentsDashboard() {
       case "critical":
         return <Badge variant="destructive" data-testid={`badge-severity-${severity}`}>حرج</Badge>;
       case "high":
-        return <Badge variant="destructive" className="bg-orange-500" data-testid={`badge-severity-${severity}`}>مرتفع</Badge>;
+        return <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-300" data-testid={`badge-severity-${severity}`}>مرتفع</Badge>;
       case "medium":
         return <Badge variant="secondary" data-testid={`badge-severity-${severity}`}>متوسط</Badge>;
       default:
@@ -177,18 +177,18 @@ export default function PaymentsDashboard() {
 
   return (
     <DashboardLayout>
-    <div className="container mx-auto p-4 md:p-6 space-y-6" dir="rtl">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <header className="flex flex-col gap-4 border-b border-border/60 pb-5 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600">
-            <DollarSign className="h-6 w-6 text-white" />
-          </div>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <DollarSign className="h-5 w-5" />
+          </span>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">لوحة تحكم المدفوعات</h1>
-            <p className="text-muted-foreground">مراقبة وتحليل جميع المدفوعات والإيرادات</p>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl" data-testid="text-page-title">لوحة تحكم المدفوعات</h1>
+            <p className="mt-1 text-sm text-muted-foreground">مراقبة وتحليل جميع المدفوعات والإيرادات</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 md:w-auto">
           <Button 
             variant="outline" 
             size="sm" 
@@ -209,13 +209,13 @@ export default function PaymentsDashboard() {
             تصدير
           </Button>
         </div>
-      </div>
+      </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-today-revenue">
+        <Card className="border-border/70 bg-card shadow-none" data-testid="card-today-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إيرادات اليوم</CardTitle>
-            <div className="p-2 rounded-md bg-green-500/20">
+            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
               <DollarSign className="w-4 h-4 text-green-600 dark:text-green-400" />
             </div>
           </CardHeader>
@@ -226,10 +226,10 @@ export default function PaymentsDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-month-revenue">
+        <Card className="border-border/70 bg-card shadow-none" data-testid="card-month-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إيرادات الشهر</CardTitle>
-            <div className="p-2 rounded-md bg-blue-500/20">
+            <div className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/30">
               <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
           </CardHeader>
@@ -250,10 +250,10 @@ export default function PaymentsDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card" data-testid="card-success-rate">
+        <Card className="border-border/70 bg-card shadow-none" data-testid="card-success-rate">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">نسبة النجاح</CardTitle>
-            <div className="p-2 rounded-md bg-purple-500/20">
+            <div className="p-2 rounded-lg bg-violet-50 dark:bg-violet-950/30">
               <CheckCircle className="w-4 h-4 text-purple-600 dark:text-purple-400" />
             </div>
           </CardHeader>
@@ -267,10 +267,10 @@ export default function PaymentsDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card" data-testid="card-lifetime-revenue">
+        <Card className="border-border/70 bg-card shadow-none" data-testid="card-lifetime-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
-            <div className="p-2 rounded-md bg-amber-500/20">
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30">
               <TrendingUp className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             </div>
           </CardHeader>
@@ -283,7 +283,7 @@ export default function PaymentsDashboard() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4" dir="rtl">
-        <TabsList className="flex-row-reverse">
+        <TabsList className="flex-row-reverse max-w-full overflow-x-auto justify-start">
           <TabsTrigger value="overview" data-testid="tab-overview">نظرة عامة</TabsTrigger>
           <TabsTrigger value="transactions" data-testid="tab-transactions">المعاملات</TabsTrigger>
           <TabsTrigger value="failed" className="relative" data-testid="tab-failed">
@@ -607,7 +607,7 @@ export default function PaymentsDashboard() {
                     {alertsData.map((alert) => (
                       <div 
                         key={alert.id} 
-                        className={`p-4 rounded-lg border ${!alert.isRead ? "bg-blue-50 dark:bg-muted/60 border-blue-200 dark:border-border" : ""}`}
+                        className={`p-4 rounded-xl border ${!alert.isRead ? "bg-sky-50/60 dark:bg-sky-950/20 border-sky-200/70 dark:border-sky-900/50" : "border-border/70"}`}
                         data-testid={`alert-row-${alert.id}`}
                       >
                         <div className="flex items-start justify-between gap-2">

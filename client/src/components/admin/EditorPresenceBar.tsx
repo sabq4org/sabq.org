@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { PenLine } from "lucide-react";
@@ -24,9 +27,10 @@ interface PublishedEvent {
 
 function prettifyName(name: string) {
   if (!name) return "محرر";
-  // Strip @domain if it's an email-shaped fallback
-  const at = name.indexOf("@");
-  return at > 0 ? name.slice(0, at) : name;
+  const trimmed = name.trim();
+  const at = trimmed.indexOf("@");
+  // Email local-part fallback only — keep Arabic/full names as-is
+  return at > 0 ? trimmed.slice(0, at) : trimmed;
 }
 
 function initials(name: string) {
@@ -38,6 +42,7 @@ function initials(name: string) {
   return (first + last).slice(0, 2) || "م";
 }
 
+/** Compact header chip: live count + popover list of editors currently writing. */
 export function EditorPresenceBar() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -89,58 +94,74 @@ export function EditorPresenceBar() {
   if (others.length === 0) return null;
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-border dark:bg-card"
-      data-testid="editor-presence-bar"
-      aria-live="polite"
-    >
-      <div className="flex items-center gap-2 text-sm font-medium text-emerald-900 dark:text-emerald-100">
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
-        </span>
-        <PenLine className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
-        <span>محررون يكتبون الآن</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {others.map((editor) => {
-          const displayName = prettifyName(editor.userName);
-          const title = (editor.articleTitle || "").trim();
-          return (
-            <div
-              key={editor.userId}
-              className="flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-50"
-              data-testid={`presence-editor-${editor.userId}`}
-              title={editor.articleSummary || title}
-            >
-              <Avatar className="h-6 w-6 ring-2 ring-emerald-400 dark:ring-emerald-600">
-                {editor.userAvatar ? (
-                  <AvatarImage src={editor.userAvatar} alt={displayName} />
-                ) : null}
-                <AvatarFallback className="bg-emerald-600 text-[10px] text-white">
-                  {initials(editor.userName)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="max-w-[120px] truncate font-semibold">
-                {displayName}
-              </span>
-              {title ? (
-                <>
-                  <span className="text-emerald-500 dark:text-emerald-400">·</span>
-                  <span className="max-w-[220px] truncate text-emerald-700 dark:text-emerald-200">
-                    {title}
-                  </span>
-                </>
-              ) : (
-                <span className="hidden text-emerald-700 dark:text-emerald-300 sm:inline">
-                  يكتب الآن
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 px-2.5 text-xs font-medium"
+          data-testid="editor-presence-bar"
+          aria-live="polite"
+          aria-label={`${others.length} محررون يكتبون الآن`}
+          title="محررون يكتبون الآن"
+        >
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
+          </span>
+          <PenLine className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="tabular-nums">{others.length}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0" data-testid="editor-presence-popover">
+        <div className="border-b border-border px-3 py-2">
+          <p className="text-sm font-semibold text-foreground">محررون يكتبون الآن</p>
+          <p className="text-xs text-muted-foreground">{others.length} نشط الآن</p>
+        </div>
+        <ul className="max-h-72 overflow-y-auto py-1">
+          {others.map((editor) => {
+            const displayName = prettifyName(editor.userName);
+            const title = (editor.articleTitle || "").trim();
+            const href = editor.articleId
+              ? `/dashboard/articles/${editor.articleId}/edit`
+              : null;
+            const row = (
+              <div
+                className="flex items-start gap-2.5 px-3 py-2.5 text-start hover:bg-muted/60"
+                data-testid={`presence-editor-${editor.userId}`}
+                title={editor.articleSummary || title}
+              >
+                <Avatar className="mt-0.5 h-7 w-7 shrink-0">
+                  {editor.userAvatar ? (
+                    <AvatarImage src={editor.userAvatar} alt={displayName} />
+                  ) : null}
+                  <AvatarFallback className="bg-muted text-[10px] text-foreground">
+                    {initials(editor.userName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {title || "يكتب الآن"}
+                  </p>
+                </div>
+              </div>
+            );
+            return (
+              <li key={editor.userId}>
+                {href ? (
+                  <Link href={href} className="block outline-none focus-visible:bg-muted/60">
+                    {row}
+                  </Link>
+                ) : (
+                  row
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 

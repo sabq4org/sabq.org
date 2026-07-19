@@ -7,10 +7,10 @@ import {
   Newspaper,
   Bot,
   Sparkles,
-  Zap,
   Heart,
   CheckCheck,
-  ArrowLeft
+  ArrowLeft,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,6 +146,27 @@ export function NotificationBell() {
     },
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("/api/notifications/clear", {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "تم المسح",
+        description: "تم مسح جميع الإشعارات",
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        description: "تعذّر مسح الإشعارات، حاول مجددًا",
+      });
+    },
+  });
+
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
       markAsReadMutation.mutate(notification.id);
@@ -205,19 +226,34 @@ export function NotificationBell() {
                 )}
               </div>
             </div>
-            {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => markAllAsReadMutation.mutate()}
-                disabled={markAllAsReadMutation.isPending}
-                className="gap-2"
-                data-testid="button-mark-all-read"
-              >
-                <CheckCheck className="h-4 w-4" />
-                <span className="text-xs">تحديد الكل</span>
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => markAllAsReadMutation.mutate()}
+                  disabled={markAllAsReadMutation.isPending}
+                  className="gap-2"
+                  data-testid="button-mark-all-read"
+                >
+                  <CheckCheck className="h-4 w-4" />
+                  <span className="text-xs">تحديد الكل</span>
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => clearAllMutation.mutate()}
+                  disabled={clearAllMutation.isPending}
+                  className="gap-2 text-destructive hover:text-destructive"
+                  data-testid="button-clear-all"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="text-xs">مسح الكل</span>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -289,15 +325,8 @@ export function NotificationBell() {
                         )}
 
                         <div className="flex-1 min-w-0 space-y-1.5">
-                          {/* الشريط العلوي */}
-                          <div className="flex items-center justify-between gap-2">
-                            <Badge 
-                              variant="secondary" 
-                              className={`${style.badgeColor} text-xs border`}
-                            >
-                              {style.hasAI && <Zap className="h-2.5 w-2.5 mr-1" />}
-                              {style.label}
-                            </Badge>
+                          {/* الشريط العلوي — الوقت فقط */}
+                          <div className="flex items-center justify-end gap-2">
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {formatDistanceToNow(new Date(notification.createdAt), {
                                 addSuffix: true,
@@ -316,15 +345,6 @@ export function NotificationBell() {
                             {notification.body}
                           </p>
 
-                          {/* مؤشر غير مقروء */}
-                          {!notification.read && (
-                            <div className="flex items-center gap-1.5 pt-0.5">
-                              <div className={`h-1.5 w-1.5 rounded-full ${style.dotColor} animate-pulse`} />
-                              <span className={`text-xs font-medium ${style.iconColor}`}>
-                                جديد
-                              </span>
-                            </div>
-                          )}
                         </div>
                       </div>
 

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
-import { canAcceptExternalSse, trackExternalSse, memoryCache, CACHE_TTL } from "./memoryCache";
+import { canAcceptExternalSse, trackExternalSse, CACHE_TTL, withSWR } from "./memoryCache";
 import { db } from "./db";
 import { pickTableColumns } from "./utils/sanitizeBody";
+import { isUniqueViolation } from "./utils/pgError";
 import { 
   adAccounts, 
   campaigns, 
@@ -2570,10 +2571,11 @@ router.post("/campaigns/:campaignId/placements", requireAdvertiser, requireAdmin
       res.json(placement);
     } catch (error: any) {
       // Catch unique violation errors (PostgreSQL error code 23505)
-      // Database-level EXCLUSION constraint prevents race conditions
-      if (error.code === "23505") {
-        return res.status(409).json({ 
-          error: "يوجد تداخل في جدولة هذا البنر في نفس المكان" 
+      // Database-level EXCLUSION constraint prevents race conditions.
+      // ملاحظة: Drizzle يلفّ خطأ PG، لذا نستخدم isUniqueViolation لفكّه.
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({
+          error: "يوجد تداخل في جدولة هذا البنر في نفس المكان"
         });
       }
       throw error; // Re-throw other errors
@@ -2735,10 +2737,11 @@ router.put("/campaigns/:campaignId/placements/:placementId", requireAdvertiser, 
       res.json(updatedPlacement);
     } catch (error: any) {
       // Catch unique violation errors (PostgreSQL error code 23505)
-      // Database-level EXCLUSION constraint prevents race conditions
-      if (error.code === "23505") {
-        return res.status(409).json({ 
-          error: "يوجد تداخل في جدولة هذا البنر في نفس المكان" 
+      // Database-level EXCLUSION constraint prevents race conditions.
+      // ملاحظة: Drizzle يلفّ خطأ PG، لذا نستخدم isUniqueViolation لفكّه.
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({
+          error: "يوجد تداخل في جدولة هذا البنر في نفس المكان"
         });
       }
       throw error; // Re-throw other errors
@@ -2902,7 +2905,7 @@ router.get("/creatives/:creativeId/placements", requireAdvertiser, async (req, r
 // that have no chance of filling (no active inventory, no recent impressions).
 // High-fill slots stay enabled so CLS stays at 0 there.
 const ACTIVE_SLOTS_CACHE_KEY = "ads:active-slot-locations";
-const ACTIVE_SLOTS_TTL_MS = 60 * 1000; // 60s in-memory; cheap query but called per page load
+const ACTIVE_SLOTS_TTL_MS = CACHE_TTL.SHORT; // 2 دقيقة fresh + نافذة stale
 const ACTIVE_SLOT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24h fill-rate window
 
 router.get("/slots/active", async (_req, res) => {
@@ -2911,64 +2914,67 @@ router.get("/slots/active", async (_req, res) => {
     "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
   );
   try {
-    const cached = memoryCache.get<{ slotIds: string[]; generatedAt: string }>(
+    // سابقًا كان plain memoryCache بـ TTL 60s: عند انتهاء النافذة كانت كل
+    // الطلبات المتزامنة تضرب الـ DB بـ query ثقيل (4-way join + distinct scan
+    // على impressions لآخر 24h). معSWR: أول طلب يحسب، الباقي ينتظر أو يُخدم
+    // من stale — حماية من thundering herd. نفس نمط /api/categories و
+    // /api/breaking-ticker/active.
+    const payload = await withSWR(
       ACTIVE_SLOTS_CACHE_KEY,
+      ACTIVE_SLOTS_TTL_MS,
+      ACTIVE_SLOTS_TTL_MS * 2,
+      async () => {
+        const now = new Date();
+        const lookbackStart = new Date(now.getTime() - ACTIVE_SLOT_LOOKBACK_MS);
+
+        // Slot locations with at least one currently-eligible placement.
+        // Mirrors the eligibility filters used by GET /slot/:slotId so the
+        // signal stays consistent with what that endpoint would actually serve.
+        const eligiblePlacements = await db
+          .selectDistinct({ location: inventorySlots.location })
+          .from(adCreativePlacements)
+          .innerJoin(creatives, eq(adCreativePlacements.creativeId, creatives.id))
+          .innerJoin(campaigns, eq(adCreativePlacements.campaignId, campaigns.id))
+          .innerJoin(
+            inventorySlots,
+            eq(adCreativePlacements.inventorySlotId, inventorySlots.id),
+          )
+          .where(
+            and(
+              eq(inventorySlots.isActive, true),
+              eq(adCreativePlacements.status, "active"),
+              eq(campaigns.status, "active"),
+              eq(creatives.status, "active"),
+              lte(adCreativePlacements.startDate, now),
+              sql`(${adCreativePlacements.endDate} IS NULL OR ${adCreativePlacements.endDate} >= ${now})`,
+              sql`${campaigns.spentBudget} < ${campaigns.totalBudget}`,
+              sql`${campaigns.spentToday} < ${campaigns.dailyBudget}`,
+            ),
+          );
+
+        // Slot locations that actually filled at least once in the last 24h.
+        // Catches slots whose placement is momentarily paused but historically
+        // serves; keeps them eligible so we don't oscillate.
+        const recentlyFilled = await db
+          .selectDistinct({ location: inventorySlots.location })
+          .from(impressions)
+          .innerJoin(inventorySlots, eq(impressions.slotId, inventorySlots.id))
+          .where(gte(impressions.timestamp, lookbackStart));
+
+        const slotSet = new Set<string>();
+        for (const row of eligiblePlacements) {
+          if (row.location) slotSet.add(row.location);
+        }
+        for (const row of recentlyFilled) {
+          if (row.location) slotSet.add(row.location);
+        }
+
+        return {
+          slotIds: Array.from(slotSet).sort(),
+          generatedAt: now.toISOString(),
+        };
+      },
     );
-    if (cached) {
-      return res.json(cached);
-    }
-
-    const now = new Date();
-    const lookbackStart = new Date(now.getTime() - ACTIVE_SLOT_LOOKBACK_MS);
-
-    // Slot locations with at least one currently-eligible placement.
-    // Mirrors the eligibility filters used by GET /slot/:slotId so the
-    // signal stays consistent with what that endpoint would actually serve.
-    const eligiblePlacements = await db
-      .selectDistinct({ location: inventorySlots.location })
-      .from(adCreativePlacements)
-      .innerJoin(creatives, eq(adCreativePlacements.creativeId, creatives.id))
-      .innerJoin(campaigns, eq(adCreativePlacements.campaignId, campaigns.id))
-      .innerJoin(
-        inventorySlots,
-        eq(adCreativePlacements.inventorySlotId, inventorySlots.id),
-      )
-      .where(
-        and(
-          eq(inventorySlots.isActive, true),
-          eq(adCreativePlacements.status, "active"),
-          eq(campaigns.status, "active"),
-          eq(creatives.status, "active"),
-          lte(adCreativePlacements.startDate, now),
-          sql`(${adCreativePlacements.endDate} IS NULL OR ${adCreativePlacements.endDate} >= ${now})`,
-          sql`${campaigns.spentBudget} < ${campaigns.totalBudget}`,
-          sql`${campaigns.spentToday} < ${campaigns.dailyBudget}`,
-        ),
-      );
-
-    // Slot locations that actually filled at least once in the last 24h.
-    // Catches slots whose placement is momentarily paused but historically
-    // serves; keeps them eligible so we don't oscillate.
-    const recentlyFilled = await db
-      .selectDistinct({ location: inventorySlots.location })
-      .from(impressions)
-      .innerJoin(inventorySlots, eq(impressions.slotId, inventorySlots.id))
-      .where(gte(impressions.timestamp, lookbackStart));
-
-    const slotSet = new Set<string>();
-    for (const row of eligiblePlacements) {
-      if (row.location) slotSet.add(row.location);
-    }
-    for (const row of recentlyFilled) {
-      if (row.location) slotSet.add(row.location);
-    }
-
-    const payload = {
-      slotIds: Array.from(slotSet).sort(),
-      generatedAt: now.toISOString(),
-    };
-
-    memoryCache.set(ACTIVE_SLOTS_CACHE_KEY, payload, ACTIVE_SLOTS_TTL_MS);
     res.json(payload);
   } catch (error) {
     console.error("[Ads API] خطأ في جلب قائمة الأماكن النشطة:", error);

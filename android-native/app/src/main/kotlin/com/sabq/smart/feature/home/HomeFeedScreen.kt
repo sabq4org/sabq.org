@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LightMode
@@ -56,16 +59,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,10 +80,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.R
 import com.sabq.smart.data.Article
+import com.sabq.smart.data.ArticleCategory
 import com.sabq.smart.data.Section
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.notifications.EditorialBellViewModel
 import com.sabq.smart.feature.settings.SettingsViewModel
+import com.sabq.smart.ui.components.BreakingTickerBar
 import com.sabq.smart.ui.components.CategoryChip
 import com.sabq.smart.ui.components.CompactArticleRow
 import com.sabq.smart.ui.components.FeaturedArticleCard
@@ -107,12 +115,16 @@ fun HomeFeedScreen(
     onOpinionsAllClick: () -> Unit = {},
     onTrendingAllClick: () -> Unit = {},
     onWorldCupClick: () -> Unit = {},
+    onGulfCupClick: () -> Unit = {},
+    onAsianCupClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
     onAudioNewslettersClick: () -> Unit = {},
     onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit = {},
+    onMuqtarabAllClick: () -> Unit = {},
+    onMuqtarabTopicClick: (angleSlug: String, topicSlug: String) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
@@ -152,12 +164,16 @@ fun HomeFeedScreen(
                 onOpinionsAllClick = onOpinionsAllClick,
                 onTrendingAllClick = onTrendingAllClick,
                 onWorldCupClick = onWorldCupClick,
+                onGulfCupClick = onGulfCupClick,
+                onAsianCupClick = onAsianCupClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
                 onAudioNewslettersClick = onAudioNewslettersClick,
                 onHajjArticleClick = onHajjArticleClick,
+                onMuqtarabAllClick = onMuqtarabAllClick,
+                onMuqtarabTopicClick = onMuqtarabTopicClick,
                 onToggleDarkMode = {
                     // Mirrors iOS: tapping the header sun/moon flips the
                     // user's explicit darkMode flag. If the user was in
@@ -190,17 +206,25 @@ private fun LoadedFeed(
     onOpinionsAllClick: () -> Unit,
     onTrendingAllClick: () -> Unit,
     onWorldCupClick: () -> Unit,
+    onGulfCupClick: () -> Unit,
+    onAsianCupClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onAudioNewslettersClick: () -> Unit,
     onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit,
+    onMuqtarabAllClick: () -> Unit,
+    onMuqtarabTopicClick: (angleSlug: String, topicSlug: String) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val uriHandler = LocalUriHandler.current
+    // «المزيد اليوم» — الكتل الثانوية خلف زر إفصاح واحد، مطوي افتراضيًا
+    // (iOS HomeFeedView.swift:690 moreTodaySection + showMoreToday).
+    var showMoreToday by rememberSaveable { mutableStateOf(false) }
 
     // Re-tap on the bottom Home tab → smooth-scroll to top + refresh.
     // Wired via [TabReselectBus] which fires only when the user taps
@@ -252,28 +276,50 @@ private fun LoadedFeed(
         // `HomeFeedView.greetingBlock` (lines 878-1001).
         item { GreetingBlock(onClick = onGreetingClick) }
 
-        // Breaking news pill — single coral row.
-        state.breaking?.let { breaking ->
+        // عاجل — الشريط الوحيد المسموح فوق الهيرو (iOS HomeFeedView.swift:
+        // 157-164): شريط لوحة التحكم الدوّار أولًا، وعند غيابه نسقط
+        // للبطاقة المفردة القديمة (خبر بنوع "breaking").
+        if (state.breakingTicker.isNotEmpty()) {
             item {
-                BreakingNewsPill(
-                    article = breaking,
-                    onClick = { onArticleClick(breaking) },
+                BreakingTickerBar(
+                    headlines = state.breakingTicker,
+                    onHeadlineClick = { headline ->
+                        val slug = headline.linkedArticleSlug
+                        if (slug != null) {
+                            // نفس مسار فتح المقال بالـ slug الذي تستخدمه
+                            // بطاقة العاجل المفردة (SabqApp ينقل بالـ slug).
+                            onArticleClick(
+                                Article(
+                                    id = headline.id,
+                                    title = headline.headline,
+                                    excerpt = "",
+                                    category = ArticleCategory.Local,
+                                    imageUrl = null,
+                                    readingTime = "",
+                                    dateFormatted = "",
+                                    isBreaking = true,
+                                    slug = slug,
+                                ),
+                            )
+                        } else {
+                            headline.externalUrl?.let { uriHandler.openUri(it) }
+                        }
+                    },
                 )
+            }
+        } else {
+            state.breaking?.let { breaking ->
+                item {
+                    BreakingNewsPill(
+                        article = breaking,
+                        onClick = { onArticleClick(breaking) },
+                    )
+                }
             }
         }
 
-        // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
-        item {
-            com.sabq.smart.feature.worldcup.WorldCupHomeStrip(onClick = onWorldCupClick)
-        }
-
-        // Stories rail — circular bubbles. Each bubble opens the
-        // dedicated StoryDetailScreen via the parent's onStoryClick.
-        if (state.stories.isNotEmpty()) {
-            item { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
-        }
-
-        // Featured carousel.
+        // Featured carousel — الهيرو مباشرة بعد العاجل وقبل أشرطة
+        // البطولات (iOS HomeFeedView.swift:166-175).
         if (state.featured.isNotEmpty()) {
             item {
                 FeaturedCarousel(
@@ -283,6 +329,18 @@ private fun LoadedFeed(
                     onClick = onArticleClick,
                 )
             }
+        }
+
+        // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
+        // (خليجي 27 غير معروض في الرئيسية مطابقةً لتطبيق iOS.)
+        item {
+            com.sabq.smart.feature.worldcup.WorldCupHomeStrip(onClick = onWorldCupClick)
+        }
+
+        // شريط كأس آسيا — مقيّد بالخادم: يختفي عند blockHidden أو قبل
+        // وصول overview (انظر AsianCupHomeStrip).
+        item {
+            com.sabq.smart.feature.asiancup.AsianCupHomeStrip(onClick = onAsianCupClick)
         }
 
         // "رحلتك المعرفية اليوم" — auth-gated personal-journey block.
@@ -301,52 +359,9 @@ private fun LoadedFeed(
             }
         }
 
-        // "صدى الحج" — seasonal block, hidden when out of season /
-        // disabled / no articles (the repo returns null in those cases,
-        // matching iOS `HajjBlockView` parity).
-        state.hajjBlock?.let { hajj ->
-            item {
-                HajjBlockSection(
-                    block = hajj,
-                    onArticleClick = onHajjArticleClick,
-                )
-            }
-        }
-
-        // Opinions preview — horizontal rail of up to 5 cards +
-        // "الكل" link to the full Opinions list.
-        if (state.opinions.isNotEmpty()) {
-            item {
-                OpinionsPreviewRail(
-                    opinions = state.opinions,
-                    onArticleClick = onArticleClick,
-                    onSeeAllClick = onOpinionsAllClick,
-                )
-            }
-        }
-
-        // Trending preview — top-3 list inside a SurfaceCard.
-        if (state.trending.isNotEmpty()) {
-            item {
-                TrendingPreviewBlock(
-                    trending = state.trending,
-                    onArticleClick = onArticleClick,
-                    onSeeAllClick = onTrendingAllClick,
-                )
-            }
-        }
-
-        // Today's calendar events.
-        if (state.calendar.isNotEmpty()) {
-            item { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
-        }
-
-        // Audio newsletter card. Tap navigates to the dedicated
-        // "النشرات الصوتية" list. iOS opens the same destination
-        // from ContentView.swift:78 via the navigation stack.
-        state.audioNewsletter?.let { newsletter ->
-            item { AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick) }
-        }
+        // الكتل الثانوية (ستوريز، صدى الحج، التقويم، النشرة الصوتية،
+        // الترند) انتقلت إلى إفصاح «المزيد اليوم» أسفل الصفحة — مطابقة
+        // iOS moreTodaySection (HomeFeedView.swift:690).
 
         // Category chips removed from Home per user direction
         // (2026-05-19) — categories live in the Explore tab. State +
@@ -402,8 +417,137 @@ private fun LoadedFeed(
                 )
             }
         }
+
+        // مقالات الرأي و«مُقترب» تُعرضان أسفل «آخر الأخبار» — مطابقة iOS
+        // (HomeFeedView.swift: opinionsPreviewSection ثم MuqtarabHomeStrip
+        // بعد latestArticlesSection).
+
+        // Opinions preview — horizontal rail of up to 5 cards +
+        // "الكل" link to the full Opinions list.
+        if (state.opinions.isNotEmpty()) {
+            item {
+                OpinionsPreviewRail(
+                    opinions = state.opinions,
+                    onArticleClick = onArticleClick,
+                    onSeeAllClick = onOpinionsAllClick,
+                )
+            }
+        }
+
+        // مُقترب — featured analytical topics strip + "الكل" link.
+        // Hidden entirely when the backend returns no featured topics.
+        if (state.muqtarabTopics.isNotEmpty()) {
+            item {
+                com.sabq.smart.feature.muqtarab.MuqtarabHomeStrip(
+                    topics = state.muqtarabTopics,
+                    onAllClick = onMuqtarabAllClick,
+                    onTopicClick = onMuqtarabTopicClick,
+                )
+            }
+        }
+
+        // «المزيد اليوم» — إفصاح مطوي افتراضيًا يضم الكتل الثانوية
+        // (iOS moreTodaySection, HomeFeedView.swift:690-746). كل كتلة
+        // تحتفظ بشرط ظهورها الأصلي.
+        item {
+            MoreTodayToggle(
+                expanded = showMoreToday,
+                onToggle = { showMoreToday = !showMoreToday },
+            )
+        }
+        if (showMoreToday) {
+            // Stories rail — circular bubbles. Each bubble opens the
+            // dedicated StoryDetailScreen via the parent's onStoryClick.
+            if (state.stories.isNotEmpty()) {
+                item { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
+            }
+
+            // "صدى الحج" — seasonal block, hidden when out of season /
+            // disabled / no articles (the repo returns null in those
+            // cases, matching iOS `HajjBlockView` parity).
+            state.hajjBlock?.let { hajj ->
+                item {
+                    HajjBlockSection(
+                        block = hajj,
+                        onArticleClick = onHajjArticleClick,
+                    )
+                }
+            }
+
+            // Today's calendar events.
+            if (state.calendar.isNotEmpty()) {
+                item { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
+            }
+
+            // Audio newsletter card. Tap navigates to the dedicated
+            // "النشرات الصوتية" list. iOS opens the same destination
+            // from ContentView.swift:78 via the navigation stack.
+            state.audioNewsletter?.let { newsletter ->
+                item { AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick) }
+            }
+
+            // Trending preview — top-3 list inside a SurfaceCard.
+            if (state.trending.isNotEmpty()) {
+                item {
+                    TrendingPreviewBlock(
+                        trending = state.trending,
+                        onArticleClick = onArticleClick,
+                        onSeeAllClick = onTrendingAllClick,
+                    )
+                }
+            }
+        }
     }
     }  // close PullToRefreshBox
+}
+
+/**
+ * زر إفصاح «المزيد اليوم» — ports iOS `moreTodaySection` button
+ * (HomeFeedView.swift:691-722): grid icon + label + chevron that
+ * rotates 180° when expanded, on a surface tile with a thin outline.
+ */
+@Composable
+private fun MoreTodayToggle(expanded: Boolean, onToggle: () -> Unit) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.tileRadius)
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        label = "more-today-chevron",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .border(width = 0.5.dp, color = SabqTheme.colors.outline.copy(alpha = 0.45f), shape = shape)
+            .clickable { onToggle() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.GridView,
+            contentDescription = null,
+            tint = SabqTheme.colors.primaryEnd,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = if (expanded) "إخفاء المزيد" else "المزيد اليوم",
+            style = SabqTheme.typography.metaSmall.copy(
+                fontSize = 14.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                color = SabqTheme.colors.ink,
+            ),
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Icon(
+            imageVector = Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (expanded) "إخفاء المزيد اليوم" else "عرض المزيد اليوم",
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier
+                .size(16.dp)
+                .rotate(chevronRotation),
+        )
+    }
 }
 
 @Composable

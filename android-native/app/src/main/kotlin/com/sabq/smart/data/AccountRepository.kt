@@ -78,6 +78,18 @@ class AccountRepository @Inject constructor(
         return user.toDomain()
     }
 
+    /** إكمال الاسم بعد دخول الجوال — العائلة اختياري. */
+    suspend fun completeDisplayName(firstName: String, lastName: String?): User {
+        val resp = api.updateProfile(
+            UpdateProfileRequest(
+                firstName = firstName.trim(),
+                lastName = lastName?.trim()?.takeIf { it.length >= 2 },
+            ),
+        )
+        val user = resp.user ?: throw AccountException(0, "missing user")
+        return user.toDomain()
+    }
+
     suspend fun subscribeNewsletter(email: String, firstName: String?) {
         val resp = api.subscribeNewsletter(
             NewsletterSubscribeRequest(email = email, firstName = firstName),

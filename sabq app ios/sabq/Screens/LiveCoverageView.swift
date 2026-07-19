@@ -4,8 +4,10 @@ struct LiveCoverageView: View {
     @State private var liveData: APILiveResponse?
     @State private var allEvents: [APILiveEvent] = []
     @State private var isLoading = true
+    @State private var loadFailed = false
     @State private var selectedCountry: String? = nil
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -14,6 +16,21 @@ struct LiveCoverageView: View {
 
                 if isLoading {
                     loadingSection
+                } else if liveData == nil, loadFailed {
+                    // فشل الجلب الأول كان يترك الشاشة بيضاء بلا تفسير ولا زر —
+                    // السحب للتحديث ليس مسارًا مكتشفًا لصفحة فارغة.
+                    EmptyStateView(
+                        icon: "wifi.exclamationmark",
+                        tint: SabqTheme.coral,
+                        title: "تعذر تحميل التغطية",
+                        subtitle: "تحقق من اتصالك بالإنترنت ثم أعد المحاولة",
+                        action: {
+                            isLoading = true
+                            Task { await loadData() }
+                        },
+                        actionTitle: "إعادة المحاولة"
+                    )
+                    .padding(.top, 60)
                 } else if let data = liveData {
                     if !data.isLive {
                         EmptyStateView(
@@ -47,7 +64,7 @@ struct LiveCoverageView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(SabqFonts.app(size: 16, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 .buttonStyle(.plain)
@@ -56,11 +73,23 @@ struct LiveCoverageView: View {
                 // "لحظة بلحظة" is the brand label the user picked for live
                 // coverage on the homepage — surface the same wording here.
                 Text("لحظة بلحظة")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
         .task { await loadData() }
+        // «لحظة بلحظة» كانت ثابتة تمامًا رغم شارة «مباشر» النابضة — لا تلتقط
+        // أي حدث جديد إلا بسحب يدوي. استطلاع كل 30ث أثناء البث الحي فقط
+        // (بلا شبكة وهو خامل أو بالخلفية)، مع تحديث فوري عند العودة للمقدمة.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                if Task.isCancelled { break }
+                guard liveData?.isLive == true else { continue }
+                await loadData()
+            }
+        }
     }
 
     // MARK: - Header
@@ -70,7 +99,7 @@ struct LiveCoverageView: View {
             HStack(spacing: 10) {
                 livePulse
                 Text(liveData?.titleAr ?? "لحظة بلحظة")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
 
@@ -81,14 +110,14 @@ struct LiveCoverageView: View {
                         .frame(width: 8, height: 8)
 
                     Text("مباشر")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.coral)
 
                     if let lastUpdated = liveData?.stats?.lastUpdated {
                         Text("·")
                             .foregroundStyle(SabqTheme.tertiaryInk)
                         Text("آخر تحديث: \(formatRelativeTime(lastUpdated))")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -103,7 +132,7 @@ struct LiveCoverageView: View {
                 .frame(width: 32, height: 32)
 
             Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.system(size: 16, weight: .semibold))
+                .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(SabqTheme.coral)
         }
     }
@@ -137,10 +166,10 @@ struct LiveCoverageView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 13, weight: isSelected ? .bold : .medium))
+                    .font(SabqFonts.app(size: 13, weight: isSelected ? .bold : .medium))
 
                 Text("\(count)")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(
@@ -188,7 +217,7 @@ struct LiveCoverageView: View {
                 .fill(SabqTheme.outline)
                 .frame(height: 0.5)
             Text(formatDateHeader(dateString))
-                .font(.system(size: 13, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .fixedSize()
             Rectangle()
@@ -207,7 +236,7 @@ struct LiveCoverageView: View {
                     .overlay {
                         if event.priority == "urgent" {
                             Image(systemName: "bolt.fill")
-                                .font(.system(size: 6, weight: .bold))
+                                .font(SabqFonts.app(size: 6, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                     }
@@ -221,12 +250,12 @@ struct LiveCoverageView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Text(formatEventTime(event.publishedAt))
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     if event.priority == "urgent" {
                         Text("عاجل")
-                            .font(.system(size: 10, weight: .heavy))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -234,7 +263,7 @@ struct LiveCoverageView: View {
                     }
 
                     Text(event.eventTypeLabelAr)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(severityColor(event.severity))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -244,7 +273,7 @@ struct LiveCoverageView: View {
 
                     if event.isUpdate {
                         Text("تحديث")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -256,14 +285,14 @@ struct LiveCoverageView: View {
 
                 HStack(spacing: 6) {
                     Text(countryFlag(event.country))
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                     Text(event.countryNameAr)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
 
                 Text(event.content)
-                    .font(.system(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 15, weight: .regular))
                     .foregroundStyle(SabqTheme.ink)
                     .lineSpacing(5)
                     .lineLimit(nil)
@@ -272,9 +301,9 @@ struct LiveCoverageView: View {
                 if let source = event.sourceName, !source.isEmpty {
                     HStack(spacing: 4) {
                         Image(systemName: "quote.opening")
-                            .font(.system(size: 9))
+                            .font(SabqFonts.app(size: 9))
                         Text(source)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 }
@@ -282,9 +311,9 @@ struct LiveCoverageView: View {
                 if event.isPinned {
                     HStack(spacing: 4) {
                         Image(systemName: "pin.fill")
-                            .font(.system(size: 10))
+                            .font(SabqFonts.app(size: 10))
                         Text("مثبت")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.primaryEnd)
                 }
@@ -294,9 +323,9 @@ struct LiveCoverageView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 12))
+                            .font(SabqFonts.app(size: 12))
                         Text("شارك")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                     }
                     .foregroundStyle(SabqTheme.secondaryInk)
                 }
@@ -324,7 +353,7 @@ struct LiveCoverageView: View {
                 .tint(SabqTheme.primaryEnd)
                 .scaleEffect(1.2)
             Text("جاري تحميل البث الحي...")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
@@ -431,9 +460,13 @@ struct LiveCoverageView: View {
                 liveData = response
                 allEvents = response.events
                 isLoading = false
+                loadFailed = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            await MainActor.run {
+                isLoading = false
+                loadFailed = true
+            }
         }
     }
 }

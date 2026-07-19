@@ -1,0 +1,14 @@
+# Cloudflare Pages SPA fallback.
+# Real static files (and /assets/*) are served first and take precedence, and
+# functions/_middleware.js runs ahead of this for every included route (proxy,
+# slug-redirect, SEO injection). This rule applies when the static layer would
+# otherwise 404 — i.e. a client-side route like /article/<slug> with no matching
+# file — so the SPA shell (index.html) is returned with a 200 instead of a 404.
+# Keeps SPA routing consistent on Pages.
+#
+# NOTE: a missing /assets/<oldhash>.js (after a deploy) also falls through to
+# this rule and gets index.html + 200, which the client's retryImport.ts
+# classifies as a MIME/CORS chunk failure → deployRecovery reload. The proactive
+# buildVersion poll (client/src/lib/buildVersion.ts) prevents the stale-tab case
+# in the first place by reloading before a deleted chunk is ever requested.
+/*    /index.html   200

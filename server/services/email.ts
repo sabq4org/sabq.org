@@ -1,11 +1,13 @@
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
+import sgMail from "@sendgrid/mail";
 import crypto from 'crypto';
 import { db } from '../db';
 import { emailVerificationTokens, users } from '@shared/schema';
 import { and, eq } from 'drizzle-orm';
 
 const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@sabq.sa';
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const FROM_EMAIL = process.env.FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || 'noreply@sabq.sa';
 const FROM_NAME = 'صحيفة سبق الإلكترونية';
 
 // Get frontend URL from environment or detect from Replit domains
@@ -34,7 +36,7 @@ const FRONTEND_URL = getFrontendUrl();
 let mailerSend: MailerSend | null = null;
 
 if (!MAILERSEND_API_KEY) {
-  console.warn('⚠️  MAILERSEND_API_KEY not set. Email functionality will be disabled.');
+  console.warn('⚠️  MAILERSEND_API_KEY not set. MailerSend email provider is disabled.');
 } else {
   mailerSend = new MailerSend({
     apiKey: MAILERSEND_API_KEY,
@@ -42,6 +44,59 @@ if (!MAILERSEND_API_KEY) {
   console.log('✅ MailerSend email service initialized');
   console.log(`🔗 Frontend URL for email links: ${FRONTEND_URL}`);
   console.log(`📧 Sending from: ${FROM_EMAIL}`);
+}
+
+if (SENDGRID_API_KEY) {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+  console.log('✅ SendGrid email fallback initialized');
+} else if (!MAILERSEND_API_KEY) {
+  console.warn('⚠️  No email provider configured. Set MAILERSEND_API_KEY or SENDGRID_API_KEY.');
+}
+
+function isTransactionalEmailConfigured(): boolean {
+  return !!(MAILERSEND_API_KEY || SENDGRID_API_KEY);
+}
+
+async function sendTransactionalEmail(options: {
+  to: string;
+  subject: string;
+  text?: string;
+  html?: string;
+}): Promise<void> {
+  if (mailerSend && MAILERSEND_API_KEY) {
+    try {
+      const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
+      const recipients = [new Recipient(options.to)];
+
+      const emailParams = new EmailParams()
+        .setFrom(sentFrom)
+        .setTo(recipients)
+        .setSubject(options.subject)
+        .setHtml(options.html || options.text || '')
+        .setText(options.text || '');
+
+      await mailerSend.email.send(emailParams);
+      return;
+    } catch (error) {
+      if (!SENDGRID_API_KEY) {
+        throw error;
+      }
+      console.warn('⚠️ MailerSend failed; falling back to SendGrid:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (SENDGRID_API_KEY) {
+    await sgMail.send({
+      to: options.to,
+      from: { email: FROM_EMAIL, name: FROM_NAME },
+      subject: options.subject,
+      text: options.text || '',
+      html: options.html || options.text || '',
+    });
+    return;
+  }
+
+  throw new Error('No email provider configured. Set MAILERSEND_API_KEY or SENDGRID_API_KEY.');
 }
 
 /**
@@ -61,22 +116,7 @@ export async function sendEmailNotification(options: {
   html?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!mailerSend || !MAILERSEND_API_KEY) {
-      console.warn('Email not sent - MailerSend not configured');
-      return { success: false, error: 'MailerSend API key not configured' };
-    }
-
-    const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
-    const recipients = [new Recipient(options.to)];
-
-    const emailParams = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject(options.subject)
-      .setHtml(options.html || options.text || '')
-      .setText(options.text || '');
-
-    await mailerSend.email.send(emailParams);
+    await sendTransactionalEmail(options);
     console.log(`✅ Email sent to ${options.to}: ${options.subject}`);
     return { success: true };
   } catch (error) {
@@ -93,8 +133,8 @@ export async function sendEmailNotification(options: {
  */
 export async function sendVerificationEmail(userId: string, email: string): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!mailerSend || !MAILERSEND_API_KEY) {
-      return { success: false, error: 'MailerSend API key not configured' };
+    if (!isTransactionalEmailConfigured()) {
+      return { success: false, error: 'No email provider configured. Set MAILERSEND_API_KEY or SENDGRID_API_KEY.' };
     }
 
     // Generate token
@@ -206,17 +246,12 @@ This link is valid for 24 hours only.
 If you didn't sign up, please ignore this email.
     `.trim();
 
-    const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
-    const recipients = [new Recipient(email)];
-
-    const emailParams = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject('تفعيل حسابك في صحيفة سبق - Activate Your Sabq Account')
-      .setHtml(htmlContent)
-      .setText(textContent);
-
-    await mailerSend.email.send(emailParams);
+    await sendTransactionalEmail({
+      to: email,
+      subject: 'تفعيل حسابك في صحيفة سبق - Activate Your Sabq Account',
+      html: htmlContent,
+      text: textContent,
+    });
     console.log(`✅ Verification email sent to ${email}`);
     
     return { success: true };
@@ -347,11 +382,6 @@ export async function resendVerificationEmail(userId: string): Promise<{ success
  */
 export async function sendPasswordResetEmail(email: string, resetToken: string): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!mailerSend || !MAILERSEND_API_KEY) {
-      console.warn('Password reset email not sent - MailerSend not configured');
-      return { success: false, error: 'MailerSend API key not configured' };
-    }
-
     // Create reset link
     const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
 
@@ -452,17 +482,12 @@ ${resetLink}
 If you didn't request a password reset, please ignore this email.
     `.trim();
 
-    const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
-    const recipients = [new Recipient(email)];
-
-    const emailParams = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject('إعادة تعيين كلمة المرور - Password Reset | سبق')
-      .setHtml(htmlContent)
-      .setText(textContent);
-
-    await mailerSend.email.send(emailParams);
+    await sendTransactionalEmail({
+      to: email,
+      subject: 'إعادة تعيين كلمة المرور - Password Reset | سبق',
+      html: htmlContent,
+      text: textContent,
+    });
     console.log(`✅ Password reset email sent to ${email}`);
     
     return { success: true };
@@ -485,11 +510,6 @@ export async function sendNewsletterWelcomeEmail(options: {
   interests?: string[];
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!mailerSend || !MAILERSEND_API_KEY) {
-      console.warn('Newsletter welcome email not sent - MailerSend not configured');
-      return { success: false, error: 'MailerSend API key not configured' };
-    }
-
     const { to, firstName, language = 'ar', interests = [] } = options;
     const greeting = firstName ? `مرحباً ${firstName}` : 'مرحباً بك';
     const interestsList = interests.length > 0 ? interests.join('، ') : 'جميع الأخبار';
@@ -597,17 +617,12 @@ ${greeting} في النشرة الذكية!
 © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
     `.trim();
 
-    const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
-    const recipients = [new Recipient(to)];
-
-    const emailParams = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject('✅ تم اشتراكك في النشرة الذكية | سبق')
-      .setHtml(htmlContent)
-      .setText(textContent);
-
-    await mailerSend.email.send(emailParams);
+    await sendTransactionalEmail({
+      to,
+      subject: '✅ تم اشتراكك في النشرة الذكية | سبق',
+      html: htmlContent,
+      text: textContent,
+    });
     console.log(`✅ Newsletter welcome email sent to ${to}`);
     
     return { success: true };
@@ -649,11 +664,6 @@ export async function sendNewsletterEmail(options: {
   aiPreheader?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!mailerSend || !MAILERSEND_API_KEY) {
-      console.warn('Newsletter email not sent - MailerSend not configured');
-      return { success: false, error: 'MailerSend API key not configured' };
-    }
-
     const { to, newsletterTitle, newsletterDescription, audioUrl, articleSummaries, newsletterType, unsubscribeToken, personalizedIntro, dailyQuestion, aiSubject, aiPreheader } = options;
 
     // Type-specific styling
@@ -783,25 +793,21 @@ ${dailyQuestion ? `❓ سؤال اليوم: ${dailyQuestion.question}${dailyQues
 إلغاء الاشتراك: ${unsubscribeUrl}
     `.trim();
 
-    const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
-    const recipients = [new Recipient(to)];
-
     // Use AI-generated subject if provided, otherwise fall back to default
     const emailSubject = aiSubject || `${style.icon} ${newsletterTitle}`;
-    
-    const emailParams = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject(emailSubject)
-      .setHtml(htmlContent)
-      .setText(textContent);
 
-    await mailerSend.email.send(emailParams);
-    console.log(`✅ Newsletter email sent to ${to}`);
+    await sendTransactionalEmail({
+      to,
+      subject: emailSubject,
+      html: htmlContent,
+      text: textContent,
+    });
+    // لا نسجل البريد (PII) ولا سطرًا لكل مستلم؛ الـ worker يسجل ملخص كل دفعة.
     
     return { success: true };
   } catch (error) {
-    console.error(`❌ Failed to send newsletter email to ${options.to}:`, error);
+    // Provider messages may echo the recipient address; keep operational logs PII-free.
+    console.error("❌ Newsletter email delivery failed");
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to send email' 
@@ -817,11 +823,6 @@ export async function sendNewsletterUnsubscribeEmail(options: {
   firstName?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!mailerSend || !MAILERSEND_API_KEY) {
-      console.warn('Unsubscribe email not sent - MailerSend not configured');
-      return { success: false, error: 'MailerSend API key not configured' };
-    }
-
     const { to, firstName } = options;
     const greeting = firstName ? `${firstName} العزيز` : 'عزيزي المشترك';
 
@@ -897,17 +898,12 @@ ${FRONTEND_URL}/newsletter
 © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
     `.trim();
 
-    const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
-    const recipients = [new Recipient(to)];
-
-    const emailParams = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject('👋 تم إلغاء اشتراكك | سبق')
-      .setHtml(htmlContent)
-      .setText(textContent);
-
-    await mailerSend.email.send(emailParams);
+    await sendTransactionalEmail({
+      to,
+      subject: '👋 تم إلغاء اشتراكك | سبق',
+      html: htmlContent,
+      text: textContent,
+    });
     console.log(`✅ Unsubscribe confirmation email sent to ${to}`);
     
     return { success: true };

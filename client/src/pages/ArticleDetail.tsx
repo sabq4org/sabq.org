@@ -14,7 +14,7 @@ import StoryTimeline from "@/components/StoryTimeline";
 import FollowStoryButton from "@/components/FollowStoryButton";
 import { AdSlot } from "@/components/AdSlot";
 import { NativeAdsSection } from "@/components/NativeAdsSection";
-import { DmsLeaderboardAd, useAdTracking } from "@/components/DmsAdSlot";
+import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 import { SocialShareBar } from "@/components/SocialShareBar";
 import { DigitalPassportButton } from "@/components/passport/DigitalPassportButton";
 import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
@@ -25,7 +25,6 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { InfographicDetail } from "@/components/InfographicDetail";
 import { DataInfographicPage } from "@/components/data-infographic/DataInfographicPage";
 import { RelatedInfographics } from "@/components/RelatedInfographics";
-import { SmartInsights } from "@/components/SmartInsights";
 import { WeeklyPhotosDisplay } from "@/components/WeeklyPhotosDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,7 +73,10 @@ import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
-const AiArticleStats = lazy(() => 
+// الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
+const SHOW_TOP_AD = true;
+
+const AiArticleStats = lazy(() =>
   import("@/components/AiArticleStats").then(module => ({ default: module.AiArticleStats }))
 );
 
@@ -98,27 +100,12 @@ export default function ArticleDetail() {
       return false;
     }
   });
-  // Smart insights toggle state (persisted in localStorage)
-  const [isInsightsOpen, setIsInsightsOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("article:isInsightsOpen") === "true";
-    } catch {
-      return false;
-    }
-  });
 
   useEffect(() => {
     try {
       window.localStorage.setItem("article:isSummaryExpanded", String(isSummaryExpanded));
     } catch {}
   }, [isSummaryExpanded]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("article:isInsightsOpen", String(isInsightsOpen));
-    } catch {}
-  }, [isInsightsOpen]);
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
@@ -179,6 +166,20 @@ export default function ArticleDetail() {
     },
   });
   const aiBullets = storedBullets.length > 0 ? storedBullets : (bulletsData?.bullets || []);
+  // الفقرة الموسّعة غالباً نفس نص النقاط (تقسيم جُمل) — لا نكررها تحت «اقرأ المزيد»
+  const summaryDetailText = (article?.aiSummary || article?.excerpt || "").trim();
+  const showSummaryDetail = useMemo(() => {
+    if (!summaryDetailText) return false;
+    if (aiBullets.length === 0) return true;
+    const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+    const joined = normalize(aiBullets.join(" "));
+    const detail = normalize(summaryDetailText);
+    if (!joined) return true;
+    if (joined === detail) return false;
+    const shorter = joined.length <= detail.length ? joined : detail;
+    const longer = joined.length <= detail.length ? detail : joined;
+    return !longer.includes(shorter) || longer.length > shorter.length * 1.35;
+  }, [summaryDetailText, aiBullets]);
 
   // DMS Ad tracking for article page
   useAdTracking(article?.category?.nameAr || '', article?.id);
@@ -948,9 +949,9 @@ export default function ArticleDetail() {
     try {
       setIsLoadingAudio(true);
       
-      // Cache busting: include article updatedAt + TTS provider version (bump when switching providers)
+      // Cache busting: include article updatedAt + TTS version (bump when normalize/provider changes)
       const timestamp = article?.updatedAt ? new Date(article.updatedAt).toISOString() : new Date().toISOString();
-      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=google-v1`;
+      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=tafqit-v2`;
       
       // Create audio element
       audioRef.current = new Audio(audioUrl);
@@ -1170,10 +1171,13 @@ export default function ArticleDetail() {
     <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
       <Header user={user} />
 
-      {/* DMS Leaderboard Ad - Desktop only */}
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
-        <DmsLeaderboardAd />
-      </div>
+      {/* الإعلان البارز أعلى المقال — أُعيد إظهاره 2026-07-09 بطلب المالك. للإخفاء: بدّل SHOW_TOP_AD إلى false. */}
+      {SHOW_TOP_AD && (
+        /* DMS Leaderboard Ad - Desktop only */
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
+          <DmsLeaderboardAd />
+        </div>
+      )}
 
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
 
@@ -1374,7 +1378,7 @@ export default function ArticleDetail() {
                           الموجز
                         </h3>
                         <div className="flex items-center gap-2">
-                          {(article.aiSummary || article.excerpt) && (
+                          {showSummaryDetail && (
                             <CollapsibleTrigger asChild>
                               <Button
                                 variant="ghost"
@@ -1440,14 +1444,14 @@ export default function ArticleDetail() {
                         </ul>
                       )}
 
-                      {/* Expanded detailed paragraph */}
-                      {(article.aiSummary || article.excerpt) && (
+                      {/* Expanded detailed paragraph — فقط إن اختلف عن النقاط */}
+                      {showSummaryDetail && (
                         <CollapsibleContent>
                           <p
                             className="mt-3 pt-3 border-t text-xs sm:text-sm text-muted-foreground leading-relaxed"
                             data-testid="text-smart-summary"
                           >
-                            {article.aiSummary || article.excerpt}
+                            {summaryDetailText}
                           </p>
                         </CollapsibleContent>
                       )}
@@ -1457,36 +1461,8 @@ export default function ArticleDetail() {
               </Collapsible>
             )}
 
-            {/*
-              DMS MPU Ad (mobile, under الموجز) DISABLED 2026-06-05 per user
-              request — clears the ad that sat right below the AI summary box
-              on the MOBILE web article view. Only this mobile slot is removed;
-              DMS tracking + the desktop Leaderboard stay intact. Re-add
-              <DmsMpuAd id="MPU" lazyLoad={true} /> (and its import) to restore.
-            */}
-
-            {/* Smart AI Insights - secondary trigger (visible only for authenticated users) */}
-            {article.status === "published" && user && (
-              <div className="flex flex-col items-start gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsInsightsOpen((v) => !v)}
-                  className="gap-2"
-                  data-testid="button-toggle-insights"
-                  aria-expanded={isInsightsOpen}
-                  aria-label={isInsightsOpen ? "إخفاء التحليل الذكي" : "حلّل هذا الخبر بالذكاء الاصطناعي"}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {isInsightsOpen ? "إخفاء التحليل" : "حلّل هذا الخبر"}
-                </Button>
-                {isInsightsOpen && (
-                  <div className="w-full">
-                    <SmartInsights articleId={article.id} articleTitle={article.title} autoStart />
-                  </div>
-                )}
-              </div>
-            )}
+            {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
+            <DmsMpuAd id="MPU" lazyLoad={true} />
 
             {/* Article Content or Paywall */}
             <div className="bg-card border rounded-lg p-6">

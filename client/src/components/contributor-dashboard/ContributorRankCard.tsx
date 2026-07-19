@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Medal, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { apiUrl } from "@/lib/queryClient";
 
 interface RankingData {
   rank: number | null;
@@ -20,7 +21,7 @@ export function ContributorRankCard({ roleType = "opinion_author", loading: pare
   const { data, isLoading } = useQuery<RankingData>({
     queryKey: ["/api/contributor/ranking", roleType],
     queryFn: async () => {
-      const res = await fetch(`/api/contributor/ranking?role=${roleType}`);
+      const res = await fetch(apiUrl(`/api/contributor/ranking?role=${roleType}`));
       if (!res.ok) throw new Error("Failed to fetch ranking");
       return res.json();
     },
@@ -50,7 +51,7 @@ export function ContributorRankCard({ roleType = "opinion_author", loading: pare
                 <span className="text-3xl font-bold">#{data.rank}</span>
                 <span className="text-sm text-muted-foreground">من {data.totalAuthors}</span>
                 {data.isTopTen && (
-                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs">
+                  <Badge className="bg-warning/15 text-warning dark:bg-warning/15 dark:text-warning text-xs">
                     الأكثر قراءة
                   </Badge>
                 )}

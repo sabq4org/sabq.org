@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Article
@@ -114,6 +115,7 @@ fun SettingsScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     onLoginClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
+    onPredictionsClick: () -> Unit = {},
     onEditProfileClick: () -> Unit = {},
     onChangePasswordClick: () -> Unit = {},
     onDeleteAccountClick: () -> Unit = {},
@@ -188,6 +190,9 @@ fun SettingsScreen(
         if (currentUser != null) {
             LoyaltyEntryRow(onClick = onLoyaltyClick)
         }
+
+        // 4-ب) مركز التوقّعات — المنصة المركزية (متاح للجميع، الإرسال للمسجّلين)
+        PredictionsEntryRow(onClick = onPredictionsClick)
 
         // 4) Press card entry — DEFERRED (editorial direction 2026-05-19)
 
@@ -1022,7 +1027,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = "مركز الأداء",
+                text = "لوحة الكاتب",
                 style = SabqTheme.typography.compactCardTitle.copy(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
@@ -1030,7 +1035,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
                 ),
             )
             Text(
-                text = "إحصائيات مقالاتك وتفاعل جمهورك",
+                text = "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
                 style = SabqTheme.typography.metaSmall.copy(
                     fontSize = 12.sp,
                     color = SabqTheme.colors.secondaryInk,
@@ -1091,6 +1096,64 @@ private fun LoyaltyEntryRow(onClick: () -> Unit) {
             )
             Text(
                 text = "تابع مستواك واستبدل نقاطك",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// مدخل مركز التوقّعات — نفس بنية LoyaltyEntryRow
+@Composable
+private fun PredictionsEntryRow(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
+            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SabqTheme.colors.primaryStart.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SportsSoccer,
+                contentDescription = null,
+                tint = SabqTheme.colors.primaryStart,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "توقّعات البطولات",
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "توقّع نتائج المباريات وتنافس على النقاط والجوائز",
                 style = SabqTheme.typography.metaSmall.copy(
                     fontSize = 12.sp,
                     color = SabqTheme.colors.secondaryInk,

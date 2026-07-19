@@ -35,37 +35,39 @@ export function AdminPublisherNav() {
 
   const isActive = (href: string) => {
     if (href === "/dashboard/admin/publishers") {
-      return location === href || location === "/dashboard/admin/publishers/";
+      // القائمة + صفحة تفاصيل وكالة (UUID/id) — دون مقالات/تحليلات/دليل
+      if (location === href || location === "/dashboard/admin/publishers/") return true;
+      const detailMatch = location.match(/^\/dashboard\/admin\/publishers\/([^/]+)$/);
+      if (!detailMatch) return false;
+      return !["articles", "analytics", "guide"].includes(detailMatch[1]);
     }
     return location.startsWith(href);
   };
 
   return (
-    <nav className="border-b bg-background" dir="rtl">
-      <div className="container mx-auto px-6">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            
-            return (
-              <Link key={item.href} href={item.href}>
-                <a
-                  className={cn(
-                    "inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
-                    active
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground"
-                  )}
-                  data-testid={item.testId}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </a>
-              </Link>
-            );
-          })}
-        </div>
+    <nav className="rounded-2xl border bg-card p-1" dir="rtl" data-testid="admin-publisher-nav">
+      <div className="flex items-center gap-1 overflow-x-auto">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+
+          return (
+            <Link key={item.href} href={item.href}>
+              <a
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors whitespace-nowrap",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                data-testid={item.testId}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </a>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

@@ -227,7 +227,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
 
                         {/* Date */}
                         {art.formattedDate && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1 text-xs font-medium text-foreground/65">
                             <Clock className="h-3 w-3" />
                             {art.formattedDate}
                           </span>
@@ -378,7 +378,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
 
                         {/* Date */}
                         {article.formattedDate && (
-                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1 text-[10px] font-medium text-foreground/65">
                             <Clock className="h-3 w-3" />
                             {article.formattedDate}
                           </span>
@@ -608,7 +608,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
 
                         {/* Date */}
                         {article.formattedDate && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1 text-xs font-medium text-foreground/65">
                             <Clock className="h-3 w-3" />
                             {article.formattedDate}
                           </span>
@@ -780,7 +780,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
 
                         {/* Date */}
                         {article.formattedDate && (
-                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1 text-[10px] font-medium text-foreground/65">
                             <Clock className="h-3 w-3" />
                             {article.formattedDate}
                           </span>

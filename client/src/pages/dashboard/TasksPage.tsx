@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddTaskQuickPane, TaskViewDialog, TaskEditDialog } from "@/components/tasks";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import { 
   ListTodo, 
@@ -57,8 +60,7 @@ import {
   Palette,
   LucideIcon
 } from "lucide-react";
-import { format, isPast } from "date-fns";
-import { ar } from "date-fns/locale";
+import { isPast } from "date-fns";
 import type { Task, InsertTask } from "@shared/schema";
 
 interface TaskStatistics {
@@ -105,6 +107,14 @@ const priorityLabels: Record<string, string> = {
   high: 'عالية',
   critical: 'عاجلة',
 };
+
+function formatTaskDate(date: Date) {
+  return date.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
   switch (status) {
@@ -262,7 +272,7 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
               {dueDateValue ? (
                 <div className="flex items-center gap-2">
                   <span className={taskIsOverdue ? 'text-red-600' : ''}>
-                    {format(dueDateValue, 'PPP', { locale: ar })}
+                    {formatTaskDate(dueDateValue)}
                   </span>
                   {taskIsOverdue && (
                     <AlertCircle className="h-4 w-4 text-red-600" data-testid={`icon-overdue-${subtask.id}`} />
@@ -414,7 +424,7 @@ function TaskRowWithSubtasks({
           {dueDateValue ? (
             <div className="flex items-center gap-2">
               <span className={taskIsOverdue ? 'text-red-600' : ''}>
-                {format(dueDateValue, 'PPP', { locale: ar })}
+                {formatTaskDate(dueDateValue)}
               </span>
               {taskIsOverdue && (
                 <AlertCircle className="h-4 w-4 text-red-600" data-testid={`icon-overdue-${task.id}`} />
@@ -534,7 +544,7 @@ function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: M
         )}
         {task.dueDate && (
           <span className="text-muted-foreground" data-testid={`text-due-date-${task.id}`}>
-            {format(new Date(task.dueDate), 'PPP', { locale: ar })}
+            {formatTaskDate(new Date(task.dueDate))}
           </span>
         )}
         {task.assignedToId && (
@@ -576,6 +586,7 @@ function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: M
 
 export default function TasksPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [viewTaskId, setViewTaskId] = useState<string | null>(null);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
@@ -627,6 +638,10 @@ export default function TasksPage() {
       if (!res.ok) throw new Error('Failed to fetch users');
       return await res.json();
     },
+    // /api/users requires admin.manage_settings; only fetch for users who can,
+    // so non-admins don't generate (retry-amplified) 403s on page load.
+    enabled: hasPermission(user, 'admin.manage_settings'),
+    retry: false,
   });
   const users = Array.isArray(usersRaw) ? usersRaw : [];
 
@@ -743,76 +758,88 @@ export default function TasksPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <ListTodo className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold" data-testid="heading-tasks">
-                مركز المهام
-              </h1>
-            </div>
-            <p className="text-muted-foreground mt-2">
-              إدارة المهام والمتابعة
-            </p>
-          </div>
-        </div>
+      <DashboardPageShell>
+        <DashboardPageHeader
+          icon={ListTodo}
+          title="مركز المهام"
+          description="إدارة المهام والمتابعة"
+          titleTestId="heading-tasks"
+        />
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card data-testid="card-stat-total">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Card
+            className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15"
+            data-testid="card-stat-total"
+          >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <ListTodo className="h-4 w-4" />
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                  <ListTodo className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+                </span>
                 إجمالي المهام
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold" data-testid="text-stat-total">
-                {(statistics?.total ?? 0).toLocaleString('en-US')}
+              <div className="text-xl font-bold tabular-nums" data-testid="text-stat-total">
+                {(statistics?.total ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
-          
-          <Card data-testid="card-stat-in-progress">
+
+          <Card
+            className="rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm dark:border-cyan-900/35 dark:from-cyan-950/15"
+            data-testid="card-stat-in-progress"
+          >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Clock className="h-4 w-4" />
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
+                  <Clock className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
+                </span>
                 قيد العمل
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold text-blue-600" data-testid="text-stat-in-progress">
-                {(statistics?.in_progress ?? 0).toLocaleString('en-US')}
+              <div className="text-xl font-bold tabular-nums text-cyan-700 dark:text-cyan-300" data-testid="text-stat-in-progress">
+                {(statistics?.in_progress ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
-          
-          <Card data-testid="card-stat-overdue">
+
+          <Card
+            className="rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm dark:border-rose-900/35 dark:from-rose-950/15"
+            data-testid="card-stat-overdue"
+          >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <span className="rounded-lg bg-rose-100/80 p-1.5 dark:bg-rose-950/40">
+                  <AlertCircle className="h-4 w-4 text-rose-700 dark:text-rose-300" />
+                </span>
                 متأخرة
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold text-red-600" data-testid="text-stat-overdue">
-                {(statistics?.overdue ?? 0).toLocaleString('en-US')}
+              <div className="text-xl font-bold tabular-nums text-rose-700 dark:text-rose-300" data-testid="text-stat-overdue">
+                {(statistics?.overdue ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
-          
-          <Card data-testid="card-stat-completed">
+
+          <Card
+            className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15"
+            data-testid="card-stat-completed"
+          >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+                </span>
                 مكتملة
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold text-green-600" data-testid="text-stat-completed">
-                {(statistics?.completed ?? 0).toLocaleString('en-US')}
+              <div className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300" data-testid="text-stat-completed">
+                {(statistics?.completed ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
@@ -827,7 +854,10 @@ export default function TasksPage() {
         />
 
         {/* Filters Section */}
-        <Card data-testid="card-filters">
+        <Card
+          className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15"
+          data-testid="card-filters"
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Filter className="h-5 w-5" />
@@ -929,11 +959,11 @@ export default function TasksPage() {
 
         {/* Tasks Table */}
         {!isError && (
-          <Card>
+          <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
             <CardHeader>
               <CardTitle>جميع المهام</CardTitle>
-              <CardDescription>
-                عرض ({(tasksData?.tasks?.length ?? 0).toLocaleString('en-US')}) من ({(tasksData?.total ?? 0).toLocaleString('en-US')}) مهمة
+              <CardDescription className="tabular-nums">
+                عرض ({(tasksData?.tasks?.length ?? 0).toLocaleString("en-US")}) من ({(tasksData?.total ?? 0).toLocaleString("en-US")}) مهمة
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1014,8 +1044,8 @@ export default function TasksPage() {
                   {/* Pagination */}
                   {tasksData && tasksData.totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4">
-                      <div className="text-sm text-muted-foreground">
-                        صفحة {page.toLocaleString('en-US')} من {tasksData.totalPages.toLocaleString('en-US')}
+                      <div className="text-sm text-muted-foreground tabular-nums">
+                        صفحة {page.toLocaleString("en-US")} من {tasksData.totalPages.toLocaleString("en-US")}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1087,7 +1117,7 @@ export default function TasksPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }

@@ -158,13 +158,12 @@ struct JustifiedAttributedText: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var onLinkTap: ((URL) -> Void)?
         var fingerprint: String = ""
-        func textView(_ textView: UITextView, shouldInteractWith URL: URL,
-                      in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
-            if let handler = onLinkTap {
-                handler(URL)
-                return false
+        func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
+                      defaultAction: UIAction) -> UIAction? {
+            if case .link(let url) = textItem.content, let handler = onLinkTap {
+                return UIAction { _ in handler(url) }
             }
-            return true
+            return defaultAction
         }
     }
 }
@@ -239,7 +238,7 @@ struct JustifiedTextDebugPreview: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Text("اختبار المحاذاة من الطرفين")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(SabqFonts.app(size: 22, weight: .bold))
                 Divider()
                 JustifiedText(
                     text: "كشفت دراسة فرنسية جديدة أن المواد الحافظة الشائعة في الأطعمة فائقة المعالجة مرتبطة بزيادة خطر الإصابة بأمراض القلب والأوعية الدموية. ووفقاً لصحيفة الديلي ميل، تابعت الدراسة المنشورة في مجلة بريتيش ميديكال جورنال أكثر من 112 ألف شخص لمدة تسع سنوات. وأوضح فريق البحث من جامعة باريس سيتي أن ثمانية من هذه المواد تُستخدم عادة في اللحوم المصنعة والمخبوزات الجاهزة والمشروبات الغازية والوجبات السريعة وتأثيراتها التراكمية على الصحة لم تُدرس بشكل كافٍ حتى الآن.",

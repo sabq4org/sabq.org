@@ -37,9 +37,9 @@ struct TwitterEmbedView: View {
             Link(destination: tweetURL) {
                 HStack(spacing: 5) {
                     Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                     Text("افتح التغريدة في X")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                 }
                 .foregroundStyle(SabqTheme.primaryEnd)
             }
@@ -53,14 +53,14 @@ struct TwitterEmbedView: View {
                     .fill(Color.black)
                     .frame(width: 44, height: 44)
                 Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(SabqFonts.app(size: 18, weight: .heavy))
                     .foregroundStyle(.white)
             }
             ProgressView()
                 .controlSize(.small)
                 .tint(SabqTheme.tertiaryInk)
             Text("تحميل التغريدة…")
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .frame(maxWidth: .infinity)
@@ -167,7 +167,12 @@ private struct TwitterWebView: UIViewRepresentable {
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             if navigationAction.navigationType == .linkActivated,
                let url = navigationAction.request.url {
-                UIApplication.shared.open(url)
+                // http/https حصرًا: بدون هذا القيد يستطيع HTML مخزَّن في جسم
+                // مقال فتح tel:/facetime:/schemes مخصّصة بنقرة داخل «التغريدة».
+                if let scheme = url.scheme?.lowercased(),
+                   scheme == "http" || scheme == "https" {
+                    UIApplication.shared.open(url)
+                }
                 decisionHandler(.cancel)
                 return
             }

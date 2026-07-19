@@ -1,4 +1,5 @@
 import { cloudflareImagesService } from './cloudflareImagesService';
+import { newsImageStorageService } from './newsImageStorageService';
 
 /**
  * Delete the underlying blob for a media file from whichever backend stores it
@@ -9,6 +10,10 @@ import { cloudflareImagesService } from './cloudflareImagesService';
  */
 export async function deleteMediaBlob(url: string): Promise<void> {
   try {
+    if (await newsImageStorageService.deleteByPublicUrl(url)) {
+      console.log('[Media Delete] Deleted R2 news image family');
+      return;
+    }
     const cfImageId = cloudflareImagesService.extractImageId(url);
     if (cfImageId) {
       await cloudflareImagesService.deleteImage(cfImageId);

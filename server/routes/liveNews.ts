@@ -2,6 +2,7 @@ import { Router } from "express";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { cacheControl } from "../cacheMiddleware";
+import { withSWR } from "../memoryCache";
 import { articles, categories, comments } from "@shared/schema";
 
 const router: Router = Router();
@@ -13,6 +14,35 @@ router.get("/api/live/updates", cacheControl({ maxAge: 30, staleWhileRevalidate:
     const cursor = req.query.cursor as string | undefined;
     const filter = req.query.filter as string | undefined;
 
+    // المسار الساخن (الاستطلاع الدوري بلا cursor) كان يضرب القاعدة
+    // باستعلامين لكل طلب — وهو الـculprit في عاصفة نشر 2026-07-18
+    // (NODE-EXPRESS-B: 267 حدث في 4 دقائق). SWR قصير (15s طازج / 30s
+    // قديم-مع-تحديث) يجعل كل البود يخدم من الذاكرة ويحمي الـpool وقت
+    // الإقلاع والذروات. صفحات الـcursor تبقى بلا كاش: مفاتيحها غير
+    // محدودة (قيم timestamps) وتضخّم memoryCache بلا فائدة تذكر.
+    if (!cursor) {
+      const cacheKey = `live-updates:${filter || "all"}:${limit}`;
+      const payload = await withSWR(cacheKey, 15_000, 30_000, () =>
+        fetchLiveUpdates(limit, cursor, filter),
+      );
+      res.json(payload);
+      return;
+    }
+
+    const payload = await fetchLiveUpdates(limit, cursor, filter);
+    res.json(payload);
+  } catch (error) {
+    console.error("Error fetching live updates:", error);
+    res.status(500).json({ message: "Failed to fetch live updates" });
+  }
+});
+
+async function fetchLiveUpdates(
+  limit: number,
+  cursor: string | undefined,
+  filter: string | undefined,
+) {
+  {
     const whereConditions = [
       sql`${articles.status} = 'published'`,
       sql`${articles.publishedAt} IS NOT NULL`,
@@ -99,15 +129,12 @@ router.get("/api/live/updates", cacheControl({ maxAge: 30, staleWhileRevalidate:
         ? items[items.length - 1].publishedAt?.toISOString()
         : null;
 
-    res.json({
+    return {
       items: formattedItems,
       nextCursor,
-    });
-  } catch (error) {
-    console.error("Error fetching live updates:", error);
-    res.status(500).json({ message: "Failed to fetch live updates" });
+    };
   }
-});
+}
 
 // GET /api/live/breaking - Get latest 5 breaking news
 router.get("/api/live/breaking", async (req, res) => {

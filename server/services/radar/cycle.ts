@@ -9,7 +9,16 @@
 import type { RadarItem } from "@shared/schema";
 import { analyzeItems } from "./analyst";
 import { processAlerts } from "./alerts";
+import { clusterRadarItems, itemsNeedingClustering } from "./clusterer";
 import { fetchSource } from "./fetcher";
+import {
+  isClusteringEnabled,
+  isMomentumEnabled,
+  isRadarForceDisabled,
+  isRelevanceEnabled,
+} from "./flags";
+import { refreshStoryMomentum } from "./momentum";
+import { refreshStoryRelevance } from "./relevance";
 import {
   breakingItemsNeedingDraft,
   cleanupOldItems,
@@ -21,7 +30,10 @@ import {
 } from "./repo";
 import { transformItem } from "./transformer";
 
-const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 12);
+// بعد توسعة المصادر تراكم طابور إنجليزي — دفعة أكبر + جولات متعددة لتصفية الترجمة
+const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 20);
+const MAX_ANALYZE_ROUNDS = Math.max(1, Number(process.env.RADAR_MAX_ANALYZE_ROUNDS || 3));
+const MAX_CLUSTER_PER_RUN = Number(process.env.RADAR_MAX_CLUSTER_PER_RUN || 40);
 const AUTO_TRANSFORM_MIN_SCORE = Number(process.env.RADAR_AUTOTRANSFORM_MIN_SCORE || 80);
 const MAX_AUTO_TRANSFORM_PER_RUN = 2;
 const RETENTION_DAYS = Number(process.env.RADAR_RETENTION_DAYS || 14);
@@ -31,6 +43,8 @@ export interface RadarCycleSummary {
   sourcesFetched: number;
   newItems: number;
   analyzed: number;
+  clustered: number;
+  storiesCreated: number;
   alertsSent: number;
   autoDrafts: number;
   cleaned: number;
@@ -39,6 +53,9 @@ export interface RadarCycleSummary {
 
 /** جلب مصدر واحد يدويًا (زر "جلب الآن" في الواجهة) — يعيد عدد الجديد */
 export async function fetchSingleSource(sourceId: string): Promise<number> {
+  if (isRadarForceDisabled()) {
+    throw new Error("RADAR_FORCE_DISABLED");
+  }
   const source = await getSource(sourceId);
   if (!source) throw new Error("RADAR_SOURCE_NOT_FOUND");
   try {
@@ -58,11 +75,17 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     sourcesFetched: 0,
     newItems: 0,
     analyzed: 0,
+    clustered: 0,
+    storiesCreated: 0,
     alertsSent: 0,
     autoDrafts: 0,
     cleaned: 0,
     errors: 0,
   };
+
+  if (isRadarForceDisabled()) {
+    return summary;
+  }
 
   // 1) الجلب — فشل مصدر واحد لا يوقف البقية
   const due = await sourcesDueForFetch();
@@ -86,24 +109,73 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
       summary.newItems += result.value;
     } else {
       summary.errors++;
-      console.error("[Radar] source fetch failed:", result.reason);
+      // فشل جلب/تحليل مصدر RSS (مثل "Unable to parse XML") حالة متوقَّعة لمصادر
+      // متقلّبة؛ نكتفي بالرسالة المختصرة بدل إغراق السجلّات بالـ stack كل دقيقة.
+      const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      console.warn("[Radar] source fetch failed:", reason);
     }
   }
 
-  // 2) التحليل — دفعة واحدة بنداء نموذج واحد
-  let analyzed: RadarItem[] = [];
+  // 2) التحليل + الترجمة — جولات متتالية حتى يصفو الطابور أو يبلغ السقف
+  const analyzed: RadarItem[] = [];
   try {
-    const pending = await itemsNeedingAnalysis(MAX_ANALYZE_PER_RUN);
-    if (pending.length) {
-      analyzed = await analyzeItems(pending);
-      summary.analyzed = analyzed.length;
+    for (let round = 0; round < MAX_ANALYZE_ROUNDS; round++) {
+      const pending = await itemsNeedingAnalysis(MAX_ANALYZE_PER_RUN);
+      if (!pending.length) break;
+      const batch = await analyzeItems(pending);
+      analyzed.push(...batch);
+      summary.analyzed += batch.length;
+      // دفعة ناقصة = لا مزيد في الطابور
+      if (pending.length < MAX_ANALYZE_PER_RUN) break;
     }
   } catch (error) {
     summary.errors++;
     console.error("[Radar] analysis failed:", error);
   }
 
-  // 3) التنبيهات على ما حُلّل للتو
+  // 3) تجميع القصص (خلف flag) — بعد التحليل لتوفر العناوين المترجمة عند الإمكان
+  if (isClusteringEnabled()) {
+    try {
+      const pool = analyzed.length
+        ? analyzed
+        : await itemsNeedingClustering(MAX_CLUSTER_PER_RUN);
+      const result = await clusterRadarItems(pool);
+      summary.clustered = result.clustered;
+      summary.storiesCreated = result.created;
+      // أيضاً صفّ طابور المواد القديمة بلا قصة
+      if (analyzed.length) {
+        const backlog = await itemsNeedingClustering(MAX_CLUSTER_PER_RUN);
+        if (backlog.length) {
+          const more = await clusterRadarItems(backlog);
+          summary.clustered += more.clustered;
+          summary.storiesCreated += more.created;
+        }
+      }
+    } catch (error) {
+      summary.errors++;
+      console.error("[Radar] clustering failed:", error);
+    }
+  }
+
+  // 3ب) زخم + صلة على القصص النشطة
+  if (isMomentumEnabled()) {
+    try {
+      await refreshStoryMomentum(50);
+    } catch (error) {
+      summary.errors++;
+      console.error("[Radar] momentum failed:", error);
+    }
+  }
+  if (isRelevanceEnabled()) {
+    try {
+      await refreshStoryRelevance(40);
+    } catch (error) {
+      summary.errors++;
+      console.error("[Radar] relevance failed:", error);
+    }
+  }
+
+  // 4) التنبيهات على ما حُلّل في هذه الدورة
   try {
     summary.alertsSent = await processAlerts(analyzed);
   } catch (error) {
@@ -111,7 +183,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     console.error("[Radar] alerts failed:", error);
   }
 
-  // 4) التحويل التلقائي للعاجل عالي القيمة — أولوية Breaking News
+  // 5) التحويل التلقائي للعاجل عالي القيمة — أولوية Breaking News
   if (autoTransformEnabled()) {
     try {
       const candidates = await breakingItemsNeedingDraft(
@@ -133,7 +205,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     }
   }
 
-  // 5) تنظيف ساعيّ (الدقيقة 0 فقط) — لا حاجة لحذف كل دقيقة
+  // 6) تنظيف ساعيّ (الدقيقة 0 فقط) — لا حاجة لحذف كل دقيقة
   if (new Date().getMinutes() === 0) {
     try {
       summary.cleaned = await cleanupOldItems(RETENTION_DAYS);
@@ -141,6 +213,17 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
       summary.errors++;
       console.error("[Radar] cleanup failed:", error);
     }
+  }
+
+  // 7) رادار الفجوات التحريرية — fire-and-forget بعد اكتمال الدورة؛
+  // استيراد ديناميكي + catch مزدوج حتى لا يؤثر فشل المطابقة على دورة الرادار
+  try {
+    const { refreshCoverageGaps } = await import("../coverageGapMatcher");
+    void refreshCoverageGaps("radar-cycle").catch((error) => {
+      console.warn("[Radar] coverage-gap matching failed:", error instanceof Error ? error.message : error);
+    });
+  } catch (error) {
+    console.warn("[Radar] coverage-gap matcher unavailable:", error instanceof Error ? error.message : error);
   }
 
   return summary;

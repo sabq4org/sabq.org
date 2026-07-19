@@ -28,6 +28,17 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/payment',
   '/en/dashboard',
   '/ur/dashboard',
+  // مجالس التوقعات تحمل دعوات وواجهات عضوية شخصية؛ تبقى قابلة للمشاركة لكن
+  // لا تُفهرس ولا تُخزّن كغلاف HTML مشترك على الحافة.
+  '/gulf-cup/majlis',
+  // مسارات البوابة الرياضية التجريبية القديمة — تُحوَّل الآن إلى /sports المعتمد،
+  // وتبقى noindex حتى لا تُفهرس النسخ المكرّرة. (البوابة المعتمدة /sports مفهرسة.)
+  '/sports2',
+  '/sports3',
+  '/sports4',
+  '/sports5',
+  // صفحات الاستطلاعات برابط شخصي (توكن لكل مدعو) — لا فهرسة ولا تخزين على الحافة.
+  '/survey',
 ];
 
 export function isNoindexPath(pathname: string): boolean {

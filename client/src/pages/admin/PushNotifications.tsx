@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -255,7 +257,7 @@ export default function PushNotifications() {
         limit: String(pageSize),
         offset: String((page - 1) * pageSize),
       });
-      const res = await fetch(`/api/admin/push/campaigns?${params}`, {
+      const res = await fetch(apiUrl(`/api/admin/push/campaigns?${params}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("فشل في تحميل الحملات");
@@ -431,7 +433,7 @@ export default function PushNotifications() {
     
     setIsSearchingArticles(true);
     try {
-      const res = await fetch(`/api/articles/search-simple?q=${encodeURIComponent(query)}&limit=5`);
+      const res = await fetch(apiUrl(`/api/articles/search-simple?q=${encodeURIComponent(query)}&limit=5`));
       if (res.ok) {
         const data = await res.json();
         setArticleSearchResults(data.articles || data || []);
@@ -545,27 +547,27 @@ export default function PushNotifications() {
   return (
     <DashboardLayout>
       <ErrorBoundary>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" dir="rtl">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold" data-testid="text-page-title">
-                إدارة الإشعارات
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                إدارة حملات الإشعارات والتحليلات
-              </p>
-            </div>
+        <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="pb-10">
+          <DashboardPageHeader
+            icon={Bell}
+            title="إدارة الإشعارات"
+            description="أنشئ حملات الإشعارات وتابع وصولها وتفاعل الجمهور معها."
+            titleTestId="text-page-title"
+            actions={
             <Button onClick={handleCreateCampaign} data-testid="button-create-campaign">
               <Plus className="h-4 w-4 ml-2" />
               إنشاء حملة جديدة
             </Button>
-          </div>
+            }
+          />
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Card className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">حالة APNs</CardTitle>
-                <Bell className="h-4 w-4 text-muted-foreground" />
+                <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+                  <Bell className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+                </span>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-2" data-testid="text-apns-status">
@@ -573,43 +575,47 @@ export default function PushNotifications() {
                     <span className="text-muted-foreground">...</span>
                   ) : status?.configured ? (
                     <>
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      <span className="font-medium text-green-600">مفعّل</span>
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      <span className="font-medium text-emerald-600">مفعّل</span>
                       <Badge variant="outline" className="mr-2">{status.environment}</Badge>
                     </>
                   ) : (
                     <>
-                      <XCircle className="h-5 w-5 text-red-500" />
-                      <span className="font-medium text-red-600">غير مفعّل</span>
+                      <XCircle className="h-5 w-5 text-rose-500" />
+                      <span className="font-medium text-rose-600">غير مفعّل</span>
                     </>
                   )}
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">إجمالي الأجهزة</CardTitle>
-                <Smartphone className="h-4 w-4 text-muted-foreground" />
+                <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                  <Smartphone className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-devices">
-                  {statusLoading ? "..." : status?.devices?.total || 0}
+                <div className="text-2xl font-bold tabular-nums" data-testid="text-total-devices">
+                  {statusLoading ? "..." : (status?.devices?.total || 0).toLocaleString("en-US")}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {statusLoading ? "" : `${status?.devices?.active || 0} نشط`}
+                <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                  {statusLoading ? "" : `${(status?.devices?.active || 0).toLocaleString("en-US")} نشط`}
                 </p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm dark:border-cyan-900/35 dark:from-cyan-950/15">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">إجمالي الإرسالات</CardTitle>
-                <Send className="h-4 w-4 text-muted-foreground" />
+                <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
+                  <Send className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-sent">
-                  {analyticsLoading ? "..." : analytics?.campaigns?.totalSent || 0}
+                <div className="text-2xl font-bold tabular-nums" data-testid="text-total-sent">
+                  {analyticsLoading ? "..." : (analytics?.campaigns?.totalSent || 0).toLocaleString("en-US")}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   آخر 30 يوم
@@ -617,13 +623,15 @@ export default function PushNotifications() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card shadow-sm dark:border-amber-900/35 dark:from-amber-950/15">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">معدل الفتح</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <span className="rounded-lg bg-amber-100/80 p-1.5 dark:bg-amber-950/40">
+                  <TrendingUp className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-open-rate">
+                <div className="text-2xl font-bold tabular-nums" data-testid="text-open-rate">
                   {analyticsLoading
                     ? "..."
                     : `${getOpenRate(
@@ -631,8 +639,8 @@ export default function PushNotifications() {
                         analytics?.campaigns?.totalOpened || 0
                       )}%`}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {analytics?.campaigns?.totalOpened || 0} فتحوا الإشعار
+                <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                  {(analytics?.campaigns?.totalOpened || 0).toLocaleString("en-US")} فتحوا الإشعار
                 </p>
               </CardContent>
             </Card>
@@ -1345,7 +1353,7 @@ export default function PushNotifications() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
+        </DashboardPageShell>
       </ErrorBoundary>
     </DashboardLayout>
   );

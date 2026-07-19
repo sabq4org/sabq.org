@@ -11,6 +11,7 @@ import {
   WC_FINISHED_STATUSES,
   WC_LIVE_STATUSES,
   WC_STATUS_AR,
+  WC_PLAYER_AR,
   localizeEvent,
   localizeGroup,
   localizeRound,
@@ -18,15 +19,50 @@ import {
   localizeVenue,
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
+import {
+  WC_COMPETITION_ID,
+  getTsTeamExtra,
+  getTsCoach,
+  getTsVenue,
+  getTsCompetitionExtra,
+  getTsCompetitionMatchPairs,
+  getTsFifaRanking,
+  getTsTeamInjuries,
+  getTsMatchTv,
+  getTsMatchTeamStats,
+  getTsMatchTrend,
+  getTsLineup,
+  getTsTeamSquad,
+  getTsPlayerMarketHistory,
+  getTsSeasonTeamStats,
+  getTsMatchPlayerStats,
+  resolveTsNames,
+  TS_I18N_TYPE,
+  type TsTeamStatSide,
+  type TsLineup,
+  type TsLineupPlayer,
+} from "./theSportsService";
+import { type WcMomentum, type WcPressure } from "./sportmonksService";
+import pLimit from "p-limit";
+import { buildBracketModel, isSyntheticFixtureId, mergeFullKnockoutSchedule, type WcBracketModel } from "./wc2026Bracket";
+import { apiFootballGet } from "./apiFootballClient";
 
-const API_BASE = "https://v3.football.api-sports.io";
+// تجميع سباقات الهدّافين يحتاج أحداث كل المباريات الجارية/المنتهية دفعةً واحدة.
+// بلا حدّ تزامن كان Promise.all يطلق طلبًا (أو ثلاثة) لكل مباراة في نفس اللحظة،
+// فيُغرق حصة المزود ويُشعل rate-limit بعد كل إعادة تشغيل (كاش بارد). نحدّه بـ 4.
+const MATCH_FETCH_CONCURRENCY = 4;
 const LEAGUE_ID = 1; // World Cup
 const SEASON = 2026;
 const TIMEZONE = "Asia/Riyadh";
 
-// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني
-const LIVE_TTL = 15 * 1000;
-const FIXTURES_TTL = 60 * 1000;
+// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني.
+// 8ث (كان 15): قائمة المباريات الجارية تُلتقط أسرع (بدء/انتهاء) لتطابق إيقاع
+// النتيجة اللحظية المُركّبة فوقها. النتيجة نفسها تأتي من TheSports (5ث)/SportMonks
+// (دفعة 4ث) في الطبقة، فلا يحدّها هذا الكاش.
+const LIVE_TTL = 8 * 1000;
+// 30ث (كان 60): يلتقط cron أخبار المونديال لحظة FT أبكر بعد صافرة النهاية،
+// فيقلّص تأخّر نشر تقرير ما بعد المباراة. البيانات الحية تتغيّر بالثواني.
+const FIXTURES_TTL = 30 * 1000;
 const MATCH_DETAIL_LIVE_TTL = 20 * 1000;
 // المزود ينشر التشكيلات قبل الانطلاق بـ 20–40 دقيقة — كاش 5 دقائق يؤخرها حتى الصافرة
 const MATCH_DETAIL_PREKICKOFF_TTL = 60 * 1000;
@@ -37,27 +73,7 @@ export function isWorldCupConfigured(): boolean {
 }
 
 async function apiGet(path: string, params: Record<string, string | number>): Promise<any[]> {
-  const apiKey = (process.env.APIFOOTBALL_KEY || "").trim();
-  if (!apiKey) throw new Error("APIFOOTBALL_KEY is not set");
-
-  const url = new URL(`${API_BASE}/${path}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-
-  const response = await fetch(url, {
-    headers: { "x-apisports-key": apiKey },
-    signal: AbortSignal.timeout(15_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`[WorldCup] API-Football HTTP ${response.status} for ${path}`);
-  }
-
-  const data: any = await response.json();
-  const errors = data?.errors;
-  if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
-    throw new Error(`[WorldCup] API-Football error for ${path}: ${JSON.stringify(errors)}`);
-  }
-  return Array.isArray(data?.response) ? data.response : [];
+  return apiFootballGet("WorldCup", path, params);
 }
 
 // ---------- DTOs المُعرَّبة التي تستهلكها الواجهة ----------
@@ -67,6 +83,8 @@ export interface WcTeam {
   name: string;
   logo: string;
   winner: boolean | null;
+  /** ترتيب فيفا للمنتخب (TheSports) — يُملأ في قائمة المنتخبات فقط، اختياري */
+  fifaRank?: number | null;
 }
 
 export interface WcFixture {
@@ -88,6 +106,12 @@ export interface WcFixture {
   away: WcTeam;
   goals: { home: number | null; away: number | null };
   penalties: { home: number | null; away: number | null } | null;
+  /** رقم المباراة الرسمي (73–104) — الأدوار الإقصائية فقط */
+  matchNo?: number;
+  /** رمز خانة FIFA للمضيف عندما لم يُحسم المنتخب بعد (W74، 2A، …) */
+  homeCode?: string;
+  /** رمز خانة FIFA للضيف عندما لم يُحسم المنتخب بعد */
+  awayCode?: string;
 }
 
 function localizeTeam(raw: any): WcTeam {
@@ -130,15 +154,24 @@ function localizeFixture(item: any): WcFixture {
 
 // ---------- نقاط البيانات المكشوفة للراوتر ----------
 
-export async function getFixtures(): Promise<WcFixture[]> {
-  return withSWR("wc:fixtures", FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
-    const rows = await apiGet("fixtures", {
-      league: LEAGUE_ID,
-      season: SEASON,
-      timezone: TIMEZONE,
-    });
-    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
-  });
+export async function getFixtures(
+  opts: { forceFresh?: boolean } = {}
+): Promise<WcFixture[]> {
+  return withSWR(
+    "wc:fixtures",
+    FIXTURES_TTL,
+    FIXTURES_TTL * 2,
+    async () => {
+      const rows = await apiGet("fixtures", {
+        league: LEAGUE_ID,
+        season: SEASON,
+        timezone: TIMEZONE,
+      });
+      const apiFixtures = rows.map(localizeFixture);
+      return mergeFullKnockoutSchedule(apiFixtures).sort((a, b) => a.timestamp - b.timestamp);
+    },
+    opts.forceFresh ?? false
+  );
 }
 
 export async function getLiveFixtures(): Promise<WcFixture[]> {
@@ -153,6 +186,37 @@ export async function getLiveFixtures(): Promise<WcFixture[]> {
   });
 }
 
+/**
+ * هوية المباراة الخام (أسماء إنجليزية + توقيت UTC + الحالة) — يحتاجها
+ * sportmonksService لمطابقة المباراة عند مزوّد آخر بمعرّفات مختلفة.
+ * منفصلة عن DTOs المُعرَّبة لأن المطابقة تحتاج الاسم الإنجليزي لا العربي.
+ */
+export interface WcFixtureIdentity {
+  kickoffIso: string; // ISO مع الإزاحة (نشتق منه يوم UTC)
+  homeNameEn: string;
+  awayNameEn: string;
+  live: boolean;
+  finished: boolean;
+}
+
+export async function getFixtureIdentity(fixtureId: number): Promise<WcFixtureIdentity | null> {
+  return withSWR(`wc:identity:${fixtureId}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return null;
+    const code: string = item.fixture?.status?.short ?? "TBD";
+    return {
+      kickoffIso: item.fixture?.date ?? "",
+      homeNameEn: item.teams?.home?.name ?? "",
+      awayNameEn: item.teams?.away?.name ?? "",
+      live: WC_LIVE_STATUSES.has(code),
+      finished: WC_FINISHED_STATUSES.has(code),
+    };
+  });
+}
+
+export type WcQualifyStatus = "qualified" | "eliminated" | "contention";
+
 export interface WcStandingRow {
   rank: number;
   team: WcTeam;
@@ -165,6 +229,13 @@ export interface WcStandingRow {
   goalsDiff: number;
   points: number;
   form: string | null;
+  // حالة التأهّل للمركزين الأوّلين داخل المجموعة (تُحسب من المباريات المتبقّية).
+  // null = دور المجموعات منتهٍ/غير متاح. أفضل الثوالث لا يُحسب هنا.
+  qualifyStatus?: WcQualifyStatus | null;
+  // true إذا حُدِّث هذا الصفّ لحظيًّا من TheSports (أسرع من تحديث API-Football).
+  live?: boolean;
+  /** حراك المركز اللحظي: موجب = صعد، سالب = هبط. */
+  liveDelta?: number;
 }
 
 export interface WcGroup {
@@ -233,6 +304,255 @@ export async function getStandings(): Promise<WcGroup[]> {
   });
 }
 
+// ---------- حالة التأهّل (تُحسب من الترتيب + المباريات المتبقّية) ----------
+// نُعدّد كل احتمالات نتائج مباريات المجموعة المتبقّية (3^n: فوز مضيف/تعادل/فوز ضيف)
+// ونحكم لكل منتخب بالنقاط فقط (دون افتراض فارق أهداف) حكمًا تحفّظيًّا:
+//   • متأهّل: في كل سيناريو لا يسبقه أو يساويه في النقاط أكثر من منتخب واحد.
+//   • خارج:   في كل سيناريو يسبقه منتخبان على الأقل في النقاط (يستحيل بلوغ المركزين).
+//   • غير ذلك: «في الصراع».
+// نقتصر على المركزين الأوّلين داخل المجموعة (محدّد ودقيق)؛ سباق «أفضل الثوالث» عبر
+// المجموعات لا يُحسب هنا. كسر التعادل عند التساوي يُعامَل ضد المنتخب (تحفّظًا) فلا
+// نُعلن تأهّلًا أو إقصاءً إلا حين يكون مؤكّدًا رياضيًّا.
+interface RemainingMatch {
+  homeId: number;
+  awayId: number;
+}
+
+function computeGroupQualification(
+  rows: WcStandingRow[],
+  remaining: RemainingMatch[],
+): Map<number, WcQualifyStatus> {
+  const ids = rows.map((r) => r.team.id).filter((id) => id > 0);
+  const basePoints = new Map(rows.map((r) => [r.team.id, r.points] as const));
+  const result = new Map<number, WcQualifyStatus>();
+  // حدّ أمان: لن تتجاوز مباريات المجموعة المتبقّية 6 فعليًّا (3^6=729).
+  if (ids.length === 0 || remaining.length > 12) {
+    for (const id of ids) result.set(id, "contention");
+    return result;
+  }
+  const stillQualified = new Map<number, boolean>(ids.map((id) => [id, true]));
+  const stillEliminated = new Map<number, boolean>(ids.map((id) => [id, true]));
+  const total = 3 ** remaining.length;
+  for (let mask = 0; mask < total; mask++) {
+    const pts = new Map(basePoints);
+    let m = mask;
+    for (const match of remaining) {
+      const o = m % 3; // 0=فوز المضيف، 1=تعادل، 2=فوز الضيف
+      m = Math.floor(m / 3);
+      if (o === 0) pts.set(match.homeId, (pts.get(match.homeId) ?? 0) + 3);
+      else if (o === 1) {
+        pts.set(match.homeId, (pts.get(match.homeId) ?? 0) + 1);
+        pts.set(match.awayId, (pts.get(match.awayId) ?? 0) + 1);
+      } else pts.set(match.awayId, (pts.get(match.awayId) ?? 0) + 3);
+    }
+    for (const id of ids) {
+      const p = pts.get(id) ?? 0;
+      let geq = 0; // منتخبات نقاطها ≥ نقاطه (قد تسبقه بكسر التعادل)
+      let gt = 0; // منتخبات نقاطها > نقاطه (تسبقه يقينًا)
+      for (const other of ids) {
+        if (other === id) continue;
+        const op = pts.get(other) ?? 0;
+        if (op >= p) geq++;
+        if (op > p) gt++;
+      }
+      if (geq > 1) stillQualified.set(id, false);
+      if (gt < 2) stillEliminated.set(id, false);
+    }
+  }
+  for (const id of ids) {
+    result.set(
+      id,
+      stillQualified.get(id) ? "qualified" : stillEliminated.get(id) ? "eliminated" : "contention",
+    );
+  }
+  return result;
+}
+
+// صفّ ترتيب مُصفّر لمنتخب (نقطة انطلاق الحساب من المباريات).
+function blankStandingRow(team: WcTeam, form: string | null): WcStandingRow {
+  return {
+    rank: 0,
+    team,
+    played: 0,
+    win: 0,
+    draw: 0,
+    lose: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    goalsDiff: 0,
+    points: 0,
+    form,
+    live: false,
+  };
+}
+
+// تطبيق نتيجة مباراة واحدة على صفّ منتخب.
+function accumulateMatch(row: WcStandingRow, scored: number, conceded: number, live: boolean): void {
+  row.played += 1;
+  row.goalsFor += scored;
+  row.goalsAgainst += conceded;
+  row.goalsDiff = row.goalsFor - row.goalsAgainst;
+  if (scored > conceded) {
+    row.win += 1;
+    row.points += 3;
+  } else if (scored === conceded) {
+    row.draw += 1;
+    row.points += 1;
+  } else {
+    row.lose += 1;
+  }
+  if (live) row.live = true;
+}
+
+// فرز وترقيم محلّي (1..N): نقاط ← فارق ← له ← الاسم. لا نثق بترتيب المزوّد لأنه
+// متأخّر/مختلط (شوهد بفجوات 1,2,4,5 وبخلط مصادر).
+function rankGroupRows(rows: WcStandingRow[]): WcStandingRow[] {
+  rows.sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.goalsDiff - a.goalsDiff ||
+      b.goalsFor - a.goalsFor ||
+      a.team.name.localeCompare(b.team.name, "ar"),
+  );
+  rows.forEach((r, i) => {
+    r.rank = i + 1;
+  });
+  return rows;
+}
+
+/**
+ * يبني جدول كل مجموعة من المباريات نفسها (مصدر واحد متّسق) بدل الوثوق بنقطة
+ * standings لدى المزوّد (المتأخّرة/المختلطة). المنتهية تُحتسب نهائيًّا؛ الجارية
+ * تُطبَّق مبدئيًّا (provisional) وتُعلَّم live فيتحرّك الجدول مع كل هدف ولا تختفي
+ * النتيجة لحظة الصافرة (تتحوّل من «جارية» إلى «منتهية» في نفس المصدر).
+ *
+ * حالة التأهّل تُحسب من النتائج **المؤكّدة فقط** (المنتهية) + المباريات المتبقّية
+ * (تشمل الجارية) كي لا نُعلن تأهّلًا/إقصاءً بناءً على نتيجة لم تُحسم بعد.
+ *
+ * البنية (أعضاء كل مجموعة + أسماء/شعارات) من baseGroups؛ والأرقام كلها من fixtures.
+ */
+export function buildGroupStandings(baseGroups: WcGroup[], fixtures: WcFixture[]): WcGroup[] {
+  return baseGroups.map((g) => {
+    const ids = new Set(g.rows.map((r) => r.team.id));
+    const display = new Map<number, WcStandingRow>();
+    const confirmed = new Map<number, WcStandingRow>();
+    for (const r of g.rows) {
+      display.set(r.team.id, blankStandingRow(r.team, r.form ?? null));
+      confirmed.set(r.team.id, blankStandingRow(r.team, r.form ?? null));
+    }
+
+    const remaining: RemainingMatch[] = [];
+    for (const f of fixtures) {
+      if (!ids.has(f.home.id) || !ids.has(f.away.id)) continue; // داخل المجموعة فقط
+      const gh = f.goals.home;
+      const ga = f.goals.away;
+      const hasScore = gh != null && ga != null;
+      if (f.status.finished && hasScore) {
+        accumulateMatch(display.get(f.home.id)!, gh!, ga!, false);
+        accumulateMatch(display.get(f.away.id)!, ga!, gh!, false);
+        accumulateMatch(confirmed.get(f.home.id)!, gh!, ga!, false);
+        accumulateMatch(confirmed.get(f.away.id)!, ga!, gh!, false);
+      } else if (f.status.live && hasScore) {
+        // جارية: ترتيب مبدئي على العرض فقط، وتبقى ضمن «المتبقّية» للتأهّل.
+        accumulateMatch(display.get(f.home.id)!, gh!, ga!, true);
+        accumulateMatch(display.get(f.away.id)!, ga!, gh!, true);
+        remaining.push({ homeId: f.home.id, awayId: f.away.id });
+      } else if (!f.status.finished) {
+        remaining.push({ homeId: f.home.id, awayId: f.away.id }); // مقرّرة لم تبدأ
+      }
+    }
+
+    const rows = rankGroupRows([...display.values()]);
+    const confirmedRanked = rankGroupRows([...confirmed.values()]);
+    const baseRank = new Map(confirmedRanked.map((r) => [r.team.id, r.rank]));
+    const anyLive = rows.some((r) => r.live);
+    if (anyLive) {
+      for (const r of rows) {
+        const br = baseRank.get(r.team.id);
+        r.liveDelta = typeof br === "number" ? br - r.rank : 0;
+      }
+    }
+    const status =
+      remaining.length > 0
+        ? computeGroupQualification([...confirmed.values()], remaining)
+        : null;
+    return {
+      ...g,
+      rows: rows.map((r) => ({ ...r, qualifyStatus: status ? status.get(r.team.id) ?? null : null })),
+    };
+  });
+}
+
+/** الترتيب مع حالة التأهّل — يُحسب من المباريات (المنتهية نهائيّة، الجارية مبدئية). */
+export async function getStandingsWithQualification(): Promise<WcGroup[]> {
+  const [baseGroups, fixtures] = await Promise.all([
+    getStandings(),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+  return buildGroupStandings(baseGroups, fixtures);
+}
+
+// ---------- شجرة الأدوار الإقصائية (Bracket) ----------
+
+// ترتيب أدوار خروج المغلوب لمونديال 2026 (48 منتخبًا → يبدأ بدور الـ32). مباراة
+// المركز الثالث تُعرض قبل النهائي في الواجهة لكنها دور منفصل عن مسار البطل.
+const KNOCKOUT_ROUND_ORDER = [
+  "Round of 32",
+  "Round of 16",
+  "Quarter-finals",
+  "Semi-finals",
+  "3rd Place Final",
+  "Final",
+] as const;
+
+export interface WcBracketRound {
+  /** اسم الدور معرَّبًا */
+  round: string;
+  roundEn: string;
+  matches: WcFixture[];
+}
+
+export interface WcBracket {
+  /** مصدر البنية: API-Football حاليًّا (TheSports لاحقًا كإثراء) */
+  source: "api-football" | "thesports";
+  rounds: WcBracketRound[];
+  /** شجرة خروج المغلوب الرسمية (FIFA 73–104) مع ترقية الفائزين ووسوم المصادر. */
+  tree: WcBracketModel;
+}
+
+/**
+ * يبني شجرة الأدوار الإقصائية من مباريات البطولة (API-Football). نُصنّف كل مباراة
+ * حسب اسم دورها (`roundEn`) إلى أحد أدوار خروج المغلوب المعروفة، ونُسقط مباريات
+ * دور المجموعات. المزوّد قد يُذيّل اسم الدور برقم ("Round of 16 - 1") فنطابق
+ * بالبادئة. دالة نقية ليُمرّر إليها المستدعي مباريات مُركّبة بأحدث نتيجة لحظية.
+ */
+export function buildBracket(fixtures: WcFixture[]): WcBracket {
+  const byRound = new Map<string, WcFixture[]>();
+  for (const fx of fixtures) {
+    const r = (fx.roundEn ?? "").trim();
+    if (!r) continue;
+    const canon = KNOCKOUT_ROUND_ORDER.find((o) => r === o || r.startsWith(o));
+    if (!canon) continue;
+    const arr = byRound.get(canon) ?? [];
+    arr.push(fx);
+    byRound.set(canon, arr);
+  }
+  const rounds: WcBracketRound[] = [];
+  for (const o of KNOCKOUT_ROUND_ORDER) {
+    const matches = byRound.get(o);
+    if (!matches || matches.length === 0) continue;
+    matches.sort((a, b) => a.timestamp - b.timestamp);
+    rounds.push({ round: localizeRound(o), roundEn: o, matches });
+  }
+  return { source: "api-football", rounds, tree: buildBracketModel(fixtures) };
+}
+
+/** شجرة الأدوار الإقصائية — يجلب المباريات ثم يبنيها (بدون تركيب لحظي). */
+export async function getBracket(): Promise<WcBracket> {
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  return buildBracket(fixtures);
+}
+
 export interface WcScorer {
   rank: number;
   /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
@@ -275,6 +595,39 @@ export async function getTopScorers(): Promise<WcScorer[]> {
   return freshestBoard(provider.board, provider.total, events.scorers, events.totals.goals);
 }
 
+/**
+ * لوحة الهدّافين **الرسمية** كما يرتّبها المزوّد (players/topscorers) — بلا دمج
+ * مع تجميع الأحداث، وبطول قابل للضبط (افتراضيًّا 20) لتضمّ النجوم لا أعلى 10 فقط.
+ * تُستخدم لمنتقي توقّع هدّاف البطولة (يحتاج القائمة الرسمية الصافية مرتّبةً بالأهداف)،
+ * بينما يبقى getTopScorers للودجت الحيّ (الذي يفضّل الأحدث متى تأخّر المزوّد).
+ */
+export async function getOfficialTopScorers(limit = 20): Promise<WcScorer[]> {
+  const board = await withSWR(`wc:scorers:official:${limit}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
+    const top = rows.slice(0, limit);
+    const tr = await resolveNames(top.map((row: any) => row.player?.name));
+    return top.map((row: any, index: number): WcScorer => {
+      const stats = row.statistics?.[0] ?? {};
+      return {
+        rank: index + 1,
+        id: row.player?.id ?? 0,
+        name: tr(row.player?.name),
+        photo: row.player?.photo ?? "",
+        team: localizeTeam(stats.team),
+        goals: stats.goals?.total ?? 0,
+        assists: stats.goals?.assists ?? 0,
+        penalties: stats.penalty?.scored ?? 0,
+        minutes: stats.games?.minutes ?? 0,
+        matches: stats.games?.appearences ?? 0,
+      };
+    });
+  });
+  // المزود يتأخّر أحيانًا ساعات عن آخر هدف حقيقي (نفس علّة getTopScorers أعلاه) —
+  // نصحّح goals فرديًّا من تجميعنا الحيّ دون استبدال اللوحة أو اقتطاعها لأعلى 10.
+  const events = await aggregateRacesFromEvents();
+  return patchStaleGoals(board, events.scorerGoalsById);
+}
+
 export interface WcPrediction {
   home: number;
   draw: number;
@@ -312,6 +665,26 @@ export async function getTeams(): Promise<WcTeam[]> {
   });
 }
 
+/**
+ * قائمة المنتخبات مُثراة بترتيب فيفا (TheSports) عبر الجسر — أفضل جهد: غياب
+ * TheSports → القائمة كما هي بلا ترتيب. لا نلوّث كاش `getTeams` الطويل لأن الترتيب
+ * (خريطة منفصلة مكاشة) يتغيّر شهريًّا والقائمة موسميًّا.
+ */
+export async function getTeamsRanked(): Promise<WcTeam[]> {
+  const teams = await getTeams();
+  try {
+    const [bridge, ranking] = await Promise.all([getWcTeamBridge(), getTsFifaRanking()]);
+    if (ranking.size === 0) return teams;
+    return teams.map((t) => {
+      const uuid = bridge.get(t.id);
+      const r = uuid ? ranking.get(uuid) : null;
+      return r ? { ...t, fifaRank: r.rank } : t;
+    });
+  } catch {
+    return teams;
+  }
+}
+
 export interface WcSquadPlayer {
   id: number;
   name: string;
@@ -320,6 +693,9 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  /** القيمة السوقية (TheSports) — null إن تعذّر الربط */
+  marketValue: number | null;
+  marketValueCurrency: string;
 }
 
 export interface WcSquad {
@@ -332,17 +708,28 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
     const rows = await apiGet("players/squads", { team: teamId });
     const entry = rows[0];
     if (!entry) return null;
-    const tr = await resolveNames((entry.players ?? []).map((p: any) => p.name));
-    const players: WcSquadPlayer[] = (entry.players ?? [])
-      .map((p: any): WcSquadPlayer => ({
-        id: p.id ?? 0,
-        name: tr(p.name),
-        number: p.number ?? null,
-        position: POSITION_AR[p.position] ?? p.position ?? "",
-        positionEn: p.position ?? "",
-        age: p.age ?? null,
-        photo: p.photo ?? "",
-      }))
+    const raw: any[] = entry.players ?? [];
+    const tr = await resolveNames(raw.map((p: any) => p.name));
+    // القيمة السوقية عبر جسر TheSports (الاسم الإنجليزي + الرقم) — أفضل جهد
+    const market = await getWcSquadMarket(
+      teamId,
+      raw.map((p: any) => ({ id: p.id ?? 0, enName: p.name ?? "", number: p.number ?? null })),
+    ).catch(() => new Map<number, WcPlayerMarketInfo>());
+    const players: WcSquadPlayer[] = raw
+      .map((p: any): WcSquadPlayer => {
+        const mv = market.get(p.id ?? 0);
+        return {
+          id: p.id ?? 0,
+          name: tr(p.name),
+          number: p.number ?? null,
+          position: POSITION_AR[p.position] ?? p.position ?? "",
+          positionEn: p.position ?? "",
+          age: p.age ?? null,
+          photo: p.photo ?? "",
+          marketValue: mv?.marketValue ?? null,
+          marketValueCurrency: mv?.currency ?? "€",
+        };
+      })
       .sort(
         (a: WcSquadPlayer, b: WcSquadPlayer) =>
           (POSITION_ORDER[a.positionEn] ?? 9) - (POSITION_ORDER[b.positionEn] ?? 9) ||
@@ -365,6 +752,920 @@ export async function getCoach(teamId: number): Promise<string | null> {
   });
 }
 
+// ---------- جسر الربط مع TheSports + بيانات إثرائية ----------
+// نربط معرّف المنتخب لدى API-Football بمعرّف TheSports (uuid) **دون أسماء**:
+// نطابق كل مباراة لدينا (لها home.id/away.id ووقت بداية) بمباراة TheSports
+// (لها home_team_id/away_team_id ووقت) عبر تطابق وقت البداية. التطابق الفريد فقط
+// (مباراة واحدة بنفس التوقيت ±دقيقتين) يُعتمد، فينكشف زوجا المعرّفين معًا. نصوّت
+// عبر كل مباريات المنتخب فيغلب المعرّف الصحيح حتى لو اختلف ترتيب المضيف/الضيف
+// أحيانًا. أفضل جهد: غياب TheSports → خريطة فارغة → لا إثراء (لا عطل).
+const WC_BRIDGE_TTL = 6 * 60 * 60 * 1000;
+let wcTeamBridge: { at: number; map: Map<number, string> } | null = null;
+
+export async function getWcTeamBridge(): Promise<Map<number, string>> {
+  if (wcTeamBridge && Date.now() - wcTeamBridge.at < WC_BRIDGE_TTL) return wcTeamBridge.map;
+  const map = new Map<number, string>();
+  try {
+    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
+    const [fixtures, pairs] = await Promise.all([
+      getFixtures(),
+      getTsCompetitionMatchPairs(WC_COMPETITION_ID, comp?.curSeasonId ?? null),
+    ]);
+    if (pairs.length > 0) {
+      const votes = new Map<number, Map<string, number>>();
+      const vote = (apiId: number, uuid: string) => {
+        if (!apiId || !uuid) return;
+        const m = votes.get(apiId) ?? new Map<string, number>();
+        m.set(uuid, (m.get(uuid) ?? 0) + 1);
+        votes.set(apiId, m);
+      };
+      for (const fx of fixtures) {
+        if (!fx.home.id || !fx.away.id || !fx.timestamp) continue;
+        const hits = pairs.filter((p) => Math.abs(p.time - fx.timestamp) <= 120);
+        if (hits.length !== 1) continue; // تطابق فريد فقط → اتجاه آمن
+        vote(fx.home.id, hits[0].home);
+        vote(fx.away.id, hits[0].away);
+      }
+      for (const [apiId, m] of votes) {
+        let best = "";
+        let bestN = 0;
+        for (const [uuid, n] of m) if (n > bestN) ((best = uuid), (bestN = n));
+        if (best) map.set(apiId, best);
+      }
+    }
+  } catch (error) {
+    console.warn("[WorldCup] TheSports team bridge failed:", error);
+  }
+  wcTeamBridge = { at: Date.now(), map };
+  return map;
+}
+
+export interface WcTeamExtra {
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  squadSize: number | null;
+}
+
+/** بيانات إثرائية لمنتخب (قيمة سوقية/تأسيس/حجم القائمة) من TheSports — null إن تعذّر الربط. */
+export async function getWcTeamExtra(teamId: number): Promise<WcTeamExtra | null> {
+  const bridge = await getWcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const x = await getTsTeamExtra(uuid);
+  if (!x) return null;
+  if (x.marketValue == null && x.foundation == null && x.totalPlayers == null) return null;
+  return {
+    marketValue: x.marketValue,
+    marketValueCurrency: x.marketValueCurrency,
+    foundation: x.foundation,
+    squadSize: x.totalPlayers,
+  };
+}
+
+// ---------- معلومات أساسية: المدرّب + الملعب (TheSports BASIC INFO) ----------
+// معرّفا المدرّب/الملعب يأتيان من `team/additional/list` (نفس النداء المُكاش للقيمة
+// السوقية) فلا نداء إضافي للجلب. ثم نحلّ كلًّا عبر `coach/list`/`venue/list?uuid=`.
+// التعريب: اسم المدرّب/الملعب لاتيني عند المزوّد (لا i18n لهما) — نمرّره كما هو؛
+// الجنسية/دولة الملعب نُعرّبها عبر i18n type 2 (country) أفضل جهد. كله best‑effort.
+
+export interface WcCoachInfo {
+  name: string;
+  /** صورة المدرّب — "" إن غابت */
+  photo: string;
+  /** الخطة المفضّلة مثل "4-3-3" — null إن غابت */
+  formation: string | null;
+  age: number | null;
+  /** جنسية المدرّب بالعربية إن توفّرت عبر i18n — null إن تعذّر */
+  nationality: string | null;
+}
+
+export interface WcVenueInfo {
+  name: string;
+  capacity: number | null;
+  city: string;
+  /** دولة الملعب بالعربية إن توفّرت عبر i18n، وإلا الإنجليزية، وإلا null */
+  country: string | null;
+}
+
+export interface WcTeamBasics {
+  coach: WcCoachInfo | null;
+  venue: WcVenueInfo | null;
+}
+
+/**
+ * المدرّب (صورة/خطة/عمر/جنسية) وملعب المنتخب من TheSports عبر الجسر — كلاهما
+ * مشتقّ من `team/additional/list` المُكاش. أفضل جهد: تعذّر الجسر/الجلب → null لكلٍّ.
+ */
+export async function getWcTeamBasics(teamId: number): Promise<WcTeamBasics> {
+  const empty: WcTeamBasics = { coach: null, venue: null };
+  const bridge = await getWcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return empty;
+  const x = await getTsTeamExtra(uuid).catch(() => null);
+  if (!x) return empty;
+
+  const [tsCoach, tsVenue] = await Promise.all([
+    x.coachId ? getTsCoach(x.coachId).catch(() => null) : Promise.resolve(null),
+    x.venueId ? getTsVenue(x.venueId).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  // تعريب الدول (جنسية المدرّب + دولة الملعب) عبر i18n type 2 — نداء مجمّع واحد.
+  const countryIds = [tsCoach?.countryId, tsVenue?.countryId].filter((c): c is string => !!c);
+  const countryAr =
+    countryIds.length > 0
+      ? await resolveTsNames(TS_I18N_TYPE.country, countryIds).catch(
+          () => (_: string | null | undefined) => null as string | null,
+        )
+      : (_: string | null | undefined) => null as string | null;
+
+  const coach: WcCoachInfo | null = tsCoach
+    ? {
+        name: tsCoach.name,
+        photo: tsCoach.logo,
+        formation: tsCoach.preferredFormation,
+        age: tsCoach.age,
+        nationality: countryAr(tsCoach.countryId),
+      }
+    : null;
+
+  const venue: WcVenueInfo | null = tsVenue
+    ? {
+        name: tsVenue.name,
+        capacity: tsVenue.capacity,
+        city: tsVenue.city,
+        country: countryAr(tsVenue.countryId) ?? tsVenue.country,
+      }
+    : null;
+
+  return { coach, venue };
+}
+
+export interface WcFifaRank {
+  rank: number;
+  points: number | null;
+  /** عدد المراكز المتغيّرة منذ التحديث السابق (موجب = صعد ▲) — null إن تعذّر */
+  change: number | null;
+}
+
+/** تصنيف فيفا لمنتخب عبر الجسر (معرّف API-Football → uuid → ترتيب TheSports) — null إن تعذّر. */
+export async function getWcTeamFifaRank(teamId: number): Promise<WcFifaRank | null> {
+  const [bridge, ranking] = await Promise.all([getWcTeamBridge(), getTsFifaRanking()]);
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const r = ranking.get(uuid);
+  if (!r) return null;
+  return { rank: r.rank, points: r.points, change: r.change };
+}
+
+// ---------- إحصاء المنتخب في البطولة (season/recent/team/stat عبر TheSports) ----------
+
+export interface WcSeasonStatItem {
+  label: string;
+  value: number;
+  /** القيمة نسبة مئوية (تُعرض مع %) */
+  percent?: boolean;
+}
+
+export interface WcTeamSeasonStats {
+  available: boolean;
+  /** عدد مباريات المنتخب في البطولة حتى الآن */
+  matches: number;
+  items: WcSeasonStatItem[];
+}
+
+// كاش مشترك لإحصاء **كل** المنتخبات للموسم — نداء واحد (`season/recent/team/stat`)
+// يخدم كل صفحات المنتخبات بدل نداء لكل منتخب.
+const WC_SEASON_STATS_TTL = 30 * 60 * 1000;
+let wcSeasonTeamStats: { at: number; map: Map<string, Record<string, number>> } | null = null;
+
+async function getWcSeasonTeamStatsMap(): Promise<Map<string, Record<string, number>>> {
+  if (wcSeasonTeamStats && Date.now() - wcSeasonTeamStats.at < WC_SEASON_STATS_TTL)
+    return wcSeasonTeamStats.map;
+  const map = new Map<string, Record<string, number>>();
+  try {
+    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
+    const season = comp?.curSeasonId ?? null;
+    if (season) {
+      const rows = await getTsSeasonTeamStats(season);
+      for (const r of rows) map.set(r.teamId, r.values);
+    }
+  } catch {
+    /* أفضل جهد */
+  }
+  wcSeasonTeamStats = { at: Date.now(), map };
+  return map;
+}
+
+function statPct(num: number | undefined, den: number | undefined): number | null {
+  if (!num || !den) return null;
+  return Math.round((num / den) * 100);
+}
+
+/** إحصاء المنتخب الموسمي عبر الجسر (API-Football id → uuid → TheSports) — مُعرَّب ومُنتقى. */
+export async function getWcTeamSeasonStats(teamId: number): Promise<WcTeamSeasonStats> {
+  const empty: WcTeamSeasonStats = { available: false, matches: 0, items: [] };
+  try {
+    const bridge = await getWcTeamBridge();
+    const uuid = bridge.get(teamId);
+    if (!uuid) return empty;
+    const map = await getWcSeasonTeamStatsMap();
+    const v = map.get(uuid);
+    if (!v) return empty;
+
+    const items: WcSeasonStatItem[] = [];
+    const push = (label: string, val: number | null | undefined, percent = false) => {
+      if (val == null) return;
+      items.push({ label, value: val, percent });
+    };
+    push("الأهداف المسجَّلة", v.goals);
+    push("الأهداف المستقبَلة", v.goals_against);
+    push("متوسّط الاستحواذ", v.ball_possession, true);
+    push("التسديدات", v.shots);
+    push("التسديدات على المرمى", v.shots_on_target);
+    push("دقّة التمرير", statPct(v.passes_accuracy, v.passes), true);
+    push("التمريرات المفتاحية", v.key_passes);
+    push("الفرص الكبيرة المصنوعة", v.big_chance_created);
+    push("الركنيات", v.corner_kicks);
+    push("التدخّلات الدفاعية", v.tackles);
+    push("الاعتراضات", v.interceptions);
+    push("الثنائيات المكسوبة", statPct(v.duels_won, v.duels), true);
+    push("الأخطاء المرتكبة", v.fouls);
+    push("البطاقات الصفراء", v.yellow_cards);
+    push("البطاقات الحمراء", v.red_cards);
+    if (items.length === 0) return empty;
+    return { available: true, matches: v.matches ?? 0, items };
+  } catch {
+    return empty;
+  }
+}
+
+export interface WcInjury {
+  /** اسم اللاعب معرَّبًا (best-effort) */
+  player: string;
+  /** سبب الغياب (نوع الإصابة معرَّب أو نصّ المزوّد) — null إن تعذّر */
+  reason: string | null;
+  /** نوع الغياب: إصابة/إيقاف/مشكوك… معرَّبًا — null إن تعذّر */
+  status: string | null;
+  /** العودة المتوقّعة (تاريخ ميلادي مختصر) — null إن غاب */
+  until: string | null;
+}
+
+// تعريب سبب الإصابة: المزوّد يرسله إنجليزيًّا قصيرًا ("Calf Injury", "Suspension").
+// نعرّب جزء الجسم + النمط "X Injury"، وإلا نُبقي النصّ كما هو (أفضل جهد).
+const INJURY_PART_AR: Record<string, string> = {
+  calf: "عضلة الساق",
+  knee: "الركبة",
+  hamstring: "أوتار الركبة الخلفية",
+  ankle: "الكاحل",
+  thigh: "الفخذ",
+  groin: "أعلى الفخذ",
+  achilles: "وتر العرقوب",
+  muscle: "إصابة عضلية",
+  back: "الظهر",
+  shoulder: "الكتف",
+  foot: "القدم",
+  hip: "الورك",
+  head: "الرأس",
+  chest: "الصدر",
+  wrist: "المعصم",
+  hand: "اليد",
+  toe: "إصبع القدم",
+  rib: "الضلع",
+  neck: "الرقبة",
+  elbow: "المرفق",
+  finger: "الإصبع",
+  shin: "الساق",
+  quadricep: "العضلة الرباعية",
+  abductor: "العضلة المبعّدة",
+};
+const INJURY_WHOLE_AR: Record<string, string> = {
+  suspension: "إيقاف",
+  suspended: "إيقاف",
+  ban: "إيقاف",
+  illness: "مرض",
+  ill: "مرض",
+  knock: "رضّة",
+  fatigue: "إجهاد",
+  "unknown injury": "إصابة غير محدّدة",
+  "knee injury": "إصابة في الركبة",
+};
+
+function translateInjuryReason(en: string | null): string | null {
+  if (!en) return null;
+  const low = en.toLowerCase().trim();
+  if (INJURY_WHOLE_AR[low]) return INJURY_WHOLE_AR[low];
+  const m = low.match(/^(.+?)\s+(injury|problem|strain|knock|surgery)$/);
+  if (m && INJURY_PART_AR[m[1]]) return `إصابة في ${INJURY_PART_AR[m[1]]}`;
+  if (INJURY_PART_AR[low]) return `إصابة في ${INJURY_PART_AR[low]}`;
+  return en; // غير معروف — نُبقي الإنجليزي بدل تشويهه
+}
+
+function fmtInjuryDate(ts: number | null): string | null {
+  if (!ts || ts <= 0) return null;
+  try {
+    return new Intl.DateTimeFormat("ar", {
+      day: "numeric",
+      month: "long",
+      calendar: "gregory",
+      timeZone: TIMEZONE,
+    }).format(new Date(ts * 1000));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * إصابات/غيابات منتخب عبر الجسر (TheSports) — أفضل جهد: غياب TheSports أو تعذّر
+ * الربط → []. الأسماء عربية عبر language/list type 5 (`name_aa`)، والسبب يُعرَّب.
+ * نُسقط أي صفّ بلا اسم قابل للعرض (لا قيمة لإصابة بلا لاعب).
+ */
+export async function getWcTeamInjuries(teamId: number): Promise<WcInjury[]> {
+  const bridge = await getWcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return [];
+  const raw = await getTsTeamInjuries(uuid).catch(() => []);
+  if (raw.length === 0) return [];
+
+  // اسم اللاعب بالعربية مباشرةً من المزوّد (name_aa) — لا يأتي في رد الإصابات.
+  const noop = (_: string | null | undefined): string | null => null;
+  const nameOf = await resolveTsNames(
+    TS_I18N_TYPE.player,
+    raw.map((r) => r.playerId),
+  ).catch(() => noop);
+
+  const out: WcInjury[] = [];
+  for (const r of raw) {
+    const player = r.playerId ? nameOf(r.playerId) : null;
+    if (!player) continue; // بلا اسم → لا نعرض
+    out.push({
+      player,
+      reason: translateInjuryReason(r.reason),
+      status: null, // لا حقل حالة في رد المزوّد — السبب يكفي
+      until: fmtInjuryDate(r.endTime),
+    });
+  }
+  return out;
+}
+
+// ---------- جسر معرّف المباراة (API-Football fixtureId ↔ TheSports match uuid) ----------
+// نطابق فريقي مباراتنا (عبر جسر الفِرق → uuid) بزوج فرق مباراة TheSports من
+// match/recent/list، فينكشف معرّف مباراة TheSports. تطابق الزوج فريد لكل مباراة
+// (لا التباس بالتزامن كما في جسر النتيجة اللحظي الذي يعتمد الوقت وحده). أفضل جهد:
+// غياب جسر الفِرق أو المباراة → null. يُكاش المعرّف بعد أول حلّ.
+const wcMatchIdBridge = new Map<number, string>();
+
+export async function getWcMatchTsId(fixtureId: number): Promise<string | null> {
+  const cached = wcMatchIdBridge.get(fixtureId);
+  if (cached) return cached;
+  const [fixtures, bridge, comp] = await Promise.all([
+    getFixtures(),
+    getWcTeamBridge(),
+    getTsCompetitionExtra(WC_COMPETITION_ID),
+  ]);
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx?.home?.id || !fx?.away?.id) return null;
+  const homeUuid = bridge.get(fx.home.id);
+  const awayUuid = bridge.get(fx.away.id);
+  if (!homeUuid || !awayUuid) return null;
+  const pairs = await getTsCompetitionMatchPairs(WC_COMPETITION_ID, comp?.curSeasonId ?? null);
+  const matches = pairs.filter(
+    (p) =>
+      p.id &&
+      ((p.home === homeUuid && p.away === awayUuid) || (p.home === awayUuid && p.away === homeUuid)),
+  );
+  if (matches.length === 0) return null;
+  // تكرار اللقاء نادر في المونديال — نختار الأقرب زمنيًّا لوقت بدء مباراتنا.
+  const best = matches.reduce((a, b) =>
+    Math.abs(b.time - fx.timestamp) < Math.abs(a.time - fx.timestamp) ? b : a,
+  );
+  if (!best.id) return null;
+  wcMatchIdBridge.set(fixtureId, best.id);
+  return best.id;
+}
+
+export interface WcTvChannel {
+  name: string;
+  country: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
+/** قنوات بثّ مباراة عبر جسر المباراة (TheSports) — [] إن تعذّر الجسر/الجلب. */
+export async function getWcMatchTv(fixtureId: number): Promise<WcTvChannel[]> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return [];
+  return getTsMatchTv(uuid).catch(() => []);
+}
+
+// إحصاء الفريق المفصّل (TheSports) عبر جسر المباراة — للمباريات المنتهية احتياطًا
+// خلف SportMonks. الحقول **مسمّاة** (متحقَّقة حيًّا) فنختار منها لائحة مألوفة.
+// `acc` يحسب نسبة الدقّة من حقلَي العدّ (مثلًا passes + passes_accuracy).
+const TS_TEAM_STAT_FIELDS: { field: string; label: string; pct?: boolean; accOf?: string }[] = [
+  { field: "ball_possession", label: "الاستحواذ", pct: true },
+  { field: "shots", label: "إجمالي التسديدات" },
+  { field: "shots_on_target", label: "التسديدات على المرمى" },
+  { field: "passes", label: "التمريرات" },
+  { field: "passes_accuracy", label: "دقّة التمرير", pct: true, accOf: "passes" },
+  { field: "corner_kicks", label: "الركنيات" },
+  { field: "fouls", label: "الأخطاء" },
+  { field: "offsides", label: "التسلّل" },
+  { field: "yellow_cards", label: "البطاقات الصفراء" },
+  { field: "red_cards", label: "البطاقات الحمراء" },
+];
+
+/** إحصاء الفريقين المفصّل لمباراة عبر الجسر (TheSports) — [] إن تعذّر. حقول مسمّاة. */
+export async function getWcMatchTeamStats(fixtureId: number): Promise<WcStatistic[]> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return [];
+  const sides = await getTsMatchTeamStats(uuid).catch(() => []);
+  if (sides.length < 2) return [];
+
+  // إقران مضيف/ضيف بمعرّف TheSports عبر الجسر؛ وإلا نفترض الترتيب [مضيف، ضيف].
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  const bridge = await getWcTeamBridge();
+  const homeUuid = fx ? bridge.get(fx.home.id) : null;
+  let home = sides[0];
+  let away = sides[1];
+  if (homeUuid && sides[1].teamId === homeUuid) {
+    home = sides[1];
+    away = sides[0];
+  }
+
+  // قيمة الحقل (مع حساب نسبة الدقّة عند الحاجة) — null لو الحقل غائب.
+  const valOf = (side: TsTeamStatSide, f: (typeof TS_TEAM_STAT_FIELDS)[number]): number | null => {
+    const v = side.values[f.field];
+    if (v == null) return null;
+    if (f.accOf) {
+      const total = side.values[f.accOf];
+      if (!total) return null;
+      return Math.round((v / total) * 100);
+    }
+    return v;
+  };
+
+  const out: WcStatistic[] = [];
+  for (const f of TS_TEAM_STAT_FIELDS) {
+    const h = valOf(home, f);
+    const a = valOf(away, f);
+    if (h == null && a == null) continue;
+    if ((h ?? 0) === 0 && (a ?? 0) === 0) continue; // صفر للطرفين = غير مُبلَّغ
+    const suffix = f.pct ? "%" : "";
+    out.push({ key: `ts:team:${f.field}`, label: f.label, home: `${h ?? 0}${suffix}`, away: `${a ?? 0}${suffix}` });
+  }
+  return out;
+}
+
+// ---------- تقييمات اللاعبين لكل مباراة (match/player_stats/detail) ----------
+// لكل لاعب شارك: تقييم (rating) + دقائق + أهداف/صناعة + بطاقات. الأسماء معرَّبة
+// (name_aa عبر language/list type5، واحتياط اسم التشكيلة). نُقرن مضيف/ضيف بالجسر.
+
+export interface WcPlayerStatLine {
+  name: string;
+  rating: number | null;
+  starter: boolean;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+}
+
+export interface WcMatchPlayerStats {
+  available: boolean;
+  home: { team: WcTeam; players: WcPlayerStatLine[] } | null;
+  away: { team: WcTeam; players: WcPlayerStatLine[] } | null;
+}
+
+/** تقييمات/إحصاء لاعبي المباراة من TheSports عبر الجسر — available:false إن تعذّر. */
+export async function getWcMatchPlayerStats(fixtureId: number): Promise<WcMatchPlayerStats> {
+  const empty: WcMatchPlayerStats = { available: false, home: null, away: null };
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return empty;
+  const [rows, fixtures, lineup] = await Promise.all([
+    getTsMatchPlayerStats(uuid).catch(() => []),
+    getFixtures().catch(() => [] as WcFixture[]),
+    getTsLineup(uuid).catch(() => null as TsLineup | null),
+  ]);
+  // نُبقي من شارك فقط (دقائق>0 أو تقييم فعلي)
+  const played = rows.filter((r) => r.minutes > 0 || (r.rating ?? 0) > 0);
+  if (played.length === 0) return empty;
+
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx) return empty;
+
+  // أسماء عربية (name_aa) + احتياط اسم التشكيلة (إنجليزي/عربي)
+  const nameOf = await resolveTsNames(TS_I18N_TYPE.player, played.map((r) => r.playerId));
+  const lineupName = new Map<string, string>();
+  if (lineup) {
+    for (const p of [...lineup.home, ...lineup.away]) {
+      const nm = p.nameAr || p.name;
+      if (p.id && nm) lineupName.set(String(p.id), nm);
+    }
+  }
+
+  // إقران مضيف/ضيف بمعرّف TheSports عبر الجسر
+  const bridge = await getWcTeamBridge();
+  const homeUuid = bridge.get(fx.home.id) ?? null;
+  const awayUuid = bridge.get(fx.away.id) ?? null;
+
+  const toLine = (r: (typeof played)[number]): WcPlayerStatLine | null => {
+    const name = nameOf(r.playerId) || lineupName.get(r.playerId) || "";
+    if (!name) return null;
+    return {
+      name,
+      rating: (r.rating ?? 0) > 0 ? r.rating : null,
+      starter: r.starter,
+      minutes: r.minutes,
+      goals: r.values.goals ?? 0,
+      assists: r.values.assists ?? 0,
+      yellow: r.values.yellow_cards ?? 0,
+      red: r.values.red_cards ?? 0,
+    };
+  };
+
+  // ترتيب: التقييم تنازليًّا (بلا تقييم أخيرًا)، ثم الدقائق
+  const sortLines = (a: WcPlayerStatLine, b: WcPlayerStatLine) =>
+    (b.rating ?? -1) - (a.rating ?? -1) || b.minutes - a.minutes;
+
+  const homePlayers: WcPlayerStatLine[] = [];
+  const awayPlayers: WcPlayerStatLine[] = [];
+  const distinctTeams = Array.from(new Set(played.map((r) => r.teamId).filter(Boolean)));
+  for (const r of played) {
+    const line = toLine(r);
+    if (!line) continue;
+    let side: "home" | "away";
+    if (homeUuid && r.teamId === homeUuid) side = "home";
+    else if (awayUuid && r.teamId === awayUuid) side = "away";
+    else side = r.teamId === distinctTeams[0] ? "home" : "away"; // احتياط: ترتيب الظهور
+    (side === "home" ? homePlayers : awayPlayers).push(line);
+  }
+  homePlayers.sort(sortLines);
+  awayPlayers.sort(sortLines);
+  if (homePlayers.length === 0 && awayPlayers.length === 0) return empty;
+
+  return {
+    available: true,
+    home: homePlayers.length ? { team: fx.home, players: homePlayers } : null,
+    away: awayPlayers.length ? { team: fx.away, players: awayPlayers } : null,
+  };
+}
+
+// ---------- الزخم/الضغط اللحظي من TheSports (match/trend/detail) ----------
+// أسرع وأدقّ من SportMonks: مؤشّر زخم لحظي (−100..100) دقيقة‑بدقيقة. نُحوّله إلى
+// نفس شكلَي WcMomentum/WcPressure فلا تتغيّر الواجهة. الاستحواذ من إحصاء الفريق
+// (ball_possession). أفضل جهد: تعذّر الجسر/الترند → null فيتراجع الراوتر لـSportMonks.
+
+function trendToPoints(values: { minute: number; value: number }[]) {
+  return values.map((v) => ({
+    label: `${v.minute}'`,
+    minute: v.minute,
+    home: v.value > 0 ? v.value : 0,
+    away: v.value < 0 ? v.value : 0, // سالبة لتُرسم أسفل الصفر (كاصطلاح SportMonks)
+    net: v.value,
+  }));
+}
+
+/** الزخم اللحظي من TheSports — null إن تعذّر (يتراجع الراوتر لـSportMonks). */
+export async function getWcMomentumTs(fixtureId: number): Promise<WcMomentum | null> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return null;
+  const [trend, fixtures, sides] = await Promise.all([
+    getTsMatchTrend(uuid),
+    getFixtures().catch(() => [] as WcFixture[]),
+    getTsMatchTeamStats(uuid).catch(() => [] as TsTeamStatSide[]),
+  ]);
+  if (!trend || trend.values.length === 0) return null;
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  const live = !!fx?.status.live;
+
+  // الاستحواذ من إحصاء الفريق (إقران مضيف/ضيف عبر الجسر)
+  let possession: { home: number; away: number } | null = null;
+  if (fx && sides.length >= 2) {
+    const bridge = await getWcTeamBridge();
+    const homeUuid = bridge.get(fx.home.id);
+    let home = sides[0];
+    let away = sides[1];
+    if (homeUuid && sides[1].teamId === homeUuid) {
+      home = sides[1];
+      away = sides[0];
+    }
+    const h = home.values.ball_possession;
+    const a = away.values.ball_possession;
+    if (h != null || a != null) {
+      possession = {
+        home: h ?? (a != null ? 100 - a : 0),
+        away: a ?? (h != null ? 100 - h : 0),
+      };
+    }
+  }
+
+  return { available: true, live, possession, points: trendToPoints(trend.values) };
+}
+
+/** مؤشّر الضغط اللحظي من TheSports — null إن تعذّر. */
+export async function getWcPressureTs(fixtureId: number): Promise<WcPressure | null> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return null;
+  const [trend, fixtures] = await Promise.all([
+    getTsMatchTrend(uuid),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+  if (!trend || trend.values.length === 0) return null;
+  const live = !!fixtures.find((f) => f.id === fixtureId)?.status.live;
+  const last = trend.values[trend.values.length - 1].value;
+  const latest: WcPressure["latest"] = {
+    side: last > 0 ? "home" : last < 0 ? "away" : "even",
+    value: Math.abs(last),
+  };
+  return { available: true, live, latest, points: trendToPoints(trend.values) };
+}
+
+// ---------- التشكيلات والخطط من TheSports (match/lineup/detail) ----------
+// نحوّل قوائم TheSports إلى WcLineup[] (نفس شكل API-Football) ليعرضها مركز
+// المباراة دون تغيير. الإحداثيات x/y → شبكة "صف:عمود" عند توفّرها لرسم الملعب،
+// وإلا grid=null فتظهر القوائم نصيًّا. الأسماء معرَّبة (name_aa) مع fallback إنجليزي.
+
+// x = عمق الملعب (0=خط مرمى الفريق .. 100=مرمى الخصم). نحوّله إلى أرقام صفوف
+// متتابعة (الحارس صف 1) بتجميع اللاعبين على قيم x المتقاربة، والعمود من ترتيب y.
+function tsPlayersToGrid(players: TsLineupPlayer[]): Map<string, string> {
+  const grid = new Map<string, string>();
+  const withXy = players.filter((p) => p.starter && (p.x != null || p.y != null) && (p.x || p.y));
+  if (withXy.length < 7) return grid; // إحداثيات غير موثوقة (أصفار) → بلا ملعب
+  // اجمع على قيم x متقاربة (±6) كصفوف
+  const sorted = [...withXy].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+  const rows: TsLineupPlayer[][] = [];
+  for (const p of sorted) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs((last[0].x ?? 0) - (p.x ?? 0)) <= 6) last.push(p);
+    else rows.push([p]);
+  }
+  rows.forEach((row, ri) => {
+    row.sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+    row.forEach((p, ci) => grid.set(p.id, `${ri + 1}:${ci + 1}`));
+  });
+  return grid;
+}
+
+function tsLineupToWc(
+  side: TsLineupPlayer[],
+  formation: string | null,
+  team: WcTeam,
+): WcLineup {
+  const gridMap = tsPlayersToGrid(side);
+  const toPlayer = (p: TsLineupPlayer): WcLineupPlayer => ({
+    id: 0, // معرّفات TheSports نصّية ولا تطابق API-Football → لا فتح بطاقة لاعب
+    name: p.nameAr || p.name,
+    number: p.shirtNumber,
+    position: p.position,
+    grid: gridMap.get(p.id) ?? null,
+  });
+  return {
+    teamId: team.id,
+    teamName: team.name,
+    formation,
+    coach: "",
+    startXI: side.filter((p) => p.starter).map(toPlayer),
+    substitutes: side.filter((p) => !p.starter).map(toPlayer),
+  };
+}
+
+/** تشكيلتا المباراة من TheSports بشكل WcLineup[] — [] إن تعذّر الجسر/الجلب. */
+export async function getWcLineupsTs(fixtureId: number): Promise<WcLineup[]> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return [];
+  const [lineup, fixtures] = await Promise.all([
+    getTsLineup(uuid).catch(() => null as TsLineup | null),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+  if (!lineup) return [];
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx) return [];
+  const out: WcLineup[] = [];
+  if (lineup.home.length > 0) out.push(tsLineupToWc(lineup.home, lineup.homeFormation, fx.home));
+  if (lineup.away.length > 0) out.push(tsLineupToWc(lineup.away, lineup.awayFormation, fx.away));
+  return out;
+}
+
+// ---------- القيمة السوقية للاعبين (player/with_stat/list + team/squad/list) ----------
+// نربط لاعب API-Football (اسم إنجليزي + رقم قميص) بلاعب TheSports (uuid) عبر قائمة
+// منتخب TheSports، ثم نأخذ قيمته السوقية من خريطة البطولة. أفضل جهد: تعذّر الربط
+// → خريطة فارغة (لا قيمة، لا عطل).
+
+/** تطبيع اسم لاتيني للمطابقة: حروف صغيرة، بلا تشكيل/علامات، مسافة واحدة. */
+function normNameKey(s: string | null | undefined): string {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface WcPlayerMarketInfo {
+  marketValue: number | null;
+  currency: string;
+  tsPlayerId: string;
+}
+
+// نطابق لاعب API-Football بلاعب TheSports داخل المنتخب: الاسم الكامل المطبّع أولًا
+// (API-Football يعطي اسمًا كاملًا في players/squads فالمطابقة دقيقة)، ثم رقم القميص
+// مع تأكيد تقاطع اسم العائلة (حماية من إعادة ترقيم)، ثم اسم العائلة الفريد.
+function matchTsPlayer(
+  ap: { enName: string; number: number | null },
+  tsSquad: { id: string; name: string; shirtNumber: number | null }[],
+  byName: Map<string, { id: string; name: string; shirtNumber: number | null }>,
+  byNum: Map<number, { id: string; name: string; shirtNumber: number | null }>,
+  byLast: Map<string, { id: string; name: string; shirtNumber: number | null }[]>,
+): string | null {
+  const key = normNameKey(ap.enName);
+  const apLast = key.split(" ").pop() ?? "";
+  const exact = key ? byName.get(key) : undefined;
+  if (exact) return exact.id;
+  if (ap.number) {
+    const byNumber = byNum.get(ap.number);
+    if (byNumber) {
+      const tsLast = normNameKey(byNumber.name).split(" ").pop() ?? "";
+      // تأكيد تقاطع اسم العائلة لتجنّب مطابقة رقم للاعب مختلف
+      if (!apLast || !tsLast || apLast === tsLast || tsLast.includes(apLast) || apLast.includes(tsLast)) {
+        return byNumber.id;
+      }
+    }
+  }
+  if (apLast) {
+    const cands = byLast.get(apLast);
+    if (cands && cands.length === 1) return cands[0].id; // اسم عائلة فريد فقط
+  }
+  return null;
+}
+
+/**
+ * يربط لاعبي API-Football (id + اسم إنجليزي + رقم) بمعرّفات TheSports عبر قائمة
+ * المنتخب، ثم يجلب قيمتهم السوقية الحاليّة من player/market/list (آخر قيمة في
+ * التاريخ). نداء/لاعب مكاش 24س. أفضل جهد: تعذّر أي شيء → خريطة فارغة (لا قيمة).
+ */
+export async function getWcSquadMarket(
+  teamId: number,
+  apiPlayers: { id: number; enName: string; number: number | null }[],
+): Promise<Map<number, WcPlayerMarketInfo>> {
+  const out = new Map<number, WcPlayerMarketInfo>();
+  try {
+    const bridge = await getWcTeamBridge();
+    const tsTeam = bridge.get(teamId);
+    if (!tsTeam) return out;
+    const tsSquad = await getTsTeamSquad(tsTeam);
+    if (tsSquad.length === 0) return out;
+
+    const byName = new Map<string, (typeof tsSquad)[number]>();
+    const byNum = new Map<number, (typeof tsSquad)[number]>();
+    const byLast = new Map<string, (typeof tsSquad)[number][]>();
+    for (const s of tsSquad) {
+      const key = normNameKey(s.name);
+      if (key) byName.set(key, s);
+      if (s.shirtNumber) byNum.set(s.shirtNumber, s);
+      const last = key.split(" ").pop() ?? "";
+      if (last) {
+        if (!byLast.has(last)) byLast.set(last, []);
+        byLast.get(last)!.push(s);
+      }
+    }
+
+    const matched: { apiId: number; tsId: string }[] = [];
+    for (const ap of apiPlayers) {
+      const tsId = matchTsPlayer(ap, tsSquad, byName, byNum, byLast);
+      if (tsId) matched.push({ apiId: ap.id, tsId });
+    }
+    if (matched.length === 0) return out;
+
+    // القيمة الحاليّة = آخر قيمة في تاريخ player/market/list (نداء/لاعب مكاش 24س)
+    const limit = pLimit(5);
+    await Promise.all(
+      matched.map(({ apiId, tsId }) =>
+        limit(async () => {
+          const hist = await getTsPlayerMarketHistory(tsId).catch(() => []);
+          const last = hist.length ? hist[hist.length - 1] : null;
+          out.set(apiId, {
+            marketValue: last ? last.value : null,
+            currency: last ? last.currency : "€",
+            tsPlayerId: tsId,
+          });
+        }),
+      ),
+    );
+  } catch {
+    /* أفضل جهد */
+  }
+  return out;
+}
+
+/** تاريخ القيمة السوقية للاعب (عبر منتخبه) — [] إن تعذّر. */
+export async function getWcPlayerMarketHistory(
+  teamId: number,
+  player: { id: number; enName: string; number: number | null },
+): Promise<{ marketValue: number | null; currency: string; history: { time: number; value: number }[] }> {
+  const empty = { marketValue: null as number | null, currency: "€", history: [] as { time: number; value: number }[] };
+  const market = await getWcSquadMarket(teamId, [player]).catch(() => new Map<number, WcPlayerMarketInfo>());
+  const info = market.get(player.id);
+  if (!info) return empty;
+  const hist = await getTsPlayerMarketHistory(info.tsPlayerId).catch(() => []);
+  return {
+    marketValue: info.marketValue ?? (hist.length ? hist[hist.length - 1].value : null),
+    currency: info.currency,
+    history: hist.map((h) => ({ time: h.time, value: h.value })),
+  };
+}
+
+export interface WcPlayerMarket {
+  available: boolean;
+  marketValue: number | null;
+  currency: string;
+  history: { time: number; value: number }[];
+}
+
+/**
+ * القيمة السوقية وتاريخها للاعب عبر معرّفه (API-Football): نجلب اسمه الإنجليزي
+ * ومنتخبه ورقمه، ثم نربطه بـTheSports. كاش طويل (القيمة تتغيّر ببطء).
+ */
+export async function getPlayerMarket(playerId: number): Promise<WcPlayerMarket> {
+  const empty: WcPlayerMarket = { available: false, marketValue: null, currency: "€", history: [] };
+  return withSWR(`wc:playermarket:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    const [profileRows, statsRows] = await Promise.all([
+      apiGet("players/profiles", { player: playerId }),
+      apiGet("players", { id: playerId, season: SEASON, league: LEAGUE_ID }).catch(() => [] as any[]),
+    ]);
+    const p = profileRows[0]?.player;
+    if (!p?.id) return empty;
+    const enName = [p.firstname, p.lastname].filter(Boolean).join(" ").trim() || p.name || "";
+    const st = statsRows[0]?.statistics?.[0];
+    const teamId = st?.team?.id ?? 0;
+    const number = st?.games?.number ?? p.number ?? null;
+    if (!teamId || !enName) return empty;
+    const res = await getWcPlayerMarketHistory(teamId, { id: playerId, enName, number });
+    if (res.marketValue == null && res.history.length === 0) return empty;
+    return { available: true, marketValue: res.marketValue, currency: res.currency, history: res.history };
+  });
+}
+
+export interface WcCompetitionFacts {
+  defendingChampion: WcTeam | null;
+  defendingChampionTitles: number | null;
+  mostTitles: { teams: WcTeam[]; count: number } | null;
+  host: string | null;
+}
+
+/** حقائق البطولة من TheSports: حامل اللقب + الأكثر تتويجًا + الدول المضيفة. */
+export async function getWcCompetitionFacts(): Promise<WcCompetitionFacts> {
+  const empty: WcCompetitionFacts = {
+    defendingChampion: null,
+    defendingChampionTitles: null,
+    mostTitles: null,
+    host: null,
+  };
+  try {
+    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
+    if (!comp) return empty;
+    const [bridge, teams] = await Promise.all([getWcTeamBridge(), getTeams().catch(() => [] as WcTeam[])]);
+    const byId = new Map(teams.map((t) => [t.id, t]));
+    const rev = new Map<string, number>();
+    for (const [id, uuid] of bridge) rev.set(uuid, id);
+    const toTeam = (uuid: string | null): WcTeam | null => {
+      if (!uuid) return null;
+      const id = rev.get(uuid);
+      return id ? byId.get(id) ?? null : null;
+    };
+    const champTeams = comp.mostTitlesTeamIds.map(toTeam).filter((t): t is WcTeam => !!t);
+    return {
+      defendingChampion: toTeam(comp.titleHolderTeamId),
+      defendingChampionTitles: comp.titleHolderCount,
+      mostTitles: comp.mostTitlesCount != null && champTeams.length > 0 ? { teams: champTeams, count: comp.mostTitlesCount } : null,
+      host: localizeHostCountries(comp.host),
+    };
+  } catch (error) {
+    console.warn("[WorldCup] competition facts failed:", error);
+    return empty;
+  }
+}
+
+// أسماء الدول المضيفة من TheSports تأتي إنجليزية مفصولة بفواصل ("United States,Canadian,Mexico").
+const HOST_COUNTRY_AR: Record<string, string> = {
+  "united states": "الولايات المتحدة",
+  usa: "الولايات المتحدة",
+  canadian: "كندا",
+  canada: "كندا",
+  mexico: "المكسيك",
+};
+function localizeHostCountries(raw: string | null): string | null {
+  if (!raw) return null;
+  const parts = raw
+    .split(/[,،]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((c) => HOST_COUNTRY_AR[c.toLowerCase()] ?? c);
+  return parts.length ? parts.join("، ") : null;
+}
+
 // ---------- صفحة المنتخب المتكاملة ----------
 // تجمّع كل ما يخص منتخبًا واحدًا في طلب واحد: هويته + مجموعته وترتيبه +
 // كل مبارياته (منتهية/مباشرة/قادمة) + قائمته الكاملة + المدرّب. كلها مبنية
@@ -378,14 +1679,31 @@ export interface WcTeamProfile {
   group: WcGroup | null;
   fixtures: WcFixture[];
   squad: WcSquadPlayer[];
+  /** إثراء TheSports (قيمة سوقية/تأسيس/حجم القائمة) — null إن تعذّر */
+  extra: WcTeamExtra | null;
+  /** تصنيف فيفا للمنتخب (TheSports) — null إن تعذّر الربط/الجلب */
+  fifaRank: WcFifaRank | null;
+  /** إصابات/غيابات المنتخب (TheSports) — [] إن تعذّر/لا يوجد */
+  injuries: WcInjury[];
+  /** إحصاء المنتخب في البطولة (TheSports season stats) — available:false إن تعذّر */
+  seasonStats: WcTeamSeasonStats;
+  /** المدرّب (صورة/خطة/عمر/جنسية) من TheSports — null إن تعذّر */
+  coachInfo: WcCoachInfo | null;
+  /** ملعب المنتخب (اسم/سعة/مدينة/دولة) من TheSports — null إن تعذّر */
+  venue: WcVenueInfo | null;
 }
 
 export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | null> {
-  const [fixtures, squad, groups, teams] = await Promise.all([
+  const [fixtures, squad, groups, teams, extra, fifaRank, injuries, seasonStats, basics] = await Promise.all([
     getFixtures(),
     getSquad(teamId).catch(() => null),
     getStandings().catch(() => [] as WcGroup[]),
     getTeams().catch(() => [] as WcTeam[]),
+    getWcTeamExtra(teamId).catch(() => null),
+    getWcTeamFifaRank(teamId).catch(() => null),
+    getWcTeamInjuries(teamId).catch(() => [] as WcInjury[]),
+    getWcTeamSeasonStats(teamId).catch(() => ({ available: false, matches: 0, items: [] }) as WcTeamSeasonStats),
+    getWcTeamBasics(teamId).catch(() => ({ coach: null, venue: null }) as WcTeamBasics),
   ]);
 
   const teamFixtures = fixtures
@@ -417,6 +1735,12 @@ export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | nu
     group,
     fixtures: teamFixtures,
     squad: squad?.players ?? [],
+    extra,
+    fifaRank,
+    injuries,
+    seasonStats,
+    coachInfo: basics.coach,
+    venue: basics.venue,
   };
 }
 
@@ -454,21 +1778,25 @@ const COMPETITION_AR: Record<string, string> = {
   "AFC Champions League": "دوري أبطال آسيا",
   "AFC Champions League Elite": "دوري أبطال آسيا للنخبة",
   "AFC Champions League Two": "دوري أبطال آسيا الثاني",
-  "Division 1": "دوري الدرجة الأولى",
+  "Division 1": "دوري يلو لأندية الدرجة الأولى",
   "CAF Champions League": "دوري أبطال أفريقيا",
   "Copa Libertadores": "كأس ليبرتادوريس",
   "UEFA Europa League": "الدوري الأوروبي",
   "Europa League": "الدوري الأوروبي",
   "UEFA Super Cup": "كأس السوبر الأوروبي",
   "UEFA Nations League": "دوري الأمم الأوروبية",
-  "Saudi League": "الدوري السعودي",
-  "Pro League": "دوري المحترفين",
+  "Saudi League": "دوري روشن السعودي",
+  "Pro League": "دوري روشن السعودي",
   "Premier League": "الدوري الممتاز",
-  "First Division": "دوري الدرجة الأولى",
-  "Second Division": "دوري الدرجة الثانية",
-  "Super Cup": "كأس السوبر",
-  "King Cup": "كأس الملك",
-  "King's Cup": "كأس الملك",
+  "First Division": "دوري يلو لأندية الدرجة الأولى",
+  "Second Division": "دوري الدرجة الثانية السعودي",
+  "Super Cup": "كأس السوبر السعودي",
+  "King Cup": "كأس خادم الحرمين الشريفين",
+  "King's Cup": "كأس خادم الحرمين الشريفين",
+  "Women's Premier League": "الدوري السعودي الممتاز للسيدات",
+  "Women Premier League": "الدوري السعودي الممتاز للسيدات",
+  "Womens Premier League": "الدوري السعودي الممتاز للسيدات",
+  "Saudi Women's Premier League": "الدوري السعودي الممتاز للسيدات",
   "Crown Prince Cup": "كأس ولي العهد",
   "La Liga": "الدوري الإسباني",
   "Serie A": "الدوري الإيطالي",
@@ -634,6 +1962,22 @@ export interface WcPlayerCard {
   /** أرقام اللاعب التراكمية في مونديال 2026 — null قبل اعتماد المزود لها */
   stats: WcPlayerTournamentStats | null;
   injury: { reason: string } | null;
+}
+
+export interface WcPlayerIdentityEn {
+  firstname: string | null;
+  lastname: string | null;
+  dob: string | null;
+}
+
+/** هوية اللاعب الإنجليزية (الاسم الأول/الأخير + الميلاد) — لجسر لاعب SportMonks. */
+export async function getPlayerIdentityEn(playerId: number): Promise<WcPlayerIdentityEn | null> {
+  return withSWR(`wc:playeridEn:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    const rows = await apiGet("players/profiles", { player: playerId });
+    const p = rows[0]?.player;
+    if (!p?.id) return null;
+    return { firstname: p.firstname ?? null, lastname: p.lastname ?? null, dob: p.birth?.date ?? null };
+  });
 }
 
 export async function getPlayerCard(playerId: number): Promise<WcPlayerCard | null> {
@@ -843,6 +2187,30 @@ function freshestBoard<T extends { id: number; photo: string; minutes: number; m
   });
 }
 
+/**
+ * تصحيح أفراديّ لـ goals/assists/penalties في لوحة مزوّد باستخدام تجميع الأحداث
+ * اللحظي متى كان أعلى — يبقي ترتيب/عضوية لوحة المزود كما هي (خلافًا لـ
+ * freshestBoard التي تستبدل اللوحة كاملةً بأعلى 10 من الأحداث، فلا تصلح للوحة
+ * المرشّحين الطويلة). يُعاد الفرز والترقيم بعد التصحيح كي لا يظهر هدّاف صُحِّحت
+ * أهدافه لأعلى وهو مرتّب تحت من فوقه رقمًا لا أهدافًا فعليًّا.
+ */
+function patchStaleGoals(
+  board: WcScorer[],
+  byId: Record<number, { goals: number; assists: number; penalties: number }>
+): WcScorer[] {
+  const patched = board.map((row) => {
+    const fresh = row.id ? byId[row.id] : undefined;
+    if (!fresh || fresh.goals <= row.goals) return row;
+    return {
+      ...row,
+      goals: fresh.goals,
+      assists: Math.max(row.assists, fresh.assists),
+      penalties: Math.max(row.penalties, fresh.penalties),
+    };
+  });
+  return patched.sort((a, b) => b.goals - a.goals).map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
 interface WcRaceTally {
   playerId: number | null;
   name: string;
@@ -864,6 +2232,10 @@ interface WcRacesFromEvents {
   cards: WcLeader[];
   // مجاميع كاملة (كل اللاعبين لا العشرة الأوائل) لمقارنة الحداثة مع لوحة المزود
   totals: { goals: number; assists: number; cards: number };
+  // كل من سجّل هدفًا من الأحداث اللحظية (لا أعلى 10 فقط) — id ← أهداف/صناعة/جزاءات.
+  // لتصحيح goals لأي هدّاف في لوحة المزود الرسمية (حتى خارج أعلى 10) عبر
+  // patchStaleGoals، دون استبدال اللوحة كاملةً كما تفعل freshestBoard.
+  scorerGoalsById: Record<number, { goals: number; assists: number; penalties: number }>;
 }
 
 async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
@@ -905,22 +2277,27 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     // أحداث المباراة المنتهية لا تتغير — كاش طويل خاص بها كي لا يستنزف التجميع
     // الدوري (كل 30 ثانية) حصة المزود بإعادة جلب تفاصيل كل مباريات البطولة
     const FINISHED_EVENTS_TTL = 60 * 60 * 1000;
+    // حدّ تزامن صارم: لا نطلق أكثر من MATCH_FETCH_CONCURRENCY نداءً للمزود معًا،
+    // ونكتفي بمسار الأحداث الخفيف (نداء واحد لكل مباراة) بدل التفاصيل الكاملة.
+    const limit = pLimit(MATCH_FETCH_CONCURRENCY);
     const eventLists = await Promise.all(
-      started.map(async (f): Promise<{ at: number; events: WcMatchEvent[] }> => {
-        try {
-          const events = f.status.finished
-            ? await withSWR(
-                `wc:raceEvents:${f.id}`,
-                FINISHED_EVENTS_TTL,
-                FINISHED_EVENTS_TTL * 2,
-                async () => (await getMatchDetail(f.id))?.events ?? []
-              )
-            : (await getMatchDetail(f.id))?.events ?? [];
-          return { at: f.timestamp, events };
-        } catch {
-          return { at: f.timestamp, events: [] };
-        }
-      })
+      started.map((f): Promise<{ at: number; events: WcMatchEvent[] }> =>
+        limit(async () => {
+          try {
+            const events = f.status.finished
+              ? await withSWR(
+                  `wc:raceEvents:${f.id}`,
+                  FINISHED_EVENTS_TTL,
+                  FINISHED_EVENTS_TTL * 2,
+                  async () => await getMatchEventsOnly(f.id)
+                )
+              : await getMatchEventsOnly(f.id);
+            return { at: f.timestamp, events };
+          } catch {
+            return { at: f.timestamp, events: [] };
+          }
+        })
+      )
     );
     for (const { at, events } of eventLists) {
       for (const ev of events) {
@@ -945,6 +2322,14 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     }
 
     const all = [...tallies.values()];
+    // تصحيح أفراديّ لأي هدّاف رصدناه (لا لوحة كاملة) — يحافظ على ترتيب/عضوية لوحة
+    // المزود الرسمية كما هي؛ الاستبدال الكامل (freshestBoard) يبقى خاصًّا بودجت
+    // أعلى 10 الحيّ فقط.
+    const scorerGoalsById: Record<number, { goals: number; assists: number; penalties: number }> = {};
+    for (const t of all) {
+      if (!t.playerId || t.goals <= 0) continue;
+      scorerGoalsById[t.playerId] = { goals: t.goals, assists: t.assists, penalties: t.penalties };
+    }
     const toLeader = (t: WcRaceTally, index: number): WcLeader => ({
       rank: index + 1,
       id: t.playerId ?? 0,
@@ -994,6 +2379,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         assists: all.reduce((sum, t) => sum + t.assists, 0),
         cards: all.reduce((sum, t) => sum + t.yellow + t.red, 0),
       },
+      scorerGoalsById,
     };
   });
 }
@@ -1126,6 +2512,289 @@ export interface WcMatchDetail {
   headToHead: WcFixture[];
 }
 
+/**
+ * يبني خريطة «معرّف اللاعب → أفضل اسم خام» من كل مصادر المباراة في الرد الواحد
+ * (أحداث + تشكيلات + تقييمات). السبب: API-Football يرسل اسم اللاعب في الأحداث
+ * مختصرًا («F. Al-Buraikan») وأحيانًا بصيغة لا يلتقطها القاموس الثابت، فيتراجع
+ * النقل الصوتي للـAI الذي قد يخطئ توسعة الحرف الأول (مثال حقيقي: «F. Al-Buraikan»
+ * → «فهد البريكين» بدل «فراس البريكان»). أما التشكيلات/التقييمات فتحمل نفس
+ * المعرّف بالاسم الكامل، فنوحّد التعريب بالمعرّف الثابت لا بسلسلة الاسم المتقلّبة:
+ * هكذا يطابق اسم الحدث/التقرير اسمَ بطاقة اللاعب تمامًا.
+ *
+ * المفاضلة لكل معرّف: ما هو في القاموس الثابت أولًا، ثم الاسم الأطول (الأكمل غالبًا).
+ */
+function collectBestNamesById(item: any): Map<number, string> {
+  const best = new Map<number, string>();
+  const consider = (id: any, name: any) => {
+    if (typeof id !== "number" || !name || typeof name !== "string" || !name.trim()) return;
+    const candidate = name.trim();
+    const prev = best.get(id);
+    if (prev === undefined) {
+      best.set(id, candidate);
+      return;
+    }
+    const prevInDict = !!WC_PLAYER_AR[prev];
+    const candInDict = !!WC_PLAYER_AR[candidate];
+    if (candInDict && !prevInDict) {
+      best.set(id, candidate);
+    } else if (candInDict === prevInDict && candidate.length > prev.length) {
+      best.set(id, candidate);
+    }
+  };
+  for (const ev of item?.events ?? []) {
+    consider(ev.player?.id, ev.player?.name);
+    consider(ev.assist?.id, ev.assist?.name);
+  }
+  for (const lineup of item?.lineups ?? []) {
+    for (const p of lineup.startXI ?? []) consider(p.player?.id, p.player?.name);
+    for (const p of lineup.substitutes ?? []) consider(p.player?.id, p.player?.name);
+  }
+  for (const teamBlock of item?.players ?? []) {
+    for (const p of teamBlock.players ?? []) consider(p.player?.id, p.player?.name);
+  }
+  return best;
+}
+
+/**
+ * يرجّع دالة تعريب تفضّل المعرّف الثابت: لو توفّر معرّف اللاعب، تُعرّب أفضل اسم
+ * خام له (الأكمل) بدل سلسلة الاسم المحلية المتقلّبة. تتراجع لتعريب الاسم كما ورد.
+ */
+// مقطع مختصر: حرفٌ واحد متبوعٌ بنقطة ("م." / "M.") — علامة اسمٍ ناقص.
+const ABBREV_NAME_TOKEN = /(?:^|\s)\p{L}\.(?=\s|$)/u;
+
+// مُعرِّف اسم موحّد بترتيب أولويةٍ يمنع الارتداد: القاموس المعتمد (WC_PLAYER_AR،
+// بشريّ) فوق الكل ← التعريب الحالي (AI/DB) إن كان اسمًا كاملًا (فلا نُراجع اسمًا
+// صحيحًا فنكسره) ← اسم TheSports name_aa يملأ الاختصار فقط ← الحالي احتياطًا.
+// يُطبَّق موحّدًا على الأحداث والتشكيلة والتقييمات فلا يختلف اسم اللاعب بين سطحين.
+function nameResolverById(
+  tr: (name: string | null | undefined) => string,
+  bestById: Map<number, string>,
+  tsArById?: Map<number, string>,
+): (id: number | null | undefined, name: string | null | undefined) => string {
+  return (id, name) => {
+    if (typeof id === "number") {
+      // اسم TheSports العربي الكامل (name_aa) عبر جسر رقم القميص — أدقّ وأكمل من
+      // اسم API-Football المختصر، وعربيٌّ أصلًا فلا يمرّ بـtr.
+      const arFull = tsArById?.get(id);
+      if (arFull) return arFull;
+    }
+    const best = typeof id === "number" ? bestById.get(id) : undefined;
+    // 1) القاموس المعتمد — أعلى سلطة، يتجاوز المزوّد كلّه (يطابق الاسم اللاتيني).
+    const curated = (best && WC_PLAYER_AR[best]) || (name ? WC_PLAYER_AR[name] : undefined);
+    if (curated) return curated;
+    // 2) التعريب الحالي (AI + تصحيحات DB) — نُبقيه إن كان كاملًا (لا نكسر اسمًا صحيحًا).
+    const resolved = tr(best ?? name);
+    if (resolved && !ABBREV_NAME_TOKEN.test(resolved)) return resolved;
+    // 3) اسم TheSports name_aa يملأ الاختصار فقط (لا يتجاوز اسمًا كاملًا أعلاه).
+    if (typeof id === "number") {
+      const arFull = tsArById?.get(id);
+      if (arFull) return arFull;
+    }
+    return resolved;
+  };
+}
+
+/**
+ * جسر أسماء: معرّف لاعب API-Football → اسمه العربي الكامل (name_aa) من TheSports.
+ * الطريق: uuid المباراة (getWcMatchTsId) → تشكيلة TheSports (رقم قميص + name_aa)،
+ * ثم مطابقة رقم القميص داخل كل جانب بتشكيلة API-Football (معرّف + رقم). يعالج جذر
+ * الأسماء المختصرة/المخترعة في المباريات المنتهية دون فقد قابلية النقر (نُبقي معرّف
+ * API-Football). أفضل جهد بالكامل: أيّ فجوة (uuid/تشكيلة/رقم مفقود) تُبقي التعريب
+ * الحالي لذلك اللاعب فقط.
+ */
+async function tsArNameByApiPlayerId(
+  fixtureId: number,
+  homeTeamId: number | null | undefined,
+  awayTeamId: number | null | undefined,
+  item: any,
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  try {
+    const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+    if (!uuid) return out;
+    const lineup = await getTsLineup(uuid).catch(() => null as TsLineup | null);
+    if (!lineup) return out;
+    // مصادر (معرّف API-Football + رقم قميص) لكل منتخب: التشكيلة، والتقييمات (players)
+    // التي تحمل الرقم في statistics[0].games.number — فيعمل الجسر حتى إن غابت التشكيلة
+    // (جذر حالة «التشكيلة كاملة والأحداث مختصرة»).
+    const apiSources: { teamId: any; entries: { pid: any; num: any }[] }[] = [];
+    for (const t of Array.isArray(item?.lineups) ? item.lineups : []) {
+      const players = [...(t?.startXI ?? []), ...(t?.substitutes ?? [])];
+      apiSources.push({
+        teamId: t?.team?.id,
+        entries: players.map((p: any) => ({ pid: p?.player?.id, num: p?.player?.number })),
+      });
+    }
+    for (const t of Array.isArray(item?.players) ? item.players : []) {
+      apiSources.push({
+        teamId: t?.team?.id,
+        entries: (t?.players ?? []).map((p: any) => ({
+          pid: p?.player?.id,
+          num: p?.statistics?.[0]?.games?.number,
+        })),
+      });
+    }
+    for (const src of apiSources) {
+      const tsSide: TsLineupPlayer[] | null =
+        src.teamId === homeTeamId ? lineup.home : src.teamId === awayTeamId ? lineup.away : null;
+      if (!tsSide) continue;
+      const byNumber = new Map<number, string>();
+      for (const p of tsSide) {
+        if (p.shirtNumber != null && p.nameAr) byNumber.set(p.shirtNumber, p.nameAr);
+      }
+      for (const { pid, num } of src.entries) {
+        if (typeof pid === "number" && typeof num === "number" && !out.has(pid)) {
+          const nm = byNumber.get(num);
+          if (nm) out.set(pid, nm);
+        }
+      }
+    }
+  } catch {
+    // أفضل جهد — أيّ فشل يُبقي التعريب الحالي بلا عطل
+  }
+  return out;
+}
+
+/** يعرّب أحداث المباراة فقط — مشترك بين التفاصيل الكاملة والمسار الخفيف. */
+function localizeMatchEvents(
+  item: any,
+  tr: (name: string | null | undefined) => string,
+  bestById?: Map<number, string>,
+  tsArById?: Map<number, string>,
+): WcMatchEvent[] {
+  const arName = nameResolverById(tr, bestById ?? new Map(), tsArById);
+  return (item?.events ?? []).map((ev: any): WcMatchEvent => {
+    const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
+    // تبديل: API-Football يعكس الحقلين — ev.player = الخارج، ev.assist = الداخل.
+    // نعرض الداخل في «player» (العنوان) والخارج في «assist» («بديلًا عن»)، مطابقةً
+    // لمسار TheSports. الأهداف/البطاقات تبقى كما هي (player=الفاعل، assist=الصانع).
+    const isSubst = String(ev.type ?? "").toLowerCase() === "subst";
+    const inSide = isSubst ? ev.assist : ev.player;
+    const outSide = isSubst ? ev.player : ev.assist;
+    const hasSecondary = !!(outSide?.name || outSide?.id);
+    return {
+      minute: ev.time?.elapsed ?? 0,
+      extraMinute: ev.time?.extra ?? null,
+      teamId: ev.team?.id ?? 0,
+      type: localized.type,
+      label: localized.label,
+      detail: ev.detail ?? "",
+      player: arName(inSide?.id, inSide?.name),
+      playerId: inSide?.id ?? null,
+      assist: hasSecondary ? arName(outSide?.id, outSide?.name) || null : null,
+      assistId: outSide?.id ?? null,
+    };
+  });
+}
+
+function creditedWcGoalCounts(events: WcMatchEvent[], homeId: number): { home: number; away: number } {
+  let home = 0;
+  let away = 0;
+  for (const e of events) {
+    if (e.type !== "goal") continue;
+    const scoredByHome = e.teamId === homeId;
+    const ownGoal = e.label.includes("عكسي") || e.detail === "Own Goal";
+    const creditHome = ownGoal ? !scoredByHome : scoredByHome;
+    if (creditHome) home += 1;
+    else away += 1;
+  }
+  return { home, away };
+}
+
+function appendWcScoreSummaryEvents(fixture: WcFixture, events: WcMatchEvent[]): WcMatchEvent[] {
+  if (!fixture.status.finished) return events;
+  const out = [...events];
+  const counted = creditedWcGoalCounts(events, fixture.home.id);
+  const homeGoals = fixture.goals.home ?? 0;
+  const awayGoals = fixture.goals.away ?? 0;
+
+  const pushMissingGoals = (team: WcTeam, missing: number, total: number) => {
+    if (missing <= 0 || total <= 0) return;
+    out.push({
+      minute: 0,
+      extraMinute: null,
+      teamId: team.id,
+      type: "score-summary",
+      label: total === 1 ? "هدف مسجل دون تفاصيل من المصدر" : `${total} أهداف مسجلة دون تفاصيل من المصدر`,
+      detail: "Score Summary",
+      player: "ملخص الأهداف",
+      playerId: null,
+      assist: null,
+      assistId: null,
+    });
+  };
+
+  pushMissingGoals(fixture.home, homeGoals - counted.home, homeGoals);
+  pushMissingGoals(fixture.away, awayGoals - counted.away, awayGoals);
+
+  const pen = fixture.penalties;
+  const hasPenaltySummary = events.some((e) => e.type === "shootout-summary" || e.label.includes("الترجيح"));
+  if (!hasPenaltySummary && pen && (pen.home != null || pen.away != null)) {
+    if (pen.home != null) {
+      out.push({
+        minute: 120,
+        extraMinute: null,
+        teamId: fixture.home.id,
+        type: "shootout-summary",
+        label: `${pen.home} ركلات ناجحة`,
+        detail: "Penalty Shootout",
+        player: "ركلات الترجيح",
+        playerId: null,
+        assist: null,
+        assistId: null,
+      });
+    }
+    if (pen.away != null) {
+      out.push({
+        minute: 120,
+        extraMinute: null,
+        teamId: fixture.away.id,
+        type: "shootout-summary",
+        label: `${pen.away} ركلات ناجحة`,
+        detail: "Penalty Shootout",
+        player: "ركلات الترجيح",
+        playerId: null,
+        assist: null,
+        assistId: null,
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * مسار خفيف يجلب أحداث المباراة فقط (نداء `fixtures` واحد) دون توقعات أو سجل
+ * مواجهات. تجميع سباقات الهدّافين يحتاج الأحداث وحدها، فلا داعي لإشعال نداءين
+ * إضافيين لكل مباراة كما يفعل getMatchDetail — هذا جذر طوفان rate-limit.
+ */
+async function getMatchEventsOnly(fixtureId: number): Promise<WcMatchEvent[]> {
+  const known = (await getFixtures()).find((f) => f.id === fixtureId);
+  let ttl = CACHE_TTL.MEDIUM;
+  if (known?.status.live) {
+    ttl = MATCH_DETAIL_LIVE_TTL;
+  } else if (known && !known.status.finished) {
+    const msToKickoff = new Date(known.date).getTime() - Date.now();
+    if (msToKickoff < PREKICKOFF_WINDOW_MS) ttl = MATCH_DETAIL_PREKICKOFF_TTL;
+  }
+
+  return withSWR(`wc:matchEvents:${fixtureId}`, ttl, ttl * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return [];
+    // وحّد التعريب بمعرّف اللاعب: نفس رد `fixtures` يحمل الأسماء الكاملة في
+    // التشكيلات/التقييمات، فنعرّبها بدل الاسم المختصر في الأحداث (انظر
+    // collectBestNamesById) كي لا يخترع الـAI اسمًا أول خاطئًا.
+    const bestById = collectBestNamesById(item);
+    const rawNames: (string | null | undefined)[] = [...bestById.values()];
+    for (const ev of item.events ?? []) {
+      rawNames.push(ev.player?.name, ev.assist?.name);
+    }
+    const tr = await resolveNames(rawNames);
+    return localizeMatchEvents(item, tr, bestById);
+  });
+}
+
 export async function getMatchDetail(
   fixtureId: number,
   opts: { forceFresh?: boolean } = {}
@@ -1133,6 +2802,22 @@ export async function getMatchDetail(
   // مباراة حية تُحدَّث كل 20 ثانية، وقبيل الانطلاق كل دقيقة (لالتقاط التشكيلات فور نشرها)،
   // والمنتهية/البعيدة كل 5 دقائق
   const known = (await getFixtures()).find((f) => f.id === fixtureId);
+  // خانة إقصائية اصطناعية لم ينشرها المزوّد بعد: لا تفاصيل عنده أصلًا — نعيد
+  // بطاقتها الأساسية من الجدول المُكمّل (الطرفان المُرقّيان/رمزاهما + الموعد
+  // والملعب والدور) بلا أحداث/تشكيلات، فيفتح مركز المباراة بدل 404.
+  if (isSyntheticFixtureId(fixtureId)) {
+    if (!known) return null;
+    return {
+      fixture: known,
+      events: [],
+      lineups: [],
+      statistics: [],
+      prediction: null,
+      ratings: [],
+      manOfTheMatch: null,
+      headToHead: [],
+    };
+  }
   let ttl = CACHE_TTL.MEDIUM;
   if (known?.status.live) {
     ttl = MATCH_DETAIL_LIVE_TTL;
@@ -1151,8 +2836,11 @@ export async function getMatchDetail(
     if (!item) return null;
 
     // اجمع كل أسماء اللاعبين في هذه المباراة (أحداث + تشكيلات + تقييمات)
-    // وعرّبها دفعة واحدة — استدعاء AI واحد فقط للأسماء الجديدة، ثم كاش للأبد
-    const rawNames: (string | null | undefined)[] = [];
+    // وعرّبها دفعة واحدة — استدعاء AI واحد فقط للأسماء الجديدة، ثم كاش للأبد.
+    // التعريب يُوحَّد بمعرّف اللاعب (لا بسلسلة الاسم): اسم الحدث المختصر يُعرَّب
+    // عبر أكمل اسم لنفس المعرّف من التشكيلة/التقييم — فيطابق اسمَ بطاقة اللاعب.
+    const bestById = collectBestNamesById(item);
+    const rawNames: (string | null | undefined)[] = [...bestById.values()];
     for (const ev of item.events ?? []) {
       rawNames.push(ev.player?.name, ev.assist?.name);
     }
@@ -1164,27 +2852,26 @@ export async function getMatchDetail(
       for (const p of teamBlock.players ?? []) rawNames.push(p.player?.name);
     }
     const tr = await resolveNames(rawNames);
+    // جسر الأسماء الكاملة من TheSports (name_aa) بمطابقة رقم القميص — يُصلح الأسماء
+    // المختصرة/المخترعة في المباريات المنتهية. أفضل جهد: خريطة فارغة = التعريب الحالي.
+    const tsArById = await tsArNameByApiPlayerId(
+      fixtureId,
+      item.teams?.home?.id,
+      item.teams?.away?.id,
+      item,
+    );
+    const arName = nameResolverById(tr, bestById, tsArById);
 
-    const events: WcMatchEvent[] = (item.events ?? []).map((ev: any) => {
-      const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
-      return {
-        minute: ev.time?.elapsed ?? 0,
-        extraMinute: ev.time?.extra ?? null,
-        teamId: ev.team?.id ?? 0,
-        type: localized.type,
-        label: localized.label,
-        detail: ev.detail ?? "",
-        player: tr(ev.player?.name),
-        playerId: ev.player?.id ?? null,
-        assist: ev.assist?.name ? tr(ev.assist.name) : null,
-        assistId: ev.assist?.id ?? null,
-      };
-    });
+    const fixture = localizeFixture(item);
+    const events: WcMatchEvent[] = appendWcScoreSummaryEvents(
+      fixture,
+      localizeMatchEvents(item, tr, bestById, tsArById)
+    );
 
-    const lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
+    let lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
       const mapPlayer = (p: any): WcLineupPlayer => ({
         id: p.player?.id ?? 0,
-        name: tr(p.player?.name),
+        name: arName(p.player?.id, p.player?.name),
         number: p.player?.number ?? null,
         position: p.player?.pos ?? null,
         grid: p.player?.grid ?? null,
@@ -1199,6 +2886,13 @@ export async function getMatchDetail(
       };
     });
 
+    // تشكيلات API-Football تتأخّر/تغيب لبعض مباريات المونديال → نتراجع لتشكيلات
+    // TheSports (أسرع نشرًا، وبأرقام/خطط/إحداثيات ملعب). أفضل جهد: لا تعطّل المباراة.
+    if (lineups.length === 0) {
+      const tsLineups = await getWcLineupsTs(fixtureId).catch(() => [] as WcLineup[]);
+      if (tsLineups.length > 0) lineups = tsLineups;
+    }
+
     // تقييمات اللاعبين — يرسلها المزود ضمن نفس الرد بعد انطلاق المباراة
     const ratings: WcPlayerRating[] = (item.players ?? [])
       .flatMap((teamBlock: any) =>
@@ -1208,7 +2902,7 @@ export async function getMatchDetail(
           if (!Number.isFinite(rating)) return null;
           return {
             id: p.player?.id ?? 0,
-            name: tr(p.player?.name),
+            name: arName(p.player?.id, p.player?.name),
             photo: p.player?.photo ?? "",
             teamId: teamBlock.team?.id ?? 0,
             number: st.games?.number ?? null,
@@ -1238,7 +2932,7 @@ export async function getMatchDetail(
         };
       });
 
-    return { fixture: localizeFixture(item), events, lineups, statistics, ratings };
+    return { fixture, events, lineups, statistics, ratings };
   }, opts.forceFresh ?? false);
 
   if (!detail) return null;
@@ -1292,15 +2986,127 @@ const STAR_WEIGHT: Record<number, number> = {
 const starWeight = (fixture: WcFixture): number =>
   (STAR_WEIGHT[fixture.home.id] ?? 1) + (STAR_WEIGHT[fixture.away.id] ?? 1);
 
+/** النهائي الحقيقي — لا يشمل «3rd Place Final» (المزوّد يسمّيها ببادئة مختلفة). */
+export function isTrueFinal(fixture: WcFixture): boolean {
+  const r = (fixture.roundEn ?? "").trim();
+  return r === "Final" || (r.startsWith("Final") && !r.startsWith("3rd"));
+}
+
+/**
+ * اختيار مباراة اليوم من بركة مرشّحات. النهائي يفوز دائمًا على مباراة المركز
+ * الثالث إن وُجد في نفس البركة (أحيانًا أبكر بساعات في نفس اليوم)، وإلا
+ * الأقرب زمنيًا ثم النجومية كاسر تعادل.
+ */
+function pickMatchOfTheDay(pool: WcFixture[]): WcFixture | null {
+  if (pool.length === 0) return null;
+  const final = pool.find(isTrueFinal);
+  if (final) return final;
+  return (
+    [...pool].sort(
+      (a, b) => a.timestamp - b.timestamp || starWeight(b) - starWeight(a),
+    )[0] ?? null
+  );
+}
+
+/** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
+export interface WcChampion {
+  team: WcTeam;
+  runnerUp: WcTeam | null;
+  /** نتيجة النهائي بترتيب «الفائز أولًا» (W-L) — نفس اتفاقية الترجيح الموحّدة */
+  score: string | null;
+  /** نتيجة ركلات الترجيح بترتيب «الفائز أولًا» — null إن حُسم النهائي دونها */
+  penalties: string | null;
+  decidedAt: string | null;
+  source: "auto" | "manual";
+}
+
+/**
+ * كشف بطل المونديال من مباراة النهائي المنتهية. الفائز يُحسم بعلم المزوّد
+ * (team.winner) أولًا، ثم بالترجيح، ثم بالأهداف — المزوّد قد يترك winner
+ * فارغًا في مباريات الترجيح. «3rd Place Final» لا تبدأ بـFinal فلا تُلتقط خطأً.
+ */
+export function detectChampion(fixtures: WcFixture[]): WcChampion | null {
+  const final = fixtures.find(
+    (f) => (f.roundEn ?? "").trim().startsWith("Final") && f.status.finished
+  );
+  if (!final) return null;
+
+  const pen = final.penalties;
+  let winnerSide: "home" | "away" | null = null;
+  if (final.home.winner === true) winnerSide = "home";
+  else if (final.away.winner === true) winnerSide = "away";
+  else if (pen && pen.home != null && pen.away != null && pen.home !== pen.away)
+    winnerSide = pen.home > pen.away ? "home" : "away";
+  else if (
+    final.goals.home != null &&
+    final.goals.away != null &&
+    final.goals.home !== final.goals.away
+  )
+    winnerSide = final.goals.home > final.goals.away ? "home" : "away";
+  if (!winnerSide) return null;
+
+  const winner = winnerSide === "home" ? final.home : final.away;
+  const loser = winnerSide === "home" ? final.away : final.home;
+  const winnerGoals = winnerSide === "home" ? final.goals.home : final.goals.away;
+  const loserGoals = winnerSide === "home" ? final.goals.away : final.goals.home;
+  const score =
+    winnerGoals != null && loserGoals != null ? `${winnerGoals}-${loserGoals}` : null;
+  const penalties =
+    pen && pen.home != null && pen.away != null
+      ? winnerSide === "home"
+        ? `${pen.home}-${pen.away}`
+        : `${pen.away}-${pen.home}`
+      : null;
+
+  return {
+    team: winner,
+    runnerUp: loser,
+    score,
+    penalties,
+    decidedAt: final.date ?? null,
+    source: "auto",
+  };
+}
+
+/**
+ * بطل مُعيَّن يدويًا من لوحة التحكم (احتياط تأخّر/خطأ المزوّد) — يُبنى من
+ * بيانات المنتخب (الاسم المعرّب + الشعار) في أي مباراة خاضها بالبطولة.
+ */
+export async function getManualChampion(teamId: number): Promise<WcChampion | null> {
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  for (const f of fixtures) {
+    const team = f.home.id === teamId ? f.home : f.away.id === teamId ? f.away : null;
+    if (team) {
+      return {
+        team,
+        runnerUp: null,
+        score: null,
+        penalties: null,
+        decidedAt: null,
+        source: "manual",
+      };
+    }
+  }
+  return null;
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
   matchOfTheDay: { fixture: WcFixture; prediction: WcPrediction | null } | null;
+  // المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — قد تكون في يوم
+  // تقويمي تالٍ فلا تظهر في today؛ تُمرّر لتُعرض كبطاقات Hero متجاورة.
+  matchOfDayPeers: WcFixture[];
+  // توقعات النتيجة مفهرسة بمعرّف المباراة — لكل مباراة قد تُعرض كبطاقة Hero
+  // كبيرة (الحيّة + المتزامنة القادمة)، لا المميّزة وحدها.
+  predictions: Record<number, WcPrediction>;
   saudi: {
     next: WcFixture | null;
     fixtures: WcFixture[];
     group: WcGroup | null;
   };
+  /** بطل البطولة بعد حسم النهائي — الواجهات تعرضه بدل مربع المباراة */
+  champion: WcChampion | null;
   updatedAt: string;
 }
 
@@ -1318,20 +3124,42 @@ export async function getOverview(): Promise<WcOverview> {
   const nextDayKey = (upcoming[0]?.date ?? "").slice(0, 10);
   const nextDayMatches = upcoming.filter((f) => (f.date ?? "").slice(0, 10) === nextDayKey);
   const fallbackPool = motdPool.length > 0 ? motdPool : nextDayMatches;
-  // الأقرب زمنيًا أولًا — مباراة الفجر لا تتجاوزها مباراة المساء مهما علت
-  // نجوميتها؛ النجومية كاسر تعادل للمباريات المتزامنة (ختام المجموعات)
-  const motdFixture = [...fallbackPool].sort(
-    (a, b) => a.timestamp - b.timestamp || starWeight(b) - starWeight(a)
-  )[0] ?? null;
+  // النهائي أولوية على المركز الثالث في نفس اليوم؛ وإلا الأقرب زمنيًا ثم النجومية
+  const motdFixture = pickMatchOfTheDay(fallbackPool);
 
-  let motdPrediction: WcPrediction | null = null;
+  // توقعات لكل المباريات التي قد تُعرض كبطاقات Hero كبيرة: الحيّة جميعها +
+  // المباراة المميّزة + المباريات القادمة المتزامنة معها (نفس وقت الانطلاق).
+  // getPrediction مُخزَّن (SWR) فجلب عدة مباريات لا يكلّف نداءات متكرّرة للمزود.
+  // المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — تُبحث ضمن كل
+  // المباريات القادمة لا «اليوم» فقط، لأن ختام دور المجموعات قد ينطلق بعد منتصف
+  // الليل (يوم تقويمي تالٍ) فلا تكون الشقيقة في مصفوفة today إطلاقًا.
+  const motdPeers =
+    motdFixture && !motdFixture.status.live && !motdFixture.status.finished
+      ? upcoming.filter(
+          (f) => f.id !== motdFixture.id && f.timestamp === motdFixture.timestamp
+        )
+      : [];
+
+  const predictionTargets = new Set<number>();
+  for (const f of live) predictionTargets.add(f.id);
   if (motdFixture && !motdFixture.status.finished) {
-    try {
-      motdPrediction = await getPrediction(motdFixture.id);
-    } catch (error) {
-      console.warn("[WorldCup] match-of-the-day prediction failed:", error);
-    }
+    predictionTargets.add(motdFixture.id);
+    for (const f of motdPeers) predictionTargets.add(f.id);
   }
+
+  const predictions: Record<number, WcPrediction> = {};
+  await Promise.all(
+    [...predictionTargets].map(async (id) => {
+      try {
+        const pred = await getPrediction(id);
+        if (pred) predictions[id] = pred;
+      } catch (error) {
+        console.warn(`[WorldCup] prediction failed for fixture ${id}:`, error);
+      }
+    })
+  );
+
+  const motdPrediction = motdFixture ? predictions[motdFixture.id] ?? null : null;
 
   const saudiFixtures = fixtures.filter(
     (f) => f.home.id === SAUDI_TEAM_ID || f.away.id === SAUDI_TEAM_ID
@@ -1351,7 +3179,10 @@ export async function getOverview(): Promise<WcOverview> {
     live,
     today,
     matchOfTheDay: motdFixture ? { fixture: motdFixture, prediction: motdPrediction } : null,
+    matchOfDayPeers: motdPeers,
+    predictions,
     saudi: { next: saudiNext, fixtures: saudiFixtures, group: saudiGroup },
+    champion: detectChampion(fixtures),
     updatedAt: new Date().toISOString(),
   };
 }

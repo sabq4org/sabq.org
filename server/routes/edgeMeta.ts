@@ -41,14 +41,41 @@ import {
   buildProfilePageJsonLd,
   reporterProfileUrl,
   muqtarabAngleUrl,
+  muqtarabWriterUrl,
   SABQ_ORG_AR,
   SABQ_ORG_EN,
 } from "../utils/creatorSchema";
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
-import { memoryCache, CACHE_TTL } from "../memoryCache";
+import { MemoryCache, CACHE_TTL } from "../memoryCache";
 import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
+import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService";
+import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
 
 const router = Router();
+
+// Dedicated cache for the slug-redirect decisions, isolated from the shared
+// `memoryCache`. The CF worker hits /api/edge/slug-redirect on (nearly) every
+// HTML pageview, keyed by the FULL path — an inherently high-cardinality key:
+// every article/category/legacy URL plus every crawler/bot 404 probe mints a
+// distinct entry (positive AND negative {redirect:null} are cached for 15 min).
+// On the shared 5000-entry cache that flood evicted genuinely hot entries
+// (rbac:*, article:*, homepage SWR) under crawler traffic — the recurring
+// "[Cache] memoryCache hit the 5000-entry cap" warning in Railway logs.
+// Keeping it in its own bounded bucket lets the per-path churn self-evict here
+// without starving the shared cache. These keys are never pattern-invalidated
+// (they only expire by TTL), so isolation changes no invalidation behavior.
+//
+// Cap = 50k (was 5k): once isRedirectCandidate() filters out the random crawler
+// 404 probes, the residual cardinality is LEGITIMATE traffic — one negative
+// {redirect:null} entry per distinct published /article/<slug> viewed inside the
+// 5-min negative TTL window. On a high-traffic news site that routinely exceeds
+// 5k distinct article URLs per window, which pinned the old bucket at its cap and
+// produced the recurring "[Cache] edgeSlugRedirectCache hit the cap" warning
+// (and evicted still-hot redirect decisions, forcing needless DB re-probes).
+// Each entry is a tiny {redirect, gone} object (<100 B), so 50k is a few MB —
+// cheap insurance against that churn. Tune via EDGE_REDIRECT_CACHE_MAX if needed.
+const EDGE_REDIRECT_CACHE_MAX = Number(process.env.EDGE_REDIRECT_CACHE_MAX) || 50_000;
+const edgeRedirectCache = new MemoryCache(EDGE_REDIRECT_CACHE_MAX, "edgeSlugRedirectCache");
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
 const reporterUsers = aliasedTable(users, "reporter_user");
 const reporterStaff = aliasedTable(staff, "reporter_staff");
@@ -69,6 +96,23 @@ const LEGACY_ARTICLE_PREFIXES = new Set([
   "cars", "tourism", "media", "entertainment", "accidents", "breaking",
   "mylife", "stations", "articles",
 ]);
+
+// Fast structural test: can this path EVER produce a redirect or gone=true?
+// computeSlugRedirect only matches /article|news/…, /category/…, and the legacy
+// /<prefix>/…/slug shapes; computeArticleGone only matches (en|ur)?/article/….
+// For anything else BOTH are a pure-regex non-match (no DB query), so the result
+// is deterministically {redirect:null, gone:false}. We skip the cache write for
+// such paths — this is the root cause of the unbounded edgeSlugRedirectCache key
+// growth: bot/crawler 404 probes on random /foo/bar/baz paths each minted a
+// distinct (never-reused) negative entry, pinning the cache at its cap. Being
+// permissive here is safe — a false positive only means we cache as before.
+function isRedirectCandidate(path: string): boolean {
+  if (/^\/(?:en\/|ur\/)?article\//.test(path)) return true;
+  if (/^\/news\//.test(path)) return true;
+  if (/^\/category\//.test(path)) return true;
+  const seg = path.match(/^\/([a-z]+)(?:\/|$)/i);
+  return !!seg && LEGACY_ARTICLE_PREFIXES.has(seg[1].toLowerCase());
+}
 
 const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
@@ -161,6 +205,41 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
   return null;
 }
 
+// "Gone" detection for the edge. An article URL whose row EXISTS but is no
+// longer published (archived = soft-deleted by editors, or draft/scheduled)
+// should return HTTP 410 to crawlers — NOT a 200 + `noindex` shell that Google
+// re-crawls forever and parks in the "Excluded by noindex tag" report. A
+// MISSING row stays a 404 (web-next renders notFound()); only an
+// existing-but-unpublished row is "gone". Mirrors the slug match in
+// fetchArArticle / fetchEnArticle / fetchUrArticle.
+async function computeArticleGone(path: string): Promise<boolean> {
+  const m = path.match(/^\/(?:(en|ur)\/)?article\/([^/?#]+)/);
+  if (!m) return false;
+  const lang = m[1]; // undefined → ar
+  const slug = safeDecode(m[2]);
+  let row: { status: string | null } | undefined;
+  if (lang === "en") {
+    [row] = await db
+      .select({ status: enArticles.status })
+      .from(enArticles)
+      .where(or(eq(enArticles.englishSlug, slug), eq(enArticles.slug, slug))!)
+      .limit(1);
+  } else if (lang === "ur") {
+    [row] = await db
+      .select({ status: urArticles.status })
+      .from(urArticles)
+      .where(or(eq(urArticles.englishSlug, slug), eq(urArticles.slug, slug))!)
+      .limit(1);
+  } else {
+    [row] = await db
+      .select({ status: articles.status })
+      .from(articles)
+      .where(or(eq(articles.englishSlug, slug), eq(articles.slug, slug))!)
+      .limit(1);
+  }
+  return !!row && row.status !== "published";
+}
+
 router.get("/api/edge/slug-redirect", async (req, res) => {
   // Redirect decisions for a path are semantically stable (a published
   // article's canonical slug doesn't change), so let the edge absorb repeats:
@@ -179,18 +258,36 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // canonical key per path → far higher hit rate + correct legacy redirects.
     const path = raw.replace(/[?#].*$/, "");
 
+    // Skip the cache (and the DB) for paths that can NEVER redirect: the result
+    // is a deterministic regex non-match. This stops bot/crawler 404 probes from
+    // minting unbounded negative cache keys (the recurring edgeSlugRedirectCache
+    // cap warning). The edge HTTP Cache-Control above still absorbs repeats.
+    if (!isRedirectCandidate(path)) {
+      return res.json({ redirect: null, gone: false });
+    }
+
     // In-process cache: this endpoint is hit on (nearly) every HTML pageview by
     // the CF worker, but the redirect decision for a given path is stable. Cache
     // both positive AND negative ({redirect:null}) results to avoid a DB
-    // round-trip on the hot path. 15 min keeps the DB off the hot path even
-    // across the 5-min edge window; 301 targets are stable so this is safe for
-    // crawlers/indexing.
+    // round-trip on the hot path.
     const cacheKey = `edge:slug-redirect:${path}`;
-    const cached = memoryCache.get<{ redirect: string | null }>(cacheKey);
+    const cached = edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
     if (cached !== null) return res.json(cached);
 
-    const payload = { redirect: await computeSlugRedirect(path) };
-    memoryCache.set(cacheKey, payload, CACHE_TTL.LONG);
+    const redirect = await computeSlugRedirect(path);
+    // Only probe "gone" when there's NO redirect: a redirect 301s first at the
+    // edge so the gone flag would never be consulted, and this saves the extra
+    // DB lookup on the (Arabic-slug) redirect path.
+    const gone = redirect ? false : await computeArticleGone(path);
+    const payload = { redirect, gone };
+    // Positive results (a real 301 target, or an existing-but-unpublished "gone"
+    // article) are stable AND bounded by article/category count → cache LONG.
+    // Negative results are dominated by non-existent-slug probes (high
+    // cardinality, low value): give them MEDIUM TTL (matches the 5-min edge
+    // s-maxage) so the periodic sweep reclaims them ~3x faster and they don't
+    // pin the bucket at its cap.
+    const ttl = redirect || gone ? CACHE_TTL.LONG : CACHE_TTL.MEDIUM;
+    edgeRedirectCache.set(cacheKey, payload, ttl);
     return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);
@@ -700,14 +797,87 @@ function buildUrArticlePayload(
   });
 }
 
-function defaultMeta(path: string) {
-  return {
+// Locale of a path by its prefix: /en* → English, /ur* → Urdu, else Arabic.
+// Drives the locale-correct default meta so unhandled English/Urdu surfaces
+// (homepage, news, static pages…) never fall back to an Arabic <title>.
+function localeOfPath(path: string): "ar" | "en" | "ur" {
+  if (path === "/en" || path.startsWith("/en/")) return "en";
+  if (path === "/ur" || path.startsWith("/ur/")) return "ur";
+  return "ar";
+}
+
+// Per-language site-level defaults (title/description/locale/site name) used as
+// the catch-all when no specific route handler matches.
+const DEFAULT_SITE_META = {
+  ar: {
     title: "سبق الذكية",
     description: "منصة إخبارية ذكية مدعومة بالذكاء الاصطناعي",
+    locale: "ar_SA",
+    siteName: ARTICLE_BRAND.ar.name,
+  },
+  en: {
+    title: "Sabq News — Smart AI-Powered News",
+    description: "Sabq News — a smart, AI-powered news platform delivering the latest from Saudi Arabia and the world.",
+    locale: "en_US",
+    siteName: ARTICLE_BRAND.en.name,
+  },
+  ur: {
+    title: "سبق نیوز — اے آئی سے چلنے والا اسمارٹ نیوز پلیٹ فارم",
+    description: "سبق نیوز — ایک اسمارٹ، اے آئی سے چلنے والا نیوز پلیٹ فارم جو سعودی عرب اور دنیا بھر کی تازہ ترین خبریں فراہم کرتا ہے۔",
+    locale: "ur_PK",
+    siteName: ARTICLE_BRAND.ur.name,
+  },
+} as const;
+
+function defaultMeta(path: string) {
+  const d = DEFAULT_SITE_META[localeOfPath(path)];
+  return {
+    title: d.title,
+    description: d.description,
     image: DEFAULT_OG_IMAGE,
     canonical: `${SITE_URL}${path === "/" ? "" : path}`,
     robots: "index,follow",
     type: "website",
+    locale: d.locale,
+    siteName: d.siteName,
+  };
+}
+
+// Localized landing pages (English + Urdu) that have a dedicated SPA route but
+// no dynamic DB-backed handler. Mirrors the English/Urdu entries in
+// seoInjector.ts STATIC_INDEXABLE_PAGES so the edge injector (production) emits
+// the correct-language <title>/description instead of the Arabic default.
+const LOCALIZED_STATIC_PAGES: Record<
+  string,
+  { title: string; desc: string; locale: string; siteName: string }
+> = {
+  // English
+  "/en": { title: "Sabq News — Smart AI-Powered News", desc: "Sabq News — a smart, AI-powered news platform delivering the latest from Saudi Arabia and the world.", locale: "en_US", siteName: "Sabq News" },
+  "/en/news": { title: "Latest News — Sabq", desc: "Browse the latest breaking news and updates on Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/categories": { title: "Categories — Sabq", desc: "Browse all news categories on Sabq.", locale: "en_US", siteName: "Sabq News" },
+  "/en/about": { title: "About — Sabq", desc: "Learn about Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/privacy": { title: "Privacy Policy — Sabq", desc: "Privacy policy of Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/terms": { title: "Terms of Use — Sabq", desc: "Terms of use for Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/accessibility-statement": { title: "Accessibility Statement — Sabq", desc: "Accessibility statement of Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/daily-brief": { title: "Daily Brief — Sabq", desc: "A daily roundup of the most important news from Sabq.", locale: "en_US", siteName: "Sabq News" },
+  "/en/moment-by-moment": { title: "Moment by Moment — Sabq", desc: "Live coverage of breaking events from Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  // Urdu
+  "/ur": { title: "سبق نیوز — اے آئی سے چلنے والا اسمارٹ نیوز پلیٹ فارم", desc: "سبق نیوز — ایک اسمارٹ، اے آئی سے چلنے والا نیوز پلیٹ فارم جو تازہ ترین خبریں فراہم کرتا ہے۔", locale: "ur_PK", siteName: "سبق نیوز" },
+  "/ur/news": { title: "تازہ خبریں — سبق نیوز", desc: "سبق نیوز پر تازہ ترین خبریں اور بریکنگ نیوز پڑھیں۔", locale: "ur_PK", siteName: "سبق نیوز" },
+};
+
+function staticPageMeta(path: string) {
+  const entry = LOCALIZED_STATIC_PAGES[path];
+  if (!entry) return null;
+  return {
+    title: entry.title,
+    description: entry.desc,
+    image: BRAND_OG_IMAGE,
+    canonical: `${SITE_URL}${path}`,
+    robots: "index,follow",
+    type: "website",
+    locale: entry.locale,
+    siteName: entry.siteName,
   };
 }
 
@@ -977,6 +1147,72 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         robots: row.status === "published" ? "index,follow" : "noindex, follow",
         type: "article",
         locale: "ar_SA",
+      };
+    },
+  },
+  // Muqtarab writer profile: /muqtarab/writer/:id
+  // لا بد أن يسبق معالج الزاوية أدناه — نمط الزاوية /muqtarab/([^/]+) يلتقط
+  // "writer" كـ slug، والإرسال يتوقف عند أول نمط مطابق.
+  {
+    pattern: /^\/muqtarab\/writer\/([^/?#]+)/,
+    handle: async (m) => {
+      const id = safeDecode(m[1]);
+      const [w] = await db
+        .select({
+          firstName: users.firstName,
+          lastName: users.lastName,
+          bio: users.bio,
+          image: users.profileImageUrl,
+          staffNameAr: staff.nameAr,
+          staffBioAr: staff.bioAr,
+          staffImage: staff.profileImage,
+        })
+        .from(users)
+        .leftJoin(staff, eq(staff.userId, users.id))
+        .where(eq(users.id, id))
+        .limit(1);
+      if (!w) return null;
+      // كاتب عام فقط إن كان يدير زاوية فعّالة
+      const [activeAngle] = await db
+        .select({ nameAr: angles.nameAr })
+        .from(angles)
+        .where(and(eq(angles.managerUserId, id), eq(angles.isActive, true)))
+        .limit(1);
+      if (!activeAngle) return null;
+      const name =
+        w.staffNameAr ||
+        [w.firstName, w.lastName].filter(Boolean).join(" ") ||
+        "كاتب مُقترب";
+      const description = (
+        w.staffBioAr ||
+        w.bio ||
+        `${name} — كاتب في منصة مُقترب من صحيفة سبق الإلكترونية.`
+      ).slice(0, 220);
+      const canonical = muqtarabWriterUrl(SITE_URL, id);
+      const { absolute: image } = await resolveMuqtarabOgImage(SITE_URL, w.staffImage, w.image);
+      const person = buildPersonJsonLd({
+        name,
+        url: canonical,
+        image,
+        description,
+        jobTitle: "كاتب في مُقترب",
+        worksFor: SABQ_ORG_AR,
+      });
+      return {
+        title: `${name} — كاتب في مُقترب — سبق`,
+        description,
+        image,
+        canonical,
+        robots: "index, follow, max-image-preview:large",
+        type: "profile",
+        locale: "ar_SA",
+        jsonLd: buildProfilePageJsonLd({
+          name,
+          url: canonical,
+          description,
+          image,
+          person,
+        }),
       };
     },
   },
@@ -1327,6 +1563,19 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
+  // عقل سبق — صفحة التعريف بمنظومة الذكاء الاصطناعي
+  {
+    pattern: /^\/sabq-ai\/?$/,
+    handle: async () => ({
+      title: "عقل سبق — الذكاء الاصطناعي في خدمة الصحافة | سبق",
+      description: "أول صحيفة سعودية وعربية تدمج الذكاء الاصطناعي في كامل دورة العمل التحريري — من رصد الخبر إلى نشره بثلاث لغات، بقرار بشري في كل مادة ووفق ميثاق معلن.",
+      image: BRAND_OG_IMAGE,
+      canonical: `${SITE_URL}/sabq-ai`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+    }),
+  },
   // World days landing
   {
     pattern: /^\/world-days\/?$/,
@@ -1339,6 +1588,210 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       type: "website",
       locale: "ar_SA",
     }),
+  },
+  // البوابة الرياضية — الصفحة الرئيسية: /sports (ويُقبل المسار القديم /sports2).
+  // بدونها كانت مشاركة الرابط في واتساب/تويتر تُظهر الميتا العامة للموقع
+  // («سبق الذكية» + الأيقونة) بدل هوية رياضية بصورة OG مخصّصة.
+  {
+    pattern: /^\/sports2?\/?$/,
+    handle: async () => {
+      const description =
+        "بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، مركز الانتقالات، وتوقعات الجماهير — تغطية لحظة بلحظة.";
+      const image = `${SITE_URL}/branding/sports-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>رياضة سبق — تغطية الملاعب لحظة بلحظة</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/sports`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "رياضة سبق",
+              description,
+              url: `${SITE_URL}/sports`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "الرياضة",
+                  item: `${SITE_URL}/sports`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // جدول المباريات الموحّد متعدد البطولات: /sports/matches
+  {
+    pattern: /^\/sports\/matches\/?$/,
+    handle: async () => ({
+      title: "جدول المباريات — نتائج مباشرة بتوقيت الرياض | سبق",
+      description:
+        "مباريات اليوم وغدًا لحظة بلحظة: النتائج المباشرة ومواعيد المباريات بتوقيت الرياض عبر دوري روشن وكبرى البطولات العربية والعالمية على بوابة سبق الرياضية.",
+      image: `${SITE_URL}/branding/sports-og-image.png`,
+      imageWidth: 1200,
+      imageHeight: 630,
+      canonical: `${SITE_URL}/sports/matches`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+      twitterSite: "@sabq",
+    }),
+  },
+  // مركز الانتقالات: /sports/transfers
+  {
+    pattern: /^\/sports\/transfers\/?$/,
+    handle: async () => ({
+      title: "مركز الانتقالات — صفقات وإشاعات الميركاتو | سبق",
+      description:
+        "سوق الانتقالات لحظة بلحظة: الصفقات المؤكدة والإشاعات الموثّقة في دوري روشن والدوريات الأوروبية، مع نبض السوق وأبرز الصفقات على بوابة سبق الرياضية.",
+      image: `${SITE_URL}/branding/sports-og-image.png`,
+      imageWidth: 1200,
+      imageHeight: 630,
+      canonical: `${SITE_URL}/sports/transfers`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+      twitterSite: "@sabq",
+    }),
+  },
+  // البوابة الرياضية — صفحة النادي: /sports/team/:id (ويُقبل المسار القديم /sports2/team)
+  // ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
+  // سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق.
+  {
+    pattern: /^\/sports2?\/team\/(\d+)/,
+    handle: async (m) => {
+      const id = Number(m[1]);
+      if (!Number.isFinite(id) || id <= 0) return null;
+      const t = await getTeamSeoMeta(id).catch(() => null);
+      if (!t) return null;
+      const canonical = `${SITE_URL}/sports/team/${id}`;
+      const parts: string[] = [];
+      if (t.rank && t.points != null && t.competitionName) {
+        parts.push(`يحتل ${t.name} المركز ${t.rank} برصيد ${t.points} نقطة في ${t.competitionName}.`);
+      } else if (t.competitionName) {
+        parts.push(`${t.name} يشارك في ${t.competitionName}.`);
+      }
+      if (t.founded) parts.push(`تأسّس عام ${t.founded}.`);
+      if (t.venueName) parts.push(`ملعبه ${t.venueName}${t.venueCity ? ` بـ${t.venueCity}` : ""}.`);
+      parts.push(`تابع نتائج ${t.name} ومبارياته القادمة وترتيبه وتشكيلته وهدّافيه على سبق.`);
+      // بطاقة OG مولّدة 1200×630 (معتمة، تظهر في واتساب/تويتر) بدل صور
+      // المزوّد 150×150 الشفّافة التي يرفضها واتساب.
+      const image = `${SITE_URL}/api/sports/og/team/${id}`;
+      return {
+        title: `${t.name} — المباريات والترتيب والتشكيلة | سبق`,
+        description: trunc(parts.join(" "), 220),
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical,
+        // القسم تجريبي → مخفيّ عن قوقل، لكن معاينة المشاركة (واتساب/تويتر)
+        // تبقى غنية بصورة الملعب والعنوان والوصف.
+        robots: "noindex, follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "SportsTeam",
+          name: t.name,
+          sport: "Association football",
+          url: canonical,
+          ...(t.logo ? { logo: abs(t.logo) } : {}),
+          ...(t.founded ? { foundingDate: String(t.founded) } : {}),
+          ...(t.venueName
+            ? {
+                location: {
+                  "@type": "StadiumOrArena",
+                  name: t.venueName,
+                  ...(t.venueCity
+                    ? { address: { "@type": "PostalAddress", addressLocality: t.venueCity } }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(t.competitionName
+            ? { memberOf: { "@type": "SportsOrganization", name: t.competitionName } }
+            : {}),
+        },
+      };
+    },
+  },
+  // البوابة الرياضية — صفحة المباراة: /sports/match/:id
+  // معاينة مشاركة غنيّة (واتساب/تويتر): "الفريق ضد الفريق" + النتيجة/الموعد +
+  // الجولة + الملعب. القسم تجريبي ⇒ noindex, follow.
+  {
+    pattern: /^\/sports\/match\/(\d+)/,
+    handle: async (m) => {
+      const id = Number(m[1]);
+      if (!Number.isFinite(id) || id <= 0) return null;
+      const fx = await getMatchSeoMeta(id).catch(() => null);
+      if (!fx) return null;
+      const canonical = `${SITE_URL}/sports/match/${id}`;
+      const score =
+        fx.status.finished || fx.status.live
+          ? `${fx.home.name} ${fx.goals.home ?? 0} - ${fx.goals.away ?? 0} ${fx.away.name}`
+          : `${fx.home.name} ضد ${fx.away.name}`;
+      const parts: string[] = [];
+      if (fx.status.finished) parts.push(`انتهت المباراة: ${score}.`);
+      else if (fx.status.live) parts.push(`مباشر الآن: ${score}.`);
+      else parts.push(`${score}.`);
+      if (fx.competitionName) parts.push(fx.round ? `${fx.competitionName} · ${fx.round}.` : `${fx.competitionName}.`);
+      if (fx.venueName) parts.push(`ملعب ${fx.venueName}.`);
+      parts.push("تابع المجريات والتشكيلات والإحصاءات والتقييمات لحظة بلحظة على سبق.");
+      const image = fx.home.logo || fx.away.logo || undefined;
+      return {
+        title: `${fx.home.name} ضد ${fx.away.name}${fx.competitionName ? ` — ${fx.competitionName}` : ""} | سبق`,
+        description: trunc(parts.join(" "), 220),
+        ...(image ? { image: abs(image) } : {}),
+        canonical,
+        robots: "noindex, follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "SportsEvent",
+          name: `${fx.home.name} ضد ${fx.away.name}`,
+          url: canonical,
+          ...(fx.kickoffIso ? { startDate: fx.kickoffIso } : {}),
+          ...(fx.venueName ? { location: { "@type": "StadiumOrArena", name: fx.venueName } } : {}),
+          competitor: [
+            { "@type": "SportsTeam", name: fx.home.name, ...(fx.home.logo ? { logo: abs(fx.home.logo) } : {}) },
+            { "@type": "SportsTeam", name: fx.away.name, ...(fx.away.logo ? { logo: abs(fx.away.logo) } : {}) },
+          ],
+          ...(fx.competitionName ? { superEvent: { "@type": "SportsOrganization", name: fx.competitionName } } : {}),
+        },
+      };
+    },
   },
   // World Cup 2026 predictions competition landing — لا بد أن يسبق معالج الهب
   // (نمط الهب مثبّت بـ $ فلا يلتقطها، لكن نُبقيها أولًا للوضوح).
@@ -1389,6 +1842,167 @@ const ROUTE_HANDLERS: RouteHandler[] = [
                   position: 3,
                   name: "توقّعات المونديال",
                   item: `${SITE_URL}/world-cup/predictions`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // صفحات كأس آسيا الغنية — ميتا ديناميكية من المصدر نفسه الذي يرسم الواجهة.
+  {
+    pattern: /^\/asian-cup\/match\/(\d+)\/?$/,
+    handle: async (m) => {
+      const id = Number(m[1]);
+      const detail = await getAcMatchDetail(id).catch(() => null);
+      if (!detail) return { title: "المباراة غير متاحة | سبق", description: "تعذّر العثور على المباراة المطلوبة.", image: `${SITE_URL}/branding/asian-cup-og-image.png`, canonical: `${SITE_URL}/asian-cup/match/${id}`, robots: "noindex,follow", type: "website", locale: "ar_SA" };
+      const fx = detail.fixture;
+      const canonical = `${SITE_URL}/asian-cup/match/${id}`;
+      const description = `${fx.home.name} ضد ${fx.away.name} في ${fx.round} من كأس آسيا 2027 — النتيجة والأحداث والإحصاءات والتشكيلات.`;
+      return {
+        title: `${fx.home.name} ضد ${fx.away.name} — مركز المباراة | سبق`, description,
+        image: `${SITE_URL}/branding/asian-cup-og-image.png`, canonical, robots: "index,follow", type: "website", locale: "ar_SA",
+        jsonLd: { "@context": "https://schema.org", "@type": "SportsEvent", name: `${fx.home.name} ضد ${fx.away.name}`, url: canonical, startDate: fx.date, location: { "@type": "StadiumOrArena", name: fx.venue.name, address: fx.venue.city }, competitor: [{ "@type": "SportsTeam", name: fx.home.name, logo: abs(fx.home.logo) }, { "@type": "SportsTeam", name: fx.away.name, logo: abs(fx.away.logo) }] },
+      };
+    },
+  },
+  {
+    pattern: /^\/asian-cup\/team\/(\d+)\/?$/,
+    handle: async (m) => {
+      const id = Number(m[1]); const data = await getAcTeamProfile(id).catch(() => null);
+      if (!data) return null;
+      const canonical = `${SITE_URL}/asian-cup/team/${id}`;
+      const description = `ملف منتخب ${data.team.name} في كأس آسيا 2027: القائمة والمدرب والمباريات والترتيب وطريق التأهل.`;
+      return { title: `${data.team.name} — كأس آسيا 2027 | سبق`, description, image: abs(data.team.logo), canonical, robots: "index,follow", type: "website", locale: "ar_SA", jsonLd: { "@context": "https://schema.org", "@type": "SportsTeam", name: data.team.name, url: canonical, logo: abs(data.team.logo), coach: data.coach ? { "@type": "Person", name: data.coach } : undefined } };
+    },
+  },
+  {
+    pattern: /^\/asian-cup\/player\/(\d+)\/?$/,
+    handle: async (m) => {
+      const id = Number(m[1]); const data = await getAcPlayerCard(id).catch(() => null);
+      if (!data) return null;
+      const canonical = `${SITE_URL}/asian-cup/player/${id}`;
+      const description = `ملف ${data.name}: الإحصاءات والمسيرة والألقاب والانتقالات في تغطية كأس آسيا 2027.`;
+      return { title: `${data.name} — كأس آسيا | سبق`, description, image: data.photo ? abs(data.photo) : `${SITE_URL}/branding/asian-cup-og-image.png`, canonical, robots: "index,follow", type: "profile", locale: "ar_SA", jsonLd: { "@context": "https://schema.org", "@type": "Person", name: data.name, image: data.photo ? abs(data.photo) : undefined, url: canonical, nationality: data.nationality ?? undefined } };
+    },
+  },
+  ...[
+    ["scorers", "هدافو كأس آسيا 2027", "ترتيب هدافي كأس آسيا 2027 وصانعي الأهداف على صحيفة سبق."],
+    ["bracket", "شجرة كأس آسيا 2027", "شجرة الأدوار الإقصائية من دور الـ16 حتى نهائي كأس آسيا 2027."],
+    ["venues", "ملاعب كأس آسيا 2027", "ملاعب ومدن استضافة كأس آسيا 2027 في المملكة العربية السعودية."],
+  ].map(([slug, title, description]) => ({
+    pattern: new RegExp(`^/asian-cup/${slug}/?$`),
+    handle: async () => ({ title: `${title} | سبق`, description, image: `${SITE_URL}/branding/asian-cup-og-image.png`, canonical: `${SITE_URL}/asian-cup/${slug}`, robots: "index,follow", type: "website", locale: "ar_SA" }),
+  })),
+  // Asian Cup 2027 (Saudi Arabia) hub landing
+  {
+    pattern: /^\/asian-cup\/?$/,
+    handle: async () => {
+      const description =
+        "كأس آسيا 2027 في السعودية — جدول المباريات بتوقيت الرياض، المجموعات، المنتخبات المتأهّلة، وملاعب الاستضافة على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/asian-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>كأس آسيا 2027 — التغطية الكاملة من السعودية</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "كأس آسيا 2027 — التغطية الكاملة من السعودية | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/asian-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "كأس آسيا 2027 — التغطية الكاملة",
+              description,
+              url: `${SITE_URL}/asian-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "كأس آسيا 2027",
+                  item: `${SITE_URL}/asian-cup`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // Gulf Cup 27 "Khaleeji 27" (Saudi Arabia 2026) hub landing
+  {
+    pattern: /^\/gulf-cup\/?$/,
+    handle: async () => {
+      const description =
+        "خليجي 27 — كأس الخليج العربي في جدة (23 سبتمبر – 6 أكتوبر 2026): جدول المباريات بتوقيت الرياض، المجموعتان، المنتخبات الثمانية، وملاعب الاستضافة على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/gulf-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>خليجي 27 — كأس الخليج العربي في السعودية</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "خليجي 27 — كأس الخليج العربي في السعودية | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/gulf-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "خليجي 27 — كأس الخليج العربي في السعودية",
+              description,
+              url: `${SITE_URL}/gulf-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "خليجي 27",
+                  item: `${SITE_URL}/gulf-cup`,
                 },
               ],
             },
@@ -1489,6 +2103,123 @@ const ROUTE_HANDLERS: RouteHandler[] = [
                   position: 2,
                   name: "كأس العالم 2026",
                   item: `${SITE_URL}/world-cup`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // King's Cup — predictions (أعلى من الهب حتى تُطابق أولًا)
+  {
+    pattern: /^\/kings-cup\/predictions\/?$/,
+    handle: async () => {
+      const description =
+        "توقّع نتائج مباريات كأس خادم الحرمين الشريفين والبطل والهدّاف، اجمع النقاط ونافس على لوحة المتصدّرين في صحيفة سبق.";
+      const image = `${SITE_URL}/branding/kings-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>توقّعات كأس خادم الحرمين الشريفين</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "توقّعات كأس خادم الحرمين الشريفين | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/kings-cup/predictions`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "توقّعات كأس خادم الحرمين الشريفين",
+              description,
+              url: `${SITE_URL}/kings-cup/predictions`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                { "@type": "ListItem", position: 2, name: "كأس خادم الحرمين الشريفين", item: `${SITE_URL}/kings-cup` },
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  name: "التوقّعات",
+                  item: `${SITE_URL}/kings-cup/predictions`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // King's Cup — hub landing
+  {
+    pattern: /^\/kings-cup\/?$/,
+    handle: async () => {
+      const description =
+        "كأس خادم الحرمين الشريفين — البطولة الإقصائية للأندية السعودية: نتائج مباشرة، جدول المباريات بتوقيت الرياض، الأدوار الإقصائية، الهدافون، والأندية المشاركة على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/kings-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>كأس خادم الحرمين الشريفين — تغطية حية من سبق</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "كأس خادم الحرمين الشريفين — تغطية حية | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/kings-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "كأس خادم الحرمين الشريفين — تغطية حية",
+              description,
+              url: `${SITE_URL}/kings-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "كأس خادم الحرمين الشريفين",
+                  item: `${SITE_URL}/kings-cup`,
                 },
               ],
             },
@@ -1851,6 +2582,12 @@ router.get("/api/edge/seo-meta", async (req, res) => {
   try {
     const path = String(req.query.path || "");
     if (!path.startsWith("/")) return res.json(defaultMeta(path));
+
+    // Localized landing pages (English/Urdu) with no dynamic handler — emit the
+    // correct-language title/description instead of the Arabic default. Keys are
+    // exact paths, so they never shadow the slug-based dynamic handlers below.
+    const staticMeta = staticPageMeta(path);
+    if (staticMeta) return res.json(staticMeta);
 
     for (const handler of ROUTE_HANDLERS) {
       const match = path.match(handler.pattern);

@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,13 +164,12 @@ export default function AdAccountPage() {
   if (account && !error) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">حسابي الإعلاني</h1>
-          <p className="text-muted-foreground">
-            إدارة معلومات حسابك الإعلاني وإحصائيات الأداء
-          </p>
-        </div>
+        <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={Building2}
+          title="حسابي الإعلاني"
+          description="إدارة معلومات حسابك الإعلاني وإحصائيات الأداء."
+        />
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
@@ -332,13 +332,12 @@ export default function AdAccountPage() {
   // إذا لم يكن لديه حساب - عرض نموذج الإنشاء
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">إنشاء حساب معلن</h1>
-        <p className="text-muted-foreground">
-          أنشئ حسابك الإعلاني لتتمكن من إطلاق حملاتك الإعلانية على منصة سبق
-        </p>
-      </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <DashboardPageHeader
+        icon={Building2}
+        title="إنشاء حساب معلن"
+        description="أنشئ حسابك الإعلاني لتتمكن من إطلاق حملاتك على منصة سبق."
+      />
 
       <Card>
         <CardHeader>

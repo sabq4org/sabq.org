@@ -154,6 +154,22 @@ async function processNotificationQueue() {
           body = payload.articleTitle || "الأكثر قراءة اليوم في اهتماماتك";
           deeplink = `/article/${payload.articleSlug || payload.articleId}`;
           recommendationReason = "most_read";
+        } else if (
+          queueItem.type === "ReporterArticlePublished" ||
+          queueItem.type === "ReporterArticleScheduled" ||
+          queueItem.type === "OpinionAuthorArticleScheduled"
+        ) {
+          // إشعارات تحريرية يصوغ notificationEngine عنوانها/نصها مسبقًا
+          // ويمرّرهما عبر الـ payload — نثق بهما بدل إعادة التركيب.
+          title = payload.notificationTitle || "تحديث على مقالك";
+          body = payload.notificationBody || payload.articleTitle || "";
+          deeplink = payload.deeplink || (payload.articleId ? `/article/${payload.articleSlug || payload.articleId}` : "/");
+          recommendationReason = null;
+        } else if (payload.notificationTitle) {
+          // أي نوع آخر يحمل عنوانًا منسّقًا مسبقًا — استخدمه بدل اعتباره مجهولًا.
+          title = payload.notificationTitle;
+          body = payload.notificationBody || payload.articleTitle || "";
+          deeplink = payload.deeplink || "/";
         } else {
           title = "إشعار جديد";
           body = payload.articleTitle || "لديك إشعار جديد";

@@ -32,30 +32,30 @@ struct LoyaltyStripView: View {
                         .fill(progress.current.color.opacity(0.18))
                         .frame(width: 28, height: 28)
                     Image(systemName: "trophy.fill")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(progress.current.color)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(progress.current.nameAr)
-                            .font(.system(size: 13, weight: .heavy, design: .rounded))
+                            .font(SabqFonts.app(size: 13, weight: .heavy))
                             .foregroundStyle(progress.current.color)
                         if summary.weekPoints > 0 {
                             HStack(spacing: 2) {
                                 Text("+\(summary.weekPoints)")
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .font(SabqFonts.app(size: 11, weight: .bold))
                                     .foregroundStyle(Color.orange)
                                 Text("هذا الأسبوع")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                             }
                         }
                         if summary.streakDays >= 3 {
                             HStack(spacing: 2) {
-                                Image(systemName: "flame.fill").font(.system(size: 9))
+                                Image(systemName: "flame.fill").font(SabqFonts.app(size: 9))
                                 Text("\(summary.streakDays)")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(SabqFonts.app(size: 11, weight: .bold))
                             }
                             .foregroundStyle(Color.orange)
                         }
@@ -73,17 +73,17 @@ struct LoyaltyStripView: View {
                         }
                         .frame(height: 4)
                         Text("\(progress.pointsToNext.formatted(.number.locale(Locale(identifier: "ar_SA")))) نقطة لـ \(next.nameAr)")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     } else {
                         Text("وصلت إلى أعلى مستوى ✨")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
-                    .font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.forward")
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(.horizontal, 12)

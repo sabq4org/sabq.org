@@ -261,13 +261,13 @@ export default function CommentsModeration() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
-        return <Badge className="bg-green-500 hover:bg-green-600">موافق عليه</Badge>;
+        return <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">موافق عليه</Badge>;
       case "pending":
         return <Badge variant="secondary">قيد المراجعة</Badge>;
       case "rejected":
         return <Badge variant="destructive">مرفوض</Badge>;
       case "flagged":
-        return <Badge className="bg-orange-500 hover:bg-orange-600">مُبلَّغ عنه</Badge>;
+        return <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">مُبلَّغ عنه</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -311,7 +311,7 @@ export default function CommentsModeration() {
 
   if (isLoading && !commentsData) {
     return (
-      <div className="space-y-4 p-6" dir="rtl">
+      <div className="space-y-4 p-4 md:p-6" dir="rtl">
         <Skeleton className="h-12 w-full" />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -326,27 +326,31 @@ export default function CommentsModeration() {
   const comments = commentsData?.comments || [];
 
   return (
-    <div className="space-y-6 p-6" dir="rtl">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold mb-2" data-testid="heading-comments-moderation">
-            إدارة التعليقات
-          </h1>
-          <p className="text-muted-foreground">مراجعة التعليقات والموافقة عليها أو رفضها</p>
-        </div>
+    <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <header className="flex flex-col gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <MessageCircle className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl" data-testid="heading-comments-moderation">
+              إدارة التعليقات
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">مراجعة التعليقات والموافقة عليها أو رفضها</p>
+          </div>
+        </div>
+        <div className="flex w-full items-center gap-3 sm:w-auto">
           <Link href="/admin/comments/suspicious-words">
-            <Button variant="outline" className="gap-2" data-testid="link-suspicious-words">
+            <Button variant="outline" className="w-full gap-2 sm:w-auto" data-testid="link-suspicious-words">
               <ShieldAlert className="h-4 w-4" />
               الكلمات المشبوهة
             </Button>
           </Link>
-          <MessageCircle className="h-8 w-8 text-primary" />
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+        <Card className="border-border/70 shadow-none">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -355,11 +359,11 @@ export default function CommentsModeration() {
                   {statsLoading ? "-" : stats?.comments.total || 0}
                 </p>
               </div>
-              <MessageCircle className="h-8 w-8 text-blue-500" />
+              <span className="rounded-lg bg-sky-50 p-2 dark:bg-sky-950/30"><MessageCircle className="h-5 w-5 text-sky-600 dark:text-sky-400" /></span>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/70 shadow-none">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -368,11 +372,11 @@ export default function CommentsModeration() {
                   {statsLoading ? "-" : stats?.comments.pending || 0}
                 </p>
               </div>
-              <AlertCircle className="h-8 w-8 text-yellow-500" />
+              <span className="rounded-lg bg-amber-50 p-2 dark:bg-amber-950/30"><AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" /></span>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/70 shadow-none">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -381,11 +385,11 @@ export default function CommentsModeration() {
                   {statsLoading ? "-" : stats?.comments.approved || 0}
                 </p>
               </div>
-              <Check className="h-8 w-8 text-green-500" />
+              <span className="rounded-lg bg-emerald-50 p-2 dark:bg-emerald-950/30"><Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></span>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/70 shadow-none">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -394,11 +398,11 @@ export default function CommentsModeration() {
                   {statsLoading ? "-" : stats?.comments.rejected || 0}
                 </p>
               </div>
-              <X className="h-8 w-8 text-red-500" />
+              <span className="rounded-lg bg-rose-50 p-2 dark:bg-rose-950/30"><X className="h-5 w-5 text-rose-600 dark:text-rose-400" /></span>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/70 shadow-none">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -407,7 +411,7 @@ export default function CommentsModeration() {
                   {statsLoading ? "-" : stats?.suspiciousWords.active || 0}
                 </p>
               </div>
-              <ShieldAlert className="h-8 w-8 text-orange-500" />
+              <span className="rounded-lg bg-orange-50 p-2 dark:bg-orange-950/30"><ShieldAlert className="h-5 w-5 text-orange-600 dark:text-orange-400" /></span>
             </div>
           </CardContent>
         </Card>
@@ -452,7 +456,7 @@ export default function CommentsModeration() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setPage(1); }}>
-        <TabsList className="grid w-full md:w-auto grid-cols-5 gap-2">
+        <TabsList className="flex w-full md:w-auto max-w-full justify-start gap-1 overflow-x-auto">
           <TabsTrigger value="all" data-testid="tab-all">
             الكل ({stats?.comments.total || 0})
           </TabsTrigger>
@@ -472,7 +476,7 @@ export default function CommentsModeration() {
 
         <TabsContent value={activeTab} className="mt-6">
           {comments.length === 0 ? (
-            <Card>
+            <Card className="border-border/70 shadow-none">
               <CardContent className="p-12 text-center">
                 <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground" data-testid="text-no-comments">لا توجد تعليقات</p>
@@ -481,7 +485,7 @@ export default function CommentsModeration() {
           ) : (
             <div className="space-y-4">
               {comments.map((comment) => (
-                <Card key={comment.id} data-testid={`comment-card-${comment.id}`}>
+                <Card className="border-border/70 shadow-none" key={comment.id} data-testid={`comment-card-${comment.id}`}>
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">

@@ -52,7 +52,8 @@ export async function parseCSV(buffer: Buffer): Promise<ParsedDataset> {
 export async function parseExcel(buffer: Buffer): Promise<ParsedDataset> {
   try {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    // exceljs declares its own Buffer interface (≠ Node Buffer); cast through any.
+    await workbook.xlsx.load(buffer as any);
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {

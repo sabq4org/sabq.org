@@ -5,15 +5,18 @@ import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
 import { useAuth } from "@/hooks/useAuth";
 import { HeroSection } from "@/components/worldcup/HeroSection";
+import { KnockoutBracket } from "@/components/worldcup/KnockoutBracket";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
 import { MatchesSection } from "@/components/worldcup/MatchesSection";
 import { NewsSection } from "@/components/worldcup/NewsSection";
 import { PredictionsCTA } from "@/components/worldcup/PredictionsCTA";
 import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
-import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
+import { ArabTeamsSpotlight } from "@/components/worldcup/ArabTeamsSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
+import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { TeamsSection } from "@/components/worldcup/TeamsSection";
+import { TournamentFacts } from "@/components/worldcup/TournamentFacts";
 import type { WcFixture, WcGroup, WcOverview, WcScorer } from "@/components/worldcup/wcTypes";
 
 export default function WorldCup() {
@@ -28,30 +31,41 @@ export default function WorldCup() {
 
   const { data: overview, isLoading: overviewLoading } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
-    // حول لحظة الانطلاق (الموعد مرّ والمزود لم يرفع «حية» بعد) نستعجل كل 10 ثوانٍ
-    // حتى تنقلب الواجهة للوضع المباشر بأقل تأخير ممكن
+    // مباراة حية → 15ث (نتيجة/دقيقة طازجة)؛ حول لحظة الانطلاق (الموعد مرّ
+    // والمزود لم يرفع «حية» بعد) → 10ث لتنقلب الواجهة للوضع المباشر بأسرع ما يمكن؛
+    // غير ذلك → 30ث
     refetchInterval: (query) => {
-      const fixture = query.state.data?.matchOfTheDay?.fixture;
+      const data = query.state.data;
+      const fixture = data?.matchOfTheDay?.fixture;
+      const hasLive = (data?.live?.length ?? 0) > 0 || Boolean(fixture?.status.live);
+      if (hasLive) return 7_000;
       const kickoffPassed =
         fixture &&
         !fixture.status.live &&
         !fixture.status.finished &&
         fixture.timestamp * 1000 <= Date.now();
-      return kickoffPassed ? 10_000 : 30_000;
+      return kickoffPassed ? 8_000 : 30_000;
     },
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: fixturesData, isLoading: fixturesLoading } = useQuery<{ fixtures: WcFixture[] }>({
     queryKey: ["/api/world-cup/fixtures"],
-    refetchInterval: 60_000,
+    // مباراة حية في الجدول → 8ث لتطازج نتائج بطاقات المباريات؛ غير ذلك → 60ث
+    refetchInterval: (query) =>
+      (query.state.data?.fixtures ?? []).some((f) => f.status.live) ? 8_000 : 60_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: standingsData, isLoading: standingsLoading } = useQuery<{ groups: WcGroup[] }>({
     queryKey: ["/api/world-cup/standings"],
-    refetchInterval: 5 * 60_000,
+    // ترتيب لحظي مفعّل (صفّ live) → 8ث لتطازج الجدول أثناء المباراة؛ غير ذلك → 5د
+    refetchInterval: (query) =>
+      (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 8_000 : 5 * 60_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: scorersData, isLoading: scorersLoading } = useQuery<{ scorers: WcScorer[] }>({
@@ -70,20 +84,24 @@ export default function WorldCup() {
 
       <main className="flex-1">
         <HeroSection overview={overview} isLoading={overviewLoading} onOpenMatch={setOpenFixtureId} />
-        <SaudiSpotlight
-          saudi={overview?.saudi}
-          onOpenMatch={setOpenFixtureId}
-          onOpenPlayer={setOpenPlayerId}
-        />
+        <TournamentFacts />
+        <ArabTeamsSpotlight fixtures={fixtures} groups={groups} onOpenMatch={setOpenFixtureId} />
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <PredictionsCTA />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
+        <KnockoutBracket
+          fixtures={fixtures}
+          groups={groups}
+          isLoading={fixturesLoading}
+          onOpenMatch={setOpenFixtureId}
+        />
         <ScorersSection
           scorers={scorers}
           isLoading={scorersLoading}
           tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
           onOpenPlayer={setOpenPlayerId}
         />
+        <TeamOfTheWeekSection />
         <TeamsSection />
         <NewsSection />
       </main>

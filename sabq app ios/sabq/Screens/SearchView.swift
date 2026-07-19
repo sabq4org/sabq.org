@@ -6,8 +6,10 @@ struct SearchView: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     
+    // لا قيم افتراضية وهمية: كانت «نيوم، رؤية 2030…» تظهر للمستخدم الجديد
+    // بعنوان «عمليات بحث سابقة» وهو لم يبحث قط — القسم يختفي حتى أول بحث فعلي.
     @State private var recentSearches: [String] = {
-        (UserDefaults.standard.stringArray(forKey: "sabq_recent_searches")) ?? ["نيوم", "رؤية 2030", "الدوري السعودي", "أرامكو"]
+        (UserDefaults.standard.stringArray(forKey: "sabq_recent_searches")) ?? []
     }()
     @State private var trendingKeywords: [String] = []
     @State private var suggestions: [String] = []
@@ -151,17 +153,17 @@ struct SearchView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(SabqFonts.app(size: 13, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
 
                         Text(suggestion)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(SabqFonts.app(size: 15, weight: .medium))
                             .foregroundStyle(SabqTheme.ink)
 
                         Spacer(minLength: 0)
 
-                        Image(systemName: "arrow.up.left")
-                            .font(.system(size: 12, weight: .medium))
+                        Image(systemName: "arrow.up.backward")
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                     .padding(.vertical, 10)
@@ -197,19 +199,19 @@ struct SearchView: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Text("\(index + 1)")
-                                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                                    .font(SabqFonts.app(size: 16, weight: .bold))
                                     .foregroundStyle(index < 3 ? SabqTheme.coral : SabqTheme.tertiaryInk)
                                     .monospacedDigit()
                                     .frame(width: 24)
 
                                 Text(keyword)
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(SabqFonts.app(size: 15, weight: .semibold))
                                     .foregroundStyle(SabqTheme.ink)
 
                                 Spacer(minLength: 0)
 
-                                Image(systemName: "arrow.up.left")
-                                    .font(.system(size: 12, weight: .medium))
+                                Image(systemName: "arrow.up.backward")
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
                             .padding(.vertical, 4)
@@ -241,17 +243,17 @@ struct SearchView: View {
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "magnifyingglass")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(SabqFonts.app(size: 14, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                                 Text(search)
-                                    .font(.system(size: 15, weight: .medium))
+                                    .font(SabqFonts.app(size: 15, weight: .medium))
                                     .foregroundStyle(SabqTheme.ink)
 
                                 Spacer(minLength: 0)
 
-                                Image(systemName: "arrow.up.left")
-                                    .font(.system(size: 13, weight: .medium))
+                                Image(systemName: "arrow.up.backward")
+                                    .font(SabqFonts.app(size: 13, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
                             .padding(.vertical, 6)
@@ -282,9 +284,9 @@ struct SearchView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                             Text(topic)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.primaryStart)
                         .padding(.horizontal, 14)
@@ -306,7 +308,7 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("نتائج البحث")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Spacer(minLength: 0)
@@ -316,7 +318,7 @@ struct SearchView: View {
                         .tint(SabqTheme.primaryEnd)
                 } else {
                     Text("\(searchTotal > 0 ? searchTotal : displayResults.count) نتيجة")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }

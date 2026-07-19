@@ -53,8 +53,16 @@ export function TeamsSection() {
                   }`}
                   data-testid={`wc-team-${team.id}`}
                 >
-                  <span className="h-9 w-9 rounded-full bg-white ring-1 ring-border p-1">
+                  <span className="relative h-9 w-9 rounded-full bg-white ring-1 ring-border p-1">
                     <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
+                    {team.fifaRank != null && (
+                      <span
+                        className="absolute -top-1.5 -left-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-black text-white tabular-nums ring-1 ring-white dark:ring-card"
+                        title={`تصنيف فيفا #${team.fifaRank}`}
+                      >
+                        {team.fifaRank}
+                      </span>
+                    )}
                   </span>
                   <span className="text-[11px] font-bold text-center leading-tight line-clamp-1">{team.name}</span>
                   {isSaudi && (

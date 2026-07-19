@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- Existing editor diagnostics are outside this upload-routing change. */
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -62,9 +63,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect } from "react";
-import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import EmojiPicker, { EmojiClickData, Theme as EmojiPickerTheme } from 'emoji-picker-react';
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { AIImageGeneratorDialog } from "./AIImageGeneratorDialog";
+import { useTheme } from "./ThemeProvider";
 
 // Twitter widgets type declaration
 declare global {
@@ -84,6 +86,7 @@ interface RichTextEditorProps {
   editorRef?: (editor: Editor | null) => void;
   dir?: "rtl" | "ltr";
   disabled?: boolean;
+  imageUploadPurpose?: string;
 }
 
 function ToolbarButton({
@@ -121,7 +124,8 @@ export function RichTextEditor({
   placeholder = "ابدأ الكتابة...",
   editorRef,
   dir = "rtl",
-  disabled = false
+  disabled = false,
+  imageUploadPurpose,
 }: RichTextEditorProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -137,6 +141,7 @@ export function RichTextEditor({
   const [isSmartFormatting, setIsSmartFormatting] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { theme } = useTheme();
   
   // Check if user is a reporter - reporters have restricted AI features
   const isReporter = user?.role === 'reporter' || (user?.roles && user.roles.some((r: any) => r.name === 'reporter' || r === 'reporter'));
@@ -163,7 +168,7 @@ export function RichTextEditor({
       TextStyle,
       Color,
       TwitterEmbed,
-      ImageGallery,
+      ImageGallery.configure({ uploadPurpose: imageUploadPurpose }),
       VideoEmbed,
       Placeholder.configure({
         placeholder,
@@ -173,8 +178,9 @@ export function RichTextEditor({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none min-h-[300px] px-4 py-3",
+        class: "rich-text-editor__content prose prose-sm sm:prose lg:prose-lg dark:prose-invert !max-w-none w-full focus:outline-none min-h-[300px] px-4 py-3",
         dir: dir,
+        "data-testid": "rich-text-editor-content",
       },
     },
     onUpdate: ({ editor }) => {
@@ -213,10 +219,9 @@ export function RichTextEditor({
 
     const loadTweets = () => {
       if (cancelled) return;
-      const isDark = document.documentElement.classList.contains('dark');
       const editorElement = editor.view.dom;
       const tweetBlocks = editorElement.querySelectorAll('blockquote.twitter-tweet');
-      tweetBlocks.forEach((block) => block.setAttribute('data-theme', isDark ? 'dark' : 'light'));
+      tweetBlocks.forEach((block) => block.setAttribute('data-theme', theme));
       if (tweetBlocks.length > 0) window.twttr?.widgets?.load(editorElement);
     };
 
@@ -246,7 +251,7 @@ export function RichTextEditor({
       cancelled = true;
       timers.forEach(t => clearTimeout(t));
     };
-  }, [editor]);
+  }, [editor, theme]);
 
   useEffect(() => {
     if (editorRef) {
@@ -312,9 +317,6 @@ export function RichTextEditor({
     // Wait for DOM to update, then render the tweet
     setTimeout(() => {
       const renderTweet = (retries = 0) => {
-        const isDark = document.documentElement.classList.contains('dark');
-        const theme = isDark ? 'dark' : 'light';
-        
         const editorElement = editor.view.dom;
         const tweetBlocks = editorElement.querySelectorAll('blockquote.twitter-tweet');
         
@@ -458,9 +460,14 @@ export function RichTextEditor({
   }
 
   return (
-    <div className="border rounded-md" dir={dir}>
+    <div
+      className="rich-text-editor border rounded-md"
+      dir={dir}
+      data-editor-shell
+      data-testid="rich-text-editor"
+    >
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1 sm:gap-1 p-2 border-b bg-muted/30">
+      <div className="rich-text-editor__toolbar flex flex-wrap items-center gap-1 sm:gap-1 p-2 border-b">
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive("bold")}
@@ -720,6 +727,7 @@ export function RichTextEditor({
             <div className="rounded-md overflow-hidden">
               <EmojiPicker
                 onEmojiClick={handleEmojiClick}
+                theme={theme === "dark" ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
                 searchPlaceHolder="بحث..."
                 width={350}
                 height={350}
@@ -752,7 +760,7 @@ export function RichTextEditor({
       </div>
 
       {/* Editor */}
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} className="rich-text-editor__surface" />
 
       {/* Link Dialog */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
@@ -802,6 +810,7 @@ export function RichTextEditor({
         onOpenChange={setImageDialogOpen}
         onImageUploaded={handleImageUploaded}
         multiple={false}
+        uploadPurpose={imageUploadPurpose}
       />
 
       {/* Twitter Dialog */}
@@ -846,6 +855,7 @@ export function RichTextEditor({
         multiple={true}
         maxFiles={10}
         showCaptions={true}
+        uploadPurpose={imageUploadPurpose ? `${imageUploadPurpose}-gallery` : undefined}
       />
 
       {/* YouTube Dialog */}

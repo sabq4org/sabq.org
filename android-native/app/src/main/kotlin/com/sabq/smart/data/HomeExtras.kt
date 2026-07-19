@@ -1,6 +1,7 @@
 package com.sabq.smart.data
 
 import com.sabq.smart.data.api.ApiAudioNewsletter
+import com.sabq.smart.data.api.ApiBreakingTickerHeadline
 import com.sabq.smart.data.api.ApiCalendarEvent
 import com.sabq.smart.data.api.ApiHajjArticle
 import com.sabq.smart.data.api.ApiHajjBlockResponse
@@ -14,6 +15,17 @@ import javax.inject.Singleton
  * rail, calendar events, audio newsletters. iOS counterparts live
  * in `Services/APIDeepContent.swift` + `APIModels.swift:420+`.
  */
+
+/** سطر واحد من «شريط الأخبار العاجلة» الذي تديره لوحة التحكم. iOS
+ *  counterpart: `APIBreakingHeadline` (Services/APIModels.swift:445). */
+data class BreakingTickerHeadline(
+    val id: String,
+    val headline: String,
+    /** Slug المقال المربوط — النقر يفتح شاشة تفاصيل المقال. */
+    val linkedArticleSlug: String?,
+    /** رابط خارجي بديل — يُفتح في المتصفح عند غياب الـ slug. */
+    val externalUrl: String?,
+)
 
 data class Story(
     val id: String,
@@ -95,6 +107,15 @@ class HomeExtrasRepository @Inject constructor(
     suspend fun getStories(): List<Story> =
         api.getStories().items.map { it.toDomain() }
 
+    /** الشريط العاجل المُدار من لوحة التحكم. الخادم يرجع `null` حرفيًا
+     *  عند عدم وجود موضوع نشط — فك الترميز يفشل حينها ويعامله المستدعي
+     *  (runCatching في HomeFeedViewModel) كقائمة فارغة → السقوط لبطاقة
+     *  العاجل المفردة، مطابقةً لسلوك iOS. */
+    suspend fun getBreakingTicker(): List<BreakingTickerHeadline> =
+        api.getBreakingTickerActive().headlines
+            .filter { it.headline.isNotBlank() }
+            .map { it.toDomain() }
+
     suspend fun getCalendarUpcoming(days: Int = 14): List<CalendarEvent> =
         api.getCalendarUpcoming(days = days).events.map { it.toDomain() }
 
@@ -113,6 +134,13 @@ class HomeExtrasRepository @Inject constructor(
     suspend fun getHajjBlock(): HajjBlock? =
         api.getHajjBlock().toDomainOrNull()
 }
+
+private fun ApiBreakingTickerHeadline.toDomain(): BreakingTickerHeadline = BreakingTickerHeadline(
+    id = id.takeIf { it.isNotBlank() } ?: headline,
+    headline = headline,
+    linkedArticleSlug = linkedArticleSlug?.takeIf { it.isNotBlank() },
+    externalUrl = externalUrl?.takeIf { it.isNotBlank() },
+)
 
 private fun ApiStory.toDomain(): Story = Story(
     id = id.takeIf { it.isNotBlank() } ?: title,

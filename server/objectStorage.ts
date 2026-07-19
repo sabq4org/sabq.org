@@ -14,19 +14,116 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER || 'local';
+type ResolvedStorageProvider = "s3" | "r2" | "gcs" | "local";
+
+function hasS3Credentials(): boolean {
+  return !!(
+    process.env.S3_ENDPOINT &&
+    process.env.S3_BUCKET &&
+    process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY
+  );
+}
+
+/** Generic R2_* first; fall back to NEWS_IMAGES_R2_* (what production actually has). */
+function r2AccountId(): string | undefined {
+  return process.env.R2_ACCOUNT_ID || process.env.NEWS_IMAGES_R2_ACCOUNT_ID || undefined;
+}
+
+function r2AccessKeyId(): string | undefined {
+  return process.env.R2_ACCESS_KEY_ID || process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID || undefined;
+}
+
+function r2SecretAccessKey(): string | undefined {
+  return (
+    process.env.R2_SECRET_ACCESS_KEY ||
+    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY ||
+    undefined
+  );
+}
+
+function hasR2Credentials(): boolean {
+  return !!(r2AccountId() && r2AccessKeyId() && r2SecretAccessKey());
+}
+
+function isReplitRuntime(): boolean {
+  return !!(
+    process.env.REPL_ID ||
+    process.env.REPL_SLUG ||
+    process.env.REPLIT_DEPLOYMENT === "1"
+  );
+}
+
+/**
+ * Resolve the active object-storage backend.
+ *
+ * Production (sabq.org) has Cloudflare R2 via NEWS_IMAGES_R2_*. Railway often
+ * still has STORAGE_PROVIDER=s3 + a dead Replit/Tigris bucket
+ * (e.g. lightweight-holder-*) which returns NoSuchBucket for correspondent
+ * license/CV uploads. Prefer R2 whenever its credentials exist, unless
+ * OBJECT_STORAGE_FORCE_S3=1. Only use the Replit GCS path on Replit.
+ */
+function resolveStorageProvider(): ResolvedStorageProvider {
+  const explicit = (process.env.STORAGE_PROVIDER || "").toLowerCase().trim();
+  const forceS3 = process.env.OBJECT_STORAGE_FORCE_S3 === "1";
+
+  // Live R2 wins over stale S3 env left over from the Replit → Railway move.
+  if (hasR2Credentials() && !forceS3) {
+    if (explicit === "s3") {
+      console.warn(
+        "[ObjectStorage] STORAGE_PROVIDER=s3 ignored — using R2 " +
+          "(stale S3 buckets cause NoSuchBucket). Set OBJECT_STORAGE_FORCE_S3=1 to force S3.",
+      );
+    }
+    return "r2";
+  }
+
+  if (explicit === "s3") return "s3";
+  if (explicit === "r2") return "r2";
+  if (explicit === "gcs") return "gcs";
+
+  // unset / "local" / unknown → auto-detect
+  if (hasS3Credentials()) return "s3";
+  if (isReplitRuntime()) return "gcs";
+  return "local";
+}
+
+const STORAGE_PROVIDER: ResolvedStorageProvider = resolveStorageProvider();
+const R2_CRED_SOURCE = process.env.R2_ACCOUNT_ID
+  ? "R2_*"
+  : process.env.NEWS_IMAGES_R2_ACCOUNT_ID
+    ? "NEWS_IMAGES_R2_*"
+    : "none";
+
+console.log(
+  `[ObjectStorage] provider=${STORAGE_PROVIDER}` +
+    ` (env STORAGE_PROVIDER=${process.env.STORAGE_PROVIDER || "(unset)"}` +
+    (STORAGE_PROVIDER === "r2" ? `, r2Creds=${R2_CRED_SOURCE}` : "") +
+    `)`,
+);
+
+/** True when private file upload/download (license/CV, PDFs, etc.) can work. */
+export function isPrivateObjectStorageConfigured(): boolean {
+  if (STORAGE_PROVIDER === "s3") return hasS3Credentials();
+  if (STORAGE_PROVIDER === "r2") return hasR2Credentials();
+  if (STORAGE_PROVIDER === "gcs") return isReplitRuntime();
+  return false;
+}
 
 let r2Client: S3Client | null = null;
 let s3Client: S3Client | null = null;
 
 function getR2Client(): S3Client {
   if (!r2Client) {
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const accountId = r2AccountId();
+    const accessKeyId = r2AccessKeyId();
+    const secretAccessKey = r2SecretAccessKey();
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
-      throw new Error('[R2] Missing R2 credentials. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY');
+      throw new Error(
+        "[R2] Missing R2 credentials. Set R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/" +
+          "R2_SECRET_ACCESS_KEY (or NEWS_IMAGES_R2_* equivalents).",
+      );
     }
 
     r2Client = new S3Client({
@@ -42,7 +139,13 @@ function getR2Client(): S3Client {
 }
 
 function getR2Bucket(): string {
-  return process.env.R2_BUCKET_NAME || 'sabq-media';
+  // Prefer dedicated private-docs bucket when set; else news-images bucket
+  // (private keys still live under `.private/` and are served via signed URLs).
+  return (
+    process.env.R2_BUCKET_NAME ||
+    process.env.NEWS_IMAGES_R2_BUCKET_NAME ||
+    "sabq-media"
+  );
 }
 
 // Generic S3-compatible client (Tigris on Railway, MinIO, Backblaze B2,
@@ -509,7 +612,13 @@ export class ObjectStorageService {
       return getSignedUrl(client, cmd, { expiresIn: 900 });
     }
 
-    // Default GCS-via-Replit-sidecar path (legacy)
+    if (STORAGE_PROVIDER !== 'gcs') {
+      throw new Error(
+        "[ObjectStorage] Upload URL unavailable — configure STORAGE_PROVIDER=s3 or r2.",
+      );
+    }
+
+    // GCS-via-Replit-sidecar path (legacy, Replit only)
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
       throw new Error(
@@ -592,6 +701,32 @@ export class ObjectStorageService {
     return { url, path: key };
   }
 
+  // Short-lived signed GET URL for a PRIVATE file previously stored via
+  // uploadFile(..., 'private'). `key` is the stored `path` return value:
+  // `.private/<path>` on s3/r2, or a full `/bucket/...` path on legacy GCS.
+  // Used by admin-only routes (e.g. correspondent license/CV downloads) —
+  // never embed these keys in public payloads.
+  async getPrivateFileDownloadURL(key: string, ttlSec: number = 300): Promise<string> {
+    if (STORAGE_PROVIDER === 's3') {
+      const client = getS3Client();
+      const bucket = getS3Bucket();
+      return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
+    }
+    if (STORAGE_PROVIDER === 'r2') {
+      const client = getR2Client();
+      const bucket = getR2Bucket();
+      return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
+    }
+    if (STORAGE_PROVIDER !== 'gcs') {
+      throw new Error(
+        "[ObjectStorage] Private download unavailable — configure STORAGE_PROVIDER=s3 or r2.",
+      );
+    }
+    const fullPath = key.startsWith('/') ? key : `${this.getPrivateObjectDir()}/${key}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
   async uploadFile(
     path: string,
     buffer: Buffer,
@@ -603,6 +738,16 @@ export class ObjectStorageService {
     }
     if (STORAGE_PROVIDER === 'r2') {
       return this.uploadFileR2(path, buffer, contentType, visibility);
+    }
+
+    if (STORAGE_PROVIDER !== 'gcs') {
+      // Avoid the Replit sidecar (127.0.0.1:1106) on Railway/local — it always
+      // ECONNREFUSED outside Replit and surfaces as a raw GaxiosError to users.
+      throw new Error(
+        "[ObjectStorage] No usable storage backend. Set STORAGE_PROVIDER=s3 " +
+          "(with S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY) " +
+          "or STORAGE_PROVIDER=r2 (with R2_* credentials).",
+      );
     }
 
     // Use public or private directory based on visibility

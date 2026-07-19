@@ -12,6 +12,9 @@ struct ContentView: View {
     @State private var revisionsStore = ArticleRevisionsStore()
     @State private var selectedTab: AppTab = .home
     @State private var navigationPath = NavigationPath()
+    /// Match center presented from a sports-alert deep link (sabq://match/:id
+    /// أو sabq://asian-cup/match/:id).
+    @State private var deepLinkMatch: DeepLinkMatch?
     /// Singleton owns the latest deep link captured from a notification tap
     /// (cold start, foreground, or background restore). We watch it via the
     /// onChange handler below and translate it into a NavigationPath entry.
@@ -20,6 +23,7 @@ struct ContentView: View {
     /// reader scrolls inside Home/Detail screens. See TabBarVisibility
     /// in SabqComponents.swift.
     @State private var tabBarVisibility = TabBarVisibility.shared
+    @State private var showCompleteName = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -89,6 +93,32 @@ struct ContentView: View {
                 .navigationDestination(for: WorldCupRoute.self) { _ in
                     WorldCupView()
                 }
+                .navigationDestination(for: AsianCupRoute.self) { _ in
+                    AsianCupView()
+                }
+                .navigationDestination(for: KingsCupRoute.self) { _ in
+                    KingsCupView()
+                }
+                .navigationDestination(for: MuqtarabRoute.self) { _ in
+                    MuqtarabLandingView()
+                }
+                .navigationDestination(for: MuqtarabAngleRoute.self) { route in
+                    MuqtarabAngleView(
+                        slug: route.slug,
+                        initialName: route.name,
+                        initialColorHex: route.colorHex
+                    )
+                }
+                .navigationDestination(for: MuqtarabTopicRoute.self) { route in
+                    MuqtarabTopicView(
+                        angleSlug: route.angleSlug,
+                        topicSlug: route.topicSlug,
+                        initialTitle: route.title
+                    )
+                }
+                .navigationDestination(for: MuqtarabWriterRoute.self) { route in
+                    MuqtarabWriterView(id: route.id, initialName: route.name)
+                }
                 .navigationDestination(for: MomentByMomentRoute.self) { _ in
                     MomentByMomentView()
                 }
@@ -98,11 +128,26 @@ struct ContentView: View {
                 .navigationDestination(for: EditorialNotificationsRoute.self) { _ in
                     EditorialNotificationsView()
                 }
+                .navigationDestination(for: SurveyDeepLinkRoute.self) { route in
+                    SurveyView(token: route.token)
+                }
                 .navigationDestination(for: ContributorDashboardRoute.self) { _ in
-                    ContributorDashboardView()
+                    WriterWorkspaceView()
                 }
                 .navigationDestination(for: AdminDashboardRoute.self) { _ in
                     AdminDashboardView()
+                }
+                .navigationDestination(for: AdminContactMessagesRoute.self) { _ in
+                    AdminContactMessagesView()
+                }
+                .navigationDestination(for: AdminOpinionTicketsRoute.self) { _ in
+                    AdminOpinionTicketsView()
+                }
+                .navigationDestination(for: AdminContactMessageRoute.self) { route in
+                    AdminContactMessageDetailView(id: route.id)
+                }
+                .navigationDestination(for: AdminOpinionTicketRoute.self) { route in
+                    AdminOpinionTicketDetailView(id: route.id)
                 }
                 .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
                     LoyaltyAccountView()
@@ -156,6 +201,23 @@ struct ContentView: View {
                     notificationsStore.pendingDeepLink = nil
                 }
             }
+            // sabq:// links arriving through the system — the Live Activity /
+            // Dynamic Island tap (`.widgetURL`) lands here, NOT in the push
+            // userInfo path. Without this handler (and the CFBundleURLTypes
+            // registration) tapping the island opened the app on whatever
+            // screen was last visible and never reached the match center.
+            .onOpenURL { url in
+                if let link = notificationsStore.parseSabqDeepLink(url: url) {
+                    handleDeepLink(link)
+                }
+            }
+            .sheet(item: $deepLinkMatch) { sel in
+                if sel.competition == "asian-cup" {
+                    AsianCupMatchCenter(fixtureId: sel.id)
+                } else {
+                    WorldCupMatchCenter(fixtureId: sel.id)
+                }
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 // When the app returns to the foreground (after being in
                 // background long enough that push handlers didn't fire),
@@ -178,6 +240,12 @@ struct ContentView: View {
                     bookmarksStore.syncFromServer()
                 } else {
                     revisionsStore.clear()
+                    // الجهاز المشترك: المفضلات/الإعجابات/عمليات البحث كانت
+                    // تبقى للمستخدم التالي بعد الخروج. المحفوظات على الخادم
+                    // تعود بالمزامنة عند الدخول القادم.
+                    bookmarksStore.clear()
+                    likesStore.clear()
+                    UserDefaults.standard.removeObject(forKey: "sabq_recent_searches")
                 }
             }
 
@@ -216,11 +284,43 @@ struct ContentView: View {
             .allowsHitTesting(tabBarVisibility.isVisible)
         }
         .sabqRTL()
+        // Boot-time loads live here (NOT in the stores' inits): the @State
+        // initial-value expression re-runs on every sabqApp body re-eval
+        // (scene phase / appearance changes), spawning throwaway store
+        // instances whose init-side network calls all fired and got dumped.
+        // `.task` runs once per view identity — exactly one session check
+        // and one home feed load per launch.
+        .task {
+            async let auth: Void = authStore.checkAuth()
+            async let articles: Void = articlesStore.loadArticles()
+            _ = await (auth, articles)
+            syncNameGate()
+        }
+        .fullScreenCover(isPresented: $showCompleteName) {
+            NavigationStack {
+                ScrollView {
+                    CompleteNameForm(onDone: { showCompleteName = false })
+                        .padding(24)
+                }
+                .background(SabqTheme.background.ignoresSafeArea())
+                .sabqRTL()
+                .interactiveDismissDisabled(true)
+            }
+            .environment(authStore)
+        }
+        .onChange(of: authStore.isLoggedIn) { _, _ in syncNameGate() }
+        .onChange(of: authStore.needsDisplayName) { _, _ in syncNameGate() }
+        .onChange(of: authStore.isAuthSheetPresented) { _, _ in syncNameGate() }
         .onChange(of: navigationPath.count) { _, _ in
             // Whenever the stack pops/pushes, restore the bar so the
             // reader never lands on a screen with the bar already hidden.
             tabBarVisibility.reset()
         }
+    }
+
+    private func syncNameGate() {
+        // ورقة الدخول تتولى الإكمال بعد OTP؛ الغطاء للجلسات المستعادة فقط.
+        showCompleteName = authStore.needsDisplayName && !authStore.isAuthSheetPresented
     }
 
     /// Translate a parsed deep link from a notification tap into a concrete
@@ -246,8 +346,25 @@ struct ContentView: View {
         case .feedback(let id):
             SabqAnalytics.notificationOpen(type: "feedback", articleId: id)
             navigationPath.append(EditorialNotificationsRoute())
+        case .match(let id):
+            SabqAnalytics.notificationOpen(type: "match", articleId: String(id))
+            deepLinkMatch = DeepLinkMatch(id: id, competition: nil)
+        case .asianCupMatch(let id):
+            SabqAnalytics.notificationOpen(type: "asian-cup-match", articleId: String(id))
+            deepLinkMatch = DeepLinkMatch(id: id, competition: "asian-cup")
+        case .survey(let token):
+            SabqAnalytics.notificationOpen(type: "survey", articleId: nil)
+            navigationPath.append(SurveyDeepLinkRoute(token: token))
         }
     }
+}
+
+/// Identifiable wrapper so a match fixture id can drive a `.sheet(item:)`
+/// presentation of the match center from a sports-alert deep link.
+struct DeepLinkMatch: Identifiable {
+    let id: Int
+    /// `"asian-cup"` يفتح مركز كأس آسيا؛ غير ذلك مركز المونديال (الافتراضي).
+    let competition: String?
 }
 
 // MARK: - Notification-driven routes
@@ -280,3 +397,9 @@ struct DraftDeepLinkRoute: Hashable {
 /// Opens the list of articles the editor sent back for revision. Used
 /// by the "مقالات تنتظر التعديل" card in Settings.
 struct ArticleRevisionsRoute: Hashable {}
+
+/// Opens the personal survey screen from a `sabq://survey/<token>` deep
+/// link (push tap) or from the pending-survey card / notifications list.
+struct SurveyDeepLinkRoute: Hashable {
+    let token: String
+}

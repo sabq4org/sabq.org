@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  CalendarClock,
   FileText,
   FolderOpen,
   Users,
@@ -12,10 +13,12 @@ import {
   Sparkles,
   AudioLines,
   Brain,
+  Satellite,
   Type,
   ShieldCheck,
   KeyRound,
   UserCircle,
+  Paintbrush,
   SquareStack,
   PieChart,
   Activity,
@@ -60,6 +63,7 @@ import {
   Moon,
   Inbox,
   Radar,
+  HeartPulse,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -74,16 +78,17 @@ export const navConfig: NavItem[] = [
     labelAr: "نظرة عامة",
     path: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter", "comments_moderator", "guest", "opinion_author"],
+    roles: ["admin", "editor", "content_manager", "author", "reviewer", "analyst", "comments_moderator", "guest", "opinion_author"],
     // No permissions - all authenticated users can access the dashboard overview
     meta: { exact: true },
   },
 
   // ===== المراسل / Reporter =====
+  // الأب «لوحة المراسل» يمنع تكرار «أخباري > أخباري» في المسار/المفضلة.
   {
     id: "reporter_section",
-    labelKey: "nav.my_news",
-    labelAr: "أخباري",
+    labelKey: "nav.reporter_workspace",
+    labelAr: "لوحة المراسل",
     icon: Newspaper,
     roles: ["reporter"],
     children: [
@@ -103,6 +108,14 @@ export const navConfig: NavItem[] = [
         icon: PlusCircle,
         roles: ["reporter"],
       },
+      {
+        id: "reporter_inquiries",
+        labelKey: "nav.writer_inquiries",
+        labelAr: "استفساراتي",
+        path: "/dashboard/opinion-author/tickets",
+        icon: MessageSquare,
+        roles: ["reporter"],
+      },
     ],
   },
 
@@ -115,6 +128,14 @@ export const navConfig: NavItem[] = [
     labelAr: "مقال جديد",
     path: "/dashboard/articles/new",
     icon: PlusCircle,
+    roles: ["opinion_author"],
+  },
+  {
+    id: "opinion_author_guide",
+    labelKey: "nav.writer_guide",
+    labelAr: "دليل الكاتب",
+    path: "/dashboard/opinion-author/guide",
+    icon: BookOpen,
     roles: ["opinion_author"],
   },
 
@@ -180,6 +201,14 @@ export const navConfig: NavItem[] = [
         icon: CreditCard,
         roles: ["publisher"],
       },
+      {
+        id: "publisher_guide",
+        labelKey: "nav.publisher_guide",
+        labelAr: "دليل الناشر",
+        path: "/dashboard/publisher/guide",
+        icon: BookOpen,
+        roles: ["publisher"],
+      },
     ],
   },
 
@@ -190,8 +219,9 @@ export const navConfig: NavItem[] = [
     labelAr: "مركز المهام",
     path: "/dashboard/tasks",
     icon: ListTodo,
-    roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter"],
-    excludeRoles: ["opinion_author"],
+    roles: ["admin", "editor", "author", "reviewer", "analyst"],
+    // المراسل له لوحة مخصّصة؛ مركز المهام العام يزدحم قائمته بلا فائدة مباشرة.
+    excludeRoles: ["opinion_author", "reporter"],
     permissions: ["tasks.view_all", "tasks.view_own", "tasks.create"],
   },
 
@@ -201,11 +231,10 @@ export const navConfig: NavItem[] = [
     labelKey: "nav.content",
     labelAr: "المحتوى",
     icon: Newspaper,
-    roles: ["admin", "editor", "author", "reviewer", "comments_moderator", "reporter"],
-    // كاتب الرأي وكاتب الزاوية يكتبان من عنصرهما المخصّص أعلاه؛ نخفي قسم المحتوى
-    // عنهما كاملاً (excludeRoles على الحاوية يُفحص قبل الصلاحيات ويلغي كل الأبناء —
-    // بما فيها "مكتبة الوسائط" التي تظهر بـ media.view). رفع الصور لا يحتاج ظهورها.
-    excludeRoles: ["opinion_author", "angle_writer"],
+    roles: ["admin", "editor", "author", "reviewer", "comments_moderator"],
+    // كاتب الرأي / الزاوية / الناشر / المراسل لهم مداخل مخصّصة («أخباري» للمراسل).
+    // نخفي قسم المحتوى كاملاً عنهم (excludeRoles على الحاوية يلغي كل الأبناء).
+    excludeRoles: ["opinion_author", "angle_writer", "publisher", "reporter"],
     // No parent permissions - each child validates independently and parent shows if any child is accessible
     children: [
       {
@@ -214,7 +243,7 @@ export const navConfig: NavItem[] = [
         labelAr: "الأخبار والمقالات",
         path: "/dashboard/articles",
         icon: FileText,
-        roles: ["admin", "editor", "author", "reviewer", "reporter"],
+        roles: ["admin", "editor", "author", "reviewer"],
         permissions: ["articles.view"], // Users with articles.view permission can access
       },
       {
@@ -223,7 +252,7 @@ export const navConfig: NavItem[] = [
         labelAr: "مقال جديد",
         path: "/dashboard/articles/new",
         icon: PlusCircle,
-        roles: ["admin", "editor", "author", "reporter"],
+        roles: ["admin", "editor", "author"],
         permissions: ["articles.create"], // Users with articles.create permission can access
       },
       {
@@ -232,8 +261,9 @@ export const navConfig: NavItem[] = [
         labelAr: "رادار سبق الذكي",
         path: "/dashboard/radar",
         icon: Radar,
-        roles: ["admin", "editor"],
-        permissions: ["articles.create"], // أداة تحريرية — نفس صلاحية إنشاء المقالات
+        // ظاهر لمسؤول النظام فقط — requireRoles يتجاهل تحويل system_admin→admin وwildcard الصلاحيات
+        roles: ["system_admin"],
+        requireRoles: ["system_admin", "system.admin", "superadmin", "super_admin"],
       },
       {
         id: "push_notifications",
@@ -298,6 +328,15 @@ export const navConfig: NavItem[] = [
         permissions: ["comments.view", "comments.approve", "comments.reject", "comments.delete"],
       },
       {
+        id: "sentiment_insights",
+        labelKey: "nav.sentiment_insights",
+        labelAr: "نبض الجمهور",
+        path: "/dashboard/sentiment-insights",
+        icon: HeartPulse,
+        roles: ["admin", "comments_moderator"],
+        permissions: ["comments.view"],
+      },
+      {
         id: "muqtarab",
         labelKey: "nav.muqtarab",
         labelAr: "مُقترب",
@@ -348,7 +387,7 @@ export const navConfig: NavItem[] = [
         labelAr: "الأيام العالمية",
         path: "/dashboard/world-days",
         icon: Globe,
-        roles: ["admin", "editor"],
+        roles: ["admin", "editor", "content_manager"],
       },
       {
         id: "media_library",
@@ -408,14 +447,35 @@ export const navConfig: NavItem[] = [
     roles: ["admin", "editor"],
   },
 
-  // ===== استفسارات كتّاب الرأي / Opinion Tickets =====
+  // ===== كتّاب الرأي / Opinion Writers =====
+  {
+    id: "opinion_writers",
+    labelKey: "nav.opinion_writers",
+    labelAr: "كتّاب الرأي",
+    path: "/dashboard/opinion-writers",
+    icon: CalendarClock,
+    roles: ["admin", "editor", "system_admin"],
+    permissions: ["opinion.review"],
+  },
+
+  // ===== استفسارات المساهمين (مراسلون + كتّاب رأي/زوايا — صندوق واحد) =====
   {
     id: "opinion_tickets",
     labelKey: "nav.opinion_tickets",
-    labelAr: "استفسارات الكتّاب",
+    labelAr: "استفسارات المساهمين",
     path: "/dashboard/opinion-tickets",
     icon: MessageSquare,
     roles: ["admin", "editor", "system_admin"],
+  },
+
+  // ===== استطلاعات الرأي / Surveys =====
+  {
+    id: "surveys",
+    labelKey: "nav.surveys",
+    labelAr: "استطلاعات الرأي",
+    path: "/dashboard/surveys",
+    icon: MessageSquare,
+    roles: ["admin", "system_admin"],
   },
 
   // ===== الإعلانات / Advertising =====
@@ -549,6 +609,28 @@ export const navConfig: NavItem[] = [
         permissions: ["ai.view", "ai.manage"],
       },
     ],
+  },
+
+  // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====
+  {
+    id: "ai_hub",
+    labelKey: "nav.ai_hub",
+    labelAr: "مركز التحكم بالذكاء الاصطناعي",
+    path: "/dashboard/ai-hub",
+    icon: Brain,
+    roles: ["admin", "system_admin"],
+    permissions: ["ai_hub.view"],
+  },
+
+  // ===== إعدادات التكاملات / Integrations (admin) =====
+  {
+    id: "integrations",
+    labelKey: "nav.integrations",
+    labelAr: "إعدادات التكاملات",
+    path: "/dashboard/integrations",
+    icon: Satellite,
+    roles: ["admin", "system_admin"],
+    permissions: ["integrations.view"],
   },
 
   // ===== الأدوات الذكية / Smart Tools =====
@@ -765,6 +847,15 @@ export const navConfig: NavItem[] = [
         roles: ["admin"],
         permissions: ["publishers.view", "analytics.view"],
       },
+      {
+        id: "publishers_guide",
+        labelKey: "nav.publishers_guide",
+        labelAr: "دليل الناشر",
+        path: "/dashboard/admin/publisher-guide",
+        icon: BookOpen,
+        roles: ["admin"],
+        permissions: ["publishers.manage"],
+      },
     ],
   },
 
@@ -777,6 +868,15 @@ export const navConfig: NavItem[] = [
     roles: ["admin", "editor"],
     featureFlags: ["smartThemes"],
     children: [
+      {
+        id: "dashboard-appearance",
+        labelKey: "nav.dashboardAppearance",
+        labelAr: "سمات اللوحة",
+        path: "/dashboard/appearance",
+        icon: Paintbrush,
+        roles: ["admin", "editor"],
+        permissions: ["appearance.view", "appearance.manage"],
+      },
       {
         id: "themes",
         labelKey: "nav.themes",
@@ -929,6 +1029,24 @@ export const navConfig: NavItem[] = [
         permissions: ["settings.view", "rss.manage"],
       },
       {
+        id: "spa_news",
+        labelKey: "nav.spa_news",
+        labelAr: "أخبار واس (SPA)",
+        path: "/dashboard/spa-news",
+        icon: Newspaper,
+        roles: ["admin"],
+        permissions: ["settings.view"],
+      },
+      {
+        id: "sportmonks_news",
+        labelKey: "nav.sportmonks_news",
+        labelAr: "أخبار SportMonks (المونديال)",
+        path: "/dashboard/sportmonks-news",
+        icon: Trophy,
+        roles: ["admin"],
+        permissions: ["settings.view"],
+      },
+      {
         id: "integrations",
         labelKey: "nav.integrations",
         labelAr: "التكاملات",
@@ -974,12 +1092,30 @@ export const navConfig: NavItem[] = [
         permissions: ["system.manage_settings"],
       },
       {
+        id: "sports_tournaments",
+        labelKey: "nav.sports_tournaments",
+        labelAr: "البطولات الرياضية",
+        path: "/dashboard/sports-tournaments",
+        icon: Trophy,
+        roles: ["admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
         id: "admin_tools",
         labelKey: "nav.admin_tools",
         labelAr: "أدوات الإدارة",
         path: "/dashboard/admin-tools",
         icon: Wrench,
         roles: ["admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
+        id: "systems_catalog",
+        labelKey: "nav.systems_catalog",
+        labelAr: "كتالوج الأنظمة",
+        path: "/dashboard/systems-catalog",
+        icon: Boxes,
+        roles: ["admin", "system_admin"],
         permissions: ["system.manage_settings"],
       },
       {

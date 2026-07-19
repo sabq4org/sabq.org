@@ -22,6 +22,10 @@ ENV DEPLOY_MARKER=$DEPLOY_MARKER
 
 WORKDIR /app
 
+# Skip downloading Puppeteer's Chrome in the builder — production uses
+# Alpine system chromium instead (see production stage below).
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 COPY package*.json ./
 RUN npm ci
 
@@ -34,6 +38,28 @@ RUN npm run build:server
 FROM node:20-alpine AS production
 
 WORKDIR /app
+
+# System Chromium for admin HTML→PDF (PR client report) and any other
+# puppeteer callers. Alpine's bundled chrome from npm does not ship in
+# this image (PUPPETEER_SKIP_DOWNLOAD below), so we point Puppeteer at
+# the distro binary instead.
+RUN apk add --no-cache \
+      chromium \
+      nss \
+      freetype \
+      harfbuzz \
+      ca-certificates \
+      ttf-freefont \
+      font-noto \
+      font-noto-arabic \
+    && CHROME_BIN="$(command -v chromium-browser || command -v chromium)" \
+    && test -n "$CHROME_BIN" \
+    && ln -sf "$CHROME_BIN" /usr/bin/sabq-chromium \
+    && /usr/bin/sabq-chromium --version
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/sabq-chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV CHROME_PATH=/usr/bin/sabq-chromium
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
@@ -51,6 +77,9 @@ COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/passkit/pass-template.pass
 COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
 COPY --from=builder /app/certs ./certs
+
+# كتالوج الأنظمة — السجل + SYSTEM.md + لقطة الجرد (للوحة /dashboard/systems-catalog)
+COPY --from=builder /app/docs/systems ./docs/systems
 
 # Arabic fonts used by the press-card strip renderer
 # (server/lib/passkit/PressCardImageRenderer.ts). Without these the

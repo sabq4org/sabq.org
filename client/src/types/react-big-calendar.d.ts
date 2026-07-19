@@ -11,10 +11,16 @@ declare module "react-big-calendar" {
     AGENDA: "agenda";
   };
 
-  export function momentLocalizer(moment: unknown): unknown;
+  export function dateFnsLocalizer(options: {
+    format: (...args: any[]) => string;
+    getDay: (date: Date) => number;
+    locales: Record<string, unknown>;
+    startOfWeek: (...args: any[]) => Date;
+  }): unknown;
 
   export interface CalendarProps<TEvent extends object = object> {
     localizer: unknown;
+    culture?: string;
     events?: TEvent[];
     startAccessor?: keyof TEvent | string | ((event: TEvent) => Date);
     endAccessor?: keyof TEvent | string | ((event: TEvent) => Date);

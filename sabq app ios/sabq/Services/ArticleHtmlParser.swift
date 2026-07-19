@@ -26,10 +26,15 @@ enum ArticleHtmlParser {
             scanner.skipWhitespace()
             if scanner.isAtEnd { break }
 
+            let before = scanner.index
             if let block = parseNextBlock(scanner: &scanner) {
                 if case .paragraph(let runs) = block, runsAreEmpty(runs) { continue }
                 blocks.append(block)
-            } else {
+            } else if scanner.index == before {
+                // التقدّم القسري فقط عندما لا يتحرك الماسح (وقاية من حلقة
+                // لا نهائية على مدخل مشوّه). كان يتقدّم بعد كل nil حتى لو
+                // استُهلك الوسم كاملًا (فقرة فارغة/<br>) فيأكل '<' الوسم
+                // التالي ويحوّل "p>نص" إلى فقرة نصية مشوّهة.
                 scanner.advance(1)
             }
         }
@@ -200,10 +205,21 @@ enum ArticleHtmlParser {
         if let url = extractTweetURL(from: inner) {
             return .twitterEmbed(tweetURL: url)
         }
-        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"), let url = URL(string: raw) {
+        // المسار الاحتياطي يجب أن يتحقق من المضيف مثل regex المسار الأساسي:
+        // بدونه data-embed-url مدسوس في جسم مقال يُصيَّر «كتغريدة» تفتح
+        // موقع تصيّد من داخل WKWebView.
+        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"),
+           let url = URL(string: raw), isTrustedTweetHost(url) {
             return .twitterEmbed(tweetURL: url)
         }
         return .divider
+    }
+
+    private static func isTrustedTweetHost(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased() else { return false }
+        return host == "twitter.com" || host.hasSuffix(".twitter.com")
+            || host == "x.com" || host.hasSuffix(".x.com")
     }
 
     private static func parseTwitterEmbedFromBlockquote(scanner: inout HTMLScanner) -> ArticleBlock {
@@ -400,7 +416,12 @@ enum ArticleHtmlParser {
     }
 
     private static func stripTags(_ html: String) -> String {
-        html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        guard let regex = HTMLRegexCache.regex("<[^>]+>") else { return html }
+        return regex.stringByReplacingMatches(
+            in: html,
+            range: NSRange(html.startIndex..., in: html),
+            withTemplate: ""
+        )
     }
 
     static func decodeEntities(_ input: String) -> String {
@@ -412,7 +433,7 @@ enum ArticleHtmlParser {
             ("&laquo;", "«"), ("&raquo;", "»"),
         ]
         for (k, v) in entities { out = out.replacingOccurrences(of: k, with: v) }
-        let regex = try? NSRegularExpression(pattern: "&#([0-9]+);")
+        let regex = HTMLRegexCache.regex("&#([0-9]+);")
         regex?.matches(in: out, range: NSRange(out.startIndex..., in: out)).reversed().forEach { match in
             guard match.numberOfRanges >= 2,
                   let r = Range(match.range, in: out),
@@ -422,6 +443,32 @@ enum ArticleHtmlParser {
             out.replaceSubrange(r, with: String(Character(unicode)))
         }
         return out
+    }
+}
+
+// MARK: - Regex cache
+
+/// كاش أنماط NSRegularExpression — كان `attr` يعيد ترجمة النمط عند كل
+/// استعلام سمة (لكل وسم × لكل نمط اقتباس)، فمقال طويل يترجم مئات الأنماط
+/// على الخيط الرئيسي أثناء أول رسم = تعليقة ملموسة عند فتح المقال.
+/// المجموعة مغلقة (أسماء سمات معدودة) فالقاموس يبقى صغيرًا.
+private nonisolated enum HTMLRegexCache {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: NSRegularExpression] = [:]
+
+    static func regex(
+        _ pattern: String,
+        options: NSRegularExpression.Options = []
+    ) -> NSRegularExpression? {
+        let key = "\(options.rawValue)#\(pattern)"
+        lock.lock()
+        defer { lock.unlock() }
+        if let hit = cache[key] { return hit }
+        guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else {
+            return nil
+        }
+        cache[key] = compiled
+        return compiled
     }
 }
 
@@ -440,7 +487,7 @@ private struct HTMLTag {
     func attr(_ name: String) -> String? {
         for q in ["\"", "'"] {
             let pattern = "\\b\(name)\\s*=\\s*\(q)([^\(q)]*)\(q)"
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+            if let regex = HTMLRegexCache.regex(pattern, options: .caseInsensitive),
                let m = regex.firstMatch(in: attributesRaw, range: NSRange(attributesRaw.startIndex..., in: attributesRaw)),
                let r = Range(m.range(at: 1), in: attributesRaw) {
                 return String(attributesRaw[r])
@@ -526,7 +573,13 @@ private struct HTMLScanner {
             }
             advance(1)
         }
-        return String(input[start..<index])
+        // وسم لم يُغلق حتى نهاية المستند (HTML مشوّه/مبتور): الإرجاع السابق
+        // كان يبتلع كل ما بعده داخل هذا البلوك فتختفي الصور/التغريدات/العناوين
+        // التالية من المقال كله. نتعافى بإرجاع الماسح إلى ما بعد وسم الفتح
+        // مباشرةً ومحتوى فارغ — فيُعاد تحليل ما بعده كبلوكات عليا وتظهر كلها.
+        // التقدّم مضمون (وسم الفتح استُهلك) فلا حلقة لا نهائية.
+        index = start
+        return ""
     }
 
     private func parseTag(_ raw: String) -> HTMLTag? {

@@ -39,6 +39,7 @@ function hostFromEnvUrl(value: string | undefined): string | null {
 function allowedHosts(): Set<string> {
   const hosts = new Set<string>(STATIC_ALLOWED_HOSTS);
   for (const envVar of [
+    process.env.NEWS_IMAGES_R2_PUBLIC_URL,
     process.env.R2_PUBLIC_URL,
     process.env.S3_PUBLIC_URL,
     process.env.S3_ENDPOINT,

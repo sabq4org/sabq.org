@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import Charts
 
 // MARK: - مركز المباراة
 //
@@ -8,16 +10,26 @@ import SwiftUI
 struct WorldCupMatchCenter: View {
     let fixtureId: Int
     @Environment(\.dismiss) private var dismiss
+    @Environment(SabqLiveStream.self) private var liveStream
 
     @State private var detail: WCMatchDetail?
     @State private var loading = true
     @State private var selectedPlayer: WCPlayerSelection?
+    @State private var showActivityDeniedAlert = false
+    private let liveManager = LiveMatchActivityManager.shared
 
-    enum Tab: String, CaseIterable { case events = "الأحداث", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات", prediction = "التوقعات" }
+    enum Tab: String, CaseIterable { case commentary = "التعليق", events = "الأحداث", momentum = "الزخم", pressure = "الضغط", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات", prediction = "التوقعات" }
     @State private var tab: Tab = .events
+    // ضبط افتراضي مرّة واحدة: التعليق الحي يتصدّر عند بثّ المباراة (كالويب)
+    @State private var didPickDefaultTab = false
 
     private var tabs: [Tab] {
-        var t: [Tab] = [.events, .lineups, .stats]
+        let started = (detail?.fixture.status.live ?? false) || (detail?.fixture.status.finished ?? false)
+        var t: [Tab] = []
+        if started { t.append(.commentary) }   // مباشر/التعليق أولًا
+        t.append(.events)
+        if started { t.append(contentsOf: [.momentum, .pressure]) }
+        t.append(contentsOf: [.lineups, .stats])
         if let d = detail, !d.ratings.isEmpty { t.append(.ratings) }
         t.append(.prediction)
         return t
@@ -31,11 +43,17 @@ struct WorldCupMatchCenter: View {
                         WCLoading().padding(.top, 30)
                     } else if let detail {
                         header(detail.fixture)
+                        if !detail.fixture.status.finished {
+                            WCTvStrip(fixtureId: detail.fixture.id)
+                        }
+                        if liveActivityEligible(detail.fixture) {
+                            liveFollowButton(detail)
+                        }
                         tabBar
                         content(detail)
                     } else {
                         Text("تعذر جلب تفاصيل المباراة")
-                            .font(.system(size: 14)).foregroundStyle(WCTheme.onDarkDim)
+                            .font(SabqFonts.app(size: 14)).foregroundStyle(WCTheme.onDarkDim)
                             .padding(.top, 50)
                     }
                 }
@@ -53,18 +71,108 @@ struct WorldCupMatchCenter: View {
                 }
             }
             .task { await load() }
+            // شبكة أمان: استطلاع أبطأ عند انقطاع SSE؛ مع البث الحي يكفي ~20ث.
+            .task(id: detail?.fixture.id) {
+                var tick = 0
+                while !Task.isCancelled {
+                    let interval: UInt64 = liveStream.connected ? 20_000_000_000 : 8_000_000_000
+                    try? await Task.sleep(nanoseconds: interval)
+                    if Task.isCancelled { return }
+                    tick += 1
+                    guard let f = detail?.fixture else { continue }
+                    if f.status.live {
+                        await load(force: true)
+                    } else if !f.status.finished, tick % 2 == 0 {
+                        let dt = Double(f.timestamp) - Date().timeIntervalSince1970
+                        if dt <= 600 && dt >= -900 { await load(force: true) }
+                    }
+                }
+            }
+            // البث الحي (SSE): تغيّر ختم المباراة ≈ جلب فوري (~2ث من الخادم).
+            .onChange(of: liveStream.stamps["w:\(fixtureId)"]) { _, _ in
+                Task { await load(force: true) }
+            }
+            .onChange(of: liveStream.stamps["s:\(fixtureId)"]) { _, _ in
+                Task { await load(force: true) }
+            }
             .refreshable { await load(force: true) }
             .sheet(item: $selectedPlayer) { sel in
                 WCPlayerSheet(playerId: sel.id)
                     .presentationDetents([.large])
             }
+            .alert("النشاطات المباشرة معطّلة", isPresented: $showActivityDeniedAlert) {
+                Button("الإعدادات") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("لمتابعة المباراة على شاشة القفل، فعّل «النشاطات المباشرة» لتطبيق سبق من الإعدادات.")
+            }
         }
         .sabqRTL()
+        .environment(liveStream)
+    }
+
+    // MARK: زر المتابعة المباشرة (Live Activity)
+
+    /// يظهر الزر للمباراة الجارية، أو القادمة خلال ساعة من انطلاقها.
+    private func liveActivityEligible(_ f: WCFixture) -> Bool {
+        if f.status.live { return true }
+        if f.status.finished { return false }
+        let secondsToKickoff = Double(f.timestamp) - Date().timeIntervalSince1970
+        return secondsToKickoff <= 3600 && secondsToKickoff > -120
+    }
+
+    @ViewBuilder
+    private func liveFollowButton(_ detail: WCMatchDetail) -> some View {
+        let running = liveManager.isRunning(for: detail.fixture.id)
+        let upcoming = !detail.fixture.status.live && !detail.fixture.status.finished
+        let title = running
+            ? "إيقاف المتابعة المباشرة"
+            : (upcoming ? "ذكّرني على شاشة القفل" : "تابع على شاشة القفل")
+        let icon = running
+            ? "stop.circle.fill"
+            : (upcoming ? "clock.badge.fill" : "bolt.horizontal.circle.fill")
+        Button {
+            if running {
+                liveManager.stop()
+            } else if !liveManager.start(for: detail) {
+                showActivityDeniedAlert = true
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                Text(title)
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(running ? WCTheme.onDark : .white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(running ? WCTheme.chipFill : WCTheme.emeraldDeep)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(WCTheme.cardStroke, lineWidth: running ? 1 : 0)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func load(force: Bool = false) async {
         if let r = try? await APIClient.shared.fetchWorldCupMatch(fixtureId: fixtureId, ignoreCache: force) {
-            await MainActor.run { detail = r; loading = false }
+            await MainActor.run {
+                detail = r
+                loading = false
+                // أول تحميل لمباراة جارية: ابدأ على «التعليق» الحي كالويب
+                if !didPickDefaultTab {
+                    didPickDefaultTab = true
+                    if r.fixture.status.live { tab = .commentary }
+                }
+            }
         } else { await MainActor.run { loading = false } }
     }
 
@@ -78,11 +186,11 @@ struct WorldCupMatchCenter: View {
                     if f.started {
                         // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
                         Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(SabqFonts.app(size: 24, weight: .semibold))
                             .foregroundStyle(WCTheme.onDark)
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
-                        Text(WCFormat.time(f)).font(.system(size: 22, weight: .black, design: .rounded)).foregroundStyle(WCTheme.onDark)
+                        Text(WCFormat.time(f)).font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     }
                     WCStatusPill(fixture: f)
                 }
@@ -90,7 +198,7 @@ struct WorldCupMatchCenter: View {
                 teamHead(f.away)
             }
             Text("\(f.round) · \(f.venue.name) — \(f.venue.city) · \(WCFormat.day(f))")
-                .font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
         }
     }
@@ -98,7 +206,7 @@ struct WorldCupMatchCenter: View {
     private func teamHead(_ team: WCTeam) -> some View {
         VStack(spacing: 6) {
             WCTeamLogo(team: team, size: 48, ring: WCTheme.cardStroke)
-            Text(team.name).font(.system(size: 13, weight: .heavy)).foregroundStyle(WCTheme.onDark)
+            Text(team.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -112,7 +220,7 @@ struct WorldCupMatchCenter: View {
                 ForEach(tabs, id: \.self) { t in
                     Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                         Text(t.rawValue)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
                             .padding(.horizontal, 12).padding(.vertical, 7)
                             .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
@@ -126,7 +234,15 @@ struct WorldCupMatchCenter: View {
     @ViewBuilder private func content(_ d: WCMatchDetail) -> some View {
         let openPlayer: (Int?) -> Void = { selectedPlayer = WCPlayerSelection($0) }
         switch tab {
+        case .commentary:
+            WCCommentaryView(fixtureId: d.fixture.id, live: d.fixture.status.live)
         case .events: WCEventsTimeline(detail: d, onOpenPlayer: openPlayer)
+        case .momentum:
+            WCMomentumView(fixtureId: d.fixture.id, live: d.fixture.status.live,
+                           homeName: d.fixture.home.name, awayName: d.fixture.away.name)
+        case .pressure:
+            WCPressureView(fixtureId: d.fixture.id, live: d.fixture.status.live,
+                           homeName: d.fixture.home.name, awayName: d.fixture.away.name)
         case .lineups: WCLineupsView(detail: d, onOpenPlayer: openPlayer)
         case .stats: WCStatsView(detail: d)
         case .ratings: WCRatingsView(detail: d, onOpenPlayer: openPlayer)
@@ -135,21 +251,164 @@ struct WorldCupMatchCenter: View {
     }
 }
 
-// MARK: - الأحداث
+// MARK: - الأحداث (خط زمن أفقي للأهداف/الكروت + مجريات عمودية أحدثها بالأعلى)
+//
+// تكافؤ مع MatchCenterDialog على الويب (#436): شريط أفقي يلخّص الأهداف والكروت
+// (المضيف أعلى المحور/الضيف أسفله، RTL فالدقيقة 0 يمينًا)، يليه سرد عمودي لكل
+// المجريات أحدثُها بالأعلى مع نقطة بلون الفريق (المضيف زمردي/الضيف ذهبي).
 
 struct WCEventsTimeline: View {
     let detail: WCMatchDetail
     let onOpenPlayer: (Int?) -> Void
+    // تفاصيل SportMonks المركّبة (طريقة الهدف/سبب البطاقة/VAR) + نتيجة الشوط الأول
+    @State private var facts: WCMatchFacts?
+
+    // أبعاد الشريط الأفقي
+    private let barHeight: CGFloat = 96
+    private let axisY: CGFloat = 42
+    private let topRowY: CGFloat = 20
+    private let bottomRowY: CGFloat = 64
+    private let barInset: CGFloat = 16
 
     var body: some View {
-        if detail.events.isEmpty {
-            emptyText("الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة")
-        } else {
-            VStack(spacing: 8) {
-                ForEach(sorted) { ev in
-                    Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
-                        .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 14) {
+            if let ht = facts?.halftime { halftimeRow(ht) }
+
+            if detail.events.isEmpty {
+                emptyText("الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة")
+            } else {
+                if !barEvents.isEmpty { horizontalBar }
+                verticalFlow
+            }
+        }
+        .task(id: detail.fixture.id) {
+            facts = try? await APIClient.shared.fetchWorldCupMatchFacts(
+                fixtureId: detail.fixture.id, ignoreCache: detail.fixture.status.live)
+        }
+    }
+
+    // MARK: نتيجة الشوط الأول
+    private func halftimeRow(_ ht: WCHalftime) -> some View {
+        HStack(spacing: 8) {
+            Text("نتيجة الشوط الأول").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            // المضيف يمينًا في RTL — الضيف أولًا داخل LTR
+            Text("\(ht.away) - \(ht.home)")
+                .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
+                .foregroundStyle(WCTheme.onDark)
+                .environment(\.layoutDirection, .leftToRight)
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: الشريط الأفقي (الأهداف والكروت)
+    private var barEvents: [WCMatchEvent] {
+        detail.events.filter { $0.type == "goal" || $0.type == "yellow-card" || $0.type == "red-card" }
+    }
+    private var maxMinute: Int {
+        max(90, detail.events.map { $0.minute + ($0.extraMinute ?? 0) }.max() ?? 90)
+    }
+    private var refMarks: [Int] {
+        maxMinute > 95 ? [0, 45, 90, maxMinute] : [0, 45, 90]
+    }
+
+    /// إحداثي أفقي يدوي بـRTL: الدقيقة 0 عند اليمين، الأكبر عند اليسار (داخل هوامش barInset).
+    private func barX(_ minute: Int, width w: CGFloat) -> CGFloat {
+        let f = min(max(CGFloat(minute) / CGFloat(maxMinute), 0), 1)
+        let usable = max(w - barInset * 2, 1)
+        return barInset + usable * (1 - f)
+    }
+
+    private var horizontalBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("خط زمن المباراة")
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .topLeading) {
+                    // المحور الأفقي
+                    Rectangle().fill(WCTheme.emerald.opacity(0.22))
+                        .frame(width: w - barInset * 2, height: 2)
+                        .position(x: w / 2, y: axisY)
+                    // علامات مرجعية + خطوط شبكية + بطاقة الدقيقة أسفلها
+                    ForEach(refMarks, id: \.self) { m in
+                        let x = barX(m, width: w)
+                        Rectangle().fill(WCTheme.emerald.opacity(0.12))
+                            .frame(width: 1, height: barHeight - 22)
+                            .position(x: x, y: (barHeight - 22) / 2)
+                        Text("\(m)'")
+                            .font(SabqFonts.app(size: 8).monospacedDigit())
+                            .foregroundStyle(WCTheme.onDarkDim)
+                            .position(x: x, y: barHeight - 6)
+                    }
+                    // العلامات: المضيف فوق المحور، الضيف تحته
+                    ForEach(barEvents) { ev in
+                        let isHome = ev.teamId == detail.fixture.home.id
+                        let x = barX(ev.minute + (ev.extraMinute ?? 0), width: w)
+                        VStack(spacing: 1) {
+                            if isHome { minuteTiny(ev); barMarker(ev) }
+                            else { barMarker(ev); minuteTiny(ev) }
+                        }
+                        .position(x: x, y: isHome ? topRowY : bottomRowY)
+                    }
                 }
+                .frame(width: w, height: barHeight)
+                .environment(\.layoutDirection, .leftToRight) // إحداثيات يدوية: 0 يمينًا
+            }
+            .frame(height: barHeight)
+
+            // مفتاح أعلى/أسفل
+            HStack(spacing: 10) {
+                HStack(spacing: 5) {
+                    Circle().fill(WCTheme.emerald).frame(width: 7, height: 7)
+                    Text("\(detail.fixture.home.name) · أعلى")
+                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 5) {
+                    Text("\(detail.fixture.away.name) · أسفل")
+                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                    Circle().fill(WCTheme.gold).frame(width: 7, height: 7)
+                }
+            }
+        }
+        .padding(12)
+        .wcElevatedCard()
+    }
+
+    private func minuteTiny(_ ev: WCMatchEvent) -> some View {
+        Text(minuteLabel(ev))
+            .font(SabqFonts.app(size: 8, weight: .semibold).monospacedDigit())
+            .foregroundStyle(WCTheme.onDarkDim)
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
+    @ViewBuilder private func barMarker(_ ev: WCMatchEvent) -> some View {
+        switch ev.type {
+        case "goal":
+            Image(systemName: "soccerball")
+                .font(.system(size: 12))
+                .foregroundStyle(WCTheme.emeraldDeep)
+                .padding(3)
+                .background(Circle().fill(.white))
+                .overlay(Circle().stroke(WCTheme.emerald.opacity(0.6), lineWidth: 1.5))
+        case "yellow-card":
+            RoundedRectangle(cornerRadius: 2).fill(WCTheme.gold).frame(width: 9, height: 13)
+        case "red-card":
+            RoundedRectangle(cornerRadius: 2).fill(WCTheme.liveRed).frame(width: 9, height: 13)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: السرد العمودي (مجريات المباراة — أحدثها بالأعلى)
+    private var verticalFlow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("مجريات المباراة")
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
+            ForEach(sorted) { ev in
+                Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
+                    .buttonStyle(.plain)
             }
         }
     }
@@ -158,30 +417,55 @@ struct WCEventsTimeline: View {
         detail.events.sorted { ($0.minute, $0.extraMinute ?? 0) > ($1.minute, $1.extraMinute ?? 0) }
     }
 
+    private func minuteLabel(_ ev: WCMatchEvent) -> String {
+        "\(ev.minute)'\(ev.extraMinute.map { "+\($0)" } ?? "")"
+    }
+
+    // يطابق صنف حدث API-Football بصنف SportMonks للتركيب
+    private func klassOf(_ type: String) -> String? {
+        switch type {
+        case "goal": return "goal"
+        case "yellow-card", "red-card": return "card"
+        case "var": return "var"
+        default: return nil
+        }
+    }
+
+    private func detailFor(_ ev: WCMatchEvent) -> String? {
+        guard let klass = klassOf(ev.type), let list = facts?.eventDetails else { return nil }
+        let loc = ev.teamId == detail.fixture.home.id ? "home" : "away"
+        return list.first { $0.klass == klass && $0.location == loc && abs($0.minute - ev.minute) <= 1 }?.detail
+    }
+
     private func row(_ ev: WCMatchEvent) -> some View {
         let isHome = ev.teamId == detail.fixture.home.id
         let team = isHome ? detail.fixture.home : detail.fixture.away
-        return HStack(spacing: 12) {
-            Text("\(ev.minute)'\(ev.extraMinute.map { "+\($0)" } ?? "")")
-                .font(.system(size: 12, weight: .bold).monospacedDigit())
+        let extra = detailFor(ev)
+        return HStack(spacing: 10) {
+            Circle().fill(isHome ? WCTheme.emerald : WCTheme.gold).frame(width: 8, height: 8)
+            Text(minuteLabel(ev))
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(WCTheme.onDarkDim)
-                .frame(minWidth: 44)
+                .frame(minWidth: 40)
                 .environment(\.layoutDirection, .leftToRight)
             icon(ev.type)
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(ev.label)\(ev.player.isEmpty ? "" : " — \(ev.player)")")
-                    .font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(ev.player.isEmpty ? ev.label : "\(ev.player) (\(ev.label))")
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                if let extra {
+                    Text(extra).font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.sky).lineLimit(1)
+                }
                 if let assist = ev.assist, ev.type == "goal" {
-                    Text("صناعة: \(assist)").font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("صناعة: \(assist)").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                 } else if let assist = ev.assist, ev.type == "substitution" {
-                    Text("بديلًا عن: \(assist)").font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("بديلًا عن: \(assist)").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                 }
             }
             Spacer()
             WCRemoteImage(url: team.logo).frame(width: 20, height: 20)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard()
     }
 
     @ViewBuilder private func icon(_ type: String) -> some View {
@@ -194,6 +478,67 @@ struct WCEventsTimeline: View {
         case "var": Image(systemName: "tv").foregroundStyle(.purple)
         default: Image(systemName: "circle.fill").foregroundStyle(WCTheme.onDarkDim)
         }
+    }
+}
+
+// MARK: - الضغط (Pressure Index)
+
+struct WCPressureView: View {
+    let fixtureId: Int
+    let live: Bool
+    let homeName: String
+    let awayName: String
+    @State private var data: WCPressure?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            if let d = data, !d.points.isEmpty {
+                if live, let latest = d.latest, latest.side != "even" {
+                    HStack(spacing: 8) {
+                        Image(systemName: "gauge.medium").foregroundStyle(WCTheme.emerald)
+                        Text("الأكثر سيطرة الآن:").font(SabqFonts.app(size: 13)).foregroundStyle(WCTheme.onDarkDim)
+                        Text(latest.side == "home" ? homeName : awayName)
+                            .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                        Text("\(Int(latest.value))")
+                            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Capsule().fill(WCTheme.chipFill))
+                            .environment(\.layoutDirection, .leftToRight)
+                    }
+                }
+                Text("مؤشّر الضغط لحظة بلحظة — أعلى: \(homeName) · أسفل: \(awayName)")
+                    .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                    .multilineTextAlignment(.center)
+                chart(d.points)
+            } else {
+                emptyText("مؤشّر الضغط يظهر هنا أثناء المباراة")
+            }
+        }
+        .task(id: fixtureId) {
+            data = try? await APIClient.shared.fetchWorldCupPressure(fixtureId: fixtureId, ignoreCache: live)
+        }
+    }
+
+    private func chart(_ points: [WCPressurePoint]) -> some View {
+        Chart(points) { p in
+            BarMark(
+                x: .value("الدقيقة", p.minute),
+                y: .value("الضغط", p.net)
+            )
+            .foregroundStyle(p.net >= 0 ? WCTheme.emeraldDeep : WCTheme.liveRed)
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                AxisValueLabel {
+                    if let m = value.as(Int.self) {
+                        Text("\(m)'").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+        }
+        .chartYAxis(.hidden)
+        .frame(height: 180)
+        .environment(\.layoutDirection, .leftToRight)
     }
 }
 
@@ -236,10 +581,10 @@ struct WCPitch: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(lineup.teamName).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                Text(lineup.teamName).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 Spacer()
                 if let f = lineup.formation {
-                    Text(f).font(.system(size: 12, weight: .bold).monospacedDigit())
+                    Text(f).font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(WCTheme.onDarkDim)
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(Capsule().fill(WCTheme.chipFill))
@@ -248,9 +593,46 @@ struct WCPitch: View {
             }
             pitch
             if !lineup.coach.isEmpty {
-                Text("المدرب: \(lineup.coach)").font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                Text("المدرب: \(lineup.coach)").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            if !lineup.substitutes.isEmpty {
+                bench
             }
         }
+    }
+
+    // دكة البدلاء — شبكة مدمجة (رقم + اسم) قابلة للنقر لفتح بطاقة اللاعب
+    private var bench: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
+                Text("دكة البدلاء").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
+                Text("(\(lineup.substitutes.count))").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(lineup.substitutes) { p in
+                    Button { onOpenPlayer(p.id) } label: { benchRow(p) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func benchRow(_ p: WCLineupPlayer) -> some View {
+        HStack(spacing: 8) {
+            Text(p.number.map { "\($0)" } ?? "•")
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
+                .environment(\.layoutDirection, .leftToRight)
+            Text(p.name)
+                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WCTheme.chipFill))
     }
 
     private var pitch: some View {
@@ -263,7 +645,7 @@ struct WCPitch: View {
                 Circle().stroke(.white.opacity(0.25), lineWidth: 1).frame(width: 64, height: 64)
 
                 if r.isEmpty {
-                    Text("التشكيلة غير متاحة بعد").font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                    Text("التشكيلة غير متاحة بعد").font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.8))
                 } else {
                     ForEach(Array(r.enumerated()), id: \.offset) { ri, players in
                         let y = geo.size.height * (1 - (CGFloat(ri) + 0.6) / (CGFloat(r.count) + 0.4))
@@ -287,9 +669,9 @@ struct WCPitch: View {
         Button { onOpenPlayer(p.id) } label: {
             VStack(spacing: 2) {
                 Text(p.number.map { "\($0)" } ?? "•")
-                    .font(.system(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.pitchBottom)
+                    .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.pitchBottom)
                     .frame(width: 28, height: 28).background(Circle().fill(.white))
-                Text(p.name).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
+                Text(p.name).font(SabqFonts.app(size: 9, weight: .regular)).foregroundStyle(.white)
                     .lineLimit(1).frame(maxWidth: 56)
             }
         }
@@ -301,17 +683,160 @@ struct WCPitch: View {
 
 struct WCStatsView: View {
     let detail: WCMatchDetail
+    // معطيات SportMonks الأعمق: إحصائيات (حتى 41) + طقس + غيابات + xG
+    @State private var facts: WCMatchFacts?
+    @State private var xg: WCXg?
+    @State private var loaded = false
+
+    // أثناء اللعب نُفضّل إحصاءات detail اللحظية (TheSports — أسرع) إن توفّرت؛ وإلا
+    // إحصائيات SportMonks الأعمق؛ ثم API-Football عند غيابها.
+    private var stats: [WCStatistic] {
+        if detail.fixture.status.live, !detail.statistics.isEmpty { return detail.statistics }
+        if let f = facts, !f.statistics.isEmpty { return f.statistics }
+        return detail.statistics
+    }
+
+    private var nothing: Bool {
+        stats.isEmpty && !(xg?.available ?? false) && facts?.weather == nil
+            && (facts?.absentees.isEmpty ?? true)
+    }
 
     var body: some View {
-        if detail.statistics.isEmpty {
-            emptyText("الإحصائيات تظهر هنا أثناء المباراة")
-        } else {
-            VStack(spacing: 14) {
-                ForEach(detail.statistics) { stat in
-                    statRow(stat)
+        VStack(spacing: 14) {
+            if let xg, xg.available { xgCard(xg) }
+            if let w = facts?.weather { weatherCard(w) }
+            if let f = facts, !f.absentees.isEmpty { absenteesView(f.absentees) }
+            if !stats.isEmpty {
+                ForEach(stats) { statRow($0) }
+            }
+            if loaded && nothing {
+                emptyText("الإحصائيات تظهر هنا أثناء المباراة")
+            }
+        }
+        .task(id: detail.fixture.id) {
+            async let f = APIClient.shared.fetchWorldCupMatchFacts(
+                fixtureId: detail.fixture.id, ignoreCache: detail.fixture.status.live)
+            async let x = APIClient.shared.fetchWorldCupXg(
+                fixtureId: detail.fixture.id, ignoreCache: detail.fixture.status.live)
+            facts = try? await f
+            xg = try? await x
+            loaded = true
+        }
+    }
+
+    // MARK: xG
+
+    private func xgCard(_ xg: WCXg) -> some View {
+        VStack(spacing: 10) {
+            statRow(WCStatistic(key: "xg", label: "الأهداف المتوقعة (xG)",
+                                home: String(format: "%.2f", xg.home.xg),
+                                away: String(format: "%.2f", xg.away.xg)))
+            if xg.home.xgot > 0 || xg.away.xgot > 0 {
+                HStack {
+                    Text(String(format: "%.2f", xg.home.xgot))
+                        .font(SabqFonts.app(size: 11).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                        .frame(width: 48, alignment: .leading)
+                    Spacer()
+                    Text("على المرمى (xGoT)").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                    Spacer()
+                    Text(String(format: "%.2f", xg.away.xgot))
+                        .font(SabqFonts.app(size: 11).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                        .frame(width: 48, alignment: .trailing)
+                }
+            }
+            if !xg.topPlayers.isEmpty {
+                Divider().overlay(WCTheme.cardStroke)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("الأعلى خطورة (xG)").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    ForEach(Array(xg.topPlayers.prefix(3))) { p in
+                        HStack(spacing: 8) {
+                            WCRemoteImage(url: p.location == "home" ? detail.fixture.home.logo : detail.fixture.away.logo)
+                                .frame(width: 16, height: 16)
+                            Text(p.name).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                            Spacer()
+                            Text(String(format: "%.2f", p.xg))
+                                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                                .environment(\.layoutDirection, .leftToRight)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
+    }
+
+    // MARK: الطقس
+
+    private func weatherCard(_ w: WCWeather) -> some View {
+        HStack(spacing: 12) {
+            if w.icon.isEmpty {
+                Image(systemName: "cloud.fill").font(.system(size: 24)).foregroundStyle(WCTheme.sky)
+            } else {
+                WCRemoteImage(url: w.icon).frame(width: 34, height: 34)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(w.description).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    if w.type == "forecast" {
+                        Text("· توقّع").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+                HStack(spacing: 12) {
+                    if let t = w.temp {
+                        Text("\(t)°م").font(SabqFonts.app(size: 11).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                    if let h = w.humidity, !h.isEmpty {
+                        HStack(spacing: 2) {
+                            Image(systemName: "drop.fill").font(.system(size: 9))
+                            Text(h)
+                        }
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .wcElevatedCard()
+    }
+
+    // MARK: الغيابات
+
+    private func absenteesView(_ list: [WCAbsentee]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "bandage.fill").font(.system(size: 12)).foregroundStyle(WCTheme.liveRed)
+                Text("الغيابات").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.liveRed)
+            }
+            HStack(alignment: .top, spacing: 12) {
+                absenteeCol(detail.fixture.home, list.filter { $0.location == "home" })
+                absenteeCol(detail.fixture.away, list.filter { $0.location == "away" })
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .wcElevatedCard()
+    }
+
+    private func absenteeCol(_ team: WCTeam, _ players: [WCAbsentee]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                WCRemoteImage(url: team.logo).frame(width: 16, height: 16)
+                Text(team.name).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            }
+            if players.isEmpty {
+                Text("—").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            } else {
+                ForEach(players) { p in
+                    Text("\(p.name)\(p.reason.isEmpty ? "" : " — \(p.reason)")")
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func statRow(_ s: WCStatistic) -> some View {
@@ -320,11 +845,11 @@ struct WCStatsView: View {
         let max = (h + a) == 0 ? 1 : (h + a)
         return VStack(spacing: 5) {
             HStack {
-                Text(s.home).font(.system(size: 14, weight: .black)).frame(width: 48, alignment: .leading)
+                Text(s.home).font(SabqFonts.app(size: 14, weight: .semibold)).frame(width: 48, alignment: .leading)
                 Spacer()
-                Text(s.label).font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                Text(s.label).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
-                Text(s.away).font(.system(size: 14, weight: .black)).frame(width: 48, alignment: .trailing)
+                Text(s.away).font(SabqFonts.app(size: 14, weight: .semibold)).frame(width: 48, alignment: .trailing)
             }
             .foregroundStyle(WCTheme.onDark)
             GeometryReader { geo in
@@ -359,8 +884,8 @@ struct WCRatingsView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text("رجل المباراة").font(.system(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
-                                Text(motm.name).font(.system(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark)
+                                Text("رجل المباراة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
+                                Text(motm.name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                             }
                             Spacer()
                             ratingBadge(motm.rating)
@@ -388,15 +913,15 @@ struct WCRatingsView: View {
                 WCRemoteImage(url: p.photo, contentMode: .fill).frame(width: 32, height: 32).clipShape(Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(p.name)\(p.captain ? " (ك)" : "")").font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-                Text(subtitle(p)).font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                Text("\(p.name)\(p.captain ? " (ك)" : "")").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(subtitle(p)).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
             }
             Spacer()
             WCRemoteImage(url: teamLogo).frame(width: 16, height: 16)
             ratingBadge(p.rating)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard()
     }
 
     private func subtitle(_ p: WCPlayerRating) -> String {
@@ -409,7 +934,7 @@ struct WCRatingsView: View {
 
     private func ratingBadge(_ rating: Double) -> some View {
         Text(String(format: "%.1f", rating))
-            .font(.system(size: 13, weight: .black).monospacedDigit())
+            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
             .foregroundStyle(.white)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(RoundedRectangle(cornerRadius: 8).fill(ratingColor(rating)))
@@ -428,29 +953,45 @@ struct WCRatingsView: View {
 
 struct WCPredictionView: View {
     let detail: WCMatchDetail
+    // توقعات SportMonks الاحتمالية (16 نوعًا) — أفضل جهد
+    @State private var forecast: WCForecast?
+    @State private var loaded = false
+
+    // نتيجة المباراة: API-Football إن توفّر، وإلا احتمالات SportMonks
+    private var ft: (home: Int, draw: Int, away: Int)? {
+        if let p = detail.prediction { return (p.home, p.draw, p.away) }
+        if let f = forecast?.fulltime { return (f.home, f.draw, f.away) }
+        return nil
+    }
+    private var hasAnyPrediction: Bool { ft != nil || (forecast?.available ?? false) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let p = detail.prediction {
+            if let ft {
                 VStack(spacing: 10) {
-                    bar("فوز \(detail.fixture.home.name)", p.home, WCTheme.emeraldDeep)
-                    bar("التعادل", p.draw, WCTheme.onDarkDim)
-                    bar("فوز \(detail.fixture.away.name)", p.away, WCTheme.sky)
+                    bar("فوز \(detail.fixture.home.name)", ft.home, WCTheme.emeraldDeep)
+                    bar("التعادل", ft.draw, WCTheme.onDarkDim)
+                    bar("فوز \(detail.fixture.away.name)", ft.away, WCTheme.sky)
                 }
-                Text("توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا")
-                    .font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else {
+            } else if loaded {
                 Text("لا تتوفر توقعات لهذه المباراة")
-                    .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 13)).foregroundStyle(WCTheme.onDarkDim)
                     .frame(maxWidth: .infinity).padding(.vertical, 4)
             }
 
+            if let f = forecast, f.available { forecastBlocks(f) }
+
+            if hasAnyPrediction {
+                Text("توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا")
+                    .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
             Divider().overlay(WCTheme.cardStroke)
-            Text("سجل المواجهات").font(.system(size: 13, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+            Text("سجل المواجهات").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
             if detail.headToHead.isEmpty {
                 Text("أول مواجهة رسمية بين المنتخبين — التاريخ يبدأ من هنا")
-                    .font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                     .frame(maxWidth: .infinity).padding(.vertical, 6)
             } else {
                 ForEach(detail.headToHead) { m in
@@ -458,14 +999,112 @@ struct WCPredictionView: View {
                 }
             }
         }
+        .task(id: detail.fixture.id) {
+            forecast = try? await APIClient.shared.fetchWorldCupForecast(fixtureId: detail.fixture.id)
+            loaded = true
+        }
+    }
+
+    // MARK: توقعات متقدّمة (SportMonks)
+
+    @ViewBuilder private func forecastBlocks(_ f: WCForecast) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Divider().overlay(WCTheme.cardStroke)
+            Text("توقعات متقدّمة").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
+
+            if let dc = f.doubleChance {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("الفرصة المزدوجة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
+                    HStack(spacing: 8) {
+                        dcCell("\(detail.fixture.home.name) أو تعادل", dc.homeOrDraw)
+                        dcCell("بلا تعادل", dc.homeOrAway)
+                        dcCell("\(detail.fixture.away.name) أو تعادل", dc.awayOrDraw)
+                    }
+                }
+            }
+
+            if let b = f.btts {
+                twoWay("الفريقان يسجلان", leftLabel: "نعم", left: b.yes, rightLabel: "لا", right: b.no)
+            }
+
+            if !f.goals.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("مجموع الأهداف — أكثر/أقل من").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
+                    ForEach(f.goals) { ou in
+                        HStack(spacing: 8) {
+                            Text(String(format: "%g", ou.line))
+                                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                                .frame(width: 32).environment(\.layoutDirection, .leftToRight)
+                            twoWayBar(left: ou.over, right: ou.under)
+                        }
+                    }
+                }
+            }
+
+            if !f.correctScores.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("أرجح النتائج (الرقم الأول للمضيف)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(f.correctScores) { cs in
+                                VStack(spacing: 2) {
+                                    Text(cs.score)
+                                        .font(SabqFonts.app(size: 14, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                                        .environment(\.layoutDirection, .leftToRight)
+                                    Text(String(format: "%g%%", cs.prob))
+                                        .font(SabqFonts.app(size: 10).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.chipFill))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func dcCell(_ label: String, _ value: Int) -> some View {
+        VStack(spacing: 3) {
+            Text("\(value)%").font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+            Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                .multilineTextAlignment(.center).lineLimit(2)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(WCTheme.chipFill))
+    }
+
+    private func twoWay(_ title: String, leftLabel: String, left: Int, rightLabel: String, right: Int) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
+            twoWayBar(left: left, right: right)
+            HStack {
+                Text("\(leftLabel) \(left)%").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDark)
+                Spacer()
+                Text("\(rightLabel) \(right)%").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDark)
+            }
+        }
+    }
+
+    private func twoWayBar(left: Int, right: Int) -> some View {
+        let total = CGFloat(max(1, left + right))
+        return GeometryReader { geo in
+            HStack(spacing: 2) {
+                WCTheme.emeraldDeep.frame(width: geo.size.width * CGFloat(left) / total)
+                WCTheme.sky.opacity(0.5).frame(maxWidth: .infinity)
+            }
+            .clipShape(Capsule())
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .frame(height: 16)
     }
 
     private func bar(_ label: String, _ value: Int, _ color: Color) -> some View {
         VStack(spacing: 4) {
             HStack {
-                Text(label).font(.system(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                Text(label).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 Spacer()
-                Text("\(value)%").font(.system(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                Text("\(value)%").font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
             }
             GeometryReader { geo in
                 Capsule().fill(color).frame(width: geo.size.width * CGFloat(value) / 100)
@@ -479,20 +1118,226 @@ struct WCPredictionView: View {
     private func h2hRow(_ m: WCFixture) -> some View {
         HStack(spacing: 8) {
             Text(String(m.date.prefix(4)))
-                .font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.chipFill))
                 .environment(\.layoutDirection, .leftToRight)
-            Text(m.home.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            Text(m.home.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             // اسم المضيف على اليمين — الضيف أولًا داخل LTR
             Text("\(m.goals.away ?? 0) - \(m.goals.home ?? 0)")
-                .font(.system(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                 .environment(\.layoutDirection, .leftToRight)
-            Text(m.away.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            Text(m.away.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             Spacer()
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard(cornerRadius: 12)
+    }
+}
+
+// MARK: - قنوات البث (شريط أعلى مركز المباراة)
+
+struct WCTvStrip: View {
+    let fixtureId: Int
+    @State private var channels: [WCTvChannel] = []
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear.frame(width: 0, height: 0)
+            if !channels.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "tv.fill").font(.system(size: 11)).foregroundStyle(WCTheme.emeraldDeep)
+                        Text("القنوات الناقلة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(channels) { ch in
+                                chip(ch)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .task(id: fixtureId) {
+            if let r = try? await APIClient.shared.fetchWorldCupTv(fixtureId: fixtureId), r.available {
+                await MainActor.run { channels = r.channels }
+            }
+        }
+    }
+
+    @ViewBuilder private func chip(_ ch: WCTvChannel) -> some View {
+        let content = HStack(spacing: 6) {
+            if let logo = ch.logo, !logo.isEmpty {
+                WCRemoteImage(url: logo).frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "play.tv").font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            Text(ch.name).font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            if let c = ch.country, !c.isEmpty {
+                Text(c).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(Capsule().fill(WCTheme.chipFill))
+        .overlay(Capsule().stroke(WCTheme.cardStroke.opacity(0.6), lineWidth: 0.5))
+
+        if let urlString = ch.url, let url = URL(string: urlString) {
+            Button { openURL(url) } label: { content }.buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - التعليق الحي (/world-cup/commentary/:id)
+//
+// تعليق نصّي أحدثُه بالأعلى، يتجدّد كل ١٥ث أثناء البث. الأهداف واللحظات
+// المهمّة مُبرَزة بلون العلامة وأيقونة.
+
+struct WCCommentaryView: View {
+    let fixtureId: Int
+    let live: Bool
+    @State private var data: WCCommentary?
+
+    private var items: [WCCommentaryItem] {
+        (data?.items ?? []).sorted { $0.order > $1.order }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if items.isEmpty {
+                emptyText("التعليق الحي يبدأ مع صافرة الانطلاق")
+            } else {
+                ForEach(items) { item in row(item) }
+            }
+        }
+        // الهوية تشمل live: من فتح المركز قبل الصافرة كانت الحلقة تخرج نهائيًا
+        // بعد أول جلبة (غير حيّة) ولا يبدأ التعليق أبدًا؛ الآن انقلاب live من
+        // الأب (الذي يستطلع حول الانطلاق) يعيد تشغيل الحلقة.
+        .task(id: "\(fixtureId)-\(live)") { await loop() }
+    }
+
+    private func row(_ item: WCCommentaryItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(item.minuteLabel)
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(item.goal ? WCTheme.emeraldDeep : WCTheme.onDarkDim)
+                .frame(minWidth: 40, alignment: .leading)
+                .environment(\.layoutDirection, .leftToRight)
+            if item.goal {
+                Image(systemName: "soccerball").font(.system(size: 13)).foregroundStyle(WCTheme.emeraldDeep)
+            } else if item.important {
+                Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(WCTheme.gold)
+            }
+            Text(item.textAr.isEmpty ? item.textEn : item.textAr)
+                .font(SabqFonts.app(size: 14, weight: item.goal || item.important ? .bold : .regular))
+                .foregroundStyle(WCTheme.onDark)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(item.goal ? WCTheme.emerald.opacity(0.10) : WCTheme.chipFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(item.goal ? WCTheme.emerald.opacity(0.35) : .clear, lineWidth: 1)
+        )
+    }
+
+    private func loop() async {
+        while !Task.isCancelled {
+            if let r = try? await APIClient.shared.fetchWorldCupCommentary(fixtureId: fixtureId, ignoreCache: live), r.available {
+                await MainActor.run { data = r }
+            }
+            let isLive = data?.live ?? live
+            if !isLive { return }   // مباراة منتهية/لم تبدأ — لا داعي للاستطلاع
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+        }
+    }
+}
+
+// MARK: - الزخم/الاستحواذ (/world-cup/momentum/:id)
+
+struct WCMomentumView: View {
+    let fixtureId: Int
+    let live: Bool
+    let homeName: String
+    let awayName: String
+    @State private var data: WCMomentum?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            if let d = data, (d.possession != nil || !d.points.isEmpty) {
+                if let pos = d.possession { possessionBar(pos) }
+                if !d.points.isEmpty {
+                    Text("الزخم الهجومي عبر دقائق المباراة — أعلى: \(homeName) · أسفل: \(awayName)")
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        .multilineTextAlignment(.center)
+                    chart(d.points)
+                }
+            } else {
+                emptyText("مؤشّر الزخم والاستحواذ يظهر هنا أثناء المباراة")
+            }
+        }
+        .task(id: fixtureId) {
+            if let r = try? await APIClient.shared.fetchWorldCupMomentum(fixtureId: fixtureId, ignoreCache: live), r.available {
+                await MainActor.run { data = r }
+            }
+        }
+    }
+
+    private func possessionBar(_ pos: WCPossession) -> some View {
+        let total = CGFloat(max(1, pos.home + pos.away))
+        return VStack(spacing: 6) {
+            HStack {
+                Text("\(homeName) \(pos.home)%")
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                Spacer()
+                Text("الاستحواذ").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                Spacer()
+                Text("\(awayName) \(pos.away)%")
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+            }
+            // RTL: المضيف (زمردي) يمينًا، الضيف (سماوي) يسارًا
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    Rectangle().fill(WCTheme.emeraldDeep).frame(width: geo.size.width * CGFloat(pos.home) / total)
+                    Rectangle().fill(WCTheme.sky)
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+        }
+        .padding(12)
+        .wcElevatedCard()
+    }
+
+    private func chart(_ points: [WCMomentumPoint]) -> some View {
+        Chart(points) { p in
+            BarMark(
+                x: .value("الدقيقة", p.minute),
+                y: .value("الزخم", p.net)
+            )
+            .foregroundStyle(p.net >= 0 ? WCTheme.emeraldDeep : WCTheme.sky)
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                AxisValueLabel {
+                    if let m = value.as(Int.self) {
+                        Text("\(m)'").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+        }
+        .chartYAxis(.hidden)
+        .frame(height: 180)
+        .environment(\.layoutDirection, .leftToRight)
     }
 }
 
@@ -501,7 +1346,7 @@ struct WCPredictionView: View {
 @ViewBuilder
 func emptyText(_ message: String) -> some View {
     Text(message)
-        .font(.system(size: 13))
+        .font(SabqFonts.app(size: 13))
         .foregroundStyle(WCTheme.onDarkDim)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)

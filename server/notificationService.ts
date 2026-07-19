@@ -12,7 +12,7 @@ import {
   userRoles,
   roles,
 } from "@shared/schema";
-import { eq, and, or, desc, sql, gt, inArray } from "drizzle-orm";
+import { eq, and, or, desc, sql, gt, inArray, isNull } from "drizzle-orm";
 import { notificationBus } from "./notificationBus";
 
 // Arabic notification templates
@@ -142,7 +142,9 @@ export async function sendArticleNotification(
           .where(
             and(
               eq(userInterests.categoryId, article.categoryId),
-              eq(userNotificationPrefs.interest, true)
+              eq(userNotificationPrefs.interest, true),
+              // «وضع المباريات فقط» يكتم إشعارات المقالات الجديدة
+              eq(userNotificationPrefs.matchesOnly, false)
             )
           );
       }
@@ -234,9 +236,23 @@ export async function sendArticleNotification(
 
         console.log(`📢 [KEYWORD-NOTIFY] Found ${followingUsers.length} users following these keywords`);
 
+        // «وضع المباريات فقط» — استبعاد من فعّلوه (نتجاهل غير المالكين لصف تفضيلات لأن الافتراضي false)
+        const followerIds = Array.from(new Set(followingUsers.map(u => u.userId)));
+        const mutedRows = followerIds.length
+          ? await db
+              .select({ userId: userNotificationPrefs.userId })
+              .from(userNotificationPrefs)
+              .where(and(
+                inArray(userNotificationPrefs.userId, followerIds),
+                eq(userNotificationPrefs.matchesOnly, true)
+              ))
+          : [];
+        const mutedUserIds = new Set(mutedRows.map(r => r.userId));
+
         // Group by userId to find which keywords they follow
         const userKeywordMap = new Map<string, string[]>();
         for (const { userId, tagId } of followingUsers) {
+          if (mutedUserIds.has(userId)) continue;
           if (!userKeywordMap.has(userId)) {
             userKeywordMap.set(userId, []);
           }
@@ -337,10 +353,23 @@ export async function sendDraftSubmittedNotification(
       .from(users)
       .innerJoin(userRoles, eq(userRoles.userId, users.id))
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      // نربط تفضيلات الإشعارات حتى نحترم «وضع المباريات فقط» (leftJoin: مَن لا
+      // يملك صفّ تفضيلات يبقى مؤهّلاً لأن القيمة الافتراضية matchesOnly=false).
+      .leftJoin(userNotificationPrefs, eq(userNotificationPrefs.userId, users.id))
       .where(
         and(
           inArray(roles.name, editorRoleNames),
-          eq(users.status, 'active')
+          eq(users.status, 'active'),
+          // «وضع المباريات فقط» يكتم إشعارات المسودات التحريرية أيضًا.
+          or(
+            isNull(userNotificationPrefs.matchesOnly),
+            eq(userNotificationPrefs.matchesOnly, false)
+          ),
+          // مفتاح مستقل: «إشعارات غرفة الأخبار / المسودات». إيقافه يكتمها مباشرة.
+          or(
+            isNull(userNotificationPrefs.editorialDrafts),
+            eq(userNotificationPrefs.editorialDrafts, true)
+          )
         )
       );
 

@@ -362,6 +362,7 @@ router.get("/api/ai/daily-summary", requireAuth, async (req: any, res) => {
       slug: article.slug,
       englishSlug: article.englishSlug || undefined,
       category: article.categoryNameAr || '',
+      categoryName: article.categoryNameAr || '',
       imageUrl: article.imageUrl,
     }));
 

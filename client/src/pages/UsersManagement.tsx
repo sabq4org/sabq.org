@@ -13,7 +13,6 @@ import {
   Users,
   KeyRound,
   UserCheck,
-  UserX,
   Ban,
   Loader2,
   TrendingUp,
@@ -131,6 +130,20 @@ interface UserListItem {
   loyalty?: UserLoyalty | null;
 }
 
+/** عرض أوضح في الإدارة لحسابات الجوال بلا اسم. */
+function adminUserLabel(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+}): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
+  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  return "بدون اسم";
+}
+
 // Role type
 interface Role {
   id: string;
@@ -143,10 +156,18 @@ interface KPIs {
   total: number;
   emailVerified: number;
   emailVerifiedTrend: number;
+  withPhone: number;
+  withPhoneTrend: number;
   suspended: number;
   suspendedTrend: number;
   banned: number;
   bannedTrend: number;
+}
+
+const LATIN_DATE = "ar-SA-u-ca-gregory-nu-latn";
+
+function formatLatinNumber(value: number) {
+  return value.toLocaleString("en-US");
 }
 
 type UserFormValues = z.infer<typeof adminUpdateUserSchema>;
@@ -216,9 +237,11 @@ export default function UsersManagement() {
       params.append("page", String(page));
       params.append("pageSize", String(pageSize));
 
-      const res = await fetch(`/api/admin/users?${params}`);
-      if (!res.ok) return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
-      return res.json();
+      try {
+        return await apiRequest(`/api/admin/users?${params}`);
+      } catch {
+        return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
+      }
     },
     enabled: !!user,
   });
@@ -238,10 +261,12 @@ export default function UsersManagement() {
   const { data: rolesRaw } = useQuery<Role[]>({
     queryKey: ["/api/roles"],
     queryFn: async () => {
-      const res = await fetch("/api/roles");
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      try {
+        const data = await apiRequest("/api/roles");
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
     },
   });
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
@@ -375,14 +400,11 @@ export default function UsersManagement() {
 
   const handleEditRoles = async (user: UserListItem) => {
     try {
-      const res = await fetch(`/api/admin/users/${user.id}/roles`);
-      if (res.ok) {
-        const roles = await res.json();
-        setEditingUserRoles({
-          userId: user.id,
-          currentRoles: roles.map((r: Role) => r.id),
-        });
-      }
+      const roles = await apiRequest(`/api/admin/users/${user.id}/roles`);
+      setEditingUserRoles({
+        userId: user.id,
+        currentRoles: (Array.isArray(roles) ? roles : []).map((r: Role) => r.id),
+      });
     } catch (error) {
       toast({
         title: "خطأ",
@@ -414,7 +436,7 @@ export default function UsersManagement() {
   const formatDate = (value?: string | null) => {
     if (!value) return "—";
     try {
-      return new Date(value).toLocaleDateString("ar-SA-u-ca-gregory");
+      return new Date(value).toLocaleDateString(LATIN_DATE);
     } catch {
       return "—";
     }
@@ -425,12 +447,12 @@ export default function UsersManagement() {
     const diffMs = Date.now() - date.getTime();
     const min = Math.floor(diffMs / 60000);
     if (min < 1) return "الآن";
-    if (min < 60) return `قبل ${min} د`;
+    if (min < 60) return `قبل ${formatLatinNumber(min)} د`;
     const hr = Math.floor(min / 60);
-    if (hr < 24) return `قبل ${hr} س`;
+    if (hr < 24) return `قبل ${formatLatinNumber(hr)} س`;
     const days = Math.floor(hr / 24);
-    if (days < 30) return `قبل ${days} يوم`;
-    return date.toLocaleDateString("ar-SA-u-ca-gregory");
+    if (days < 30) return `قبل ${formatLatinNumber(days)} يوم`;
+    return date.toLocaleDateString(LATIN_DATE);
   };
   const getPlatformLabel = (info?: UserDeviceInfo | null) => {
     if (!info?.platform) return null;
@@ -485,102 +507,124 @@ export default function UsersManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="relative min-h-full overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.07),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.045),_transparent_45%),linear-gradient(180deg,_rgba(240,249,255,0.55)_0%,_transparent_26%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.1),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.05),_transparent_45%),linear-gradient(180deg,_rgba(8,47,73,0.22)_0%,_transparent_28%)]"
+        />
+        <div className="relative space-y-6" dir="rtl">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="heading-title">
-              إدارة المستخدمين
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              إدارة حسابات المستخدمين والصلاحيات
-            </p>
+        <header className="relative overflow-hidden rounded-2xl border border-sky-200/60 bg-gradient-to-l from-sky-50/80 via-background to-emerald-50/40 p-5 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:via-background dark:to-emerald-950/20 sm:p-6">
+          <div aria-hidden className="pointer-events-none absolute -left-16 -top-20 h-44 w-44 rounded-full bg-[#1BADF8]/10 blur-3xl dark:bg-[#1BADF8]/15" />
+          <div aria-hidden className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
+          <div className="relative flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3">
+              <span className="rounded-xl bg-[#1BADF8]/15 p-2.5 text-[#078fd1] dark:text-[#45c0f5]">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6" />
+              </span>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-title">
+                  إدارة المستخدمين
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  إدارة حسابات المستخدمين والصلاحيات
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => setAddingUser(true)} data-testid="button-add-user" className="gap-2">
+              <PlusCircle className="h-4 w-4" />
+              إضافة مستخدم
+            </Button>
           </div>
-          <Button onClick={() => setAddingUser(true)} data-testid="button-add-user">
-            <PlusCircle className="ml-2 h-4 w-4" />
-            إضافة مستخدم
-          </Button>
-        </div>
+        </header>
 
         {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card
-            className="hover-elevate cursor-pointer"
+            className="cursor-pointer rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/35 dark:from-sky-950/15"
             onClick={() => setStatusFilter("all")}
             data-testid="card-kpi-total"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي المستخدمين</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                <Users className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis?.total || 0}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-total">
+                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.total || 0)}
               </div>
             </CardContent>
           </Card>
 
           <Card
-            className="hover-elevate cursor-pointer"
+            className="cursor-pointer rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-emerald-900/35 dark:from-emerald-950/15"
             onClick={() => setStatusFilter("all")}
             data-testid="card-kpi-verified"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الموثقون بالبريد</CardTitle>
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+                <UserCheck className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-verified">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis?.emailVerified || 0}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-verified">
+                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.emailVerified || 0)}
               </div>
               {!kpisLoading && kpis && (
-                <div className={`flex items-center text-xs ${kpis.emailVerifiedTrend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {kpis.emailVerifiedTrend >= 0 ? <TrendingUp className="w-3 h-3 ml-1" /> : <TrendingDown className="w-3 h-3 ml-1" />}
-                  <span>{Math.abs(kpis.emailVerifiedTrend)}%</span>
+                <div className={`mt-1 flex items-center text-xs tabular-nums ${kpis.emailVerifiedTrend >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  {kpis.emailVerifiedTrend >= 0 ? <TrendingUp className="ml-1 h-3 w-3" /> : <TrendingDown className="ml-1 h-3 w-3" />}
+                  <span>{formatLatinNumber(Math.abs(kpis.emailVerifiedTrend))}%</span>
                 </div>
               )}
             </CardContent>
           </Card>
 
           <Card
-            className="hover-elevate cursor-pointer"
-            onClick={() => setStatusFilter("suspended")}
-            data-testid="card-kpi-suspended"
+            className="cursor-pointer rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-cyan-900/35 dark:from-cyan-950/15"
+            onClick={() => setStatusFilter("all")}
+            data-testid="card-kpi-with-phone"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">المعلقون</CardTitle>
-              <UserX className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">الجوالات المسجّلة</CardTitle>
+              <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
+                <Phone className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-suspended">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis?.suspended || 0}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-with-phone">
+                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.withPhone || 0)}
               </div>
               {!kpisLoading && kpis && (
-                <div className={`flex items-center text-xs ${kpis.suspendedTrend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {kpis.suspendedTrend >= 0 ? <TrendingUp className="w-3 h-3 ml-1" /> : <TrendingDown className="w-3 h-3 ml-1" />}
-                  <span>{Math.abs(kpis.suspendedTrend)}%</span>
+                <div className={`mt-1 flex items-center text-xs tabular-nums ${kpis.withPhoneTrend >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  {kpis.withPhoneTrend >= 0 ? <TrendingUp className="ml-1 h-3 w-3" /> : <TrendingDown className="ml-1 h-3 w-3" />}
+                  <span>{formatLatinNumber(Math.abs(kpis.withPhoneTrend))}%</span>
                 </div>
               )}
             </CardContent>
           </Card>
 
           <Card
-            className="hover-elevate cursor-pointer"
+            className="cursor-pointer rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-rose-900/35 dark:from-rose-950/15"
             onClick={() => setStatusFilter("banned")}
             data-testid="card-kpi-banned"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">المحظورون</CardTitle>
-              <Ban className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-rose-100/80 p-1.5 dark:bg-rose-950/40">
+                <Ban className="h-4 w-4 text-rose-700 dark:text-rose-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-banned">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis?.banned || 0}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-banned">
+                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.banned || 0)}
               </div>
               {!kpisLoading && kpis && (
-                <div className={`flex items-center text-xs ${kpis.bannedTrend >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {kpis.bannedTrend >= 0 ? <TrendingUp className="w-3 h-3 ml-1" /> : <TrendingDown className="w-3 h-3 ml-1" />}
-                  <span>{Math.abs(kpis.bannedTrend)}%</span>
+                <div className={`mt-1 flex items-center text-xs tabular-nums ${kpis.bannedTrend >= 0 ? "text-red-600" : "text-emerald-600"}`}>
+                  {kpis.bannedTrend >= 0 ? <TrendingUp className="ml-1 h-3 w-3" /> : <TrendingDown className="ml-1 h-3 w-3" />}
+                  <span>{formatLatinNumber(Math.abs(kpis.bannedTrend))}%</span>
                 </div>
               )}
             </CardContent>
@@ -588,7 +632,7 @@ export default function UsersManagement() {
         </div>
 
         {/* Main Card */}
-        <Card>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardHeader>
             <CardTitle data-testid="heading-users">قائمة المستخدمين</CardTitle>
           </CardHeader>
@@ -669,9 +713,7 @@ export default function UsersManagement() {
                             <div className="min-w-0 flex-1">
                               <div className="font-medium flex items-start gap-1 flex-wrap" data-testid={`text-name-${user.id}`}>
                                 <span className="break-words">
-                                  {user.firstName || user.lastName
-                                    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
-                                    : "بدون اسم"}
+                                  {adminUserLabel(user)}
                                 </span>
                                 {user.verificationBadge === "gold" && (
                                   <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0 mt-1" aria-label="موثق ذهبي" />
@@ -718,7 +760,7 @@ export default function UsersManagement() {
                                 <span className="text-xs">{user.loyalty.currentRank}</span>
                               </Badge>
                               <span className="text-xs text-muted-foreground">
-                                {user.loyalty.totalPoints.toLocaleString("en-US")} نقطة
+                                {formatLatinNumber(user.loyalty.totalPoints)} نقطة
                               </span>
                             </div>
                           ) : (
@@ -820,15 +862,15 @@ export default function UsersManagement() {
                 buttons. Resets to page 1 when filters change (see the
                 effect above the useQuery). */}
             {totalUsers > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-4 pb-4 text-sm">
+              <div className="mt-4 flex flex-col items-center justify-between gap-3 px-4 pb-4 text-sm sm:flex-row">
                 <div className="text-muted-foreground" data-testid="pagination-status">
-                  عرض <span className="font-bold text-foreground">{(page - 1) * pageSize + 1}</span>
+                  عرض <span className="font-bold tabular-nums text-foreground">{formatLatinNumber((page - 1) * pageSize + 1)}</span>
                   {" – "}
-                  <span className="font-bold text-foreground">
-                    {Math.min(page * pageSize, totalUsers)}
+                  <span className="font-bold tabular-nums text-foreground">
+                    {formatLatinNumber(Math.min(page * pageSize, totalUsers))}
                   </span>
                   {" من "}
-                  <span className="font-bold text-foreground">{totalUsers.toLocaleString("en-US")}</span>
+                  <span className="font-bold tabular-nums text-foreground">{formatLatinNumber(totalUsers)}</span>
                   {" قارئ"}
                 </div>
 
@@ -837,11 +879,11 @@ export default function UsersManagement() {
                   <select
                     value={pageSize}
                     onChange={(e) => setPageSize(Number(e.target.value))}
-                    className="border border-input bg-background rounded-md px-2 py-1 text-sm"
+                    className="rounded-md border border-input bg-background px-2 py-1 text-sm tabular-nums"
                     data-testid="select-page-size"
                   >
                     {[50, 100, 200, 500].map((n) => (
-                      <option key={n} value={n}>{n}</option>
+                      <option key={n} value={n}>{formatLatinNumber(n)}</option>
                     ))}
                   </select>
                 </div>
@@ -866,7 +908,7 @@ export default function UsersManagement() {
                     السابقة
                   </Button>
                   <span className="px-3 text-muted-foreground tabular-nums">
-                    {page} / {totalPages}
+                    {formatLatinNumber(page)} / {formatLatinNumber(totalPages)}
                   </span>
                   <Button
                     variant="outline"
@@ -891,6 +933,7 @@ export default function UsersManagement() {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Edit Dialog */}
@@ -1015,9 +1058,7 @@ export default function UsersManagement() {
                   <div className="min-w-0">
                     <SheetTitle className="flex items-center gap-1.5 text-base">
                       <span className="truncate">
-                        {viewingDetails.firstName || viewingDetails.lastName
-                          ? `${viewingDetails.firstName || ""} ${viewingDetails.lastName || ""}`.trim()
-                          : "بدون اسم"}
+                        {adminUserLabel(viewingDetails)}
                       </span>
                       {viewingDetails.verificationBadge === "gold" && (
                         <BadgeCheck className="h-5 w-5 text-amber-500" aria-label="موثق ذهبي" />
@@ -1050,15 +1091,15 @@ export default function UsersManagement() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">المستوى</span>
-                        <span className="font-medium">{viewingDetails.loyalty.rankLevel} من 5</span>
+                        <span className="font-medium tabular-nums">{formatLatinNumber(viewingDetails.loyalty.rankLevel)} من 5</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">النقاط الحالية</span>
-                        <span className="font-medium">{viewingDetails.loyalty.totalPoints.toLocaleString("en-US")}</span>
+                        <span className="font-medium tabular-nums">{formatLatinNumber(viewingDetails.loyalty.totalPoints)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">إجمالي النقاط</span>
-                        <span className="font-medium">{viewingDetails.loyalty.lifetimePoints.toLocaleString("en-US")}</span>
+                        <span className="font-medium tabular-nums">{formatLatinNumber(viewingDetails.loyalty.lifetimePoints)}</span>
                       </div>
                     </div>
                   ) : (
@@ -1237,9 +1278,11 @@ function UserRoles({ userId }: { userId: string }) {
   const { data: userRoles, isLoading } = useQuery<Role[]>({
     queryKey: ["/api/admin/users", userId, "roles"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/users/${userId}/roles`);
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        return await apiRequest(`/api/admin/users/${userId}/roles`);
+      } catch {
+        return [];
+      }
     },
   });
 

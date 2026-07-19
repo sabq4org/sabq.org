@@ -29,6 +29,8 @@
  * 7. Pass updated in Apple Wallet automatically
  */
 
+import { log } from '../../utils/logger';
+
 interface PassUpdateEvent {
   userId: string;
   passType: 'press' | 'loyalty';
@@ -49,7 +51,10 @@ class PassUpdateLogger {
   log(event: PassUpdateEvent) {
     this.updates.push(event);
     
-    console.log('📱 [Pass Update] Logged:', {
+    // High-frequency audit line — keep the in-memory record (above) for the
+    // /api/wallet debug endpoints, but gate the console output behind debug so
+    // it stops flooding production logs. Set LOG_VERBOSE=1 to re-enable.
+    log.debug('📱 [Pass Update] Logged:', {
       userId: event.userId,
       passType: event.passType,
       reason: event.updateReason,

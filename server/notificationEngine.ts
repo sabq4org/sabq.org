@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { isUniqueViolation } from "./utils/pgError";
 import { 
   users, 
   articles,
@@ -22,6 +23,11 @@ interface NotificationPayload {
   matchedTopic?: string;
   deeplink?: string;
   imageUrl?: string;
+  // العنوان والنص المنسّقان مسبقًا هنا. notificationWorker كان يعيد تركيبهما من
+  // الصفر حسب type، فأي نوع جديد بلا فرع صريح كان يقع في "Unknown notification
+  // type" ويُسجَّل كخطأ. تمريرهما عبر الـ payload يجعل العامل يثق بهما مباشرة.
+  notificationTitle?: string;
+  notificationBody?: string;
 }
 
 // Notification type definitions
@@ -137,11 +143,17 @@ async function sendToInbox(
 
     // Add to notification queue (with deduplication via unique constraint)
     const dedupeKey = `${userId}:${payload.articleId || 'general'}:${type}`;
+    // احفظ العنوان/النص المنسّقين ضمن الـ payload ليستخدمهما العامل كما هي.
+    const enrichedPayload: NotificationPayload = {
+      ...payload,
+      notificationTitle: payload.notificationTitle ?? title,
+      notificationBody: payload.notificationBody ?? body,
+    };
     try {
       await db.insert(notificationQueue).values({
         userId,
         type,
-        payload,
+        payload: enrichedPayload,
         priority: type === "BreakingNews" ? 100 : 50,
         scheduledAt,
         dedupeKey,
@@ -155,8 +167,9 @@ async function sendToInbox(
       }
       return true;
     } catch (insertError: any) {
-      // If unique constraint violation, it's already queued (race condition)
-      if (insertError.code === '23505') {
+      // If unique constraint violation, it's already queued (race condition).
+      // Drizzle يلفّ خطأ PG، لذا نستخدم isUniqueViolation لفكّه.
+      if (isUniqueViolation(insertError)) {
         console.log(`🔁 Notification already queued for user ${userId}: ${type}`);
         return false;
       }

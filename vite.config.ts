@@ -9,10 +9,60 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 // for users who keep the tab open across releases.
 const SABQ_BUILD_ID = String(Date.now());
 
+// Optional append-only asset CDN (structural fix for "white page after every
+// deploy"). When ASSET_CDN_URL is set at BUILD time (e.g.
+// "https://cdn.sabq.org"), every content-hashed /assets/* URL is emitted as an
+// ABSOLUTE url on that host instead of a Pages-relative path. Pair it with the
+// post-build upload step (scripts/upload-assets-to-r2.mjs) that pushes
+// dist/public/assets/* into an R2 bucket WITHOUT ever deleting old files.
+// Because filenames are content-hashed, the bucket accumulates EVERY build's
+// chunks, so a chunk URL never 404s — neither for an open tab on the previous
+// build nor for a fresh tab hitting a POP mid-propagation. Unset (the default)
+// keeps the current Pages-relative behavior, so this is safe to merge inert and
+// flip on once cdn.sabq.org + R2 CORS are wired (see docs).
+const ASSET_CDN_URL = (process.env.ASSET_CDN_URL || "").replace(/\/+$/, "");
+
 export default defineConfig({
+  // Only rewrites bundle-emitted asset URLs (js/css/fonts/images) — root/public
+  // paths (index.html, /build-info.json, /favicon.ico) stay on the origin so the
+  // deploy-detection probe and the SPA shell are still served (no-store) by
+  // Cloudflare Pages. Inert unless ASSET_CDN_URL is set.
+  ...(ASSET_CDN_URL
+    ? {
+        experimental: {
+          renderBuiltUrl(
+            filename: string,
+            { type }: { type: "asset" | "public" },
+          ) {
+            // ONLY content-hashed bundle assets (js/css/fonts/images under
+            // dist/public/assets) go to the CDN — those are what the post-build
+            // uploader pushes to R2. Files copied from publicDir (favicon.ico,
+            // manifest.webmanifest, icon-*.png, apple-touch-icon.png) are NOT
+            // uploaded and live at the Pages origin root; rewriting them to the
+            // CDN makes them 404 there. Keep `public` assets origin-relative.
+            if (type === "asset") {
+              return `${ASSET_CDN_URL}/${filename}`;
+            }
+            return { relative: true };
+          },
+        },
+      }
+    : {}),
   plugins: [
     react(),
-    runtimeErrorOverlay(),
+    runtimeErrorOverlay({
+      // DMS/GTM injector assumes ≥4 `card-article-grid-*` cards exist and
+      // throws when a page (e.g. /opinion) renders a different card testid
+      // or fewer than 4 nodes. Not our code — don't hijack the page.
+      filter(error) {
+        const message = error?.message || "";
+        if (/card-article-grid/.test(message)) return false;
+        if (/parentNode/.test(message) && /undefined is not an object|Cannot read propert/i.test(message)) {
+          return false;
+        }
+        return true;
+      },
+    }),
     {
       name: "sabq-build-info",
       apply: "build",
@@ -25,6 +75,17 @@ export default defineConfig({
             builtAt: new Date().toISOString(),
           }),
         });
+      },
+      // Inject the build id as a <meta> tag so the inline safety-net script in
+      // index.html can read it (it can't see the `define`d __SABQ_BUILD_ID__
+      // constant — that's only available inside the bundled JS). The script
+      // compares this meta against /build-info.json on every HTML load: if they
+      // differ, the browser is holding a STALE index.html (e.g. iOS Safari disk
+      // cache) that points at deleted chunks, and it self-heals with a
+      // cache-busted reload BEFORE the entry chunk is even requested.
+      transformIndexHtml(html) {
+        const meta = `<meta name="sabq-build-id" content="${SABQ_BUILD_ID}">`;
+        return html.replace("<head>", `<head>\n    ${meta}`);
       },
     },
     // Replit-specific plugins — only on Replit AND in dev. Vercel builds

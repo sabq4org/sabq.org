@@ -24,20 +24,16 @@ data class SabqDimens(
     val mediaCardRadius: Dp = 12.dp,
 
     val screenPaddingH: Dp = 16.dp,
-    // Reduced from 26dp → 18dp: the original gap left large empty bands
-    // between sections, making the feed feel sparse on mid-size screens.
-    val sectionGap: Dp = 18.dp,
-    // Reduced from 20dp → 16dp: tighter internal padding keeps content
-    // closer together without crowding; matches Material3 card conventions.
-    val cardPadding: Dp = 16.dp,
+    // Strict iOS parity (owner directive 2026-07-13): section gap, card
+    // padding, and tab-bar inset restored to the exact iOS values —
+    // earlier Android-side reductions (18/16/88) reverted.
+    val sectionGap: Dp = 20.dp,
+    val cardPadding: Dp = 20.dp,
     // Horizontal rails (opinions, stories): iOS uses 14pt gaps.
     val railGap: Dp = 14.dp,
     // HorizontalPager spacing for the featured carousel.
     val pageSpacing: Dp = 12.dp,
-    // Reduced from 120dp → 88dp: 120 was leaving excessive dead space at the
-    // bottom of all scrollable screens. 88dp still clears the floating tab bar
-    // (54dp height) with comfortable breathing room.
-    val tabBarSafeArea: Dp = 88.dp,
+    val tabBarSafeArea: Dp = 120.dp,
 
     // Component-internal — drawn from FeaturedArticleCard / CompactArticleRow.
     val heroImageHeight: Dp = 200.dp,

@@ -829,6 +829,7 @@ router.post('/voices/test', requirePermission('audio_newsletters.create'), async
           voiceId: effectiveVoiceId,
           voiceSettings: { speed: voiceSettings?.speed ?? 1.0 },
           instructions: tone,
+          language: language ?? 'ar',
         }, 15000);
       } else {
         audioBuffer = await provider.testVoice(effectiveVoiceId, sample, ttsSettings);
@@ -882,7 +883,7 @@ router.post('/voices/compare', requireRole('admin', 'system_admin'), async (req,
       const voiceId = requestedVoices?.[name] || await resolveVoiceIdForProvider(name, undefined, language);
       const startedAt = Date.now();
       try {
-        const opts: TTSOptions = { text: sample, voiceId };
+        const opts: TTSOptions = { text: sample, voiceId, language };
         if (name === 'openai' && tone) opts.instructions = tone;
         const buf = await provider.textToSpeech(opts, 20000);
         const durationMs = Date.now() - startedAt;
@@ -927,7 +928,7 @@ router.post('/voices/compare', requireRole('admin', 'system_admin'), async (req,
 });
 
 // Read TTS system settings (admin)
-router.get('/tts-settings', requireRole('admin', 'system_admin'), async (_req, res) => {
+router.get('/tts-settings', requireRole('admin', 'system_admin', 'super_admin', 'superadmin'), async (_req, res) => {
   try {
     const settings = await loadTtsSettings();
     res.json({ settings });
@@ -938,7 +939,7 @@ router.get('/tts-settings', requireRole('admin', 'system_admin'), async (_req, r
 });
 
 // Update TTS system settings (admin)
-router.patch('/tts-settings', requireRole('admin', 'system_admin'), async (req, res) => {
+router.patch('/tts-settings', requireRole('admin', 'system_admin', 'super_admin', 'superadmin'), async (req, res) => {
   try {
     const data = updateTtsSettingsSchema.parse(req.body);
     await saveTtsSettings(data);

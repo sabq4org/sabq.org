@@ -30,8 +30,8 @@ export function QuickActionsSection() {
       title: "إضافة خبر",
       description: "إنشاء خبر جديد",
       icon: Newspaper,
-      iconColor: "text-emerald-600 dark:text-emerald-400",
-      iconBgColor: "bg-emerald-100 dark:bg-emerald-900/50",
+      iconColor: "text-primary",
+      iconBgColor: "bg-primary/10",
       href: "/dashboard/article/new",
       testId: "quick-action-add-article",
       permissions: ["articles.create"],
@@ -41,8 +41,8 @@ export function QuickActionsSection() {
       title: "إضافة مهمة",
       description: "مهمة جديدة للفريق",
       icon: CheckSquare,
-      iconColor: "text-indigo-600 dark:text-indigo-400",
-      iconBgColor: "bg-indigo-100 dark:bg-indigo-900/50",
+      iconColor: "text-primary",
+      iconBgColor: "bg-primary/10",
       href: "/dashboard/tasks",
       testId: "quick-action-add-task",
       permissions: ["tasks.manage"],
@@ -52,8 +52,8 @@ export function QuickActionsSection() {
       title: "تحليل عميق",
       description: "تحليل بالذكاء الاصطناعي",
       icon: TrendingUp,
-      iconColor: "text-purple-600 dark:text-purple-400",
-      iconBgColor: "bg-purple-100 dark:bg-purple-900/50",
+      iconColor: "text-primary",
+      iconBgColor: "bg-primary/10",
       href: "/dashboard/ai/deep",
       testId: "quick-action-add-analysis",
       permissions: ["analysis.create", "omq.create"],
@@ -63,8 +63,8 @@ export function QuickActionsSection() {
       title: "بلوك ذكي",
       description: "محتوى قابل للاستخدام",
       icon: Blocks,
-      iconColor: "text-cyan-600 dark:text-cyan-400",
-      iconBgColor: "bg-cyan-100 dark:bg-cyan-900/50",
+      iconColor: "text-primary",
+      iconBgColor: "bg-primary/10",
       href: "/dashboard/smart-blocks",
       testId: "quick-action-add-block",
       permissions: ["blocks.manage"],
@@ -80,7 +80,7 @@ export function QuickActionsSection() {
   }
 
   return (
-    <Card className="h-full overflow-visible border-primary/20 dark:border-border bg-gradient-to-br from-primary/5 via-transparent to-transparent dark:from-transparent" data-testid="section-quick-actions">
+    <Card className="h-full overflow-visible border-border/70 bg-card shadow-none" data-testid="section-quick-actions">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">

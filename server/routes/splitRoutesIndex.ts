@@ -1,5 +1,8 @@
 import type { Express } from "express";
+import { aiHubRouter } from "./aiHub";
+import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
+import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
 import interestsRouter from "./interests";
@@ -18,12 +21,17 @@ import { registerStoryRoutes } from "./stories";
 import { registerAbTestRoutes } from "./abTests";
 import focusSessionsRouter from "./focusSessions";
 import edgeMetaRouter from "./edgeMeta";
+import aiPublicStatsRouter from "./aiPublicStats";
 import articleEditLocksRouter from "./articleEditLocks";
 import opinionTicketsRouter from "./opinionTickets";
+import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
+import opinionWritersRouter from "./opinionWriters";
+import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
+import muqtarabWriterRouter from "./muqtarabWriter";
 import { registerAnnouncementRoutes } from "./announcements";
 import { registerAudioBriefRoutes } from "./audioBriefs";
 import { registerShortsRoutes } from "./shorts";
@@ -31,12 +39,41 @@ import { registerCalendarRoutes } from "./calendar";
 import { registerTaskRoutes } from "./tasks";
 import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
+import { registerAsianCupRoutes } from "./asianCup";
+import { registerGulfCupRoutes } from "./gulfCup";
+import { registerKingsCupRoutes } from "./kingsCup";
+import { registerSportsRoutes } from "./sports";
+import { registerTransferCenterRoutes } from "./transferCenter";
+import { registerSportsIntelRoutes } from "./sportsIntel";
+import { registerSportsSnapsRoutes } from "./sportsSnaps";
+import sportsTournamentsRouter from "./sportsTournaments";
+import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
 import { registerRadarRoutes } from "./radar";
+import { registerCoverageGapRoutes } from "./coverageGaps";
+import { registerSpaNewsRoutes } from "./spaNews";
+import { registerSportmonksNewsRoutes } from "./sportmonksNews";
+import { registerSportsNamesRoutes } from "./sportsNames";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
+import predictionsCoreRouter from "./predictionsCore";
+import predictionsMobileRouter from "./predictionsMobile";
+import gcMajlisRouter from "./gcMajlis";
+import gcFantasyRouter from "./gcFantasy";
+import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
+import articleViewStatsRouter from "./articleViewStats";
+import articlePrClientReportRouter from "./articlePrClientReport";
+import keywordRouter from "./keywordRoutes";
+import editorAlertsRouter from "./editorAlerts";
+import audioNewsletterRoutes from "./audioNewsletterRoutes";
+import dashboardPulseRouter from "./dashboardPulse";
+import adminToolsRouter from "./adminToolsRoutes";
+import { systemsCatalogRouter } from "./systemsCatalog";
+import surveysRouter from "./surveys";
+import correspondentApplicationsRouter from "./correspondentApplications";
+import publisherPortalRouter from "./publisherPortal";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -44,7 +81,15 @@ import promptStudioRouter from "./promptStudio";
  * behavior is identical to the original inline definitions.
  */
 export function registerSplitRoutes(app: Express) {
+  // Must run after setupAuth (caller guarantees that). Mount before the legacy
+  // /api/audio-newsletters/:slug handlers still living in routes.ts so TTS
+  // settings / voices / providers are not swallowed as slugs or 401'd.
+  app.use("/api/audio-newsletters", audioNewsletterRoutes);
+
   app.use(systemSettingsRouter);
+  app.use(userDashboardThemeRouter);
+  app.use(aiHubRouter);
+  app.use(integrationsStatusRouter);
   app.use(adminActivityLogsRouter);
   app.use(keywordFollowingRouter);
   app.use(interestsRouter);
@@ -63,12 +108,19 @@ export function registerSplitRoutes(app: Express) {
   registerAbTestRoutes(app);
   app.use(focusSessionsRouter);
   app.use(edgeMetaRouter);
+  app.use(aiPublicStatsRouter);
   app.use(articleEditLocksRouter);
   app.use(opinionTicketsRouter);
+  app.use(opinionAuthorWorkspaceRouter);
+  app.use(opinionWritersRouter);
+  app.use(replyPolishRouter);
+  app.use(correspondentApplicationsRouter);
+  app.use(publisherPortalRouter);
   app.use(deployWebhooksRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);
+  app.use(muqtarabWriterRouter);
   registerAnnouncementRoutes(app);
   registerAudioBriefRoutes(app);
   registerShortsRoutes(app);
@@ -76,10 +128,36 @@ export function registerSplitRoutes(app: Express) {
   registerTaskRoutes(app);
   registerWalletRoutes(app);
   registerWorldCupRoutes(app);
+  registerAsianCupRoutes(app);
+  registerGulfCupRoutes(app);
+  registerKingsCupRoutes(app);
+  registerSportsRoutes(app);
+  registerTransferCenterRoutes(app);
+  registerSportsIntelRoutes(app);
+  registerSportsSnapsRoutes(app);
+  app.use(sportsTournamentsRouter);
+  registerSportsLiveStreamRoutes(app);
   registerRadarRoutes(app);
+  registerCoverageGapRoutes(app);
+  registerSpaNewsRoutes(app);
+  registerSportmonksNewsRoutes(app);
+  registerSportsNamesRoutes(app);
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
   app.use(wcPredictionsRouter);
+  app.use(predictionsCoreRouter);
+  app.use(predictionsMobileRouter);
+  app.use(gcMajlisRouter);
+  app.use(gcFantasyRouter);
+  app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
+  app.use(articleViewStatsRouter);
+  app.use(articlePrClientReportRouter);
+  app.use(keywordRouter);
+  app.use(editorAlertsRouter);
+  app.use(dashboardPulseRouter);
+  app.use(adminToolsRouter);
+  app.use(systemsCatalogRouter);
+  app.use(surveysRouter);
 }

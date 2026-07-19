@@ -24,6 +24,9 @@ import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { AdSlot } from "@/components/AdSlot";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 
+// الإعلان البارز أعلى الصفحة الرئيسية (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
+const SHOW_TOP_ADS = true;
+
 // === LAZY LOADED - Below the fold content (retryImport + deploy recovery) ===
 const AIInsightsBlock = lazyNamed(() => import("@/components/AIInsightsBlock"), "AIInsightsBlock");
 const TrendingKeywords = lazyNamed(() => import("@/components/TrendingKeywords"), "TrendingKeywords");
@@ -37,6 +40,10 @@ const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopi
 const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesBlock"), "QuadCategoriesBlock");
 const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
 const WorldCupHomeSection = lazyDefault(() => import("@/components/worldcup/WorldCupHomeSection"));
+const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCupHomeSection"));
+const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
+const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
+const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
@@ -351,7 +358,7 @@ export default function Home() {
             <p className="text-destructive text-lg mb-4">
               حدث خطأ في تحميل الصفحة الرئيسية
             </p>
-            <p className="text-muted-foreground text-sm mb-6">
+            <p className="mb-6 text-sm font-medium text-foreground/70">
               {error instanceof Error ? error.message : "خطأ غير معروف"}
             </p>
             <button
@@ -376,7 +383,7 @@ export default function Home() {
         <NavigationBar />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <div className="text-center py-20">
-            <p className="text-muted-foreground text-lg">
+            <p className="text-lg font-medium text-foreground/70">
               لا توجد بيانات متاحة حالياً
             </p>
           </div>
@@ -401,7 +408,7 @@ export default function Home() {
           role="status"
           aria-live="polite"
         >
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm font-medium text-foreground/70">
             {isFetching ? "جارٍ تحديث الأخبار…" : "تعذّر تحديث الأخبار"}
           </span>
           {!isFetching && (
@@ -446,6 +453,36 @@ export default function Home() {
           </Suspense>
         </ErrorBoundary>
 
+        {/* Gulf Cup 27 + Asian Cup 2027 strips — each hides itself entirely
+            when toggled off from dashboard (blockHidden / schedule window)
+            or when no data */}
+        {/* King's Cup strip — hides itself entirely when toggled off from
+            dashboard (blockHidden / schedule window) or when no data */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <KingsCupHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+
+        {/* Roshn Saudi League strip — pre-season countdown / matchday /
+            next match / champion; hides via dashboard toggle or no data */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <RoshnHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <GulfCupHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <AsianCupHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
           {/* Gulf Live Coverage Block — hidden (no active events) */}
           {/* <ErrorBoundary fallback={null}>
@@ -464,12 +501,17 @@ export default function Home() {
             </Suspense>
           </ErrorBoundary>
 
-          {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
-          <DmsLeaderboardAd />
-          <DmsMpuAd />
+          {/* الإعلان البارز أسفل الهيدر — أُعيد إظهاره 2026-07-09 بطلب المالك. للإخفاء: بدّل SHOW_TOP_ADS إلى false. */}
+          {SHOW_TOP_ADS && (
+            <>
+              {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
+              <DmsLeaderboardAd />
+              <DmsMpuAd />
 
-          {/* Ad Banner Slot - Below Featured News */}
-          <AdSlot slotId="header-banner" className="w-full" />
+              {/* Ad Banner Slot - Below Featured News */}
+              <AdSlot slotId="header-banner" className="w-full" />
+            </>
+          )}
         </div>
 
         {/* AI Section with soft gradient background - Lazy loaded */}

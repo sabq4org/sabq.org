@@ -57,12 +57,16 @@ fun CategoryChip(
                 haptics.light()
                 onClick()
             }
-            .padding(horizontal = 18.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = title,
-            style = SabqTheme.typography.chipLabel,
+            // iOS: size 13 .medium → renders Regular (≤13 softening).
+            style = SabqTheme.typography.chipLabel.copy(
+                fontSize = 13.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+            ),
             color = if (isSelected) Color.White else SabqTheme.colors.secondaryInk,
         )
     }
@@ -78,8 +82,8 @@ fun StatusChip(
     compact: Boolean = false,
 ) {
     val capsule = CircleShape
-    val h = if (compact) 8.dp else 11.dp
-    val v = if (compact) 4.dp else 7.dp
+    val h = if (compact) 8.dp else 10.dp
+    val v = if (compact) 4.dp else 6.dp
     val style = if (compact) {
         SabqTheme.typography.statusChip.copy(fontSize = 10.sp)
     } else SabqTheme.typography.statusChip
@@ -122,7 +126,7 @@ fun DetailLabelPill(
                 imageVector = icon,
                 contentDescription = null,
                 tint = tint,
-                modifier = Modifier.size(11.dp),
+                modifier = Modifier.size(10.dp),
             )
         }
         Text(
@@ -142,13 +146,13 @@ fun BreakingPill(modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(capsule)
             .background(SabqTheme.colors.coral.copy(alpha = 0.10f), capsule)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         androidx.compose.foundation.layout.Box(
             modifier = Modifier
-                .size(6.dp)
+                .size(5.dp)
                 .clip(CircleShape)
                 .background(SabqTheme.colors.coral),
         )

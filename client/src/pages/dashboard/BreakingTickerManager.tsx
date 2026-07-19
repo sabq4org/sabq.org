@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -132,7 +132,7 @@ function SortableHeadlineRow({
     queryKey: ['/api/articles/search-simple', debouncedSearch],
     queryFn: async () => {
       if (!debouncedSearch || debouncedSearch.length < 2) return [];
-      const res = await fetch(`/api/articles/search-simple?q=${encodeURIComponent(debouncedSearch)}`);
+      const res = await fetch(apiUrl(`/api/articles/search-simple?q=${encodeURIComponent(debouncedSearch)}`));
       if (!res.ok) return [];
       return res.json();
     },
@@ -167,7 +167,7 @@ function SortableHeadlineRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-3 border rounded-md bg-card mb-2"
+      className="flex items-center gap-3 p-3 border border-border/70 rounded-xl bg-card mb-2 transition-colors hover:border-primary/25"
       data-testid={`headline-row-${headline.id}`}
     >
       <div
@@ -499,11 +499,11 @@ export default function BreakingTickerManager() {
   return (
     <DashboardLayout>
       <div className="space-y-6" dir="rtl">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
           <div className="flex items-center gap-3">
-            <Zap className="h-8 w-8 text-primary" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Zap className="h-5 w-5 text-primary" /></span>
             <div>
-              <h1 className="text-2xl font-bold" data-testid="text-page-title">
+              <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-page-title">
                 إدارة شريط الأخبار العاجلة
               </h1>
               <p className="text-muted-foreground text-sm">
@@ -511,7 +511,7 @@ export default function BreakingTickerManager() {
               </p>
             </div>
           </div>
-          <Button
+          <Button className="w-full sm:w-auto"
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid="button-create-topic"
           >
@@ -521,7 +521,7 @@ export default function BreakingTickerManager() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 space-y-3">
+          <div className="lg:col-span-1 space-y-3 rounded-xl border border-border/70 bg-card p-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Newspaper className="h-5 w-5" />
               المواضيع
@@ -532,7 +532,7 @@ export default function BreakingTickerManager() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : !topics || topics.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground border rounded-md">
+                <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl bg-muted/20">
                 لا توجد مواضيع. أنشئ موضوعاً جديداً للبدء.
               </div>
             ) : (
@@ -540,9 +540,9 @@ export default function BreakingTickerManager() {
                 {topics.map((topic) => (
                   <div
                     key={topic.id}
-                    className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                    className={`p-3 border rounded-xl cursor-pointer transition-colors ${
                       selectedTopicId === topic.id
-                        ? "border-primary bg-primary/5"
+                        ? "border-primary/40 bg-primary/[0.04]"
                         : "hover:bg-muted/50"
                     }`}
                     onClick={() => setSelectedTopicId(topic.id)}
@@ -554,7 +554,7 @@ export default function BreakingTickerManager() {
                           {topic.topicTitle}
                         </span>
                         {topic.isActive && (
-                          <Badge variant="default" className="shrink-0 bg-green-600" data-testid={`badge-active-${topic.id}`}>
+                          <Badge variant="outline" className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid={`badge-active-${topic.id}`}>
                             مفعّل
                           </Badge>
                         )}
@@ -609,11 +609,11 @@ export default function BreakingTickerManager() {
             )}
           </div>
 
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 rounded-xl border border-border/70 bg-card p-4">
             <h2 className="text-lg font-semibold mb-3">العناوين</h2>
 
             {!selectedTopicId ? (
-              <div className="text-center py-12 text-muted-foreground border rounded-md">
+              <div className="text-center py-12 text-muted-foreground border border-dashed rounded-xl bg-muted/20">
                 اختر موضوعاً من القائمة لإدارة عناوينه
               </div>
             ) : isLoadingTopic ? (

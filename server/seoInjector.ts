@@ -28,6 +28,7 @@ import {
   SABQ_ORG_EN,
 } from "./utils/creatorSchema";
 import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
+import { getTeamSeoMeta } from "./services/saudiLeagueService";
 
 const SKIP_PREFIXES = ['/api/', '/src/', '/@fs/', '/assets/', '/@vite/', '/node_modules/'];
 const FILE_EXT_REGEX = /\.\w{2,5}$/;
@@ -752,6 +753,7 @@ const STATIC_INDEXABLE_PAGES: Record<string, { title: string; desc: string; loca
   '/polls': { title: 'استطلاعات الرأي — سبق', desc: 'شارك في استطلاعات الرأي على صحيفة سبق الإلكترونية وتعرّف على آراء القرّاء.' },
   '/poll': { title: 'استطلاعات الرأي — سبق', desc: 'شارك في استطلاعات الرأي على صحيفة سبق الإلكترونية وتعرّف على آراء القرّاء.' },
   '/ai': { title: 'iFox — مساعد سبق الذكي', desc: 'iFox هو مساعد سبق الذكي للأخبار والمعلومات والإجابات الفورية.' },
+  '/sabq-ai': { title: 'عقل سبق — الذكاء الاصطناعي في خدمة الصحافة', desc: 'كيف طوّعت سبق الذكاء الاصطناعي في خدمة الإعلام السعودي: أول صحيفة سعودية وعربية تدمج الذكاء في كامل دورة العمل التحريري — بقرار بشري في كل مادة، ووفق ميثاق معلن من ثماني مواد.' },
   '/en/news': { title: 'Latest News — Sabq', desc: 'Browse the latest breaking news and updates on Sabq News.', locale: 'en_US', siteName: 'Sabq News' },
   '/ur/news': { title: 'تازہ خبریں — سبق نیوز', desc: 'سبق نیوز پر تازہ ترین خبریں اور بریکنگ نیوز پڑھیں۔', locale: 'ur_PK', siteName: 'سبق نیوز' },
   // English mirrors
@@ -772,8 +774,8 @@ const INDEXABLE_SECTION_PREFIXES = new Map<string, { title: string; desc: string
   ['business', { title: 'الأعمال — سبق', desc: 'أخبار الأعمال والشركات والاقتصاد على صحيفة سبق الإلكترونية.' }],
   ['economy', { title: 'الاقتصاد — سبق', desc: 'الأخبار الاقتصادية والمالية على صحيفة سبق الإلكترونية.' }],
   ['technology', { title: 'التقنية — سبق', desc: 'أخبار التقنية والذكاء الاصطناعي والابتكار على صحيفة سبق الإلكترونية.' }],
-  ['sports', { title: 'الرياضة — سبق', desc: 'أخبار الرياضة المحلية والعالمية على صحيفة سبق الإلكترونية.' }],
-  ['sport', { title: 'الرياضة — سبق', desc: 'أخبار الرياضة المحلية والعالمية على صحيفة سبق الإلكترونية.' }],
+  ['sports', { title: 'رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق', desc: 'بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، ومركز الانتقالات لحظة بلحظة.' }],
+  ['sport', { title: 'رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق', desc: 'بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، ومركز الانتقالات لحظة بلحظة.' }],
   ['cars', { title: 'السيارات — سبق', desc: 'أخبار السيارات والمراجعات والأسعار على صحيفة سبق الإلكترونية.' }],
   ['tourism', { title: 'السياحة — سبق', desc: 'أخبار السياحة والوجهات والترفيه على صحيفة سبق الإلكترونية.' }],
   ['mylife', { title: 'حياتي — سبق', desc: 'أخبار الحياة والصحة والأسرة والمجتمع على صحيفة سبق الإلكترونية.' }],
@@ -794,6 +796,12 @@ function firstSegmentOf(pathname: string): string {
 function matchRoute(pathname: string): { type: string; slug?: string; angleSlug?: string; pathname: string } | null {
   if (pathname === '/' || pathname === '') return { type: 'homepage', pathname };
   if (pathname === '/en' || pathname === '/ar' || pathname === '/ur') return { type: 'homepage', pathname };
+
+  // البوابة الرياضية — صفحة النادي (/sports/team/:id؛ ويُقبل المسار القديم /sports2/team
+  // الذي يُحوَّل في العميل). يُفحص قبل isNoindexPath لأن المسار القديم /sports2 ضمن
+  // قائمة noindex: نريد ميتا مشاركة غنية + canonical يشير للمسار المعتمد /sports/team.
+  let sportsTeamMatch = pathname.match(/^\/sports2?\/team\/(\d+)$/);
+  if (sportsTeamMatch) return { type: 'sports-team', slug: sportsTeamMatch[1], pathname };
 
   // Noindex routes — emit self-canonical + noindex,follow
   if (isNoindexPath(pathname)) return { type: 'noindex-page', pathname };
@@ -1413,6 +1421,69 @@ async function handleWorldDayPage(slug: string, baseUrl: string): Promise<SeoDat
   };
 }
 
+// البوابة الرياضية — صفحة النادي (/sports/team/:id).
+// ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
+// سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق. صورة الملعب/الشعار
+// روابط https كاملة من المزوّد فتُمرَّر كما هي.
+async function handleSportsTeamPage(id: string, baseUrl: string): Promise<SeoData | null> {
+  const teamId = Number(id);
+  if (!Number.isFinite(teamId) || teamId <= 0) return null;
+  const t = await withCache(`seo:sports-team:${teamId}`, CACHE_TTL.MEDIUM, async () =>
+    getTeamSeoMeta(teamId).catch(() => null)
+  );
+  const canonicalUrl = `${baseUrl}/sports/team/${teamId}`;
+  if (!t) return null;
+
+  const parts: string[] = [];
+  if (t.rank && t.points != null && t.competitionName) {
+    parts.push(`يحتل ${t.name} المركز ${t.rank} برصيد ${t.points} نقطة في ${t.competitionName}.`);
+  } else if (t.competitionName) {
+    parts.push(`${t.name} يشارك في ${t.competitionName}.`);
+  }
+  if (t.founded) parts.push(`تأسّس عام ${t.founded}.`);
+  if (t.venueName) parts.push(`ملعبه ${t.venueName}${t.venueCity ? ` بـ${t.venueCity}` : ''}.`);
+  parts.push(`تابع نتائج ${t.name} ومبارياته القادمة وترتيبه وتشكيلته وهدّافيه على سبق.`);
+
+  // بطاقة OG مولّدة 1200×630 (معتمة) بدل صور المزوّد 150×150 الشفّافة.
+  const ogImage = `${baseUrl}/api/sports/og/team/${teamId}`;
+
+  return {
+    title: `${t.name} — المباريات والترتيب والتشكيلة | الرياضة - سبق`,
+    description: truncate(parts.join(' '), 220),
+    canonicalUrl,
+    ogType: 'website',
+    ogImage,
+    ogLocale: 'ar_SA',
+    ogSiteName: 'صحيفة سبق الإلكترونية',
+    twitterSite: '@sabq',
+    // القسم تجريبي → مخفيّ عن قوقل، مع إبقاء معاينة المشاركة غنية.
+    robots: 'noindex, follow',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'SportsTeam',
+      name: t.name,
+      sport: 'Association football',
+      url: canonicalUrl,
+      ...(t.logo ? { logo: ensureAbsoluteUrl(t.logo, baseUrl) } : {}),
+      ...(t.founded ? { foundingDate: String(t.founded) } : {}),
+      ...(t.venueName
+        ? {
+            location: {
+              '@type': 'StadiumOrArena',
+              name: t.venueName,
+              ...(t.venueCity
+                ? { address: { '@type': 'PostalAddress', addressLocality: t.venueCity } }
+                : {}),
+            },
+          }
+        : {}),
+      ...(t.competitionName
+        ? { memberOf: { '@type': 'SportsOrganization', name: t.competitionName } }
+        : {}),
+    },
+  };
+}
+
 async function handleLocalizedCategoryPage(slug: string, baseUrl: string, pathname: string): Promise<SeoData | null> {
   const isEn = pathname.startsWith('/en/');
   const display = slug.replace(/[-_]+/g, ' ');
@@ -1460,6 +1531,8 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
       return handleOmqPage(route.slug!, baseUrl);
     case 'world-day':
       return handleWorldDayPage(route.slug!, baseUrl);
+    case 'sports-team':
+      return handleSportsTeamPage(route.slug!, baseUrl);
     case 'homepage':
       return handleHomepage(baseUrl);
     case 'sponsored':

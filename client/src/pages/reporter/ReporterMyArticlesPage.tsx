@@ -1,13 +1,17 @@
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
+import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
 import {
   markArticleSubmittedInAnalyticsCache,
@@ -34,7 +38,9 @@ import {
   ThumbsUp,
   MessageCircle,
   Bookmark,
+  Newspaper,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ReporterAnalytics {
   totalArticles: number;
@@ -97,9 +103,23 @@ interface ReporterAnalytics {
   }>;
 }
 
+type ListFilter = "active" | "archived" | "all";
+
+const EMPTY_COMPARISON = {
+  viewsThisMonth: 0,
+  viewsLastMonth: 0,
+  likesThisMonth: 0,
+  likesLastMonth: 0,
+};
+
+function isArchived(status: string) {
+  return status === "archived" || status === "deleted";
+}
+
 export default function ReporterMyArticlesPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [listFilter, setListFilter] = useState<ListFilter>("active");
 
   const {
     data: analytics,
@@ -112,8 +132,23 @@ export default function ReporterMyArticlesPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const needsChangesList =
-    analytics?.articles?.filter((a) => a.reviewStatus === "needs_changes") ?? [];
+  const articles = Array.isArray(analytics?.articles) ? analytics.articles : [];
+  const needsChangesList = articles.filter((a) => a.reviewStatus === "needs_changes");
+
+  const filteredArticles = useMemo(() => {
+    if (listFilter === "all") return articles;
+    if (listFilter === "archived") return articles.filter((a) => isArchived(a.status));
+    return articles.filter((a) => !isArchived(a.status));
+  }, [articles, listFilter]);
+
+  const filterCounts = useMemo(() => {
+    const archived = articles.filter((a) => isArchived(a.status)).length;
+    return {
+      active: articles.length - archived,
+      archived,
+      all: articles.length,
+    };
+  }, [articles]);
 
   const handleEditArticle = (articleId: string) => {
     navigate(`/dashboard/articles/${articleId}/edit`);
@@ -151,23 +186,29 @@ export default function ReporterMyArticlesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">أخباري</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              تتبّع أخبارك وملاحظات فريق التحرير
-            </p>
-          </div>
-          <Button onClick={handleNewArticle} className="gap-2">
-            <PlusCircle className="h-4 w-4" />
-            خبر جديد
-          </Button>
-        </div>
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="px-4 pb-20 sm:px-6">
+        <DashboardPageHeader
+          icon={Newspaper}
+          title="أخباري"
+          description="واقع أدائك التحريري والتفاعل مع أخبارك — وما يحتاجه منك فريق التحرير"
+          titleTestId="text-reporter-page-title"
+          actions={
+            <>
+              <WriterInquiriesButton />
+              <Button
+                onClick={handleNewArticle}
+                className="h-10 gap-2 px-4"
+                data-testid="button-reporter-new-article"
+              >
+                <PlusCircle className="h-4 w-4" />
+                خبر جديد
+              </Button>
+            </>
+          }
+        />
 
         {isError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
             <p className="text-sm text-destructive">تعذّر تحميل أخبارك. جرّب تحديث الصفحة.</p>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               إعادة المحاولة
@@ -175,21 +216,20 @@ export default function ReporterMyArticlesPage() {
           </div>
         ) : (
           <>
-            {/* Needs Changes Alert */}
             {needsChangesList.length > 0 && (
-              <div className="rounded-xl border-2 border-amber-300 bg-amber-50 dark:bg-card dark:border-border p-4 md:p-5 space-y-3">
-                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100 font-semibold">
+              <div className="rounded-2xl border-2 border-warning/50 bg-warning/10 dark:bg-card dark:border-border p-4 md:p-5 space-y-3">
+                <div className="flex items-center gap-2 text-warning font-semibold">
                   <AlertCircle className="h-5 w-5 shrink-0" />
                   أخبار تحتاج تعديلك ({needsChangesList.length})
                 </div>
-                <p className="text-sm text-amber-800/90 dark:text-amber-200/90">
-                  يؤسفنا إبلاغكم بوجود بعض الملاحظات — عدّل الخبر ثم اضغط «إرسال» ليعود إلى مسودات التحرير.
+                <p className="text-sm text-warning">
+                  عدّل الخبر ثم اضغط «إرسال» ليعود إلى مسودات التحرير.
                 </p>
                 <ul className="space-y-2">
                   {needsChangesList.map((article) => (
                     <li
                       key={article.id}
-                      className="rounded-lg border border-amber-200/80 dark:border-border bg-white/60 dark:bg-background/40 p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
+                      className="rounded-xl border border-warning/40 dark:border-border bg-card/80 dark:bg-background/40 p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
                     >
                       <div className="min-w-0 flex-1 space-y-2">
                         <p className="font-medium line-clamp-2">{article.title}</p>
@@ -201,7 +241,7 @@ export default function ReporterMyArticlesPage() {
                         )}
                       </div>
                       <div className="flex shrink-0 gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEditArticle(article.id)}>
+                        <Button size="sm" variant="outline" className="h-9" onClick={() => handleEditArticle(article.id)}>
                           <Edit className="h-4 w-4 ml-1" />
                           تعديل
                         </Button>
@@ -217,10 +257,8 @@ export default function ReporterMyArticlesPage() {
               </div>
             )}
 
-            {/* Section: Overview */}
             <section className="space-y-4">
-              <h2 className="text-lg font-semibold">نظرة عامة</h2>
-
+              <h2 className="text-lg font-semibold">واقع التفاعل</h2>
               <ContributorStatsRow
                 totalViews={analytics?.totalViews ?? 0}
                 totalLikes={analytics?.totalLikes ?? 0}
@@ -229,8 +267,7 @@ export default function ReporterMyArticlesPage() {
                 comparison={analytics?.comparison}
                 loading={isLoading}
               />
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <ArticleStatusBreakdown
                   published={analytics?.publishedArticles ?? 0}
                   draft={analytics?.draftArticles ?? 0}
@@ -238,37 +275,43 @@ export default function ReporterMyArticlesPage() {
                   needsChanges={analytics?.needsChangesArticles ?? 0}
                   rejected={analytics?.rejectedArticles ?? 0}
                   loading={isLoading}
+                  title="توزيع الأخبار"
+                  emptyLabel="لا توجد أخبار"
                 />
                 <MonthComparisonCard
-                  comparison={analytics?.comparison ?? { viewsThisMonth: 0, viewsLastMonth: 0, likesThisMonth: 0, likesLastMonth: 0 }}
+                  comparison={analytics?.comparison ?? EMPTY_COMPARISON}
                   loading={isLoading}
                 />
                 <BestArticleCard
                   article={analytics?.bestArticleThisWeek ?? null}
                   loading={isLoading}
                   onNavigate={(id) => navigate(`/article/${id}`)}
+                  title="أفضل خبر هذا الأسبوع"
+                  emptyLabel="لا توجد أخبار منشورة بعد"
                 />
               </div>
             </section>
 
-            {/* Section: Performance Chart */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">أداء الأخبار</h2>
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold">أداء الأخبار</h2>
               <PerformanceChart
                 dailyStats={analytics?.dailyStats ?? []}
                 loading={isLoading}
+                title="أداء الأخبار"
+                description="المشاهدات والتفاعل خلال الفترة"
               />
             </section>
 
-            {/* Section: Engagement */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">التفاعل</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold">التفاعل والجمهور</h2>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div className="lg:col-span-2">
                   <EngagementTable
                     articles={analytics?.topArticles ?? []}
                     loading={isLoading}
                     onNavigate={(id) => navigate(`/article/${id}`)}
+                    title="أعلى الأخبار تفاعلاً"
+                    emptyLabel="لا توجد أخبار منشورة"
                   />
                 </div>
                 <FeaturedCommentCard
@@ -277,12 +320,7 @@ export default function ReporterMyArticlesPage() {
                   onNavigate={(id) => navigate(`/article/${id}`)}
                 />
               </div>
-            </section>
-
-            {/* Section: Audience */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">الجمهور</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <FollowerCard
                   count={analytics?.followers?.count ?? 0}
                   dailyGrowth={analytics?.followers?.dailyGrowth ?? []}
@@ -299,12 +337,37 @@ export default function ReporterMyArticlesPage() {
               </div>
             </section>
 
-            {/* Section: Articles Table */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">أخباري</h2>
+            <section className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-lg font-semibold">قائمة أخباري</h2>
+                <div className="flex flex-wrap gap-1.5 rounded-xl border bg-muted/30 p-1">
+                  {(
+                    [
+                      { id: "active", label: "النشطة" },
+                      { id: "archived", label: "المؤرشفة" },
+                      { id: "all", label: "الكل" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setListFilter(tab.id)}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors tabular-nums",
+                        listFilter === tab.id
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      data-testid={`filter-articles-${tab.id}`}
+                    >
+                      {tab.label} ({filterCounts[tab.id]})
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-              {analytics?.articles && analytics.articles.length > 0 ? (
-                <div className="overflow-x-auto rounded-lg border">
+              {filteredArticles.length > 0 ? (
+                <div className="overflow-x-auto rounded-2xl border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr>
@@ -328,7 +391,7 @@ export default function ReporterMyArticlesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {analytics?.articles?.map((article) => (
+                      {filteredArticles.map((article) => (
                         <tr
                           key={article.id}
                           className="border-t hover:bg-muted/30 transition-colors"
@@ -343,7 +406,7 @@ export default function ReporterMyArticlesPage() {
                           </td>
                           <td className="py-3 px-4">
                             {article.reviewStatus === "needs_changes" && article.reviewNotes ? (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-muted/40 dark:border-border px-3 py-2 text-xs text-amber-900 dark:text-amber-100 leading-relaxed max-w-md">
+                              <div className="rounded-lg border border-warning/40 bg-warning/10 dark:bg-muted/40 dark:border-border px-3 py-2 text-xs text-warning leading-relaxed max-w-md">
                                 <span className="font-medium flex items-center gap-1 mb-1">
                                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                                   ملاحظات التحرير
@@ -407,19 +470,27 @@ export default function ReporterMyArticlesPage() {
                   </table>
                 </div>
               ) : !isLoading ? (
-                <div className="text-center py-12 border rounded-lg bg-muted/20">
-                  <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">لا توجد أخبار بعد</p>
-                  <Button onClick={handleNewArticle}>
-                    <PlusCircle className="h-4 w-4 ml-2" />
-                    ابدأ بكتابة خبرك الأول
-                  </Button>
+                <div className="rounded-2xl border bg-muted/20 py-12 text-center">
+                  <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                  <p className="mb-4 text-muted-foreground">
+                    {listFilter === "archived"
+                      ? "لا توجد أخبار مؤرشفة"
+                      : listFilter === "active"
+                        ? "لا توجد أخبار نشطة حالياً"
+                        : "لا توجد أخبار بعد"}
+                  </p>
+                  {listFilter !== "archived" && (
+                    <Button onClick={handleNewArticle} className="h-10 gap-2 px-4">
+                      <PlusCircle className="h-4 w-4" />
+                      ابدأ بكتابة خبرك الأول
+                    </Button>
+                  )}
                 </div>
               ) : null}
             </section>
           </>
         )}
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }

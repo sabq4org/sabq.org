@@ -694,6 +694,7 @@ export default function IFoxArticleEditor() {
                               content={field.value}
                               onChange={field.onChange}
                               placeholder="ابدأ بكتابة محتوى المقال..."
+                              imageUploadPurpose="article-ifox-inline"
                             />
                           </FormControl>
                           <FormMessage className="text-xs" />

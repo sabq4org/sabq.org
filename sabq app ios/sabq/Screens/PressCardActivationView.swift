@@ -85,7 +85,7 @@ struct PressCardActivationView: View {
             Text(status.hasPass
                  ? "بطاقتك مُصدرة بالفعل. اضغط الزر لإعادة إضافتها إذا حذفتها من Apple Wallet."
                  : "أضف بطاقتك إلى Apple Wallet للوصول إليها بنقرة واحدة من قفل الشاشة.")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 8)
@@ -129,13 +129,13 @@ struct PressCardActivationView: View {
     private var unauthorizedBody: some View {
         VStack(spacing: 14) {
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 42))
+                .font(SabqFonts.app(size: 42))
                 .foregroundStyle(SabqTheme.secondaryInk)
             Text("غير مصرّح لك بإصدار بطاقة صحفية")
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             Text("البطاقة متاحة للمراسلين وكتّاب الرأي والمحرّرين. إذا اعتقدت أن هذا خطأ، تواصل مع إدارة سبق.")
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 8)
@@ -153,7 +153,7 @@ struct PressCardActivationView: View {
     private var helpSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("كيف تعمل البطاقة؟")
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 13, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             bullet("تُحفظ في تطبيق Wallet على iPhone و Apple Watch")
             bullet("تُحدَّث تلقائياً عند تجديد صلاحيتها من قبل سبق")
@@ -171,7 +171,7 @@ struct PressCardActivationView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle().fill(SabqTheme.secondaryInk).frame(width: 4, height: 4)
             Text(text)
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
     }

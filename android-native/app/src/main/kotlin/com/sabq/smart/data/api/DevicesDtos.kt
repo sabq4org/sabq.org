@@ -21,7 +21,7 @@ data class DeviceRegisterRequest(
     val appVersion: String? = null,
     val locale: String? = "ar",
     val timezone: String? = null,
-    val userId: String? = null,
+    val installationId: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -36,4 +36,28 @@ data class DeviceRegisterResponse(
 @Serializable
 data class DeviceUnregisterRequest(
     val deviceToken: String,
+)
+
+/** App-scoped push registration used by the Gulf Cup notification outbox. */
+@Serializable
+data class MemberPushTokenRequest(
+    val token: String,
+    val provider: String = "fcm",
+    val platform: String = "android",
+    val deviceName: String? = null,
+    val osVersion: String? = null,
+    val appVersion: String? = null,
+    val locale: String? = "ar",
+    val timezone: String? = null,
+    val bundleId: String,
+    val installationId: String,
+)
+
+@Serializable
+data class MemberPushTokenDeleteRequest(val token: String)
+
+@Serializable
+data class MemberPushTokenResponse(
+    val success: Boolean = false,
+    val message: String? = null,
 )

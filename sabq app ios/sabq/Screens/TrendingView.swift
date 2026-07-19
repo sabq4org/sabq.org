@@ -43,7 +43,7 @@ struct TrendingView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))
@@ -51,7 +51,7 @@ struct TrendingView: View {
             }
             ToolbarItem(placement: .principal) {
                 Text("الأكثر تداولاً")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
@@ -63,16 +63,16 @@ struct TrendingView: View {
     private var heroSection: some View {
         HStack(spacing: 12) {
             Image(systemName: "flame.fill")
-                .font(.system(size: 28, weight: .medium))
+                .font(SabqFonts.app(size: 28, weight: .medium))
                 .foregroundStyle(.orange)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("الأكثر تداولاً")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 22, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text("الأخبار الأكثر مشاهدة في آخر 48 ساعة")
-                    .font(.system(size: 13, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
 
@@ -83,14 +83,14 @@ struct TrendingView: View {
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("الوسوم الرائجة")
-                .font(.system(size: 15, weight: .bold))
+                .font(SabqFonts.app(size: 15, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
 
             FlowLayout(spacing: 8) {
                 ForEach(tags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
@@ -138,27 +138,27 @@ struct TrendingView: View {
                 NavigationLink(value: article) {
                     HStack(alignment: .top, spacing: 14) {
                         Text("\(index + 1)")
-                            .font(.system(size: 22, weight: .heavy, design: .rounded))
+                            .font(SabqFonts.app(size: 22, weight: .heavy))
                             .foregroundStyle(rankColor(for: index))
                             .frame(width: 36)
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text(article.title)
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(SabqFonts.app(size: 15, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
 
                             HStack(spacing: 8) {
                                 Text(article.category.title)
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.primaryEnd)
 
                                 HStack(spacing: 3) {
                                     Image(systemName: "clock")
-                                        .font(.system(size: 10))
+                                        .font(SabqFonts.app(size: 10))
                                     Text(article.relativeDate)
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(SabqFonts.app(size: 10, weight: .regular))
                                 }
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                             }

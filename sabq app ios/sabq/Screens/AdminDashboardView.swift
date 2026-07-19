@@ -179,6 +179,7 @@ struct AdminDashboardView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 metricsSection
+                inboxSection
                 AdminSegmentedControl(selected: vm.selectedStatus) { status in
                     Task { await vm.select(status) }
                 }
@@ -196,7 +197,7 @@ struct AdminDashboardView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button { showNewArticleChoice = true } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
                 }
             }
         }
@@ -231,13 +232,89 @@ struct AdminDashboardView: View {
         .sabqScreen("AdminDashboard")
     }
 
+    // MARK: Admin inbox shortcuts
+
+    /// Operational queues deliberately sit above the article workflow: they
+    /// are time-sensitive communications, while drafts can wait for the next
+    /// editorial session. Both destinations remain protected server-side by
+    /// the mobile platform-admin Bearer check.
+    private var inboxSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("صندوق الإدارة")
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+
+            let columns = [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ]
+            LazyVGrid(columns: columns, spacing: 10) {
+                NavigationLink(value: AdminContactMessagesRoute()) {
+                    adminShortcut(
+                        title: "رسائل التواصل",
+                        subtitle: "عرض الرسائل الواردة والرد عليها",
+                        icon: "envelope",
+                        tint: AdminInboxPalette.success
+                    )
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink(value: AdminOpinionTicketsRoute()) {
+                    adminShortcut(
+                        title: "استفسارات كتّاب الرأي",
+                        subtitle: "متابعة المحادثات مع الكتّاب",
+                        icon: "text.bubble",
+                        tint: AdminInboxPalette.warning
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func adminShortcut(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 36, height: 36)
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Text(subtitle)
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 0.5)
+        )
+    }
+
     // MARK: Metrics strip
 
     @ViewBuilder
     private var metricsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("نظرة عامة")
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 18, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
 
             let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
@@ -302,10 +379,10 @@ struct AdminDashboardView: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                 }
                 Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
             }
             .foregroundStyle(SabqTheme.sky)
             .frame(maxWidth: .infinity)
@@ -325,10 +402,10 @@ struct AdminDashboardView: View {
     private var emptyState: some View {
         VStack(spacing: 14) {
             Image(systemName: "tray")
-                .font(.system(size: 40, weight: .light))
+                .font(SabqFonts.app(size: 40, weight: .light))
                 .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
             Text("لا توجد أخبار في \(vm.selectedStatus.label)")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity, minHeight: 240)
@@ -337,14 +414,14 @@ struct AdminDashboardView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40, weight: .light))
+                .font(SabqFonts.app(size: 40, weight: .light))
                 .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
             Button { Task { await vm.load() } } label: {
                 Text("إعادة المحاولة")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.sky)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)

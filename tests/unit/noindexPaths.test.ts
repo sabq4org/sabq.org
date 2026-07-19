@@ -33,6 +33,8 @@ describe("isNoindexPath — prefixes", () => {
     "/ur/dashboard",
     "/payment/success",
     "/ifox/anything",
+    "/gulf-cup/majlis",
+    "/gulf-cup/majlis/123",
   ])("%s is noindex", (p) => expect(isNoindexPath(p)).toBe(true));
 
   it("does NOT match prefix lookalikes (boundary check)", () => {

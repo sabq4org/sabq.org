@@ -443,17 +443,17 @@ function RealTimePanel({ data, isLoading }: { data: RealTimeData | undefined; is
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
-        <Card className="bg-green-500/10 border-green-500/20">
+        <Card className="border-border/70 bg-card shadow-none">
           <CardContent className="p-4 text-center">
             <Activity className="h-6 w-6 mx-auto mb-2 text-green-500" />
-            <p className="text-3xl font-bold text-green-600">{data.activeUsers}</p>
+            <p className="text-3xl font-bold text-foreground">{data.activeUsers}</p>
             <p className="text-sm text-muted-foreground">مستخدم نشط الآن</p>
           </CardContent>
         </Card>
-        <Card className="bg-blue-500/10 border-blue-500/20">
+        <Card className="border-border/70 bg-card shadow-none">
           <CardContent className="p-4 text-center">
             <Eye className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-            <p className="text-3xl font-bold text-blue-600">{data.currentPageViews}</p>
+            <p className="text-3xl font-bold text-foreground">{data.currentPageViews}</p>
             <p className="text-sm text-muted-foreground">مشاهدة صفحات</p>
           </CardContent>
         </Card>
@@ -627,16 +627,16 @@ export default function AdvancedAnalytics() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6" dir="rtl">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6" />
-            تحليلات سلوك القراء المتقدمة
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            تتبع دقيق لكيفية تفاعل القراء مع المحتوى
-          </p>
+    <div className="container mx-auto space-y-6 px-4 py-5 sm:px-6 sm:py-6" dir="rtl">
+      <header className="flex flex-col gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <BarChart3 className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">تحليلات سلوك القراء المتقدمة</h1>
+            <p className="mt-1 text-sm text-muted-foreground">تتبع دقيق لكيفية تفاعل القراء مع المحتوى</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Button 
@@ -660,9 +660,9 @@ export default function AdvancedAnalytics() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard
           title="إجمالي الجلسات"
           value={overview?.sessions.total.toLocaleString() || "0"}
@@ -838,9 +838,9 @@ export default function AdvancedAnalytics() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="rounded-xl border border-border/70 bg-card p-4">
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-green-500/20">
+                <div className="rounded-full bg-muted p-3">
                   <Users className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
@@ -851,9 +851,9 @@ export default function AdvancedAnalytics() {
                 </div>
               </div>
             </div>
-            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <div className="rounded-xl border border-border/70 bg-card p-4">
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-blue-500/20">
+                <div className="rounded-full bg-muted p-3">
                   <RefreshCw className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>

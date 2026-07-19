@@ -28,68 +28,68 @@ import {
   type TTSProvider,
   type TTSProviderName,
 } from './ttsProviderRegistry';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 
 // Voice configurations for different narrators
 // Using Gulf/Saudi Arabic voices for authentic Saudi news experience
 // ElevenLabs Flash v2.5 model for Arabic optimization
 export const ARABIC_VOICES = {
-  // ⭐ Gulf/Saudi Male Voices - Primary for Saudi audience
+  // ⭐ Saudi Male Voices — primary for Sabq audience
   MALE_NEWS: {
-    id: '5Spsi3mCH9e7futpnGE5', // فارس - صوت خليجي احترافي للأخبار
-    name: 'فارس - مذيع أخبار خليجي',
-    model_id: 'eleven_flash_v2_5', // Flash v2.5 for low latency
+    id: 'yXEnnEln9armDCyhkXcA', // صوت جدة الإذاعي
+    name: 'صوت جدة الإذاعي — Jeddawi Echo',
+    model_id: 'eleven_flash_v2_5',
     settings: {
-      stability: 0.50, // Higher stability for consistent news delivery
-      similarity_boost: 0.80, // Strong voice matching for authentic Gulf accent
-      style: 0.55, // Moderate style for professional news tone
-      use_speaker_boost: true // For clarity
-    }
+      stability: 0.50,
+      similarity_boost: 0.80,
+      style: 0.55,
+      use_speaker_boost: true,
+    },
   },
   MALE_ANALYSIS: {
-    id: 'G1HOkzin3NMwRHSq60UI', // شوقي - مذيع إذاعي للتحليلات
-    name: 'شوقي - محلل إخباري',
-    model_id: 'eleven_flash_v2_5', // Flash v2.5 for low latency
+    id: 'xvhpbk8otnNHtT3fjCpr', // عمر — فصحى احترافية
+    name: 'عمر — محلل إخباري',
+    model_id: 'eleven_flash_v2_5',
     settings: {
-      stability: 0.55, // Higher stability for analysis content
-      similarity_boost: 0.75, // Natural sounding
-      style: 0.45, // Slightly formal for analysis
-      use_speaker_boost: true // For clarity
-    }
+      stability: 0.55,
+      similarity_boost: 0.75,
+      style: 0.45,
+      use_speaker_boost: true,
+    },
   },
   MALE_SAUDI: {
-    id: 'IK7YYZcSpmlkjKrQxbSn', // رائد - صوت سعودي أصيل
-    name: 'رائد - صوت سعودي',
+    id: 'usjDi9nBY6UHvtKrL4ba', // عبدالله — راوي سعودي
+    name: 'عبدالله — صوت سعودي',
     model_id: 'eleven_flash_v2_5',
     settings: {
       stability: 0.50,
       similarity_boost: 0.80,
       style: 0.50,
-      use_speaker_boost: true
-    }
+      use_speaker_boost: true,
+    },
   },
-  // Female voices with Arabic language support
   FEMALE_NEWS: {
-    id: 'VwC51uc4PUblWEJSPzeo', // أبرار صباح - مذيعة أخبار
-    name: 'أبرار صباح - مذيعة أخبار',
-    model_id: 'eleven_flash_v2_5', // Flash v2.5 for low latency
+    id: 'mRdG9GYEjJmIzqbYTidv', // سناء
+    name: 'سناء — مذيعة أخبار',
+    model_id: 'eleven_flash_v2_5',
     settings: {
-      stability: 0.50, // Balanced for news content
-      similarity_boost: 0.80, // Natural sounding
-      style: 0.50, // Professional for news
-      use_speaker_boost: true // For clarity
-    }
+      stability: 0.50,
+      similarity_boost: 0.80,
+      style: 0.50,
+      use_speaker_boost: true,
+    },
   },
   FEMALE_CONVERSATIONAL: {
-    id: 'u0TsaWvt0v8migutHM3M', // غزلان - صوت هادئ
-    name: 'غزلان - صوت هادئ',
-    model_id: 'eleven_flash_v2_5', // Flash v2.5 for low latency
+    id: 'aMmeBf0lzDYlouyfqNjh', // مريم — سعودية
+    name: 'مريم — صوت سعودي هادئ',
+    model_id: 'eleven_flash_v2_5',
     settings: {
-      stability: 0.45, // Slightly more expressive for conversation
-      similarity_boost: 0.75, // Natural sounding
-      style: 0.40, // Relaxed for conversational
-      use_speaker_boost: true // For clarity
-    }
-  }
+      stability: 0.45,
+      similarity_boost: 0.75,
+      style: 0.40,
+      use_speaker_boost: true,
+    },
+  },
 };
 
 // Newsletter templates with different script structures
@@ -443,8 +443,22 @@ export class AudioNewsletterService extends EventEmitter {
       job.progress = 20;
       this.emit('job:progress', job);
       
-      // Build script from template
-      const script = await this.buildScript(newsletter);
+      // Build script from template, then verbalize numbers/dates/% for Arabic TTS.
+      const rawScript = await this.buildScript(newsletter);
+      interface NewsletterTtsMeta {
+        ttsVoice?: string;
+        ttsTone?: string;
+        language?: 'ar' | 'en' | 'ur';
+        voicePreset?: string;
+        voiceId?: string;
+        voiceSettings?: Record<string, unknown>;
+      }
+      const newsletterMeta = (newsletter.metadata as NewsletterTtsMeta | null) || {};
+      const language: 'ar' | 'en' | 'ur' =
+        newsletterMeta.language === 'en' || newsletterMeta.language === 'ur'
+          ? newsletterMeta.language
+          : 'ar';
+      const script = normalizeTextForTts(rawScript, { language });
       
       job.progress = 30;
       this.emit('job:progress', job);
@@ -462,24 +476,16 @@ export class AudioNewsletterService extends EventEmitter {
       const audioBuffers: Buffer[] = [];
       
       // Get voice configuration based on preset or custom settings
-      const voicePreset = newsletter.metadata?.voicePreset || 'MALE_NEWS';
+      const voicePreset = newsletterMeta.voicePreset || newsletter.metadata?.voicePreset || 'MALE_NEWS';
       const voiceConfig = ARABIC_VOICES[voicePreset as keyof typeof ARABIC_VOICES] || ARABIC_VOICES.MALE_NEWS;
-      const voiceId = newsletter.metadata?.voiceId || voiceConfig.id;
-      const voiceSettings = newsletter.metadata?.voiceSettings || voiceConfig.settings;
+      const voiceId = newsletterMeta.voiceId || newsletter.metadata?.voiceId || voiceConfig.id;
+      const voiceSettings = newsletterMeta.voiceSettings || newsletter.metadata?.voiceSettings || voiceConfig.settings;
       const modelId = voiceConfig.model_id || 'eleven_flash_v2_5'; // Use Flash v2.5 for low latency
       
-      // Per-newsletter overrides (from metadata.ttsProvider/ttsVoice/ttsTone)
-      interface NewsletterTtsMeta {
-        ttsVoice?: string;
-        ttsTone?: string;
-        language?: 'ar' | 'en' | 'ur';
-      }
-      const newsletterMeta = (newsletter.metadata as NewsletterTtsMeta | null) || {};
       const overrideVoice = newsletterMeta.ttsVoice;
       // Fall back to system-wide defaultTone when newsletter doesn't override.
       const systemSettings = await loadTtsSettings();
       const overrideTone = newsletterMeta.ttsTone ?? systemSettings.defaultTone;
-      const language: 'ar' | 'en' | 'ur' = newsletterMeta.language === 'en' || newsletterMeta.language === 'ur' ? newsletterMeta.language : 'ar';
 
       // Provider-specific TTS request builder. Voice IDs are namespaced per
       // provider so we resolve a usable voice id for whichever provider runs.
@@ -492,6 +498,7 @@ export class AudioNewsletterService extends EventEmitter {
             voiceId: resolvedVoice,
             voiceSettings,
             model: modelId,
+            language,
           };
         }
         if (providerName === 'openai') {
@@ -499,10 +506,11 @@ export class AudioNewsletterService extends EventEmitter {
             text: chunkText,
             voiceId: resolvedVoice,
             voiceSettings: { speed: voiceSettings?.speed ?? 1.0 },
+            language,
             ...(overrideTone ? { instructions: overrideTone } : {}),
           };
         }
-        return { text: chunkText, voiceId: resolvedVoice };
+        return { text: chunkText, voiceId: resolvedVoice, language };
       };
 
       // Active provider index — stays on the working provider once we fall back.

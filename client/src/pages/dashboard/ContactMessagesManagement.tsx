@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -27,21 +27,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   MessageSquare,
   Search,
   Eye,
@@ -51,27 +36,27 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Mail,
-  Phone,
-  Calendar,
   User,
-  FileText,
   Clock,
   Send,
   Inbox,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
+import { PolishReplyButton } from "@/components/ai/PolishReplyButton";
 import type { ContactMessage } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 type ContactMessageStatus = "pending" | "read" | "replied";
+type StatusFilter = "all" | ContactMessageStatus;
 
 const statusColors: Record<ContactMessageStatus, string> = {
-  pending: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
-  read: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  replied: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
+  pending:
+    "bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-400/40",
+  read:
+    "bg-sky-100 text-sky-950 border-sky-300 dark:bg-sky-500/20 dark:text-sky-100 dark:border-sky-400/40",
+  replied:
+    "bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:border-emerald-400/40",
 };
 
 const statusLabels: Record<ContactMessageStatus, string> = {
@@ -80,59 +65,30 @@ const statusLabels: Record<ContactMessageStatus, string> = {
   replied: "تم الرد",
 };
 
-const statusIcons: Record<ContactMessageStatus, typeof Clock> = {
-  pending: Clock,
-  read: Eye,
-  replied: CheckCheck,
+const statusTone: Record<ContactMessageStatus, string> = {
+  pending: "text-amber-700 dark:text-amber-300",
+  read: "text-sky-700 dark:text-sky-300",
+  replied: "text-emerald-700 dark:text-emerald-300",
 };
 
 function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "-";
-  return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
-}
-
-function TableSkeleton() {
-  return (
-    <div className="space-y-3">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-          <Skeleton className="h-8 w-24" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-primary/10 p-6 mb-4">
-          <MessageSquare className="h-12 w-12 text-primary" />
-        </div>
-        <h3 className="text-xl font-semibold mb-2">لا توجد رسائل</h3>
-        <p className="text-muted-foreground text-center max-w-md">
-          لم يتم استلام أي رسائل تواصل بعد
-        </p>
-      </CardContent>
-    </Card>
-  );
+  return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function ContactMessagesManagement() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const [messageToDelete, setMessageToDelete] = useState<ContactMessage | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [replyDialogOpen, setReplyDialogOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [messageToReply, setMessageToReply] = useState<ContactMessage | null>(null);
@@ -149,6 +105,12 @@ export default function ContactMessagesManagement() {
     page: number;
     limit: number;
     totalPages: number;
+    statusCounts?: {
+      pending: number;
+      read: number;
+      replied: number;
+      total: number;
+    };
   }>({
     queryKey: ["/api/admin/contact-messages", page, statusFilter, searchTerm],
     queryFn: async () => {
@@ -162,37 +124,13 @@ export default function ContactMessagesManagement() {
       if (searchTerm) {
         params.append("search", searchTerm);
       }
-      const response = await fetch(`/api/admin/contact-messages?${params}`, {
+      const response = await fetch(apiUrl(`/api/admin/contact-messages?${params}`), {
         credentials: "include",
       });
       if (!response.ok) {
         throw new Error("فشل في جلب الرسائل");
       }
       return response.json();
-    },
-  });
-
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      return await apiRequest(`/api/admin/contact-messages/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-        headers: { "Content-Type": "application/json" },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/contact-messages"] });
-      toast({
-        title: "تم تحديث الحالة",
-        description: "تم تحديث حالة الرسالة بنجاح",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "خطأ",
-        description: error.message || "فشل في تحديث الحالة",
-        variant: "destructive",
-      });
     },
   });
 
@@ -293,6 +231,12 @@ export default function ContactMessagesManagement() {
   const messages = Array.isArray(data?.messages) ? data.messages : [];
   const totalPages = data?.totalPages || 1;
   const total = data?.total || 0;
+  const statusCounts = data?.statusCounts ?? {
+    pending: 0,
+    read: 0,
+    replied: 0,
+    total: 0,
+  };
 
   const pendingOnPage = useMemo(
     () => messages.filter((m) => m.status === "pending"),
@@ -336,585 +280,527 @@ export default function ContactMessagesManagement() {
     setSelectedIds(new Set());
   }, [page, statusFilter, searchTerm]);
 
-  const counts = {
-    total,
-    pending: messages.filter((m) => m.status === "pending").length,
-    read: messages.filter((m) => m.status === "read").length,
-    replied: messages.filter((m) => m.status === "replied").length,
-  };
+  const statusTabs: Array<{
+    id: StatusFilter;
+    label: string;
+    count: number;
+    tone?: string;
+  }> = [
+    { id: "all", label: "الكل", count: statusCounts.total || total },
+    {
+      id: "pending",
+      label: "قيد الانتظار",
+      count: statusCounts.pending,
+      tone: statusTone.pending,
+    },
+    {
+      id: "read",
+      label: "مقروءة",
+      count: statusCounts.read,
+      tone: statusTone.read,
+    },
+    {
+      id: "replied",
+      label: "تم الرد",
+      count: statusCounts.replied,
+      tone: statusTone.replied,
+    },
+  ];
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl" data-testid="contact-messages-page">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-500/10">
-            <MessageSquare className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">رسائل التواصل</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              إدارة رسائل الزوار والرد عليها
-            </p>
-          </div>
-        </div>
+      <div data-testid="contact-messages-page">
+        <DashboardPageShell
+          maxWidthClassName="max-w-[1400px]"
+          contentClassName="px-4 pb-16 sm:px-6"
+        >
+          <DashboardPageHeader
+            icon={MessageSquare}
+            title="رسائل التواصل"
+            description="صندوق رسائل الزوار — فرز سريع ورد بالبريد"
+            titleTestId="text-contact-messages-title"
+          />
 
-        {/* Stats overview */}
-        {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <Skeleton className="h-4 w-20 mb-2" />
-                  <Skeleton className="h-8 w-16" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card data-testid="card-total-messages">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Inbox className="h-5 w-5 text-primary" />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              {
+                id: "all" as const,
+                label: "الإجمالي",
+                value: statusCounts.total || total,
+                icon: Inbox,
+                testId: "card-total-messages",
+              },
+              {
+                id: "pending" as const,
+                label: "قيد الانتظار",
+                value: statusCounts.pending,
+                icon: Clock,
+                testId: "card-pending-messages",
+                tone: statusTone.pending,
+              },
+              {
+                id: "read" as const,
+                label: "تمت القراءة",
+                value: statusCounts.read,
+                icon: Eye,
+                testId: "card-read-messages",
+                tone: statusTone.read,
+              },
+              {
+                id: "replied" as const,
+                label: "تم الرد",
+                value: statusCounts.replied,
+                icon: CheckCheck,
+                testId: "card-replied-messages",
+                tone: statusTone.replied,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              const selected = statusFilter === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-testid={item.testId}
+                  onClick={() => {
+                    setStatusFilter(item.id);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "rounded-xl border bg-card px-3 py-2.5 text-start transition-all",
+                    selected && "ring-2 ring-primary/35 border-primary/30",
+                    !selected && "hover:bg-muted/30",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">الإجمالي</p>
-                    <p className="text-2xl font-bold">{counts.total.toLocaleString("en-US")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-pending-messages">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-yellow-500/10">
-                    <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">قيد الانتظار</p>
-                    <p className="text-2xl font-bold">{counts.pending.toLocaleString("en-US")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-read-messages">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-500/10">
-                    <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">تمت القراءة</p>
-                    <p className="text-2xl font-bold">{counts.read.toLocaleString("en-US")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-replied-messages">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <CheckCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">تم الرد</p>
-                    <p className="text-2xl font-bold">{counts.replied.toLocaleString("en-US")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="grid gap-3 md:grid-cols-[1fr_220px]" data-testid="filters-card">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="بحث بالاسم أو البريد..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-              className="pr-10"
-              data-testid="input-search"
-            />
-          </div>
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger data-testid="select-status-filter">
-              <SelectValue placeholder="جميع الحالات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الحالات</SelectItem>
-              <SelectItem value="pending">قيد الانتظار</SelectItem>
-              <SelectItem value="read">تم القراءة</SelectItem>
-              <SelectItem value="replied">تم الرد</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Table */}
-        <div data-testid="messages-table-card">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-            <div>
-              <h2 className="text-lg font-semibold">قائمة الرسائل</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isLoading ? "جاري التحميل..." : `عرض ${messages.length} من ${total}`}
-              </p>
-            </div>
-            {!isLoading && messages.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                {pendingOnPage.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleSelectAllOnPage}
-                    data-testid="button-select-all-page"
+                  <p
+                    className={cn(
+                      "mt-1 text-2xl font-bold tabular-nums tracking-tight",
+                      item.tone,
+                    )}
                   >
-                    {allPendingOnPageSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
-                  </Button>
-                )}
-                <Button
+                    {isLoading ? "—" : item.value.toLocaleString("en-US")}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="space-y-3 rounded-2xl border bg-card p-3 sm:p-4" data-testid="filters-card">
+            <div className="flex flex-wrap gap-1.5 rounded-xl bg-muted/40 p-1">
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.id}
                   type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleMarkSelectedRead}
-                  disabled={selectedIds.size === 0 || bulkMarkReadMutation.isPending}
-                  data-testid="button-mark-selected-read"
-                >
-                  {bulkMarkReadMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin ms-1" />
-                  ) : (
-                    <Check className="h-4 w-4 ms-1" />
+                  onClick={() => {
+                    setStatusFilter(tab.id);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-medium tabular-nums transition-colors",
+                    statusFilter === tab.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                    tab.tone && statusFilter === tab.id && tab.tone,
                   )}
-                  جعل المحدد مقروءاً
-                  {selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setMarkAllConfirmOpen(true)}
-                  disabled={bulkMarkReadMutation.isPending}
-                  data-testid="button-mark-all-read"
                 >
-                  <CheckCheck className="h-4 w-4 ms-1" />
-                  جعل الكل مقروء
-                </Button>
+                  {tab.label} ({isLoading ? "—" : tab.count.toLocaleString("en-US")})
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="بحث بالاسم أو البريد..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-10 pr-10"
+                  data-testid="input-search"
+                />
               </div>
-            )}
-          </div>
-          <div>
-              {isLoading ? (
-                <TableSkeleton />
-              ) : messages.length === 0 ? (
-                <EmptyState />
-              ) : (
-                <>
-                  <div className="rounded-md border" dir="rtl">
-                    <Table data-testid="messages-table">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-10 text-center">
-                            <Checkbox
-                              checked={
-                                pendingOnPage.length > 0 && allPendingOnPageSelected
-                              }
-                              onCheckedChange={() => toggleSelectAllOnPage()}
-                              disabled={pendingOnPage.length === 0}
-                              aria-label="تحديد كل الرسائل قيد الانتظار في الصفحة"
-                              data-testid="checkbox-select-all"
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">الاسم</TableHead>
-                          <TableHead className="text-right">البريد</TableHead>
-                          <TableHead className="text-right">الهاتف</TableHead>
-                          <TableHead className="text-right">الموضوع</TableHead>
-                          <TableHead className="text-right">الحالة</TableHead>
-                          <TableHead className="text-right">التاريخ</TableHead>
-                          <TableHead className="text-right">الإجراءات</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {messages.map((message) => {
-                          const StatusIcon = statusIcons[message.status as ContactMessageStatus] || Clock;
-                          const isPending = message.status === "pending";
-                          return (
-                            <TableRow
-                              key={message.id}
-                              className="cursor-pointer hover-elevate"
-                              onClick={() => handleViewMessage(message)}
-                              data-testid={`message-row-${message.id}`}
-                            >
-                              <TableCell
-                                className="w-10 text-center"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Checkbox
-                                  checked={selectedIds.has(message.id)}
-                                  disabled={!isPending}
-                                  onCheckedChange={(checked) =>
-                                    toggleSelectMessage(message.id, checked === true)
-                                  }
-                                  aria-label={`تحديد رسالة ${message.name}`}
-                                  data-testid={`checkbox-message-${message.id}`}
-                                />
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center gap-2 flex-row-reverse justify-end">
-                                  <User className="h-4 w-4 text-muted-foreground" />
-                                  {message.name}
-                                </div>
-                              </TableCell>
-                              <TableCell dir="ltr" className="text-right">
-                                {message.email}
-                              </TableCell>
-                              <TableCell dir="ltr" className="text-right">
-                                {message.phone}
-                              </TableCell>
-                              <TableCell>{message.subject}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  className={statusColors[message.status as ContactMessageStatus]}
-                                  data-testid={`badge-status-${message.id}`}
-                                >
-                                  <StatusIcon className="h-3 w-3 ms-1" />
-                                  {statusLabels[message.status as ContactMessageStatus]}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-muted-foreground text-sm">
-                                {formatDate(message.createdAt)}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleViewMessage(message)}
-                                    data-testid={`button-view-${message.id}`}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  {message.status !== "replied" && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleOpenReplyDialog(message)}
-                                      disabled={replyMutation.isPending}
-                                      data-testid={`button-reply-${message.id}`}
-                                    >
-                                      <Send className="h-4 w-4 text-green-600" />
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setMessageToDelete(message)}
-                                    data-testid={`button-delete-${message.id}`}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-red-600" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4" dir="rtl">
-                      <p className="text-sm text-muted-foreground">
-                        صفحة {page} من {totalPages}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                          disabled={page >= totalPages}
-                          data-testid="button-next-page"
-                        >
-                          التالي
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                          disabled={page === 1}
-                          data-testid="button-prev-page"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                          السابق
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-          </div>
-        </div>
-
-        <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <DialogContent className="max-w-2xl" dir="rtl" data-testid="message-details-dialog">
-            <DialogHeader className="text-right">
-              <DialogTitle className="flex items-center justify-end gap-2">
-                <span>تفاصيل الرسالة</span>
-                <MessageSquare className="h-5 w-5" />
-              </DialogTitle>
-              <DialogDescription>
-                عرض كامل لمحتوى الرسالة والمعلومات المرتبطة
-              </DialogDescription>
-            </DialogHeader>
-            {selectedMessage && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                      <User className="h-4 w-4" />
-                      <span>الاسم</span>
-                    </div>
-                    <p className="font-medium" data-testid="detail-name">{selectedMessage.name}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                      <Mail className="h-4 w-4" />
-                      <span>البريد الإلكتروني</span>
-                    </div>
-                    <p className="font-medium" dir="ltr" data-testid="detail-email">{selectedMessage.email}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                      <Phone className="h-4 w-4" />
-                      <span>رقم الهاتف</span>
-                    </div>
-                    <p className="font-medium" dir="ltr" data-testid="detail-phone">{selectedMessage.phone}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                      <FileText className="h-4 w-4" />
-                      <span>الموضوع</span>
-                    </div>
-                    <p className="font-medium" data-testid="detail-subject">{selectedMessage.subject}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                      <Calendar className="h-4 w-4" />
-                      <span>تاريخ الإرسال</span>
-                    </div>
-                    <p className="font-medium" data-testid="detail-date">{formatDate(selectedMessage.createdAt)}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                      <Check className="h-4 w-4" />
-                      <span>الحالة</span>
-                    </div>
-                    <Badge
-                      className={statusColors[selectedMessage.status as ContactMessageStatus]}
-                      data-testid="detail-status"
-                    >
-                      {statusLabels[selectedMessage.status as ContactMessageStatus]}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground flex-row-reverse justify-end">
-                    <MessageSquare className="h-4 w-4" />
-                    <span>نص الرسالة</span>
-                  </div>
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="whitespace-pre-wrap" data-testid="detail-message">{selectedMessage.message}</p>
-                  </div>
-                </div>
-
-                {selectedMessage.repliedAt && (
-                  <div className="text-sm text-muted-foreground border-t pt-4">
-                    تم الرد بتاريخ: {formatDate(selectedMessage.repliedAt)}
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-2 pt-4 border-t">
-                  {selectedMessage.status !== "replied" && (
+              {!isLoading && messages.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {pendingOnPage.length > 0 && (
                     <Button
-                      onClick={() => {
-                        setDetailsOpen(false);
-                        handleOpenReplyDialog(selectedMessage);
-                      }}
-                      disabled={replyMutation.isPending}
-                      data-testid="button-dialog-reply"
+                      type="button"
+                      variant="outline"
+                      className="h-10"
+                      onClick={toggleSelectAllOnPage}
+                      data-testid="button-select-all-page"
                     >
-                      {replyMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin me-2" />
-                      ) : (
-                        <Send className="h-4 w-4 me-2" />
-                      )}
-                      إرسال رد
+                      {allPendingOnPageSelected ? "إلغاء التحديد" : "تحديد الكل"}
                     </Button>
                   )}
                   <Button
-                    variant="destructive"
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      setMessageToDelete(selectedMessage);
-                    }}
-                    data-testid="button-dialog-delete"
+                    type="button"
+                    variant="secondary"
+                    className="h-10"
+                    onClick={handleMarkSelectedRead}
+                    disabled={selectedIds.size === 0 || bulkMarkReadMutation.isPending}
+                    data-testid="button-mark-selected-read"
                   >
-                    <Trash2 className="h-4 w-4 me-2" />
-                    حذف
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        <AlertDialog open={markAllConfirmOpen} onOpenChange={setMarkAllConfirmOpen}>
-          <AlertDialogContent dir="rtl" data-testid="mark-all-read-confirm-dialog">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-right">جعل كل الرسائل مقروءة؟</AlertDialogTitle>
-              <AlertDialogDescription className="text-right">
-                سيتم تعليم جميع الرسائل «قيد الانتظار» كمقروءة في النظام. لن تتأثر الرسائل التي تم الرد عليها.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex-row-reverse gap-2">
-              <AlertDialogCancel data-testid="button-cancel-mark-all-read">إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleMarkAllRead}
-                disabled={bulkMarkReadMutation.isPending}
-                data-testid="button-confirm-mark-all-read"
-              >
-                {bulkMarkReadMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin me-2" />
-                ) : (
-                  <CheckCheck className="h-4 w-4 me-2" />
-                )}
-                تأكيد
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <AlertDialog open={!!messageToDelete} onOpenChange={() => setMessageToDelete(null)}>
-          <AlertDialogContent dir="rtl" data-testid="delete-confirm-dialog">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-right">هل أنت متأكد من الحذف؟</AlertDialogTitle>
-              <AlertDialogDescription className="text-right">
-                سيتم حذف رسالة "{messageToDelete?.name}" نهائياً. لا يمكن التراجع عن هذا الإجراء.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex-row-reverse gap-2">
-              <AlertDialogCancel data-testid="button-cancel-delete">إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => messageToDelete && deleteMutation.mutate(messageToDelete.id)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleteMutation.isPending}
-                data-testid="button-confirm-delete"
-              >
-                {deleteMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin me-2" />
-                ) : (
-                  <Trash2 className="h-4 w-4 me-2" />
-                )}
-                حذف
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <Dialog open={replyDialogOpen} onOpenChange={(open) => {
-          setReplyDialogOpen(open);
-          if (!open) {
-            setReplyText("");
-            setMessageToReply(null);
-          }
-        }}>
-          <DialogContent className="max-w-2xl" dir="rtl" data-testid="reply-dialog">
-            <DialogHeader className="text-right">
-              <DialogTitle className="flex items-center justify-end gap-2">
-                <span>الرد على الرسالة</span>
-                <Send className="h-5 w-5" />
-              </DialogTitle>
-              <DialogDescription>
-                سيتم إرسال ردك إلى البريد الإلكتروني للمرسل
-              </DialogDescription>
-            </DialogHeader>
-            {messageToReply && (
-              <div className="space-y-4">
-                <div className="p-4 bg-muted rounded-lg space-y-3">
-                  <h4 className="font-semibold text-sm text-muted-foreground">معلومات الرسالة الأصلية</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">الاسم: </span>
-                      <span className="font-medium" data-testid="reply-dialog-name">{messageToReply.name}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">البريد: </span>
-                      <span className="font-medium" dir="ltr" data-testid="reply-dialog-email">{messageToReply.email}</span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground">الموضوع: </span>
-                      <span className="font-medium" data-testid="reply-dialog-subject">{messageToReply.subject}</span>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t">
-                    <span className="text-muted-foreground text-sm">الرسالة: </span>
-                    <p className="mt-1 text-sm whitespace-pre-wrap" data-testid="reply-dialog-message">{messageToReply.message}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">نص الرد</label>
-                  <Textarea
-                    placeholder="اكتب ردك هنا..."
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    className="min-h-[150px] resize-none"
-                    data-testid="input-reply-text"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setReplyDialogOpen(false);
-                      setReplyText("");
-                      setMessageToReply(null);
-                    }}
-                    disabled={replyMutation.isPending}
-                    data-testid="button-cancel-reply"
-                  >
-                    إلغاء
-                  </Button>
-                  <Button
-                    onClick={handleSendReply}
-                    disabled={!replyText.trim() || replyMutation.isPending}
-                    data-testid="button-send-reply"
-                  >
-                    {replyMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin me-2" />
+                    {bulkMarkReadMutation.isPending ? (
+                      <Loader2 className="ms-1 h-4 w-4 animate-spin" />
                     ) : (
-                      <Send className="h-4 w-4 me-2" />
+                      <Check className="ms-1 h-4 w-4" />
                     )}
-                    إرسال الرد
+                    المحدد مقروءاً
+                    {selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10"
+                    onClick={() => setMarkAllConfirmOpen(true)}
+                    disabled={bulkMarkReadMutation.isPending}
+                    data-testid="button-mark-all-read"
+                  >
+                    <CheckCheck className="ms-1 h-4 w-4" />
+                    الكل مقروء
                   </Button>
                 </div>
+              )}
+            </div>
+          </div>
+
+          <section className="space-y-2" data-testid="messages-table-card">
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <h2 className="text-sm font-semibold">قائمة الرسائل</h2>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {isLoading
+                  ? "جاري التحميل..."
+                  : `${messages.length.toLocaleString("en-US")} من ${total.toLocaleString("en-US")}`}
+              </p>
+            </div>
+
+            {isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                ))}
               </div>
+            ) : messages.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-muted/20 py-12 text-center">
+                <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                <p className="font-medium">لا توجد رسائل</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  لا نتائج مطابقة للفلتر الحالي
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-2xl border bg-card" data-testid="messages-table">
+                  {messages.map((message, idx) => {
+                    const status = (message.status as ContactMessageStatus) || "pending";
+                    const isPending = status === "pending";
+                    return (
+                      <div
+                        key={message.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleViewMessage(message)}
+                        onKeyDown={(e) =>
+                          (e.key === "Enter" || e.key === " ") && handleViewMessage(message)
+                        }
+                        className={cn(
+                          "grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:px-4",
+                          idx !== messages.length - 1 && "border-b",
+                          isPending && "bg-amber-50/40 dark:bg-amber-500/5",
+                        )}
+                        data-testid={`message-row-${message.id}`}
+                      >
+                        <div
+                          className="flex items-center gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selectedIds.has(message.id)}
+                            disabled={!isPending}
+                            onCheckedChange={(checked) =>
+                              toggleSelectMessage(message.id, checked === true)
+                            }
+                            aria-label={`تحديد رسالة ${message.name}`}
+                            data-testid={`checkbox-message-${message.id}`}
+                          />
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <h3 className="truncate text-sm font-semibold">{message.name}</h3>
+                            <span
+                              className={cn(
+                                "rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+                                statusColors[status],
+                              )}
+                              data-testid={`badge-status-${message.id}`}
+                            >
+                              {statusLabels[status]}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                            <span className="font-medium text-foreground/80">{message.subject}</span>
+                            <span className="mx-1 opacity-40">·</span>
+                            <span dir="ltr">{message.email}</span>
+                            {message.phone ? (
+                              <>
+                                <span className="mx-1 opacity-40">·</span>
+                                <span dir="ltr">{message.phone}</span>
+                              </>
+                            ) : null}
+                            <span className="mx-1 opacity-40">·</span>
+                            <span className="tabular-nums">{formatDate(message.createdAt)}</span>
+                          </p>
+                        </div>
+
+                        <div
+                          className="flex shrink-0 items-center gap-0.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleViewMessage(message)}
+                            data-testid={`button-view-${message.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {status !== "replied" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleOpenReplyDialog(message)}
+                              disabled={replyMutation.isPending}
+                              data-testid={`button-reply-${message.id}`}
+                            >
+                              <Send className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setMessageToDelete(message)}
+                            data-testid={`button-delete-${message.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between gap-2 pt-1" dir="rtl">
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      صفحة {page.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page >= totalPages}
+                        data-testid="button-next-page"
+                      >
+                        التالي
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        السابق
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-          </DialogContent>
-        </Dialog>
+          </section>
+
+          <AlertDialog open={markAllConfirmOpen} onOpenChange={setMarkAllConfirmOpen}>
+            <AlertDialogContent dir="rtl" data-testid="mark-all-read-confirm-dialog">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-right">جعل كل الرسائل مقروءة؟</AlertDialogTitle>
+                <AlertDialogDescription className="text-right">
+                  سيتم تعليم جميع الرسائل «قيد الانتظار» كمقروءة في النظام. لن تتأثر الرسائل التي تم
+                  الرد عليها.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-row-reverse gap-2">
+                <AlertDialogCancel data-testid="button-cancel-mark-all-read">إلغاء</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleMarkAllRead}
+                  disabled={bulkMarkReadMutation.isPending}
+                  data-testid="button-confirm-mark-all-read"
+                >
+                  {bulkMarkReadMutation.isPending ? (
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCheck className="me-2 h-4 w-4" />
+                  )}
+                  تأكيد
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={!!messageToDelete} onOpenChange={() => setMessageToDelete(null)}>
+            <AlertDialogContent dir="rtl" data-testid="delete-confirm-dialog">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-right">هل أنت متأكد من الحذف؟</AlertDialogTitle>
+                <AlertDialogDescription className="text-right">
+                  سيتم حذف رسالة "{messageToDelete?.name}" نهائياً. لا يمكن التراجع عن هذا الإجراء.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-row-reverse gap-2">
+                <AlertDialogCancel data-testid="button-cancel-delete">إلغاء</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => messageToDelete && deleteMutation.mutate(messageToDelete.id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deleteMutation.isPending}
+                  data-testid="button-confirm-delete"
+                >
+                  {deleteMutation.isPending ? (
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="me-2 h-4 w-4" />
+                  )}
+                  حذف
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <Dialog
+            open={replyDialogOpen}
+            onOpenChange={(open) => {
+              setReplyDialogOpen(open);
+              if (!open) {
+                setReplyText("");
+                setMessageToReply(null);
+              }
+            }}
+          >
+            <DialogContent className="max-w-2xl" dir="rtl" data-testid="reply-dialog">
+              <DialogHeader className="text-right">
+                <DialogTitle className="flex items-center justify-end gap-2">
+                  <span>الرد على الرسالة</span>
+                  <Send className="h-5 w-5" />
+                </DialogTitle>
+                <DialogDescription>
+                  سيتم إرسال ردك إلى البريد الإلكتروني للمرسل
+                </DialogDescription>
+              </DialogHeader>
+              {messageToReply && (
+                <div className="space-y-4">
+                  <div className="space-y-3 rounded-lg bg-muted p-4">
+                    <h4 className="text-sm font-semibold text-muted-foreground">
+                      معلومات الرسالة الأصلية
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">الاسم: </span>
+                        <span className="font-medium" data-testid="reply-dialog-name">
+                          {messageToReply.name}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">البريد: </span>
+                        <span className="font-medium" dir="ltr" data-testid="reply-dialog-email">
+                          {messageToReply.email}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">الموضوع: </span>
+                        <span className="font-medium" data-testid="reply-dialog-subject">
+                          {messageToReply.subject}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="border-t pt-2">
+                      <span className="text-sm text-muted-foreground">الرسالة: </span>
+                      <p
+                        className="mt-1 whitespace-pre-wrap text-sm"
+                        data-testid="reply-dialog-message"
+                      >
+                        {messageToReply.message}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">نص الرد</label>
+                    <Textarea
+                      placeholder="اكتب مضمون ردك باختصار… ثم اضغط «توليد الرد»"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      className="min-h-[150px] resize-none"
+                      data-testid="input-reply-text"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                    <Button
+                      variant="outline"
+                      className="h-10"
+                      onClick={() => {
+                        setReplyDialogOpen(false);
+                        setReplyText("");
+                        setMessageToReply(null);
+                      }}
+                      disabled={replyMutation.isPending}
+                      data-testid="button-cancel-reply"
+                    >
+                      إلغاء
+                    </Button>
+                    <PolishReplyButton
+                      draft={replyText}
+                      channel="contact_message"
+                      recipientName={messageToReply.name}
+                      subject={messageToReply.subject}
+                      originalMessage={messageToReply.message}
+                      onPolished={setReplyText}
+                      disabled={replyMutation.isPending}
+                    />
+                    <Button
+                      className="h-10"
+                      onClick={handleSendReply}
+                      disabled={!replyText.trim() || replyMutation.isPending}
+                      data-testid="button-send-reply"
+                    >
+                      {replyMutation.isPending ? (
+                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="me-2 h-4 w-4" />
+                      )}
+                      إرسال الرد
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        </DashboardPageShell>
       </div>
     </DashboardLayout>
   );

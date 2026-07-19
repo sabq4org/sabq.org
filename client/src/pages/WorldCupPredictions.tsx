@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { Trophy, Target, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -8,27 +9,32 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatKickoffDay, riyadhDayKey, todayRiyadhKey } from "@/components/worldcup/wcTypes";
+import { formatNumber } from "@/lib/format";
 import { PredictionMatchCard } from "@/components/worldcup/predictions/PredictionMatchCard";
 import { PredictionsLeaderboard } from "@/components/worldcup/predictions/PredictionsLeaderboard";
 import { MyPredictionsList } from "@/components/worldcup/predictions/MyPredictionsList";
+import { WcLongPredictions } from "@/components/worldcup/predictions/WcLongPredictions";
 import type {
   PredictableMatch,
-  LeaderRow,
+  LeaderboardResponse,
   MyPredictionRow,
+  WcLongData,
 } from "@/components/worldcup/predictions/predictionsTypes";
 
-type Tab = "today" | "mine" | "leaders";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "today", label: "المباريات" },
-  { key: "mine", label: "توقّعاتي" },
-  { key: "leaders", label: "المتصدّرون" },
-];
+type Tab = "today" | "mine" | "leaders" | "tournament";
+const TAB_VALUES: Tab[] = ["today", "mine", "leaders", "tournament"];
 
 export default function WorldCupPredictions() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("today");
+  // يتيح الربط المباشر من الصفحة الرئيسية بتبويب محدّد، مثل ?tab=tournament
+  const search = useSearch();
+  const tabParam = new URLSearchParams(search).get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && TAB_VALUES.includes(tabParam) ? tabParam : "today");
+
+  useEffect(() => {
+    if (tabParam && TAB_VALUES.includes(tabParam)) setTab(tabParam);
+  }, [tabParam]);
 
   useEffect(() => {
     document.title = "توقّعات المونديال — توقّع واربح نقاط الولاء | سبق";
@@ -53,15 +59,53 @@ export default function WorldCupPredictions() {
     staleTime: 30_000,
   });
 
-  const { data: leaderData, isLoading: leaderLoading } = useQuery<{ leaders: LeaderRow[] }>({
-    queryKey: ["/api/world-cup/predictions/leaderboard"],
+  // «عرض المزيد» يرفع limit تدريجيًا (سقف الخادم 500) — keepPreviousData يمنع
+  // وميض الهيكل العظمي أثناء جلب الدفعة الأكبر.
+  const [leaderLimit, setLeaderLimit] = useState(100);
+  const {
+    data: leaderData,
+    isLoading: leaderLoading,
+    isFetching: leaderFetching,
+  } = useQuery<LeaderboardResponse>({
+    queryKey: ["/api/world-cup/predictions/leaderboard", { limit: leaderLimit }],
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+  // توقّعات البطولة طويلة المدى — التبويب يظهر فقط متى فعّل الخادم الميزة (يُرجع 503
+  // ⇒ query في حالة خطأ ⇒ longData غير موجود ⇒ نُخفي التبويب).
+  const { data: longData } = useQuery<WcLongData>({
+    queryKey: ["/api/world-cup/predictions/long"],
+    retry: false,
     staleTime: 60_000,
   });
+  const longAvailable = !!longData;
+
+  // تمرير إلى قسم الهدّاف عند القدوم من بطاقة الصفحة الرئيسية (#wc-long-scorer)
+  useEffect(() => {
+    if (tab !== "tournament" || !longAvailable || typeof window === "undefined") return;
+    if (window.location.hash !== "#wc-long-scorer") return;
+    const t = window.setTimeout(() => {
+      document.getElementById("wc-long-scorer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [tab, longAvailable]);
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "today", label: "المباريات" },
+    ...(longAvailable ? ([{ key: "tournament", label: "توقّع البطل" }] as const) : []),
+    { key: "mine", label: "توقّعاتي" },
+    { key: "leaders", label: "المتصدّرون" },
+  ];
 
   const matches = Array.isArray(todayData?.matches) ? todayData.matches : [];
   const myPredictions = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
   const leaders = Array.isArray(leaderData?.leaders) ? leaderData.leaders : [];
-  const myRank = user ? leaders.find((l) => l.userId === user.id) : undefined;
+  const leaderboardViewer = leaderData?.viewer ?? null;
+  // صفّي في القائمة المعروضة، وإلا صف viewer من الخادم (رتبتي الحقيقية ولو بعد الـ100)
+  const myRank = user
+    ? (leaders.find((l) => l.userId === user.id) ?? leaderboardViewer ?? undefined)
+    : undefined;
 
   const submitMutation = useMutation({
     mutationFn: (vars: { fixtureId: number; predHome: number; predAway: number }) =>
@@ -112,19 +156,19 @@ export default function WorldCupPredictions() {
             {isAuthenticated ? (
               <div className="mt-5 inline-flex items-center gap-4 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">
                 <div className="text-center">
-                  <p className="text-xl font-black tabular-nums">{(myRank?.totalPoints ?? 0).toLocaleString("ar-SA")}</p>
+                  <p className="text-xl font-black tabular-nums">{formatNumber(myRank?.totalPoints ?? 0)}</p>
                   <p className="text-[11px] text-emerald-100">نقاط التوقّعات</p>
                 </div>
                 <div className="h-8 w-px bg-white/25" />
                 <div className="text-center">
-                  <p className="text-xl font-black tabular-nums">{(myRank?.correctCount ?? 0).toLocaleString("ar-SA")}</p>
+                  <p className="text-xl font-black tabular-nums">{formatNumber(myRank?.correctCount ?? 0)}</p>
                   <p className="text-[11px] text-emerald-100">إصابة دقيقة</p>
                 </div>
                 {myRank && (
                   <>
                     <div className="h-8 w-px bg-white/25" />
                     <div className="text-center">
-                      <p className="text-xl font-black tabular-nums">#{myRank.rank.toLocaleString("ar-SA")}</p>
+                      <p className="text-xl font-black tabular-nums">#{formatNumber(myRank.rank)}</p>
                       <p className="text-[11px] text-emerald-100">ترتيبك</p>
                     </div>
                   </>
@@ -144,7 +188,7 @@ export default function WorldCupPredictions() {
         <div className="mx-auto max-w-4xl px-4 py-6">
           {/* التبويبات */}
           <div className="mb-5 inline-flex w-full gap-1 rounded-full bg-muted p-1 sm:w-auto">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -179,8 +223,22 @@ export default function WorldCupPredictions() {
               <SignInPrompt onLogin={goLogin} />
             ))}
 
+          {tab === "tournament" && (
+            <WcLongPredictions isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />
+          )}
+
           {tab === "leaders" && (
-            <PredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />
+            <PredictionsLeaderboard
+              leaders={leaders}
+              currentUserId={user?.id}
+              isLoading={leaderLoading}
+              total={leaderData?.total}
+              viewer={leaderboardViewer}
+              viewerName={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name}
+              viewerAvatar={user?.profileImageUrl ?? null}
+              onLoadMore={() => setLeaderLimit((l) => Math.min(l + 100, 500))}
+              loadingMore={leaderFetching && !leaderLoading}
+            />
           )}
         </div>
       </main>
@@ -246,7 +304,7 @@ function TodayTab({
           <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
             <span className="h-4 w-1 rounded-full bg-emerald-500" />
             {g.label}
-            <span className="text-xs font-normal text-muted-foreground">({g.items.length.toLocaleString("ar-SA")})</span>
+            <span className="text-xs font-normal text-muted-foreground">({formatNumber(g.items.length)})</span>
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {g.items.map((m) => (

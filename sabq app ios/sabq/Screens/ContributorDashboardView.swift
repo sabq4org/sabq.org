@@ -215,12 +215,59 @@ nonisolated struct ContributorRanking: Decodable {
     }
 }
 
+// موعد النشر الأسبوعي لكاتب الرأي — بانر بثلاث حالات، أو دعوة لاختيار اليوم
+nonisolated struct WriterScheduleBannerModel: Decodable {
+    let weekday: Int
+    let publishTime: String
+    let nextPublishAt: String
+    let submitDeadline: String
+    let state: String // ok | reminder | late
+    let hasUpcoming: Bool
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        weekday = (try? c.decode(Int.self, forKey: FlexKey("weekday"))) ?? 0
+        publishTime = (try? c.decode(String.self, forKey: FlexKey("publishTime"))) ?? "06:00"
+        nextPublishAt = (try? c.decode(String.self, forKey: FlexKey("nextPublishAt"))) ?? ""
+        submitDeadline = (try? c.decode(String.self, forKey: FlexKey("submitDeadline"))) ?? ""
+        state = (try? c.decode(String.self, forKey: FlexKey("state"))) ?? "ok"
+        hasUpcoming = (try? c.decode(Bool.self, forKey: FlexKey("hasUpcoming"))) ?? false
+    }
+}
+
+nonisolated struct WriterScheduleResponse: Decodable {
+    let banner: WriterScheduleBannerModel?
+    let canChoose: Bool
+    let dayLoads: [Int]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        banner = try? c.decode(WriterScheduleBannerModel.self, forKey: FlexKey("banner"))
+        canChoose = (try? c.decode(Bool.self, forKey: FlexKey("canChoose"))) ?? false
+        dayLoads = (try? c.decode([Int].self, forKey: FlexKey("dayLoads"))) ?? []
+    }
+}
+
+nonisolated struct WriterSchedulePostResponse: Decodable {
+    let success: Bool
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        success = (try? c.decode(Bool.self, forKey: FlexKey("success"))) ?? false
+    }
+}
+
+let writerWeekdaysAr = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
+
 // MARK: - ViewModel
 
 @MainActor
 final class ContributorDashboardViewModel: ObservableObject {
     @Published var analytics: ContributorAnalytics?
     @Published var ranking: ContributorRanking?
+    @Published var schedule: WriterScheduleResponse?
+    @Published var savingDay = false
+    @Published var scheduleError: String?
     @Published var isLoading = true
     @Published var error: String?
 
@@ -230,19 +277,42 @@ final class ContributorDashboardViewModel: ObservableObject {
         do {
             async let a = APIClient.shared.get(ContributorAnalytics.self, path: "/contributor/analytics", ignoreCache: true)
             async let r = APIClient.shared.get(ContributorRanking.self, path: "/contributor/ranking", ignoreCache: true)
+            async let s = APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
             analytics = try await a
             ranking = try? await r
+            schedule = try? await s
         } catch {
             self.error = "تعذّر تحميل البيانات"
         }
         isLoading = false
+    }
+
+    /// تثبيت اليوم المختار — مرة واحدة؛ الخادم يرفض أي تغيير لاحق (409)
+    func pickDay(_ weekday: Int) async {
+        savingDay = true
+        scheduleError = nil
+        struct Body: Encodable { let weekday: Int }
+        do {
+            _ = try await APIClient.shared.post(WriterSchedulePostResponse.self, path: "/contributor/schedule", body: Body(weekday: weekday))
+            schedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+        } catch {
+            scheduleError = "تعذر حفظ اليوم — حاول مرة أخرى"
+        }
+        savingDay = false
     }
 }
 
 // MARK: - View
 
 struct ContributorDashboardView: View {
+    /// true عندما تُعرض كتبويب «أدائي» داخل WriterWorkspaceView — تُخفى
+    /// بطاقات الجدولة والاستطلاعات (انتقلت لتبويب «اليوم») ويتغير العنوان.
+    var embedded = false
+
     @StateObject private var vm = ContributorDashboardViewModel()
+    /// دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة
+    /// حتى لو فات الكاتبَ إشعارُ الدفع. فشل الجلب يمرّ بصمت (القائمة تبقى فارغة).
+    @State private var pendingSurveys: [APIMySurveyInvite] = []
 
     private let accentGreen = Color(red: 0.18, green: 0.80, blue: 0.44)
     private let accentBlue  = Color(red: 0.25, green: 0.56, blue: 0.97)
@@ -258,14 +328,14 @@ struct ContributorDashboardView: View {
             } else if let error = vm.error {
                 VStack(spacing: 16) {
                     Image(systemName: "chart.bar.xaxis.ascending")
-                        .font(.system(size: 40, weight: .light))
+                        .font(SabqFonts.app(size: 40, weight: .light))
                         .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
                     Text(error)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(SabqFonts.app(size: 14, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                     Button { Task { await vm.load() } } label: {
                         Text("إعادة المحاولة")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(SabqFonts.app(size: 14, weight: .semibold))
                             .padding(.horizontal, 20)
                             .padding(.vertical, 8)
                             .background(Capsule().fill(accentBlue.opacity(0.12)))
@@ -275,6 +345,22 @@ struct ContributorDashboardView: View {
             } else if let data = vm.analytics {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection(data)
+                    if !embedded, data.role == "writer", let sched = vm.schedule {
+                        if let banner = sched.banner {
+                            WriterScheduleBannerCard(banner: banner)
+                        } else if sched.canChoose {
+                            WriterDayPickerCard(
+                                dayLoads: sched.dayLoads,
+                                saving: vm.savingDay,
+                                errorText: vm.scheduleError
+                            ) { day in
+                                Task { await vm.pickDay(day) }
+                            }
+                        }
+                    }
+                    if !pendingSurveys.isEmpty {
+                        PendingSurveysCard(invites: pendingSurveys)
+                    }
                     statsCardsSection(data)
                     overviewRow(data)
                     chartSection(data)
@@ -290,10 +376,16 @@ struct ContributorDashboardView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle("لوحة الأداء")
+        .navigationTitle(embedded ? "لوحة الكاتب" : "لوحة الأداء")
         .navigationBarTitleDisplayMode(.large)
-        .task { await vm.load() }
-        .refreshable { await vm.load() }
+        .task {
+            await vm.load()
+            pendingSurveys = (try? await APIClient.shared.fetchMySurveys()) ?? []
+        }
+        .refreshable {
+            await vm.load()
+            pendingSurveys = (try? await APIClient.shared.fetchMySurveys()) ?? []
+        }
     }
 
     // MARK: - Header
@@ -303,14 +395,14 @@ struct ContributorDashboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: data.role == "reporter" ? "newspaper.fill" : "pencil.and.outline")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(accentBlue)
                 Text(data.role == "reporter" ? "لوحة المراسل" : "لوحة كاتب الرأي")
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
             }
             Text("مرحباً بك في لوحة التحكم الخاصة بك")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
     }
@@ -336,16 +428,16 @@ struct ContributorDashboardView: View {
                         .fill(bgColor.opacity(0.12))
                         .frame(width: 30, height: 30)
                     Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(color)
                 }
                 Spacer()
                 if let t = trend {
                     HStack(spacing: 2) {
                         Image(systemName: t >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(SabqFonts.app(size: 8, weight: .bold))
                         Text("\(abs(t))%")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .font(SabqFonts.app(size: 10, weight: .bold))
                     }
                     .foregroundStyle(t >= 0 ? accentGreen : accentPink)
                     .padding(.horizontal, 6)
@@ -354,10 +446,10 @@ struct ContributorDashboardView: View {
                 }
             }
             Text("\(value)")
-                .font(.system(size: 24, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 24, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .padding(14)
@@ -390,21 +482,21 @@ struct ContributorDashboardView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 4) {
                             Image(systemName: "trophy.fill")
-                                .font(.system(size: 12))
+                                .font(SabqFonts.app(size: 12))
                                 .foregroundStyle(.orange)
                             Text("الأفضل هذا الأسبوع")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .semibold))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                         Text(best.title)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                             .lineLimit(3)
                         HStack(spacing: 3) {
                             Image(systemName: "eye.fill")
-                                .font(.system(size: 10))
+                                .font(SabqFonts.app(size: 10))
                             Text("\(best.views)")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.secondaryInk)
                     }
@@ -447,7 +539,7 @@ struct ContributorDashboardView: View {
                             AxisValueLabel {
                                 if let v = value.as(Int.self) {
                                     Text("\(v)")
-                                        .font(.system(size: 9))
+                                        .font(SabqFonts.app(size: 9))
                                 }
                             }
                         }
@@ -475,12 +567,12 @@ struct ContributorDashboardView: View {
                                 .fill(index < 3 ? accentAmber.opacity(0.12) : SabqTheme.outline.opacity(0.15))
                                 .frame(width: 26, height: 26)
                             Text("\(index + 1)")
-                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 12, weight: .heavy))
                                 .foregroundStyle(index < 3 ? accentAmber : SabqTheme.secondaryInk)
                         }
                         VStack(alignment: .leading, spacing: 3) {
                             Text(article.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
                             HStack(spacing: 10) {
@@ -506,23 +598,23 @@ struct ContributorDashboardView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "quote.opening")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(accentCyan)
                     Text("أبرز تعليق هذا الأسبوع")
-                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 12, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 Text("«\(comment.content)»")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .italic()
                 HStack(spacing: 4) {
                     Image(systemName: "person.circle.fill")
-                        .font(.system(size: 11))
+                        .font(SabqFonts.app(size: 11))
                         .foregroundStyle(SabqTheme.secondaryInk)
                     Text("\(comment.userName) · \(comment.articleTitle)")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(1)
                 }
@@ -548,19 +640,19 @@ struct ContributorDashboardView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 4) {
                         Image(systemName: "person.2.fill")
-                            .font(.system(size: 12))
+                            .font(SabqFonts.app(size: 12))
                             .foregroundStyle(.blue)
                         Text("المتابعون")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(SabqFonts.app(size: 11, weight: .semibold))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     Text("\(data.followers.count)")
-                        .font(.system(size: 24, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 24, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     if !data.followers.dailyGrowth.isEmpty {
                         let total = data.followers.dailyGrowth.reduce(0) { $0 + $1.count }
                         Text("+\(total) آخر 30 يوم")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                             .foregroundStyle(.green)
                     }
                 }
@@ -574,36 +666,36 @@ struct ContributorDashboardView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 4) {
                             Image(systemName: "medal.fill")
-                                .font(.system(size: 12))
+                                .font(SabqFonts.app(size: 12))
                                 .foregroundStyle(accentAmber)
                             Text("ترتيبك")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .semibold))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                         if let rank = ranking.rank {
                             HStack(alignment: .firstTextBaseline, spacing: 4) {
                                 Text("#\(rank)")
-                                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                                    .font(SabqFonts.app(size: 24, weight: .heavy))
                                     .foregroundStyle(SabqTheme.ink)
                                 Text("من \(ranking.totalAuthors)")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(SabqFonts.app(size: 11, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                             }
                             if ranking.isTopTen {
                                 Text("الأكثر قراءة")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(SabqFonts.app(size: 10, weight: .bold))
                                     .foregroundStyle(accentAmber)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(accentAmber.opacity(0.12)))
                             } else {
                                 Text("أعلى من \(ranking.percentile)%")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                             }
                         } else {
                             Text("لم تنشر هذا الشهر")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                     }
@@ -626,10 +718,10 @@ struct ContributorDashboardView: View {
             HStack(spacing: 12) {
                 VStack(spacing: 4) {
                     Text("\(pa.thisWeekCount)")
-                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 20, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("هذا الأسبوع")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 .frame(maxWidth: .infinity)
@@ -638,10 +730,10 @@ struct ContributorDashboardView: View {
 
                 VStack(spacing: 4) {
                     Text("\(pa.thisMonthCount)")
-                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 20, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("هذا الشهر")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 .frame(maxWidth: .infinity)
@@ -651,9 +743,9 @@ struct ContributorDashboardView: View {
             if let days = pa.daysSinceLastPublished {
                 HStack(spacing: 4) {
                     Image(systemName: "clock.fill")
-                        .font(.system(size: 11))
+                        .font(SabqFonts.app(size: 11))
                     Text(days == 0 ? "آخر نشر: اليوم" : days == 1 ? "آخر نشر: أمس" : "آخر نشر منذ \(days) يوم")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                 }
                 .foregroundStyle(days > 14 ? .orange : SabqTheme.secondaryInk)
             }
@@ -674,7 +766,7 @@ struct ContributorDashboardView: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(article.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
                             HStack(spacing: 8) {
@@ -699,7 +791,7 @@ struct ContributorDashboardView: View {
     @ViewBuilder
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 16, weight: .heavy, design: .rounded))
+            .font(SabqFonts.app(size: 16, weight: .heavy))
             .foregroundStyle(SabqTheme.ink)
     }
 
@@ -708,11 +800,11 @@ struct ContributorDashboardView: View {
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.ink)
             Spacer()
             Text("\(count)")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 12, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
         }
     }
@@ -721,9 +813,9 @@ struct ContributorDashboardView: View {
     private func miniStat(icon: String, value: Int) -> some View {
         HStack(spacing: 2) {
             Image(systemName: icon)
-                .font(.system(size: 9))
+                .font(SabqFonts.app(size: 9))
             Text("\(value)")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(SabqFonts.app(size: 10, weight: .medium))
         }
         .foregroundStyle(SabqTheme.secondaryInk)
     }
@@ -732,7 +824,7 @@ struct ContributorDashboardView: View {
     private func statusPill(_ status: String, reviewStatus: String?) -> some View {
         let (label, color) = statusInfo(status, reviewStatus: reviewStatus)
         Text(label)
-            .font(.system(size: 9, weight: .bold))
+            .font(SabqFonts.app(size: 9, weight: .bold))
             .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -754,6 +846,195 @@ struct ContributorDashboardView: View {
     private func trendPct(_ current: Int, _ previous: Int) -> Int? {
         guard previous > 0 else { return current > 0 ? 100 : nil }
         return Int(Double(current - previous) / Double(previous) * 100)
+    }
+}
+
+// MARK: - Writer Schedule Cards
+
+/// تنسيق تاريخ ISO بتوقيت الرياض وبالعربية — "الثلاثاء 21 يوليو – 6:00 ص"
+private func formatRiyadhDate(_ iso: String, withTime: Bool = true) -> String {
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let plain = ISO8601DateFormatter()
+    guard let date = withFraction.date(from: iso) ?? plain.date(from: iso) else { return "" }
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "ar")
+    f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+    f.dateFormat = withTime ? "EEEE d MMMM – h:mm a" : "EEEE d MMMM"
+    return f.string(from: date)
+}
+
+/// بانر موعد النشر الأسبوعي بثلاث حالات: عادي / تذكير / متأخر
+struct WriterScheduleBannerCard: View {
+    let banner: WriterScheduleBannerModel
+
+    private var tint: Color {
+        switch banner.state {
+        case "late": return Color(red: 0.86, green: 0.28, blue: 0.28)
+        case "reminder": return Color(red: 0.96, green: 0.62, blue: 0.04)
+        default: return Color(red: 0.25, green: 0.56, blue: 0.97)
+        }
+    }
+
+    private var iconName: String {
+        switch banner.state {
+        case "late": return "exclamationmark.circle.fill"
+        case "reminder": return "bell.badge.fill"
+        default: return "calendar.badge.clock"
+        }
+    }
+
+    private var title: String {
+        switch banner.state {
+        case "late": return "فات موعد النشر لهذا الأسبوع"
+        case "reminder": return "تذكير: اقترب موعد مقالتك"
+        default: return "يومك المخصص للنشر: \(writerWeekdaysAr[banner.weekday])"
+        }
+    }
+
+    private var subtitle: String {
+        switch banner.state {
+        case "late":
+            return "عند إرسال مقالتك الآن ستُجدول ليوم \(formatRiyadhDate(banner.nextPublishAt))"
+        case "reminder":
+            return "أرسلها قبل \(formatRiyadhDate(banner.submitDeadline, withTime: false)) — تُنشر \(formatRiyadhDate(banner.nextPublishAt))"
+        default:
+            if banner.hasUpcoming {
+                return "مقالتك القادمة في مسار النشر — موعدها \(formatRiyadhDate(banner.nextPublishAt))"
+            }
+            return "مقالتك القادمة تُنشر \(formatRiyadhDate(banner.nextPublishAt)) — آخر موعد للإرسال \(formatRiyadhDate(banner.submitDeadline, withTime: false))"
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: iconName)
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                Text(subtitle)
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
+/// بطاقة اختيار الكاتب يومه الأسبوعي — مرة واحدة، مع ازدحام كل يوم
+struct WriterDayPickerCard: View {
+    let dayLoads: [Int]
+    let saving: Bool
+    let errorText: String?
+    let onPick: (Int) -> Void
+
+    @State private var picked: Int?
+
+    private let accentBlue = Color(red: 0.25, green: 0.56, blue: 0.97)
+    private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(accentBlue.opacity(0.12))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "calendar.badge.plus")
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
+                        .foregroundStyle(accentBlue)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("اختر يومك الأسبوعي للنشر")
+                        .font(SabqFonts.app(size: 14, weight: .heavy))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("مقالتك ستُنشر في هذا اليوم من كل أسبوع. يُحدد مرة واحدة، وتغييره لاحقاً عبر إدارة التحرير.")
+                        .font(SabqFonts.app(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(0..<7, id: \.self) { day in
+                    Button {
+                        picked = day
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text(writerWeekdaysAr[day])
+                                .font(SabqFonts.app(size: 12, weight: picked == day ? .heavy : .semibold))
+                                .foregroundStyle(picked == day ? accentBlue : SabqTheme.ink)
+                            Text(day < dayLoads.count && dayLoads[day] > 0 ? "\(dayLoads[day]) كاتب" : "شاغر")
+                                .font(SabqFonts.app(size: 9, weight: .medium))
+                                .foregroundStyle(SabqTheme.secondaryInk)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(picked == day ? accentBlue.opacity(0.12) : SabqTheme.outline.opacity(0.06))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(picked == day ? accentBlue.opacity(0.6) : SabqTheme.outline.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if let errorText {
+                Text(errorText)
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+
+            Button {
+                if let picked { onPick(picked) }
+            } label: {
+                HStack(spacing: 6) {
+                    if saving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                    }
+                    Text(picked == nil ? "اختر يوماً أولاً" : "تثبيت يوم \(writerWeekdaysAr[picked ?? 0])")
+                        .font(SabqFonts.app(size: 13, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(picked == nil || saving ? accentBlue.opacity(0.4) : accentBlue)
+                )
+            }
+            .disabled(picked == nil || saving)
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(accentBlue.opacity(0.35), lineWidth: 1)
+        )
     }
 }
 

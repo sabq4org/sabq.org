@@ -14,6 +14,7 @@ import { getReadingHistory, type ReadingEntry } from "@/lib/readingHistory";
 import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { apiUrl } from "@/lib/queryClient";
 
 interface MatchBadgeProps {
   match: MatchResult;
@@ -34,13 +35,13 @@ function MatchBadge({ match, articleId, size = "md" }: MatchBadgeProps) {
       ? "text-emerald-600 dark:text-emerald-400"
       : match.level === "medium"
         ? "text-amber-600 dark:text-amber-400"
-        : "text-muted-foreground";
+        : "text-foreground/65";
 
   if (!match.hasEnoughHistory) {
     if (isSm) return null;
     return (
       <p
-        className="flex items-center gap-1 text-[11px] text-muted-foreground"
+        className="flex items-center gap-1 text-[11px] font-medium text-foreground/65"
         data-testid={`text-match-empty-${articleId}`}
       >
         <Target className="h-3 w-3" aria-hidden="true" />
@@ -77,7 +78,7 @@ function MatchBadge({ match, articleId, size = "md" }: MatchBadgeProps) {
           {match.score}%
         </span>
         <span
-          className="truncate text-muted-foreground"
+          className="truncate font-medium text-foreground/65"
           data-testid={`text-match-reason-${articleId}`}
         >
           · {match.reason}
@@ -89,14 +90,14 @@ function MatchBadge({ match, articleId, size = "md" }: MatchBadgeProps) {
   return (
     <div className="flex items-center justify-between gap-2 text-xs" data-testid={`block-match-${articleId}`}>
       <p
-        className="line-clamp-1 text-muted-foreground"
+        className="line-clamp-1 font-medium text-foreground/65"
         data-testid={`text-match-reason-${articleId}`}
       >
         {match.reason}
       </p>
       <div className="flex items-center gap-1.5 shrink-0">
-        <Target className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-        <span className="text-muted-foreground whitespace-nowrap">نسبة التطابق</span>
+        <Target className="h-3 w-3 text-foreground/65" aria-hidden="true" />
+        <span className="whitespace-nowrap font-medium text-foreground/65">نسبة التطابق</span>
         <span
           className={`font-bold ${numColor}`}
           data-testid={`text-match-score-${articleId}`}
@@ -211,7 +212,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     impressionQueue.current = [];
 
     try {
-      await fetch('/api/recommendations/impressions', {
+      await fetch(apiUrl('/api/recommendations/impressions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -254,7 +255,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     queueImpression(articleId);
 
     try {
-      await fetch(`/api/recommendations/${recommendationId}/displayed`, {
+      await fetch(apiUrl(`/api/recommendations/${recommendationId}/displayed`), {
         method: 'POST',
         credentials: 'include',
       });
@@ -267,11 +268,11 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     if (!recommendationId) return;
 
     try {
-      await fetch(`/api/recommendations/${recommendationId}/clicked`, {
+      await fetch(apiUrl(`/api/recommendations/${recommendationId}/clicked`), {
         method: 'POST',
         credentials: 'include',
       });
-      await fetch('/api/recommendations/click', {
+      await fetch(apiUrl('/api/recommendations/click'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -289,7 +290,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     try {
       // استخدام نقطة النهاية المخصصة للترقيم
       const response = await fetch(
-        `/api/news/paginated?limit=8&offset=${offset}`,
+        apiUrl(`/api/news/paginated?limit=8&offset=${offset}`),
         { credentials: 'include' }
       );
       
@@ -337,7 +338,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
         </h2>
       </div>
       
-      <p className="text-muted-foreground">
+      <p className="text-sm font-medium text-foreground/70">
         {subtitle || "نشر كل الأخبار المضافة مرتبة من الأحدث إلى الأقدم"}
       </p>
 
@@ -375,6 +376,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                 preferSize="small"
                                 aspectRatio="16/9"
                                 sizes="112px"
+                                eager={index < 3}
                               />
                             ) : (
                               <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
@@ -455,7 +457,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                             </h4>
 
                             {/* Meta Info */}
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-foreground/65">
                               {timeAgo && (
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
@@ -485,7 +487,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
       {/* Desktop View: Grid with 4 columns */}
       {!isCompact && (
       <div className="hidden lg:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {articles.map((article) => {
+        {articles.map((article, index) => {
           const match = matches.get(article.id);
           return (
             <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
@@ -508,6 +510,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                       preferSize="small"
                       aspectRatio="16/9"
                       sizes="(max-width: 1279px) 100vw, 25vw"
+                      eager={index < 4}
                     />
                   </div>
                 )}
@@ -585,13 +588,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                   </h3>
                   
                   {article.excerpt && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
+                    <p className="text-sm font-medium text-foreground/70 line-clamp-2">
                       {article.excerpt}
                     </p>
                   )}
 
                   {article.publishedAt && (
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
+                    <div className="flex items-center gap-4 text-xs font-medium text-foreground/65 pt-2">
                       <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         <span>

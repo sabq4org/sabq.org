@@ -10,7 +10,7 @@
 //   - user_points_total           — current tier + lifetime points per user
 //   - user_loyalty_events         — every action that awarded points
 //   - loyalty_rewards             — catalog of available rewards
-//   - user_rewards_history        — redemption log (status='delivered' counts as spent)
+//   - user_rewards_history        — redemption log (pending + delivered reserve points)
 //
 // All endpoints accept an optional ?period query param (`7d`, `30d`, `90d`,
 // or an ISO range `from=...&to=...`). The default is `30d`.
@@ -26,13 +26,20 @@ import {
   userLoyaltyEvents,
   userRewardsHistory,
   loyaltyRewards,
+  loyaltyCampaigns,
   users,
 } from "@shared/schema";
-import { LOYALTY_TIERS, LOYALTY_ACTION_POINTS } from "@shared/loyalty";
+import {
+  LOYALTY_TIERS,
+  LOYALTY_ACTION_META,
+  LOYALTY_ACTION_POINTS,
+  getLoyaltyActionMeta,
+} from "@shared/loyalty";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { isAuthenticated } from "../auth";
-import { sql, and, gte, lte, eq, desc, inArray } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
+import { z } from "zod";
 
 const router = Router();
 
@@ -68,39 +75,119 @@ async function requireLoyaltyAdmin(req: Request, res: Response, next: () => void
 
 router.use(isAuthenticated, requireLoyaltyAdmin);
 
+const rewardInputSchema = z.object({
+  nameAr: z.string().trim().min(2).max(120),
+  nameEn: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(500).nullable().optional(),
+  pointsCost: z.coerce.number().int().positive().max(10_000_000),
+  rewardType: z.enum(["COUPON", "BADGE", "CONTENT_ACCESS", "PARTNER_REWARD"]),
+  stock: z.coerce.number().int().nonnegative().nullable().optional(),
+  remainingStock: z.coerce.number().int().nonnegative().nullable().optional(),
+  maxRedemptionsPerUser: z.coerce.number().int().positive().nullable().optional(),
+  isActive: z.boolean().optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
+const campaignInputSchema = z.object({
+  nameAr: z.string().trim().min(2).max(120),
+  nameEn: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(500).nullable().optional(),
+  campaignType: z.enum(["BONUS_POINTS", "MULTIPLIER", "SPECIAL_EVENT"]),
+  targetAction: z.string().trim().nullable().optional(),
+  multiplier: z.coerce.number().min(1).max(10).optional(),
+  bonusPoints: z.coerce.number().int().min(0).max(100_000).optional(),
+  isActive: z.boolean().optional(),
+  startAt: z.string().datetime(),
+  endAt: z.string().datetime(),
+}).refine((value) => new Date(value.endAt) > new Date(value.startAt), {
+  message: "تاريخ النهاية يجب أن يكون بعد تاريخ البداية",
+  path: ["endAt"],
+}).refine((value) => !value.targetAction || (
+  value.targetAction !== "ADMIN_ADJUSTMENT" && Boolean(LOYALTY_ACTION_META[value.targetAction])
+), {
+  message: "الفعل المستهدف غير معروف",
+  path: ["targetAction"],
+});
+
+router.get("/metadata", (_req, res) => {
+  res.json({
+    actions: Object.entries(LOYALTY_ACTION_META).map(([action, meta]) => ({ action, ...meta })),
+    tiers: LOYALTY_TIERS,
+    audiences: [
+      { value: "readers", labelAr: "القراء", descriptionAr: "حسابات القراء خارج فريق سبق" },
+      { value: "team", labelAr: "فريق سبق", descriptionAr: "الحسابات الوظيفية ونطاقات سبق" },
+      { value: "all", labelAr: "الكل", descriptionAr: "القراء والفريق معاً" },
+    ],
+  });
+});
+
 // ----------------------------------------------------------------------------
 // Period parsing — accepts `?period=7d|30d|90d|all`, or explicit
 // `?from=YYYY-MM-DD&to=YYYY-MM-DD`. Returns a {from, to} pair where `from` is
 // null for "all-time" queries.
 // ----------------------------------------------------------------------------
 
-type DateRange = { from: Date | null; to: Date; label: string };
+type DateRange = { from: Date | null; to: Date; label: string; period: "7d" | "30d" | "90d" | "all" | "custom" };
+type Audience = "readers" | "team" | "all";
+
+const TEAM_USER_SQL = sql`(
+  LOWER(COALESCE(u.email, '')) LIKE '%@sabq.org'
+  OR LOWER(COALESCE(u.email, '')) LIKE '%@sabq.sa'
+  OR LOWER(COALESCE(u.role, 'reader')) NOT IN ('reader', 'user', 'member', 'subscriber')
+)`;
+
+function parseAudience(req: Request): Audience {
+  const value = String(req.query.audience ?? "readers");
+  return value === "all" || value === "team" ? value : "readers";
+}
+
+function audienceSql(audience: Audience) {
+  const segment = audience === "all"
+    ? sql`TRUE`
+    : audience === "team"
+      ? TEAM_USER_SQL
+      : sql`NOT ${TEAM_USER_SQL}`;
+  return sql`(${segment}) AND (u.status != 'deleted' OR u.status IS NULL)`;
+}
+
+function boundedInt(value: unknown, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
+function riyadhDate(value: string, endOfDay = false): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const suffix = endOfDay ? "T23:59:59.999+03:00" : "T00:00:00.000+03:00";
+  const parsed = new Date(`${value}${suffix}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 function parsePeriod(req: Request): DateRange {
   const now = new Date();
   if (req.query.from) {
-    const from = new Date(String(req.query.from));
-    const to = req.query.to ? new Date(String(req.query.to)) : now;
-    if (!isNaN(from.getTime())) {
-      return { from, to, label: "مخصّصة" };
+    const from = riyadhDate(String(req.query.from));
+    const to = req.query.to ? riyadhDate(String(req.query.to), true) : now;
+    if (from && to && from <= to) {
+      return { from, to, label: "فترة مخصّصة", period: "custom" };
     }
   }
   const period = String(req.query.period ?? "30d");
   switch (period) {
     case "7d": {
       const from = new Date(now); from.setDate(from.getDate() - 7);
-      return { from, to: now, label: "آخر 7 أيام" };
+      return { from, to: now, label: "آخر 7 أيام", period: "7d" };
     }
     case "90d": {
       const from = new Date(now); from.setDate(from.getDate() - 90);
-      return { from, to: now, label: "آخر 90 يوم" };
+      return { from, to: now, label: "آخر 90 يوم", period: "90d" };
     }
     case "all":
-      return { from: null, to: now, label: "كل الفترات" };
+      return { from: null, to: now, label: "كل الفترات", period: "all" };
     case "30d":
     default: {
       const from = new Date(now); from.setDate(from.getDate() - 30);
-      return { from, to: now, label: "آخر 30 يوم" };
+      return { from, to: now, label: "آخر 30 يوم", period: "30d" };
     }
   }
 }
@@ -110,7 +197,7 @@ function previousRange(current: DateRange): DateRange | null {
   const spanMs = current.to.getTime() - current.from.getTime();
   const to = new Date(current.from);
   const from = new Date(current.from.getTime() - spanMs);
-  return { from, to, label: "الفترة السابقة" };
+  return { from, to, label: "الفترة السابقة", period: current.period };
 }
 
 // ----------------------------------------------------------------------------
@@ -123,46 +210,102 @@ function previousRange(current: DateRange): DateRange | null {
 router.get("/overview", async (req, res) => {
   try {
     const range = parsePeriod(req);
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
     const prev = previousRange(range);
 
     const [totals] = await db.execute<{
       total_members: number;
       avg_points: number;
       lifetime_total: number;
+      current_balance: number;
     }>(sql`
       SELECT
         COUNT(*)::int AS total_members,
-        COALESCE(AVG(lifetime_points), 0)::int AS avg_points,
-        COALESCE(SUM(lifetime_points), 0)::bigint AS lifetime_total
-      FROM user_points_total
+        COALESCE(AVG(upt.lifetime_points), 0)::int AS avg_points,
+        COALESCE(SUM(upt.lifetime_points), 0)::bigint AS lifetime_total,
+        COALESCE(SUM(upt.total_points), 0)::bigint AS current_balance
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      WHERE ${audienceFilter}
     `).then((r) => r.rows as any[]);
 
-    const earnedNow = await sumEarned(range);
-    const earnedPrev = prev ? await sumEarned(prev) : null;
-    const spentNow = await sumSpent(range);
-    const spentPrev = prev ? await sumSpent(prev) : null;
+    const earnedNow = await sumEarned(range, audience);
+    const earnedPrev = prev ? await sumEarned(prev, audience) : null;
+    const spentNow = await sumSpent(range, audience);
+    const spentPrev = prev ? await sumSpent(prev, audience) : null;
 
-    // New members added in this window — joins `users.created_at` since
-    // user_points_total.created_at only exists after the first awarded
-    // action. We approximate by the points row creation; for an exact
-    // signup count we'd need users.createdAt.
-    const newMembers = range.from
+    const activeMembers = await db.execute<{ count: number }>(sql`
+      SELECT COUNT(DISTINCT e.user_id)::int AS count
+      FROM user_loyalty_events e
+      LEFT JOIN users u ON u.id = e.user_id
+      WHERE ${audienceFilter}
+        AND e.points > 0
+        ${range.from ? sql`AND e.created_at >= ${range.from}` : sql``}
+        AND e.created_at <= ${range.to}
+    `).then((r) => Number((r.rows as any[])[0]?.count ?? 0));
+
+    // This deliberately measures first participation in loyalty, not account
+    // registration. The UI labels it "منضمون للولاء" to keep the definition
+    // honest and avoid mixing all registered users with loyalty participants.
+    const newLoyaltyMembers = range.from
       ? await db.execute<{ count: number }>(sql`
           SELECT COUNT(*)::int AS count
-          FROM user_points_total
-          WHERE created_at >= ${range.from} AND created_at <= ${range.to}
+          FROM user_points_total upt
+          LEFT JOIN users u ON u.id = upt.user_id
+          WHERE ${audienceFilter}
+            AND upt.created_at >= ${range.from}
+            AND upt.created_at <= ${range.to}
         `).then((r) => (r.rows as any[])[0]?.count ?? 0)
       : null;
 
+    const [qualityRow] = await db.execute<{
+      members_needing_review: number;
+      future_events: number;
+    }>(sql`
+      WITH period_points AS (
+        SELECT
+          e.user_id,
+          COALESCE(SUM(GREATEST(e.points, 0)), 0)::bigint AS positive_points
+        FROM user_loyalty_events e
+        LEFT JOIN users u ON u.id = e.user_id
+        WHERE ${audienceFilter}
+          ${range.from ? sql`AND e.created_at >= ${range.from}` : sql``}
+          AND e.created_at <= ${range.to}
+        GROUP BY e.user_id
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE period_points.positive_points > upt.lifetime_points)::int AS members_needing_review,
+        (
+          SELECT COUNT(*)::int
+          FROM user_loyalty_events future_event
+          LEFT JOIN users u ON u.id = future_event.user_id
+          WHERE ${audienceFilter}
+            AND future_event.created_at > NOW() + INTERVAL '5 minutes'
+        ) AS future_events
+      FROM period_points
+      JOIN user_points_total upt ON upt.user_id = period_points.user_id
+    `).then((r) => r.rows as any[]);
+
+    const redemptionRate = earnedNow > 0 ? (spentNow / earnedNow) * 100 : 0;
+
     res.json({
-      range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label },
+      range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label, period: range.period },
+      audience,
+      quality: {
+        membersNeedingReview: Number(qualityRow?.members_needing_review ?? 0),
+        futureEvents: Number(qualityRow?.future_events ?? 0),
+      },
       kpis: {
         totalMembers: Number(totals?.total_members ?? 0),
-        newMembersInRange: newMembers,
+        activeMembers,
+        newLoyaltyMembersInRange: newLoyaltyMembers,
         pointsEarned: earnedNow,
         pointsEarnedPrev: earnedPrev,
         pointsSpent: spentNow,
         pointsSpentPrev: spentPrev,
+        redemptionRate,
+        currentBalance: Number(totals?.current_balance ?? 0),
         avgLifetimePerMember: Number(totals?.avg_points ?? 0),
         totalLifetimePoints: Number(totals?.lifetime_total ?? 0),
       },
@@ -173,30 +316,32 @@ router.get("/overview", async (req, res) => {
   }
 });
 
-async function sumEarned(range: DateRange): Promise<number> {
-  const where = range.from
-    ? sql`WHERE created_at >= ${range.from} AND created_at <= ${range.to}`
-    : sql``;
+async function sumEarned(range: DateRange, audience: Audience = "all"): Promise<number> {
+  const audienceFilter = audienceSql(audience);
   const [row] = await db.execute<{ total: number }>(sql`
-    SELECT COALESCE(SUM(points), 0)::bigint AS total
-    FROM user_loyalty_events
-    ${where}
+    SELECT COALESCE(SUM(GREATEST(e.points, 0)), 0)::bigint AS total
+    FROM user_loyalty_events e
+    LEFT JOIN users u ON u.id = e.user_id
+    WHERE ${audienceFilter}
+      ${range.from ? sql`AND e.created_at >= ${range.from}` : sql``}
+      AND e.created_at <= ${range.to}
   `).then((r) => r.rows as any[]);
   return Number(row?.total ?? 0);
 }
 
-async function sumSpent(range: DateRange): Promise<number> {
+async function sumSpent(range: DateRange, audience: Audience = "all"): Promise<number> {
   // user_rewards_history uses `redeemed_at`, NOT `created_at` — discovered
   // 2026-05-20 when the admin overview cards came back empty because this
   // query threw a `column "created_at" does not exist` 500.
-  const where = range.from
-    ? sql`AND redeemed_at >= ${range.from} AND redeemed_at <= ${range.to}`
-    : sql``;
+  const audienceFilter = audienceSql(audience);
   const [row] = await db.execute<{ total: number }>(sql`
-    SELECT COALESCE(SUM(points_spent), 0)::bigint AS total
-    FROM user_rewards_history
-    WHERE status = 'delivered'
-    ${where}
+    SELECT COALESCE(SUM(h.points_spent), 0)::bigint AS total
+    FROM user_rewards_history h
+    LEFT JOIN users u ON u.id = h.user_id
+    WHERE h.status IN ('pending', 'delivered')
+      AND ${audienceFilter}
+      ${range.from ? sql`AND h.redeemed_at >= ${range.from}` : sql``}
+      AND h.redeemed_at <= ${range.to}
   `).then((r) => r.rows as any[]);
   return Number(row?.total ?? 0);
 }
@@ -207,6 +352,8 @@ async function sumSpent(range: DateRange): Promise<number> {
 
 router.get("/tier-distribution", async (req, res) => {
   try {
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
     // Compute the tier from lifetime_points using the live thresholds in
     // LOYALTY_TIERS, NOT the stored rank_level column. The two diverge
     // for the legacy users that the Phase 1 migration grandfathered to
@@ -232,7 +379,9 @@ router.get("/tier-distribution", async (req, res) => {
           ELSE 1
         END AS live_level,
         COUNT(*)::int AS count
-      FROM user_points_total
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      WHERE ${audienceFilter}
       GROUP BY live_level
       ORDER BY live_level
     `).then((r) => r.rows as any[]);
@@ -242,12 +391,15 @@ router.get("/tier-distribution", async (req, res) => {
     // stored level so we can annotate the right segment in the UI.
     const grandfathered = await db.execute<{ stored_level: number; count: number }>(sql`
       SELECT rank_level AS stored_level, COUNT(*)::int AS count
-      FROM user_points_total
-      WHERE
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      WHERE ${audienceFilter}
+        AND (
         (rank_level = 5 AND lifetime_points < 10000)
         OR (rank_level = 4 AND lifetime_points < 2000)
         OR (rank_level = 3 AND lifetime_points < 500)
         OR (rank_level = 2 AND lifetime_points < 100)
+        )
       GROUP BY rank_level
     `).then((r) => r.rows as any[]);
 
@@ -271,7 +423,7 @@ router.get("/tier-distribution", async (req, res) => {
       };
     });
 
-    res.json({ total, tiers });
+    res.json({ total, tiers, audience });
   } catch (err) {
     console.error("[LoyaltyAdmin] /tier-distribution error:", err);
     res.status(500).json({ message: "تعذر جلب توزيع المستويات" });
@@ -285,27 +437,62 @@ router.get("/tier-distribution", async (req, res) => {
 router.get("/time-series", async (req, res) => {
   try {
     const range = parsePeriod(req);
-    const from = range.from ?? new Date(range.to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
+    let from = range.from;
+
+    if (!from) {
+      const [earliest] = await db.execute<{ first_at: string | null }>(sql`
+        SELECT MIN(first_at)::text AS first_at
+        FROM (
+          SELECT MIN(e.created_at) AS first_at
+          FROM user_loyalty_events e
+          LEFT JOIN users u ON u.id = e.user_id
+          WHERE ${audienceFilter}
+          UNION ALL
+          SELECT MIN(h.redeemed_at) AS first_at
+          FROM user_rewards_history h
+          LEFT JOIN users u ON u.id = h.user_id
+          WHERE ${audienceFilter}
+        ) dates
+      `).then((r) => r.rows as any[]);
+      from = earliest?.first_at ? new Date(earliest.first_at) : new Date(range.to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    const monthly = range.period === "all";
+    const earnedBucket = monthly
+      ? sql`TO_CHAR(DATE_TRUNC('month', e.created_at AT TIME ZONE 'Asia/Riyadh'), 'YYYY-MM')`
+      : sql`DATE(e.created_at AT TIME ZONE 'Asia/Riyadh')::text`;
+    const spentBucket = monthly
+      ? sql`TO_CHAR(DATE_TRUNC('month', h.redeemed_at AT TIME ZONE 'Asia/Riyadh'), 'YYYY-MM')`
+      : sql`DATE(h.redeemed_at AT TIME ZONE 'Asia/Riyadh')::text`;
 
     const earned = await db.execute<{ day: string; total: number }>(sql`
       SELECT
-        DATE(created_at AT TIME ZONE 'Asia/Riyadh')::text AS day,
-        COALESCE(SUM(points), 0)::int AS total
-      FROM user_loyalty_events
-      WHERE created_at >= ${from} AND created_at <= ${range.to}
-      GROUP BY day
-      ORDER BY day
+        ${earnedBucket} AS day,
+        COALESCE(SUM(GREATEST(e.points, 0)), 0)::int AS total
+      FROM user_loyalty_events e
+      LEFT JOIN users u ON u.id = e.user_id
+      WHERE ${audienceFilter}
+        AND e.points > 0
+        AND e.created_at >= ${from}
+        AND e.created_at <= ${range.to}
+      GROUP BY 1
+      ORDER BY 1
     `).then((r) => r.rows as any[]);
 
     const spent = await db.execute<{ day: string; total: number }>(sql`
       SELECT
-        DATE(created_at AT TIME ZONE 'Asia/Riyadh')::text AS day,
-        COALESCE(SUM(points_spent), 0)::int AS total
-      FROM user_rewards_history
-      WHERE status = 'delivered'
-        AND created_at >= ${from} AND created_at <= ${range.to}
-      GROUP BY day
-      ORDER BY day
+        ${spentBucket} AS day,
+        COALESCE(SUM(h.points_spent), 0)::int AS total
+      FROM user_rewards_history h
+      LEFT JOIN users u ON u.id = h.user_id
+      WHERE h.status IN ('pending', 'delivered')
+        AND ${audienceFilter}
+        AND h.redeemed_at >= ${from}
+        AND h.redeemed_at <= ${range.to}
+      GROUP BY 1
+      ORDER BY 1
     `).then((r) => r.rows as any[]);
 
     // Merge by day so the line chart has a single point per date.
@@ -320,7 +507,12 @@ router.get("/time-series", async (req, res) => {
     }
     const series = Array.from(map.values()).sort((a, b) => a.day.localeCompare(b.day));
 
-    res.json({ series, range: { from: from.toISOString(), to: range.to.toISOString(), label: range.label } });
+    res.json({
+      series,
+      granularity: monthly ? "month" : "day",
+      audience,
+      range: { from: from.toISOString(), to: range.to.toISOString(), label: range.label, period: range.period },
+    });
   } catch (err) {
     console.error("[LoyaltyAdmin] /time-series error:", err);
     res.status(500).json({ message: "تعذر جلب سلسلة النقاط" });
@@ -332,34 +524,11 @@ router.get("/time-series", async (req, res) => {
 //    the most points in the window.
 // ----------------------------------------------------------------------------
 
-const ACTION_LABELS_AR: Record<string, string> = {
-  READ: "قراءة",
-  READ_DEEP: "قراءة عميقة",
-  LIKE: "إعجاب",
-  SHARE: "مشاركة",
-  COMMENT: "تعليق",
-  NOTIFICATION_OPEN: "فتح إشعار",
-  DAILY_LOGIN: "دخول يومي",
-  WC_PREDICTION_WIN: "فوز بتوقّع مباراة",
-};
-
-const ACTION_ICONS: Record<string, string> = {
-  READ: "📖",
-  READ_DEEP: "📕",
-  LIKE: "❤️",
-  SHARE: "🔄",
-  COMMENT: "💬",
-  NOTIFICATION_OPEN: "🔔",
-  DAILY_LOGIN: "🚪",
-  WC_PREDICTION_WIN: "🏆",
-};
-
 router.get("/action-breakdown", async (req, res) => {
   try {
     const range = parsePeriod(req);
-    const where = range.from
-      ? sql`WHERE created_at >= ${range.from} AND created_at <= ${range.to}`
-      : sql``;
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
 
     const rows = await db.execute<{
       action: string;
@@ -368,27 +537,45 @@ router.get("/action-breakdown", async (req, res) => {
       unique_users: number;
     }>(sql`
       SELECT
-        action,
+        e.action,
         COUNT(*)::int AS events,
-        COALESCE(SUM(points), 0)::int AS points,
-        COUNT(DISTINCT user_id)::int AS unique_users
-      FROM user_loyalty_events
-      ${where}
-      GROUP BY action
+        COALESCE(SUM(GREATEST(e.points, 0)), 0)::int AS points,
+        COUNT(DISTINCT e.user_id)::int AS unique_users
+      FROM user_loyalty_events e
+      LEFT JOIN users u ON u.id = e.user_id
+      WHERE ${audienceFilter}
+        AND e.points > 0
+        ${range.from ? sql`AND e.created_at >= ${range.from}` : sql``}
+        AND e.created_at <= ${range.to}
+      GROUP BY e.action
       ORDER BY points DESC
     `).then((r) => r.rows as any[]);
 
-    const actions = rows.map((r) => ({
-      action: r.action,
-      labelAr: ACTION_LABELS_AR[r.action] ?? r.action,
-      icon: ACTION_ICONS[r.action] ?? "•",
-      pointsPerEvent: LOYALTY_ACTION_POINTS[r.action as keyof typeof LOYALTY_ACTION_POINTS] ?? null,
-      events: Number(r.events),
-      points: Number(r.points),
-      uniqueUsers: Number(r.unique_users),
-    }));
+    const totalPoints = rows.reduce((sum, row) => sum + Number(row.points), 0);
+    const actions = rows.map((r) => {
+      const meta = getLoyaltyActionMeta(r.action);
+      const events = Number(r.events);
+      const points = Number(r.points);
+      return {
+        action: r.action,
+        labelAr: meta.labelAr,
+        icon: meta.icon,
+        category: meta.category,
+        configuredPointsPerEvent: LOYALTY_ACTION_POINTS[r.action as keyof typeof LOYALTY_ACTION_POINTS] ?? null,
+        averagePointsPerEvent: events > 0 ? points / events : 0,
+        shareOfPoints: totalPoints > 0 ? (points / totalPoints) * 100 : 0,
+        events,
+        points,
+        uniqueUsers: Number(r.unique_users),
+      };
+    });
 
-    res.json({ actions, range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label } });
+    res.json({
+      actions,
+      totalPoints,
+      audience,
+      range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label, period: range.period },
+    });
   } catch (err) {
     console.error("[LoyaltyAdmin] /action-breakdown error:", err);
     res.status(500).json({ message: "تعذر جلب تفصيل الأفعال" });
@@ -402,9 +589,11 @@ router.get("/action-breakdown", async (req, res) => {
 router.get("/top-users", async (req, res) => {
   try {
     const range = parsePeriod(req);
-    const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 10)));
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
+    const limit = boundedInt(req.query.limit, 10, 1, 50);
     const where = range.from
-      ? sql`AND e.created_at >= ${range.from} AND e.created_at <= ${range.to}`
+      ? sql`AND e.created_at >= ${range.from}`
       : sql``;
 
     const rows = await db.execute<{
@@ -415,6 +604,7 @@ router.get("/top-users", async (req, res) => {
       profile_image_url: string | null;
       points_in_range: number;
       actions_in_range: number;
+      total_points: number;
       lifetime_points: number;
       rank_level: number;
       current_rank: string;
@@ -427,16 +617,20 @@ router.get("/top-users", async (req, res) => {
         u.profile_image_url,
         COALESCE(SUM(e.points), 0)::int AS points_in_range,
         COUNT(*)::int AS actions_in_range,
+        upt.total_points,
         upt.lifetime_points,
         upt.rank_level,
         upt.current_rank
       FROM user_loyalty_events e
       LEFT JOIN users u ON u.id = e.user_id
       LEFT JOIN user_points_total upt ON upt.user_id = e.user_id
-      WHERE u.status != 'deleted' OR u.status IS NULL
+      WHERE (u.status != 'deleted' OR u.status IS NULL)
+        AND ${audienceFilter}
+        AND e.points > 0
       ${where}
+        AND e.created_at <= ${range.to}
       GROUP BY e.user_id, u.first_name, u.last_name, u.email, u.profile_image_url,
-               upt.lifetime_points, upt.rank_level, upt.current_rank
+               upt.total_points, upt.lifetime_points, upt.rank_level, upt.current_rank
       ORDER BY points_in_range DESC
       LIMIT ${limit}
     `).then((r) => r.rows as any[]);
@@ -463,6 +657,7 @@ router.get("/top-users", async (req, res) => {
       const liveTier = tierFromPoints(livePoints);
       const storedLevel = Number(r.rank_level);
       const isGrandfathered = storedLevel > liveTier.level;
+      const pointsInRange = Number(r.points_in_range);
       const displayName = [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || r.email || "مستخدم";
       return {
         rank: i + 1,
@@ -470,9 +665,11 @@ router.get("/top-users", async (req, res) => {
         name: displayName,
         email: r.email,
         avatar: r.profile_image_url,
-        pointsInRange: Number(r.points_in_range),
+        pointsInRange,
         actionsInRange: Number(r.actions_in_range),
         lifetimePoints: livePoints,
+        currentBalance: Number(r.total_points ?? 0),
+        needsReview: pointsInRange > livePoints,
         isGrandfathered,
         tier: {
           level: liveTier.level,
@@ -482,10 +679,171 @@ router.get("/top-users", async (req, res) => {
       };
     });
 
-    res.json({ users, range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label } });
+    res.json({
+      users,
+      audience,
+      range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label, period: range.period },
+    });
   } catch (err) {
     console.error("[LoyaltyAdmin] /top-users error:", err);
     res.status(500).json({ message: "تعذر جلب أفضل المستخدمين" });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// 5b. Searchable loyalty members directory
+// ----------------------------------------------------------------------------
+
+router.get("/members", async (req, res) => {
+  try {
+    const range = parsePeriod(req);
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
+    const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 120) : "";
+    const action = typeof req.query.action === "string" && req.query.action !== "all"
+      ? req.query.action
+      : null;
+    const tierCandidate = Number(req.query.tier);
+    const tier = Number.isInteger(tierCandidate) && tierCandidate >= 1 && tierCandidate <= 5
+      ? tierCandidate
+      : null;
+    const page = boundedInt(req.query.page, 1, 1, 100_000);
+    const limit = boundedInt(req.query.limit, 25, 10, 100);
+    const offset = (page - 1) * limit;
+    const searchPattern = `%${search}%`;
+
+    const searchFilter = search
+      ? sql`AND (
+          u.email ILIKE ${searchPattern}
+          OR COALESCE(u.first_name, '') ILIKE ${searchPattern}
+          OR COALESCE(u.last_name, '') ILIKE ${searchPattern}
+          OR CONCAT_WS(' ', u.first_name, u.last_name) ILIKE ${searchPattern}
+        )`
+      : sql``;
+    const tierFilter = tier
+      ? sql`AND (
+          CASE
+            WHEN upt.lifetime_points >= 10000 THEN 5
+            WHEN upt.lifetime_points >= 2000 THEN 4
+            WHEN upt.lifetime_points >= 500 THEN 3
+            WHEN upt.lifetime_points >= 100 THEN 2
+            ELSE 1
+          END
+        ) = ${tier}`
+      : sql``;
+    const actionExistsFilter = action
+      ? sql`AND EXISTS (
+          SELECT 1
+          FROM user_loyalty_events filtered_event
+          WHERE filtered_event.user_id = upt.user_id
+            AND filtered_event.action = ${action}
+            AND filtered_event.points > 0
+            ${range.from ? sql`AND filtered_event.created_at >= ${range.from}` : sql``}
+            AND filtered_event.created_at <= ${range.to}
+        )`
+      : sql``;
+
+    const [countRow] = await db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      WHERE (u.status != 'deleted' OR u.status IS NULL)
+        AND ${audienceFilter}
+        ${searchFilter}
+        ${tierFilter}
+        ${actionExistsFilter}
+    `).then((r) => r.rows as any[]);
+
+    const rows = await db.execute<{
+      user_id: string;
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+      profile_image_url: string | null;
+      role: string | null;
+      total_points: number;
+      lifetime_points: number;
+      rank_level: number;
+      last_activity_at: string | null;
+      points_in_range: number;
+      actions_in_range: number;
+    }>(sql`
+      SELECT
+        upt.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.profile_image_url,
+        u.role,
+        upt.total_points,
+        upt.lifetime_points,
+        upt.rank_level,
+        upt.last_activity_at,
+        COALESCE(stats.points, 0)::int AS points_in_range,
+        COALESCE(stats.actions, 0)::int AS actions_in_range
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(e.points), 0)::int AS points,
+          COUNT(*)::int AS actions
+        FROM user_loyalty_events e
+        WHERE e.user_id = upt.user_id
+          AND e.points > 0
+          ${range.from ? sql`AND e.created_at >= ${range.from}` : sql``}
+          AND e.created_at <= ${range.to}
+          ${action ? sql`AND e.action = ${action}` : sql``}
+      ) stats ON TRUE
+      WHERE (u.status != 'deleted' OR u.status IS NULL)
+        AND ${audienceFilter}
+        ${searchFilter}
+        ${tierFilter}
+        ${actionExistsFilter}
+      ORDER BY points_in_range DESC, upt.lifetime_points DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `).then((r) => r.rows as any[]);
+
+    const members = rows.map((row) => {
+      const lifetimePoints = Number(row.lifetime_points ?? 0);
+      const liveTier = [...LOYALTY_TIERS].reverse().find(
+        (candidate) => lifetimePoints >= candidate.minLifetimePoints,
+      ) ?? LOYALTY_TIERS[0];
+      const pointsInRange = Number(row.points_in_range ?? 0);
+      return {
+        userId: row.user_id,
+        name: [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || row.email || "مستخدم",
+        email: row.email,
+        avatar: row.profile_image_url,
+        role: row.role,
+        currentBalance: Number(row.total_points ?? 0),
+        lifetimePoints,
+        pointsInRange,
+        actionsInRange: Number(row.actions_in_range ?? 0),
+        lastActivityAt: row.last_activity_at,
+        needsReview: pointsInRange > lifetimePoints,
+        isGrandfathered: Number(row.rank_level) > liveTier.level,
+        tier: {
+          level: liveTier.level,
+          nameAr: liveTier.nameAr,
+          color: liveTier.color,
+        },
+      };
+    });
+
+    const total = Number(countRow?.count ?? 0);
+    res.json({
+      members,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      audience,
+      range: { from: range.from?.toISOString() ?? null, to: range.to.toISOString(), label: range.label, period: range.period },
+    });
+  } catch (err) {
+    console.error("[LoyaltyAdmin] /members error:", err);
+    res.status(500).json({ message: "تعذر جلب أعضاء الولاء" });
   }
 });
 
@@ -496,6 +854,8 @@ router.get("/top-users", async (req, res) => {
 router.get("/rewards-performance", async (req, res) => {
   try {
     const range = parsePeriod(req);
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
 
     const rows = await db.execute<{
       id: string;
@@ -506,6 +866,7 @@ router.get("/rewards-performance", async (req, res) => {
       stock: number | null;
       is_active: boolean;
       redemptions: number;
+      pending_redemptions: number;
       total_points_spent: number;
     }>(sql`
       SELECT
@@ -517,13 +878,20 @@ router.get("/rewards-performance", async (req, res) => {
         r.stock,
         r.is_active,
         COALESCE(redemption.count, 0)::int AS redemptions,
+        COALESCE(redemption.pending_count, 0)::int AS pending_redemptions,
         COALESCE(redemption.total_points, 0)::int AS total_points_spent
       FROM loyalty_rewards r
       LEFT JOIN LATERAL (
-        SELECT COUNT(*)::int AS count, COALESCE(SUM(points_spent), 0)::int AS total_points
+        SELECT
+          COUNT(*) FILTER (WHERE h.status IN ('pending', 'delivered'))::int AS count,
+          COUNT(*) FILTER (WHERE h.status = 'pending')::int AS pending_count,
+          COALESCE(SUM(h.points_spent) FILTER (WHERE h.status IN ('pending', 'delivered')), 0)::int AS total_points
         FROM user_rewards_history h
-        WHERE h.reward_id = r.id AND h.status = 'delivered'
-        ${range.from ? sql`AND h.redeemed_at >= ${range.from} AND h.redeemed_at <= ${range.to}` : sql``}
+        LEFT JOIN users u ON u.id = h.user_id
+        WHERE h.reward_id = r.id
+        AND ${audienceFilter}
+        ${range.from ? sql`AND h.redeemed_at >= ${range.from}` : sql``}
+        AND h.redeemed_at <= ${range.to}
       ) redemption ON TRUE
       ORDER BY redemptions DESC, r.points_cost DESC
     `).then((r) => r.rows as any[]);
@@ -538,9 +906,11 @@ router.get("/rewards-performance", async (req, res) => {
         totalStock: r.stock,
         isActive: r.is_active,
         redemptions: Number(r.redemptions),
+        pendingRedemptions: Number(r.pending_redemptions),
         totalPointsSpent: Number(r.total_points_spent),
         lowStock: r.remaining_stock !== null && r.remaining_stock < 20,
       })),
+      audience,
     });
   } catch (err) {
     console.error("[LoyaltyAdmin] /rewards-performance error:", err);
@@ -548,12 +918,181 @@ router.get("/rewards-performance", async (req, res) => {
   }
 });
 
+router.post("/rewards", async (req, res) => {
+  const parsed = rewardInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "بيانات المكافأة غير مكتملة", issues: parsed.error.flatten() });
+  }
+
+  try {
+    const input = parsed.data;
+    const stock = input.stock ?? null;
+    const [reward] = await db.insert(loyaltyRewards).values({
+      nameAr: input.nameAr,
+      nameEn: input.nameEn,
+      description: input.description ?? null,
+      pointsCost: input.pointsCost,
+      rewardType: input.rewardType,
+      stock,
+      remainingStock: input.remainingStock ?? stock,
+      maxRedemptionsPerUser: input.maxRedemptionsPerUser ?? null,
+      isActive: input.isActive ?? true,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+    }).returning();
+    res.status(201).json({ reward });
+  } catch (err) {
+    console.error("[LoyaltyAdmin] POST /rewards error:", err);
+    res.status(500).json({ message: "تعذر إنشاء المكافأة" });
+  }
+});
+
+router.patch("/rewards/:id", async (req, res) => {
+  const parsed = rewardInputSchema.partial().safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "بيانات المكافأة غير صالحة", issues: parsed.error.flatten() });
+  }
+
+  try {
+    const input = parsed.data;
+    const updates: Record<string, unknown> = { ...input };
+    if (input.expiresAt !== undefined) {
+      updates.expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+    }
+    const [reward] = await db.update(loyaltyRewards)
+      .set(updates)
+      .where(sql`${loyaltyRewards.id} = ${req.params.id}`)
+      .returning();
+    if (!reward) return res.status(404).json({ message: "المكافأة غير موجودة" });
+    res.json({ reward });
+  } catch (err) {
+    console.error("[LoyaltyAdmin] PATCH /rewards/:id error:", err);
+    res.status(500).json({ message: "تعذر تحديث المكافأة" });
+  }
+});
+
 // ----------------------------------------------------------------------------
-// 7. Recent activity — last 20 loyalty events (writers can spot anomalies)
+// 7. Loyalty campaigns — operational management + issuance performance
 // ----------------------------------------------------------------------------
 
-router.get("/recent-activity", async (_req, res) => {
+router.get("/campaigns", async (_req, res) => {
   try {
+    const rows = await db.execute<any>(sql`
+      SELECT
+        c.id,
+        c.name_ar,
+        c.name_en,
+        c.description,
+        c.campaign_type,
+        c.target_action,
+        c.multiplier,
+        c.bonus_points,
+        c.is_active,
+        c.start_at,
+        c.end_at,
+        COUNT(e.id)::int AS events,
+        COUNT(DISTINCT e.user_id)::int AS unique_users,
+        COALESCE(SUM(e.points), 0)::bigint AS awarded_points
+      FROM loyalty_campaigns c
+      LEFT JOIN user_loyalty_events e ON e.campaign_id = c.id
+      GROUP BY c.id
+      ORDER BY c.start_at DESC
+    `).then((r) => r.rows as any[]);
+    const now = Date.now();
+    res.json({
+      campaigns: rows.map((row) => {
+        const startAt = new Date(row.start_at);
+        const endAt = new Date(row.end_at);
+        const status = !row.is_active
+          ? "paused"
+          : startAt.getTime() > now
+            ? "upcoming"
+            : endAt.getTime() < now
+              ? "ended"
+              : "active";
+        return {
+          id: row.id,
+          nameAr: row.name_ar,
+          nameEn: row.name_en,
+          description: row.description,
+          campaignType: row.campaign_type,
+          targetAction: row.target_action,
+          targetActionLabel: row.target_action ? getLoyaltyActionMeta(row.target_action).labelAr : "كل الأفعال",
+          multiplier: Number(row.multiplier ?? 1),
+          bonusPoints: Number(row.bonus_points ?? 0),
+          isActive: row.is_active,
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+          status,
+          events: Number(row.events ?? 0),
+          uniqueUsers: Number(row.unique_users ?? 0),
+          awardedPoints: Number(row.awarded_points ?? 0),
+        };
+      }),
+    });
+  } catch (err) {
+    console.error("[LoyaltyAdmin] GET /campaigns error:", err);
+    res.status(500).json({ message: "تعذر جلب حملات الولاء" });
+  }
+});
+
+router.post("/campaigns", async (req, res) => {
+  const parsed = campaignInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "بيانات الحملة غير مكتملة", issues: parsed.error.flatten() });
+  }
+
+  try {
+    const input = parsed.data;
+    const [campaign] = await db.insert(loyaltyCampaigns).values({
+      nameAr: input.nameAr,
+      nameEn: input.nameEn,
+      description: input.description ?? null,
+      campaignType: input.campaignType,
+      targetAction: input.targetAction || null,
+      multiplier: input.multiplier ?? 1,
+      bonusPoints: input.bonusPoints ?? 0,
+      isActive: input.isActive ?? true,
+      startAt: new Date(input.startAt),
+      endAt: new Date(input.endAt),
+    }).returning();
+    res.status(201).json({ campaign });
+  } catch (err) {
+    console.error("[LoyaltyAdmin] POST /campaigns error:", err);
+    res.status(500).json({ message: "تعذر إنشاء الحملة" });
+  }
+});
+
+router.patch("/campaigns/:id", async (req, res) => {
+  const toggleOnly = z.object({ isActive: z.boolean() }).safeParse(req.body);
+  if (!toggleOnly.success) {
+    return res.status(400).json({ message: "يمكن تحديث حالة الحملة فقط من هذه الشاشة" });
+  }
+
+  try {
+    const [campaign] = await db.update(loyaltyCampaigns)
+      .set({ isActive: toggleOnly.data.isActive })
+      .where(sql`${loyaltyCampaigns.id} = ${req.params.id}`)
+      .returning();
+    if (!campaign) return res.status(404).json({ message: "الحملة غير موجودة" });
+    res.json({ campaign });
+  } catch (err) {
+    console.error("[LoyaltyAdmin] PATCH /campaigns/:id error:", err);
+    res.status(500).json({ message: "تعذر تحديث الحملة" });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// 8. Recent activity — latest loyalty events (admins can spot anomalies)
+// ----------------------------------------------------------------------------
+
+router.get("/recent-activity", async (req, res) => {
+  try {
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
+    const action = typeof req.query.action === "string" && req.query.action !== "all"
+      ? req.query.action
+      : null;
+    const limit = boundedInt(req.query.limit, 40, 1, 100);
     const rows = await db.execute<{
       id: string;
       user_id: string;
@@ -561,28 +1100,36 @@ router.get("/recent-activity", async (_req, res) => {
       last_name: string | null;
       action: string;
       points: number;
+      source: string | null;
       created_at: string;
     }>(sql`
       SELECT
-        e.id, e.user_id, e.action, e.points, e.created_at,
+        e.id, e.user_id, e.action, e.points, e.source, e.created_at,
         u.first_name, u.last_name
       FROM user_loyalty_events e
       LEFT JOIN users u ON u.id = e.user_id
+      WHERE ${audienceFilter}
+        ${action ? sql`AND e.action = ${action}` : sql``}
       ORDER BY e.created_at DESC
-      LIMIT 20
+      LIMIT ${limit}
     `).then((r) => r.rows as any[]);
 
     res.json({
-      events: rows.map((r) => ({
-        id: r.id,
-        userId: r.user_id,
-        userName: [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "مستخدم",
-        action: r.action,
-        actionLabel: ACTION_LABELS_AR[r.action] ?? r.action,
-        actionIcon: ACTION_ICONS[r.action] ?? "•",
-        points: Number(r.points),
-        createdAt: r.created_at,
-      })),
+      events: rows.map((r) => {
+        const meta = getLoyaltyActionMeta(r.action);
+        return {
+          id: r.id,
+          userId: r.user_id,
+          userName: [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "مستخدم",
+          action: r.action,
+          actionLabel: meta.labelAr,
+          actionIcon: meta.icon,
+          source: r.source,
+          points: Number(r.points),
+          createdAt: r.created_at,
+        };
+      }),
+      audience,
     });
   } catch (err) {
     console.error("[LoyaltyAdmin] /recent-activity error:", err);
@@ -597,6 +1144,8 @@ router.get("/recent-activity", async (_req, res) => {
 router.get("/export", async (req, res) => {
   try {
     const range = parsePeriod(req);
+    const audience = parseAudience(req);
+    const audienceFilter = audienceSql(audience);
     const wb = new ExcelJS.Workbook();
     wb.creator = "Sabq Loyalty Admin";
     wb.created = new Date();
@@ -617,10 +1166,12 @@ router.get("/export", async (req, res) => {
         COUNT(*)::int AS total_members,
         COALESCE(AVG(lifetime_points), 0)::int AS avg_points,
         COALESCE(SUM(lifetime_points), 0)::bigint AS lifetime_total
-      FROM user_points_total
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      WHERE ${audienceFilter}
     `).then((r) => (r.rows as any[])[0]);
-    const earned = await sumEarned(range);
-    const spent = await sumSpent(range);
+    const earned = await sumEarned(range, audience);
+    const spent = await sumSpent(range, audience);
     kpiSheet.addRow({ label: "إجمالي الأعضاء", value: Number(overview?.total_members ?? 0) });
     kpiSheet.addRow({ label: `نقاط مكتسبة (${range.label})`, value: earned });
     kpiSheet.addRow({ label: `نقاط مستبدلة (${range.label})`, value: spent });
@@ -636,12 +1187,24 @@ router.get("/export", async (req, res) => {
       { header: "الحد الأدنى للنقاط", key: "min", width: 20 },
       { header: "عدد الأعضاء", key: "count", width: 15 },
     ];
-    const tierRows = await db.execute<{ rank_level: number; count: number }>(sql`
-      SELECT rank_level, COUNT(*)::int AS count
-      FROM user_points_total GROUP BY rank_level ORDER BY rank_level
+    const tierRows = await db.execute<{ live_level: number; count: number }>(sql`
+      SELECT
+        CASE
+          WHEN upt.lifetime_points >= 10000 THEN 5
+          WHEN upt.lifetime_points >= 2000 THEN 4
+          WHEN upt.lifetime_points >= 500 THEN 3
+          WHEN upt.lifetime_points >= 100 THEN 2
+          ELSE 1
+        END AS live_level,
+        COUNT(*)::int AS count
+      FROM user_points_total upt
+      LEFT JOIN users u ON u.id = upt.user_id
+      WHERE ${audienceFilter}
+      GROUP BY 1
+      ORDER BY 1
     `).then((r) => r.rows as any[]);
     for (const tier of LOYALTY_TIERS) {
-      const row = tierRows.find((r) => Number(r.rank_level) === tier.level);
+      const row = tierRows.find((r) => Number(r.live_level) === tier.level);
       tierSheet.addRow({
         name: `${tier.nameAr} (المستوى ${tier.level})`,
         min: tier.minLifetimePoints,
@@ -671,19 +1234,24 @@ router.get("/export", async (req, res) => {
       FROM user_loyalty_events e
       LEFT JOIN users u ON u.id = e.user_id
       LEFT JOIN user_points_total upt ON upt.user_id = e.user_id
-      ${range.from ? sql`WHERE e.created_at >= ${range.from} AND e.created_at <= ${range.to}` : sql``}
+      WHERE ${audienceFilter}
+        AND (u.status != 'deleted' OR u.status IS NULL)
+        AND e.points > 0
+        ${range.from ? sql`AND e.created_at >= ${range.from}` : sql``}
+        AND e.created_at <= ${range.to}
       GROUP BY e.user_id, u.first_name, u.last_name, u.email, upt.lifetime_points, upt.rank_level
       ORDER BY points_in_range DESC LIMIT 50
     `).then((r) => r.rows as any[]);
     topRows.forEach((r, i) => {
-      const tier = LOYALTY_TIERS.find((t) => t.level === Number(r.rank_level)) ?? LOYALTY_TIERS[0];
+      const lifetime = Number(r.lifetime_points ?? 0);
+      const tier = [...LOYALTY_TIERS].reverse().find((t) => lifetime >= t.minLifetimePoints) ?? LOYALTY_TIERS[0];
       topSheet.addRow({
         rank: i + 1,
         name: [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "—",
         email: r.email ?? "—",
         tier: tier.nameAr,
         points: Number(r.points_in_range),
-        lifetime: Number(r.lifetime_points ?? 0),
+        lifetime,
         actions: Number(r.actions_in_range),
       });
     });
@@ -710,8 +1278,12 @@ router.get("/export", async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS count, COALESCE(SUM(points_spent), 0)::int AS total_points
         FROM user_rewards_history h
-        WHERE h.reward_id = r.id AND h.status = 'delivered'
-        ${range.from ? sql`AND h.created_at >= ${range.from} AND h.created_at <= ${range.to}` : sql``}
+        LEFT JOIN users u ON u.id = h.user_id
+        WHERE h.reward_id = r.id
+          AND h.status IN ('pending', 'delivered')
+          AND ${audienceFilter}
+        ${range.from ? sql`AND h.redeemed_at >= ${range.from}` : sql``}
+        AND h.redeemed_at <= ${range.to}
       ) redemption ON TRUE
       ORDER BY redemptions DESC
     `).then((r) => r.rows as any[]);

@@ -62,7 +62,7 @@ struct OmqListView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -77,16 +77,16 @@ struct OmqListView: View {
                     .fill(SabqTheme.sky.opacity(0.14))
                     .frame(width: 56, height: 56)
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: 26, weight: .light))
+                    .font(SabqFonts.app(size: 26, weight: .light))
                     .foregroundStyle(SabqTheme.sky)
                     .symbolRenderingMode(.hierarchical)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("تحليلات عميقة")
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Text("تحليلات أسبوعية لأهم القضايا بمزيج من نماذج الذكاء الاصطناعي")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .lineLimit(2)
             }
@@ -99,7 +99,7 @@ struct OmqListView: View {
             HStack(spacing: 8) {
                 if let cat = a.categoryName ?? a.category, !cat.isEmpty {
                     Text(cat)
-                        .font(.system(size: 10, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .heavy))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .foregroundStyle(SabqTheme.sky)
@@ -108,9 +108,9 @@ struct OmqListView: View {
                 Spacer(minLength: 0)
                 if let views = a.viewsCount, views > 0 {
                     HStack(spacing: 4) {
-                        Image(systemName: "eye.fill").font(.system(size: 10))
+                        Image(systemName: "eye.fill").font(SabqFonts.app(size: 10))
                         Text("\(views)")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(SabqFonts.app(size: 11, weight: .semibold))
                             .monospacedDigit()
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
@@ -118,7 +118,7 @@ struct OmqListView: View {
             }
 
             Text(a.title)
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
@@ -126,7 +126,7 @@ struct OmqListView: View {
 
             if let topic = a.topic, !topic.isEmpty, topic != a.title {
                 Text(topic)
-                    .font(.system(size: 12))
+                    .font(SabqFonts.app(size: 12))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
             }
@@ -135,7 +135,7 @@ struct OmqListView: View {
                 HStack(spacing: 6) {
                     ForEach(kw.prefix(3), id: \.self) { tag in
                         Text("#\(tag)")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(SabqFonts.app(size: 10, weight: .semibold))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -212,7 +212,7 @@ struct OmqDetailView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -225,20 +225,20 @@ struct OmqDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.sky)
                 Text("تحليل عميق")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 11, weight: .heavy))
                     .foregroundStyle(SabqTheme.sky)
             }
             Text(a.title)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 22, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
             if let topic = a.topic, !topic.isEmpty, topic != a.title {
                 Text(topic)
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
         }
@@ -270,15 +270,15 @@ struct OmqDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
             }
 
             Text(body)
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
                 .foregroundStyle(SabqTheme.ink.opacity(0.9))
                 .lineSpacing(6)
                 .multilineTextAlignment(.leading)

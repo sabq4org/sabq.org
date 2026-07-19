@@ -65,7 +65,7 @@ struct SectionsView: View {
                 ForEach(trendingTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.primaryStart)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
@@ -148,7 +148,7 @@ struct CategoryArticlesView: View {
                                         ProgressView().tint(SabqTheme.primaryEnd)
                                     }
                                     Text("تحميل المزيد")
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(SabqFonts.app(size: 14, weight: .semibold))
                                         .foregroundStyle(SabqTheme.primaryEnd)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -205,11 +205,11 @@ struct CategoryArticlesView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(category.title)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 26, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(category.subtitle)
-                    .font(.system(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 15, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(4)
 

@@ -15,6 +15,7 @@ import { ar } from "date-fns/locale";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import type { Task } from "@shared/schema";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ interface User {
 
 export function TaskEditDialog({ taskId, onClose, onSuccess }: TaskEditDialogProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: task, isLoading } = useQuery<Task>({
     queryKey: ['/api/tasks', taskId],
@@ -65,6 +67,10 @@ export function TaskEditDialog({ taskId, onClose, onSuccess }: TaskEditDialogPro
       if (!res.ok) throw new Error('Failed to fetch users');
       return await res.json();
     },
+    // /api/users requires admin.manage_settings; only fetch for users who can,
+    // so non-admins don't generate (retry-amplified) 403s.
+    enabled: hasPermission(user, 'admin.manage_settings'),
+    retry: false,
   });
   const users = Array.isArray(usersRaw) ? usersRaw : [];
 

@@ -12,6 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Lock, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getDefaultRedirectPath, type User } from "@/hooks/useAuth";
+import { consumePostAuthReturn } from "@/lib/postAuthRedirect";
 
 const setPasswordSchema = z.object({
   currentPassword: z.string().min(1, "كلمة المرور الحالية مطلوبة"),
@@ -65,7 +66,8 @@ export default function SetPassword() {
       });
 
       setTimeout(() => {
-        const redirectPath = getDefaultRedirectPath(userData);
+        const fallback = getDefaultRedirectPath(userData);
+        const redirectPath = fallback === "/complete-name" ? fallback : consumePostAuthReturn(fallback);
         window.location.href = redirectPath;
       }, 2000);
     } catch (error: any) {

@@ -1,0 +1,398 @@
+import Foundation
+import ActivityKit
+import SwiftUI
+
+// MARK: - مدير المتابعة اللحظية على شاشة القفل (Live Activity)
+//
+// يربط مباراة بعينها بنشاط حيّ يظهر على شاشة القفل والجزيرة الديناميكية.
+// المستخدم «يحدّد المباراة» من زرّ في مركز المباراة → `start(for:)`.
+//
+// التحديث:
+//   • محليًّا: عند تحديث لقطة المباراة (التطبيق نشط/خلفية قصيرة) عبر `update(with:)`.
+//   • عن بُعد لاحقًا: نلتقط `pushToken` لكل نشاط ونرفعه للخادم كي يدفع APNs
+//     تحديثات النتيجة حتى لو كان التطبيق مغلقًا (مرحلة تالية على الخادم).
+//
+// متاح من iOS 16.2+ (هدف التطبيق 17.0)، وبشرط تفعيل المستخدم لـLive Activities
+// (إعدادات > VARA الرياضي > Live Activities) — `areActivitiesEnabled`.
+
+@MainActor
+@Observable
+final class SpLiveActivityManager {
+    static let shared = SpLiveActivityManager()
+    private init() {}
+
+    /// معرّفات المباريات التي لها نشاط حيّ قائم (لعكس حالة الزرّ في الواجهة).
+    private(set) var activeFixtureIds: Set<Int> = []
+    /// يظهر للمستخدم بدل ابتلاع فشل ActivityKit بصمت.
+    private(set) var startErrorMessage: String?
+
+    /// النشاطات القائمة مفهرسة بمعرّف المباراة.
+    private var activities: [Int: Activity<SpMatchActivityAttributes>] = [:]
+
+    /// آخر توكن دفع لكل مباراة (لإبلاغ الخادم بالإلغاء عند الإيقاف اليدوي).
+    private var pushTokens: [Int: String] = [:]
+    private var didAdoptExisting = false
+    private var didStartObservers = false
+    private var observedActivityIds: Set<String> = []
+    private var activityUpdatesTask: Task<Void, Never>?
+    private var pushToStartTask: Task<Void, Never>?
+
+    private let pushToStartTokenKey = "sabqsports.liveActivity.pushToStartToken"
+    private let installationIdKey = "sabqsports.installation.id"
+
+    var isSupported: Bool { ActivityAuthorizationInfo().areActivitiesEnabled }
+
+    func isActive(_ fixtureId: Int) -> Bool {
+        adoptExistingIfNeeded()
+        return activeFixtureIds.contains(fixtureId)
+    }
+
+    /// يبدّل المتابعة اللحظية لمباراة (يبدأ إن لم تكن قائمة، وإلا يُنهيها).
+    func toggle(for fixture: SpFixture) {
+        adoptExistingIfNeeded()
+        if isActive(fixture.id) { end(fixtureId: fixture.id) }
+        else { start(for: fixture) }
+    }
+
+    // MARK: بدء النشاط
+    func start(for fixture: SpFixture) {
+        // المعرّف الموجب = API-Football، والسالب = مباراة عالمية من TheSports.
+        // الخادم يحلّ المصدرين عبر المسار نفسه؛ رفض السالب هنا كان يجعل زر الهاتف
+        // ظاهرًا لكن بلا استجابة في شاشة «عالمية».
+        guard fixture.id != 0 else {
+            startErrorMessage = L("تعذّر تحديد المباراة")
+            return
+        }
+        adoptExistingIfNeeded()
+        pruneInactiveActivities()
+        guard isSupported else {
+            startErrorMessage = L("فعّل Live Activities من إعدادات الجهاز لهذا التطبيق.")
+            return
+        }
+        // نشاط قائم فعلًا → زامن الواجهة بدل ابتلاع النقرة بصمت.
+        if let existing = activities[fixture.id] {
+            let state = existing.activityState
+            if state == .active || state == .stale {
+                activeFixtureIds.insert(fixture.id)
+                return
+            }
+            activities[fixture.id] = nil
+            pushTokens[fixture.id] = nil
+            activeFixtureIds.remove(fixture.id)
+            observedActivityIds.remove(existing.id)
+        }
+        startErrorMessage = nil
+        // أظهر الحالة فورًا (تفاؤليًّا) ريثما تكتمل عملية البدء غير المتزامنة.
+        activeFixtureIds.insert(fixture.id)
+        Task { await startAsync(for: fixture) }
+    }
+
+    private func startAsync(for fixture: SpFixture) async {
+        guard activities[fixture.id] == nil else { return }
+        // نزّل شعارَي الفريقين للحاوية المشتركة (أفضل-جهد، بمهلة قصيرة).
+        async let homeFile = SpSharedContainer.cacheLogo(from: fixture.home.logo)
+        async let awayFile = SpSharedContainer.cacheLogo(from: fixture.away.logo)
+        let (hFile, aFile) = await (homeFile, awayFile)
+
+        let attrs = SpMatchActivityAttributes(
+            fixtureId: fixture.id,
+            homeName: fixture.home.name,
+            awayName: fixture.away.name,
+            homeLogo: fixture.home.logo,
+            awayLogo: fixture.away.logo,
+            homeLogoFile: hFile,
+            awayLogoFile: aFile,
+            competition: activityCompetitionName(for: fixture),
+            kickoff: fixture.kickoff
+        )
+        let state = makeState(from: fixture)
+        let content = ActivityContent(state: state, staleDate: staleDate(for: fixture))
+        do {
+            let activity = try Activity.request(
+                attributes: attrs,
+                content: content,
+                pushType: .token   // نطلب توكن دفع لتمكين تحديثات APNs لاحقًا
+            )
+            adopt(activity)
+        } catch let pushError {
+            // بعض أجهزة/TestFlight ترفض إنشاء push token مؤقتًا رغم سماح Live
+            // Activities. لا نجعل الزر ميتًا: ابدأ نشاطًا محليًّا فورًا؛ سيستمر
+            // تحديثه من التطبيق، بينما النسخة ذات التوكن تبقى المسار المفضّل.
+            do {
+                let activity = try Activity.request(
+                    attributes: attrs,
+                    content: content,
+                    pushType: nil
+                )
+                adopt(activity)
+                #if DEBUG
+                print("[LiveActivity] push token unavailable; local fallback started: \(pushError)")
+                #endif
+            } catch let localError {
+                activeFixtureIds.remove(fixture.id)
+                let ns = localError as NSError
+                startErrorMessage = Lf(
+                    "رفض iOS بدء النشاط المباشر (%d). تأكد من تفعيل Live Activities وعدم وجود أنشطة كثيرة مفتوحة.",
+                    ns.code
+                )
+                #if DEBUG
+                print("[LiveActivity] start failed: push=\(pushError), local=\(localError)")
+                #endif
+            }
+        }
+    }
+
+    func clearStartError() { startErrorMessage = nil }
+
+    // MARK: تحديث الحالة الحيّة
+    func update(with fixture: SpFixture, lastEvent: String? = nil) {
+        guard let activity = activities[fixture.id] else { return }
+        var state = makeState(from: fixture)
+        // حافظ على آخر حدث معروض إن لم يحمل المستدعي أحدث — التحديث المحلي من
+        // «مبارياتي» بلا أحداث، ومسحه كان يُخفي شريحة الهدف/البطاقة المدفوعة.
+        state.lastEvent = lastEvent ?? activity.content.state.lastEvent
+        // مرساة الخادم (matchClock) هي السلطة: مثبّتة عنده وتطابق دفعات APNs
+        // حرفيًّا فلا قفز عند تعاقب التحديث المحلي والدفع البعيد — نعتمدها كما هي.
+        // التسامح المحلي (75ث) يبقى فقط للمرساة المحسوبة محليًّا (خادم لم يحقنها):
+        // لا نُزحزح مرساةً جاريةً لفرقٍ طفيف (اختلاف لحظة انقلاب الدقيقة بين
+        // المصادر كان يجعل العدّاد يسبق ثم يرتدّ).
+        if fixture.status.clockStartEpoch == nil,
+           let current = activity.content.state.clockStartEpoch,
+           let candidate = state.clockStartEpoch,
+           abs(current - candidate) < 75 {
+            state.clockStartEpoch = current
+        }
+        Task {
+            await activity.update(.init(state: state, staleDate: staleDate(for: fixture)))
+            // أنهِ النشاط تلقائيًّا بعد نهاية المباراة بفترة قصيرة.
+            if fixture.status.finished {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                end(fixtureId: fixture.id, final: state)
+            }
+        }
+    }
+
+    // MARK: إنهاء النشاط
+    func end(fixtureId: Int, final: SpMatchActivityAttributes.ContentState? = nil) {
+        guard let activity = activities[fixtureId] else {
+            activeFixtureIds.remove(fixtureId)
+            return
+        }
+        let content: ActivityContent<SpMatchActivityAttributes.ContentState>? =
+            final.map { .init(state: $0, staleDate: nil) }
+        Task {
+            await activity.end(content, dismissalPolicy: .after(.now + 4 * 3600))
+        }
+        // أبلِغ الخادم بإلغاء التوكن كي يتوقّف الدفع.
+        if let token = pushTokens[fixtureId] {
+            Task { try? await APIClient.shared.endLiveActivity(pushToken: token) }
+        }
+        activities[fixtureId] = nil
+        pushTokens[fixtureId] = nil
+        activeFixtureIds.remove(fixtureId)
+    }
+
+    func endAll() {
+        for id in Array(activities.keys) { end(fixtureId: id) }
+    }
+
+    // MARK: مساعدات
+
+    func adoptExistingIfNeeded() {
+        guard !didAdoptExisting else { return }
+        didAdoptExisting = true
+        adoptExisting()
+    }
+
+    /// يبدأ مراقبي ActivityKit مرة واحدة عند إقلاع التطبيق. `activityUpdates`
+    /// ضروري للنشاط الذي يبدأه APNs في الخلفية؛ قائمة `activities` وحدها تلتقط
+    /// الموجود لحظة الإقلاع فقط وقد تفوّت نشاطًا يصل لاحقًا.
+    func startObservers() {
+        guard !didStartObservers else { return }
+        didStartObservers = true
+        adoptExistingIfNeeded()
+
+        activityUpdatesTask = Task { [weak self] in
+            for await activity in Activity<SpMatchActivityAttributes>.activityUpdates {
+                guard !Task.isCancelled else { return }
+                self?.adopt(activity)
+            }
+        }
+
+        if #available(iOS 17.2, *) {
+            observePushToStartTokenUpdates()
+        }
+    }
+
+    /// يلتقط النشاطات الباقية من جلسة سابقة بعد إعادة تشغيل التطبيق.
+    private func adoptExisting() {
+        for activity in Activity<SpMatchActivityAttributes>.activities {
+            adopt(activity)
+        }
+    }
+
+    private func adopt(_ activity: Activity<SpMatchActivityAttributes>) {
+        let fixtureId = activity.attributes.fixtureId
+        activities[fixtureId] = activity
+        activeFixtureIds.insert(fixtureId)
+        guard observedActivityIds.insert(activity.id).inserted else { return }
+        observePushToken(activity)
+        observeActivityState(activity)
+    }
+
+    /// يزيل نشاطات انتهت أو أغلقها المستخدم/النظام من الحالة المحلية؛ بقاؤها
+    /// كان يجعل الزر يظنها قائمة وقد يراكم النشاطات حتى حد ActivityKit.
+    private func observeActivityState(_ activity: Activity<SpMatchActivityAttributes>) {
+        let fixtureId = activity.attributes.fixtureId
+        Task { [weak self] in
+            for await state in activity.activityStateUpdates {
+                guard !Task.isCancelled else { return }
+                if state == .ended || state == .dismissed {
+                    guard let self else { return }
+                    if self.activities[fixtureId]?.id == activity.id {
+                        self.activities[fixtureId] = nil
+                        self.pushTokens[fixtureId] = nil
+                        self.activeFixtureIds.remove(fixtureId)
+                    }
+                    self.observedActivityIds.remove(activity.id)
+                    return
+                }
+            }
+        }
+    }
+
+    private func pruneInactiveActivities() {
+        for (fixtureId, activity) in activities {
+            if activity.activityState == .ended || activity.activityState == .dismissed {
+                activities[fixtureId] = nil
+                pushTokens[fixtureId] = nil
+                activeFixtureIds.remove(fixtureId)
+                observedActivityIds.remove(activity.id)
+            }
+        }
+    }
+
+    /// يعيد رفع آخر Push-to-Start token بعد استعادة الجلسة أو تسجيل دخول جديد.
+    /// إن وصل التوكن قبل استعادة Keychain يبقى محليًّا حتى هذه المزامنة.
+    func syncPushToStartToken() async {
+        guard SpAuthStore.shared.isLoggedIn,
+              let token = UserDefaults.standard.string(forKey: pushToStartTokenKey),
+              !token.isEmpty else { return }
+        try? await APIClient.shared.registerLiveActivityStartToken(
+            token, deviceId: installationId())
+    }
+
+    /// يُستدعى أثناء تسجيل الخروج قبل إزالة Bearer token. نبقي القيمة محليًّا
+    /// لأنها توكن للتثبيت لا للحساب؛ ستُربط بالحساب التالي بعد دخوله فقط.
+    func unregisterPushToStartToken() async {
+        guard let token = UserDefaults.standard.string(forKey: pushToStartTokenKey),
+              !token.isEmpty else { return }
+        try? await APIClient.shared.unregisterLiveActivityStartToken(
+            token, deviceId: installationId())
+    }
+
+    @available(iOS 17.2, *)
+    private func observePushToStartTokenUpdates() {
+        pushToStartTask = Task { [weak self] in
+            for await tokenData in Activity<SpMatchActivityAttributes>.pushToStartTokenUpdates {
+                guard !Task.isCancelled, let self else { return }
+                let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                UserDefaults.standard.set(token, forKey: self.pushToStartTokenKey)
+                await self.syncPushToStartToken()
+            }
+        }
+    }
+
+    private func installationId() -> String {
+        if let existing = UserDefaults.standard.string(forKey: installationIdKey), !existing.isEmpty {
+            return existing
+        }
+        let value = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(value, forKey: installationIdKey)
+        return value
+    }
+
+    private func makeState(from f: SpFixture) -> SpMatchActivityAttributes.ContentState {
+        var minute = ""
+        if f.status.live, let m = f.status.elapsed, m > 0 {
+            let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
+            minute = "\(m)\(extra)'"
+        }
+        return .init(
+            homeScore: f.goals.home ?? 0,
+            awayScore: f.goals.away ?? 0,
+            homePenaltyScore: f.penaltyScore?.home,
+            awayPenaltyScore: f.penaltyScore?.away,
+            minute: minute,
+            statusLabel: f.status.finished ? L("انتهت") : f.status.label,
+            isLive: f.status.live,
+            isFinished: f.status.finished,
+            lastEvent: nil,
+            // مرساة الخادم أولًا (نفس قيمة دفعات APNs والموجز) — الحساب المحلي
+            // احتياط فقط للمسارات التي لا تحقنها بعد (كأس العالم).
+            clockStartEpoch: f.status.clockStartEpoch ?? Self.clockStartEpoch(for: f.status)
+        )
+    }
+
+    private func activityCompetitionName(for fixture: SpFixture) -> String {
+        if let name = fixture.competition?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        switch fixture.competitionSlug {
+        case "pro-league": return L("دوري روشن")
+        case "kings-cup": return L("كأس الملك")
+        case "super-cup": return L("كأس السوبر السعودي")
+        case "uefa-super-cup": return L("كأس السوبر الأوروبي")
+        case "division-1": return L("دوري يلو")
+        case "division-2": return L("دوري الدرجة الثانية")
+        case "womens-league": return L("الدوري السعودي للسيدات")
+        case "world-cup": return L("كأس العالم")
+        case "champions-league": return L("دوري أبطال أوروبا")
+        case "europa-league": return L("الدوري الأوروبي")
+        case "premier-league": return L("الدوري الإنجليزي")
+        case "la-liga", "laliga": return L("الدوري الإسباني")
+        case "serie-a": return L("الدوري الإيطالي")
+        case "bundesliga": return L("الدوري الألماني")
+        case "ligue-1": return L("الدوري الفرنسي")
+        default: return L("مباراة مباشرة")
+        }
+    }
+
+    /// مرساة الساعة الذاتية: تُحسب فقط حين تكون الساعة **جاريةً فعليًّا** (لا استراحة).
+    /// «الدقيقة m» عند المزوّد = اللعب جارٍ داخلها (ساعة البث تعرض m-1:xx)، فالإرساء
+    /// الصحيح = الآن − (m-1)×60 كي يطابق العدّاد ساعة البث لا يسبقها بدقيقة.
+    /// تُعاد nil وقت التوقّف ليُجمَّد العرض على الدقيقة المدفوعة.
+    static func clockStartEpoch(for s: SpStatus) -> Double? {
+        guard s.live, !s.finished, let m = s.elapsed, m > 0, isClockRunning(code: s.code) else { return nil }
+        let playedMinutes = m + (s.extra ?? 0)
+        guard playedMinutes >= 1 else { return nil }
+        return Date().timeIntervalSince1970 - Double(playedMinutes - 1) * 60.0
+    }
+
+    /// أكواد توقّف الساعة (استراحة/فاصل الإضافي/ركلات الترجيح/إيقاف) — تُجمّد العدّاد.
+    private static func isClockRunning(code: String) -> Bool {
+        let paused: Set<String> = ["HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP", "HALF_TIME"]
+        return !paused.contains(code.uppercased())
+    }
+
+    /// تاريخ تقادم الحالة: قصير أثناء اللعب (دفعات الدقيقة الدورية تمدّده ضمنيًّا)؛
+    /// وحتى الانطلاق+دقيقتين للمباراة القادمة كي لا يُعتَّم العدّاد التنازلي قبل البدء.
+    private func staleDate(for f: SpFixture) -> Date? {
+        if f.status.live { return Date().addingTimeInterval(180) }
+        if !f.started, f.kickoff > Date() { return f.kickoff.addingTimeInterval(120) }
+        return nil
+    }
+
+    /// يراقب توكن الدفع الخاص بالنشاط ويرفعه للخادم (لتحديثات APNs المستقبلية).
+    private func observePushToken(_ activity: Activity<SpMatchActivityAttributes>) {
+        let fixtureId = activity.attributes.fixtureId
+        Task {
+            for await tokenData in activity.pushTokenUpdates {
+                let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                pushTokens[fixtureId] = token
+                // يعمل للزوّار أيضًا (الخادم يلتقط userId إن وُجدت جلسة فقط).
+                try? await APIClient.shared.registerLiveActivity(fixtureId: fixtureId, pushToken: token)
+            }
+        }
+    }
+}

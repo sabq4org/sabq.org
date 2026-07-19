@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
-import { bulkMediaOperation, type BulkMediaAction } from "../services/mediaLibraryService";
+import { bulkMediaOperation, saveExistingMedia, type BulkMediaAction } from "../services/mediaLibraryService";
 import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
-import { semanticSearchMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
+import { semanticSearchMedia, suggestMediaForArticle, similarMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
+import { getDuplicateGroups } from "../services/mediaHashService";
+import { getMediaHealthReport } from "../services/mediaHealthService";
 import { saveGeneratedImage } from "../services/mediaGenerationService";
 import { getMediaStats } from "../services/mediaStatsService";
+import { getMediaGovernance } from "../services/mediaGovernanceService";
 import { isAllowedMediaUrl } from "../utils/mediaUrl";
 
 const router: Router = Router();
@@ -126,6 +129,33 @@ router.get(
   },
 );
 
+// GET /api/media/suggest-for-article - semantic suggestions for an article
+// draft (title + optional body slice → embedding → ranked library images,
+// sensitive-flagged excluded). Powers the editor's hero-image suggestion strip
+// and the picker's "اقتراحات ذكية" tab. Gated like /api/media/analyze: any
+// writer who can edit an article.
+router.get(
+  "/api/media/suggest-for-article",
+  requireAuth,
+  requireAnyPermission("articles.create", "articles.edit_own", "articles.edit_any", "media.view"),
+  async (req: any, res) => {
+    try {
+      const title = typeof req.query.title === "string" ? req.query.title : "";
+      if (!title.trim()) {
+        return res.json({ files: [], total: 0, query: "" });
+      }
+      const content = typeof req.query.content === "string" ? req.query.content : null;
+      const limit = Number(req.query.limit) || 6;
+
+      const result = await suggestMediaForArticle({ title, content, limit });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error suggesting media for article:", error);
+      res.status(500).json({ message: "فشل في جلب اقتراحات الصور" });
+    }
+  },
+);
+
 // POST /api/media/embeddings/backfill - index a bounded batch of not-yet-embedded
 // archive images for semantic search, reporting how many remain so the UI can
 // loop until the library is fully indexed. Gated by media.edit.
@@ -173,6 +203,118 @@ router.post(
     } catch (error: any) {
       console.error("Error saving generated image:", error);
       res.status(500).json({ message: "فشل في حفظ الصورة المولّدة" });
+    }
+  },
+);
+
+// POST /api/media/save-existing - register an already-hosted image URL in the
+// library (JSON endpoint the editor auto-saves hero images through). Reuses the
+// row when the URL is known, and enqueues AI auto-tag + embedding either way.
+// Moved out of routes.ts (ADR-001); gated by media.view like before.
+router.post(
+  "/api/media/save-existing",
+  requireAuth,
+  requirePermission("media.view"),
+  async (req: any, res) => {
+    try {
+      const { url, fileName, title, description, category } = req.body || {};
+      if (!url || !fileName) {
+        return res.status(400).json({ message: "URL والاسم مطلوبان" });
+      }
+      // Only accept URLs from our own storage origins (prevents storing an
+      // attacker-controlled URL that the media proxy would later redirect to).
+      if (typeof url !== "string" || !isAllowedMediaUrl(url, req.get("host"))) {
+        return res.status(400).json({ message: "رابط غير صالح" });
+      }
+      const mediaFile = await saveExistingMedia({
+        url,
+        fileName: String(fileName),
+        title: typeof title === "string" ? title : null,
+        description: typeof description === "string" ? description : null,
+        category: typeof category === "string" ? category : null,
+        userId: req.user.id,
+      });
+      res.json(mediaFile);
+    } catch (error: any) {
+      console.error("Error saving media metadata:", error);
+      res.status(500).json({ message: "فشل حفظ البيانات" });
+    }
+  },
+);
+
+// GET /api/media/:id/governance - lightweight pre-publish check for one media
+// file: rights documentation, alt text, quality, sensitive flag. The editor
+// calls this when the writer hits "نشر" to decide whether to show the rights
+// dialog. Gated like suggest-for-article: any writer.
+router.get(
+  "/api/media/:id/governance",
+  requireAuth,
+  requireAnyPermission("articles.create", "articles.edit_own", "articles.edit_any", "media.view"),
+  async (req: any, res) => {
+    try {
+      const info = await getMediaGovernance(req.params.id);
+      if (!info) {
+        return res.status(404).json({ message: "ملف الوسائط غير موجود" });
+      }
+      res.json(info);
+    } catch (error: any) {
+      console.error("Error fetching media governance:", error);
+      res.status(500).json({ message: "فشل في فحص بيانات الصورة" });
+    }
+  },
+);
+
+// GET /api/media/:id/similar - "صور مشابهة": vector-similar archive images
+// (alternate angles of the same event). Gated by media.view.
+router.get(
+  "/api/media/:id/similar",
+  requireAuth,
+  requirePermission("media.view"),
+  async (req: any, res) => {
+    try {
+      const limit = Number(req.query.limit) || 12;
+      const result = await similarMedia(req.params.id, limit);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching similar media:", error);
+      res.status(500).json({ message: "فشل في جلب الصور المشابهة" });
+    }
+  },
+);
+
+// GET /api/media/duplicates - visually-identical groups (same perceptual hash,
+// 2+ files), largest first — the librarian's cleanup worklist. Gated by
+// media.edit (it's a curation tool, not a browsing surface).
+router.get(
+  "/api/media/duplicates",
+  requireAuth,
+  requirePermission("media.edit"),
+  async (req: any, res) => {
+    try {
+      const limit = Number(req.query.limit) || 20;
+      const result = await getDuplicateGroups(limit);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching duplicate groups:", error);
+      res.status(500).json({ message: "فشل في جلب مجموعات التكرار" });
+    }
+  },
+);
+
+// GET /api/media/health-report - the monthly-review numbers on demand:
+// pipeline coverage, governance coverage, cleanup candidates, reuse leaders.
+// Gated by media.view.
+router.get(
+  "/api/media/health-report",
+  requireAuth,
+  requirePermission("media.view"),
+  async (_req: any, res) => {
+    try {
+      const report = await getMediaHealthReport();
+      res.json(report);
+    } catch (error: any) {
+      console.error("Error building media health report:", error);
+      res.status(500).json({ message: "فشل في إعداد تقرير صحة المكتبة" });
     }
   },
 );

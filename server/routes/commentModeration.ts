@@ -1,6 +1,13 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
 import { moderateComment, getStatusFromClassification, ModerationResult } from "../ai/commentModeration";
+import {
+  persistCommentAnalysis,
+  getCalibrationExamples,
+  getSentimentStats,
+  getSentimentInsights,
+  notifyCommentOwnerRejected,
+} from "../services/commentInsightsService";
 import { z } from "zod";
 import { db } from "../db";
 import { userRoles, roles, users, comments } from "@shared/schema";
@@ -74,6 +81,29 @@ router.get("/stats", async (req: Request, res: Response) => {
   }
 });
 
+// Get sentiment statistics (for dashboard)
+router.get("/sentiment-stats", async (req: Request, res: Response) => {
+  try {
+    const stats = await getSentimentStats();
+    res.json(stats);
+  } catch (error) {
+    console.error("[Moderation API] Sentiment stats error:", error);
+    res.status(500).json({ error: "حدث خطأ أثناء جلب إحصائيات المشاعر" });
+  }
+});
+
+// Editorial sentiment insights (نبض الجمهور dashboard)
+router.get("/sentiment-insights", requireModeratorAuth, async (req: Request, res: Response) => {
+  try {
+    const days = parseInt((req.query.days as string) || "7", 10) || 7;
+    const insights = await getSentimentInsights(days);
+    res.json(insights);
+  } catch (error) {
+    console.error("[Moderation API] Sentiment insights error:", error);
+    res.status(500).json({ error: "حدث خطأ أثناء جلب تحليلات المشاعر" });
+  }
+});
+
 // Get moderation results with filters
 router.get("/results", async (req: Request, res: Response) => {
   try {
@@ -98,17 +128,12 @@ router.post("/analyze-all", async (req: Request, res: Response) => {
   try {
     const pendingComments = await storage.getUnanalyzedComments(50);
     
+    const calibrationExamples = await getCalibrationExamples();
     let analyzed = 0;
     for (const comment of pendingComments) {
       try {
-        const result = await moderateComment(comment.content);
-        await storage.updateCommentModeration(comment.id, {
-          aiModerationScore: result.score,
-          aiClassification: result.classification,
-          aiDetectedIssues: result.detected,
-          aiModerationReason: result.reason,
-          aiAnalyzedAt: new Date(),
-        });
+        const result = await moderateComment(comment.content, { calibrationExamples });
+        await persistCommentAnalysis(comment.id, comment.content, result);
         analyzed++;
       } catch (err) {
         console.error(`[Moderation] Failed to analyze comment ${comment.id}:`, err);
@@ -132,15 +157,10 @@ router.post("/analyze/:commentId", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "التعليق غير موجود" });
     }
 
-    const result = await moderateComment(comment.content);
-    
-    await storage.updateCommentModeration(commentId, {
-      aiModerationScore: result.score,
-      aiClassification: result.classification,
-      aiDetectedIssues: result.detected,
-      aiModerationReason: result.reason,
-      aiAnalyzedAt: new Date(),
+    const result = await moderateComment(comment.content, {
+      calibrationExamples: await getCalibrationExamples(),
     });
+    await persistCommentAnalysis(commentId, comment.content, result);
 
     res.json({ success: true, result });
   } catch (error) {
@@ -186,15 +206,10 @@ router.post("/reanalyze/:commentId", requireModeratorAuth, async (req: Request, 
       return res.status(404).json({ error: "التعليق غير موجود" });
     }
 
-    const result = await moderateComment(comment.content);
-    
-    await storage.updateCommentModeration(commentId, {
-      aiModerationScore: result.score,
-      aiClassification: result.classification,
-      aiDetectedIssues: result.detected,
-      aiModerationReason: result.reason,
-      aiAnalyzedAt: new Date(),
+    const result = await moderateComment(comment.content, {
+      calibrationExamples: await getCalibrationExamples(),
     });
+    await persistCommentAnalysis(commentId, comment.content, result);
 
     res.json({ success: true, result });
   } catch (error) {
@@ -235,6 +250,8 @@ router.post("/reject/:commentId", requireModeratorAuth, async (req: Request, res
       moderatedAt: new Date(),
       moderationReason: reason,
     });
+
+    await notifyCommentOwnerRejected(commentId, reason);
 
     res.json({ success: true });
   } catch (error) {
@@ -284,6 +301,9 @@ router.post("/bulk", requireModeratorAuth, async (req: Request, res: Response) =
         moderatedAt: new Date(),
         moderationReason: action === "reject" ? reason : undefined,
       });
+      if (action === "reject") {
+        await notifyCommentOwnerRejected(commentId, reason);
+      }
     }
 
     res.json({ success: true, count: commentIds.length });

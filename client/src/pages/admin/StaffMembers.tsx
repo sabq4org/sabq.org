@@ -14,6 +14,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,9 +65,8 @@ import {
   UserCog,
   Send,
   Mail,
+  RotateCcw,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 
 interface StaffUser {
   id: string;
@@ -275,6 +276,38 @@ export default function StaffMembers() {
     },
   });
 
+  const unsuspendMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest(`/api/dashboard/users/${userId}/unsuspend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "تم إلغاء التعليق", description: "أصبحت عضوية الموظف نشطة مرة أخرى" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error.message || "فشل إلغاء تعليق المستخدم", variant: "destructive" });
+    },
+  });
+
+  const unbanMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest(`/api/dashboard/users/${userId}/unban`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "تم رفع الحظر", description: "أصبحت عضوية الموظف نشطة مرة أخرى" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error.message || "فشل رفع الحظر عن المستخدم", variant: "destructive" });
+    },
+  });
+
   const changeRoleMutation = useMutation({
     mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
       return await apiRequest(`/api/admin/users/${userId}`, {
@@ -360,10 +393,13 @@ export default function StaffMembers() {
         const status = info.getValue();
         const variants: Record<string, any> = {
           active: { variant: "default" as const, label: "نشط" },
+          pending: { variant: "outline" as const, label: "بانتظار التفعيل" },
           suspended: { variant: "secondary" as const, label: "معلق" },
           banned: { variant: "destructive" as const, label: "محظور" },
+          locked: { variant: "secondary" as const, label: "مقفل" },
+          deleted: { variant: "destructive" as const, label: "محذوف" },
         };
-        const config = variants[status] || variants.active;
+        const config = variants[status] || { variant: "outline" as const, label: status || "غير معروف" };
         return (
           <Badge variant={config.variant} data-testid={`badge-staff-status-${info.row.original.id}`}>
             {config.label}
@@ -376,8 +412,14 @@ export default function StaffMembers() {
       cell: (info) => {
         const lastActivity = info.getValue();
         return (
-          <span data-testid={`text-staff-activity-${info.row.original.id}`}>
-            {lastActivity ? format(new Date(lastActivity), "dd MMM yyyy", { locale: ar }) : "لا يوجد"}
+          <span className="tabular-nums" data-testid={`text-staff-activity-${info.row.original.id}`}>
+            {lastActivity
+              ? new Date(lastActivity).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "لا يوجد"}
           </span>
         );
       },
@@ -388,6 +430,7 @@ export default function StaffMembers() {
       cell: (info) => {
         const rowUser = info.row.original;
         const isCurrentUser = rowUser.id === user?.id;
+        const status = rowUser.status;
         return (
           <div className="flex items-center gap-1">
             <Button
@@ -425,33 +468,71 @@ export default function StaffMembers() {
             >
               <Shield className="w-4 h-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setSelectedUser(rowUser);
-                setSuspendDialogOpen(true);
-              }}
-              disabled={isCurrentUser}
-              title="تعليق"
-              data-testid={`action-staff-suspend-${rowUser.id}`}
-            >
-              <UserX className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setSelectedUser(rowUser);
-                setBanDialogOpen(true);
-              }}
-              disabled={isCurrentUser}
-              title="حظر"
-              className="text-destructive hover:text-destructive"
-              data-testid={`action-staff-ban-${rowUser.id}`}
-            >
-              <Ban className="w-4 h-4" />
-            </Button>
+            {status === "banned" ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => unbanMutation.mutate(rowUser.id)}
+                disabled={isCurrentUser || unbanMutation.isPending}
+                title="رفع الحظر"
+                className="text-emerald-600 hover:text-emerald-600"
+                data-testid={`action-staff-unban-${rowUser.id}`}
+              >
+                {unbanMutation.isPending && unbanMutation.variables === rowUser.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+              </Button>
+            ) : (
+              <>
+                {status === "suspended" ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => unsuspendMutation.mutate(rowUser.id)}
+                    disabled={isCurrentUser || unsuspendMutation.isPending}
+                    title="إلغاء التعليق"
+                    className="text-emerald-600 hover:text-emerald-600"
+                    data-testid={`action-staff-unsuspend-${rowUser.id}`}
+                  >
+                    {unsuspendMutation.isPending && unsuspendMutation.variables === rowUser.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <UserCheck className="w-4 h-4" />
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setSelectedUser(rowUser);
+                      setSuspendDialogOpen(true);
+                    }}
+                    disabled={isCurrentUser}
+                    title="تعليق"
+                    data-testid={`action-staff-suspend-${rowUser.id}`}
+                  >
+                    <UserX className="w-4 h-4" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSelectedUser(rowUser);
+                    setBanDialogOpen(true);
+                  }}
+                  disabled={isCurrentUser}
+                  title="حظر"
+                  className="text-destructive hover:text-destructive"
+                  data-testid={`action-staff-ban-${rowUser.id}`}
+                >
+                  <Ban className="w-4 h-4" />
+                </Button>
+              </>
+            )}
           </div>
         );
       },
@@ -481,76 +562,99 @@ export default function StaffMembers() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6" dir="rtl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold" data-testid="heading-staff-title">منسوبي سبق</h1>
-              <p className="text-muted-foreground mt-1">إدارة فريق العمل والموظفين</p>
-            </div>
-          </div>
-          <Button
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="px-4 pb-10 sm:px-6">
+        <DashboardPageHeader
+          icon={Users}
+          title="منسوبي سبق"
+          description="إدارة فريق العمل والموظفين"
+          titleTestId="heading-staff-title"
+          actions={<Button
             onClick={() => setSendCredentialsDialogOpen(true)}
             className="gap-2"
             data-testid="button-send-credentials"
           >
             <Mail className="h-4 w-4" />
             إرسال بيانات الدخول للجميع
-          </Button>
-        </div>
+          </Button>}
+        />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="hover-elevate cursor-pointer" onClick={() => setRoleFilter("all")} data-testid="card-staff-total">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <Card
+            className="cursor-pointer rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/35 dark:from-sky-950/15"
+            onClick={() => setRoleFilter("all")}
+            data-testid="card-staff-total"
+          >
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي المنسوبين</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                <Users className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-staff-total">
-                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : allUsers.length}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-staff-total">
+                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : allUsers.length.toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate cursor-pointer" onClick={() => setRoleFilter("editor")} data-testid="card-staff-editors">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <Card
+            className="cursor-pointer rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-emerald-900/35 dark:from-emerald-950/15"
+            onClick={() => setRoleFilter("editor")}
+            data-testid="card-staff-editors"
+          >
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">المحررون</CardTitle>
-              <Pencil className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+                <Pencil className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-staff-editors">
-                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : roleCounts.editor || 0}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-staff-editors">
+                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (roleCounts.editor || 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate cursor-pointer" onClick={() => setRoleFilter("reporter")} data-testid="card-staff-reporters">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <Card
+            className="cursor-pointer rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-cyan-900/35 dark:from-cyan-950/15"
+            onClick={() => setRoleFilter("reporter")}
+            data-testid="card-staff-reporters"
+          >
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">المراسلون</CardTitle>
-              <Briefcase className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
+                <Briefcase className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-staff-reporters">
-                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : roleCounts.reporter || 0}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-staff-reporters">
+                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (roleCounts.reporter || 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate cursor-pointer" onClick={() => setRoleFilter("admin")} data-testid="card-staff-admins">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <Card
+            className="cursor-pointer rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/45 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-amber-900/35 dark:from-amber-950/15"
+            onClick={() => setRoleFilter("admin")}
+            data-testid="card-staff-admins"
+          >
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">المدراء</CardTitle>
-              <UserCog className="h-4 w-4 text-muted-foreground" />
+              <span className="rounded-lg bg-amber-100/80 p-1.5 dark:bg-amber-950/40">
+                <UserCog className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+              </span>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-staff-admins">
-                {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (roleCounts.admin || 0) + (roleCounts.system_admin || 0)}
+              <div className="text-2xl font-bold tabular-nums" data-testid="text-staff-admins">
+                {usersLoading ? (
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                ) : ((roleCounts.admin || 0) + (roleCounts.system_admin || 0)).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardContent className="pt-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex-1">
@@ -587,6 +691,7 @@ export default function StaffMembers() {
                   <SelectContent>
                     <SelectItem value="all">كل الحالات</SelectItem>
                     <SelectItem value="active">نشط</SelectItem>
+                    <SelectItem value="pending">بانتظار التفعيل</SelectItem>
                     <SelectItem value="suspended">معلق</SelectItem>
                     <SelectItem value="banned">محظور</SelectItem>
                   </SelectContent>
@@ -601,7 +706,7 @@ export default function StaffMembers() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               {usersLoading ? (
@@ -653,7 +758,7 @@ export default function StaffMembers() {
                   value={String(table.getState().pagination.pageSize)}
                   onValueChange={(value) => table.setPageSize(Number(value))}
                 >
-                  <SelectTrigger className="w-[100px]" data-testid="select-staff-page-size">
+                  <SelectTrigger className="w-[100px] tabular-nums" data-testid="select-staff-page-size">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -676,8 +781,8 @@ export default function StaffMembers() {
                   <ChevronRight className="w-4 h-4" />
                   السابق
                 </Button>
-                <span className="text-sm" data-testid="text-staff-page-info">
-                  صفحة {table.getState().pagination.pageIndex + 1} من {table.getPageCount() || 1}
+                <span className="text-sm tabular-nums" data-testid="text-staff-page-info">
+                  صفحة {(table.getState().pagination.pageIndex + 1).toLocaleString("en-US")} من {(table.getPageCount() || 1).toLocaleString("en-US")}
                 </span>
                 <Button
                   variant="outline"
@@ -693,7 +798,7 @@ export default function StaffMembers() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </DashboardPageShell>
 
       <Dialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
         <DialogContent data-testid="dialog-staff-suspend">
@@ -894,7 +999,7 @@ export default function StaffMembers() {
               </p>
             </div>
             <div className="text-sm text-muted-foreground">
-              <p>سيتم إرسال البريد إلى <strong>{allUsers.length}</strong> موظف</p>
+              <p>سيتم إرسال البريد إلى <strong className="tabular-nums">{allUsers.length.toLocaleString("en-US")}</strong> موظف</p>
             </div>
           </div>
           <DialogFooter>

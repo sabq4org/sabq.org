@@ -29,7 +29,7 @@ struct BookmarksView: View {
                     VStack(spacing: 12) {
                         ProgressView().tint(SabqTheme.primaryEnd)
                         Text("يتم تحميل المحفوظات…")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(SabqFonts.app(size: 13, weight: .medium))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     .frame(maxWidth: .infinity)
@@ -107,17 +107,17 @@ struct BookmarksView: View {
                     .fill(tint.opacity(0.12))
                     .frame(width: 32, height: 32)
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(tint)
             }
 
             Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 22, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .monospacedDigit()
 
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(14)

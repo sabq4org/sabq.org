@@ -6,6 +6,7 @@
  * Keep in sync when the SPA theme changes. Only the subset used by the public
  * SSR surfaces (article/category/home) is mirrored here. */
 :root {
+  color-scheme: light;
   --background: 0 0% 100%;
   --foreground: 210 25% 7.8431%;
   --border: 201.4286 30.4348% 90.9804%;
@@ -32,26 +33,27 @@
 }
 
 .dark {
-  --background: 0 0% 0%;
-  --foreground: 200 6.6667% 91.1765%;
-  --border: 210 5.2632% 14.9020%;
-  --input: 207.6923 27.6596% 18.4314%;
-  --ring: 202.8169 89.1213% 53.1373%;
-  --card: 228 9.8039% 10%;
-  --card-foreground: 0 0% 85.0980%;
-  --card-border: 220 18% 16%;
-  --popover: 0 0% 0%;
-  --popover-foreground: 200 6.6667% 91.1765%;
-  --primary: 203.7736 87.6033% 52.5490%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 195.0000 15.3846% 94.9020%;
-  --secondary-foreground: 210 25% 7.8431%;
-  --muted: 0 0% 9.4118%;
-  --muted-foreground: 210 3.3898% 46.2745%;
-  --footer: 220 18% 12%;
-  --footer-foreground: 220 10% 85%;
-  --accent: 205.7143 70% 7.8431%;
-  --accent-foreground: 203.7736 87.6033% 52.5490%;
+  color-scheme: dark;
+  --background: 210 20% 7.8431%;
+  --foreground: 214.2857 14.8936% 90.7843%;
+  --border: 210 15.6863% 20%;
+  --input: 208 21% 15%;
+  --ring: 201.5267 90.4762% 71.1765%;
+  --card: 210 17.8571% 10.9804%;
+  --card-foreground: 210 14.7059% 85.0980%;
+  --card-border: 210 15.6863% 20%;
+  --popover: 207.6923 18.3099% 13.9216%;
+  --popover-foreground: 214.2857 14.8936% 90.7843%;
+  --primary: 201.7857 89.3617% 63.1373%;
+  --primary-foreground: 205 55% 7%;
+  --secondary: 210 18.1818% 16.4706%;
+  --secondary-foreground: 210 14.7059% 85.0980%;
+  --muted: 210 18.75% 12.5490%;
+  --muted-foreground: 210 10.5263% 69.0196%;
+  --footer: 210 18% 9.5%;
+  --footer-foreground: 210 14.7059% 85.0980%;
+  --accent: 204 54% 17%;
+  --accent-foreground: 201.5267 90.4762% 71.1765%;
   --destructive: 356.3033 90.5579% 54.3137%;
   --destructive-foreground: 0 0% 100%;
 }

@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>كأس آسيا 2027 — نظام التصميم لكل الشاشات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#0a8a4f; --green-d:#076b3d; --green-l:#e7f5ed; --green-mid:#12a560;
+  --gold:#b8882e; --gold-l:#faf2dd;
+  --ink:#13201b; --slate:#5a6b63; --faint:#92a39a;
+  --line:#e4eae6; --line-2:#d4ddd8;
+  --card:#ffffff; --live:#d8413c; --blue:#2f6fb5; --blue-l:#e8f0fb;
+  --r-lg:22px; --r-md:16px; --r-sm:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#0e1714;color:#13201b;padding:30px 20px 60px;}
+.pagehead{max-width:1200px;margin:0 auto 28px;color:#eaf4ee;}
+.pagehead h1{font-size:24px;font-weight:700;}
+.pagehead p{font-size:14px;color:#9fb3a9;margin-top:6px;line-height:1.7;}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:#cfe0d7;}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.sw{width:14px;height:14px;border-radius:4px;display:inline-block;}
+
+.gallery{display:flex;flex-wrap:wrap;gap:34px 26px;justify-content:center;max-width:1320px;margin:0 auto;}
+.phone{width:390px;}
+.caption{text-align:center;color:#bcd0c6;font-size:13px;font-weight:600;margin-top:12px;}
+.caption span{color:#7f978c;font-weight:400;font-size:11px;display:block;margin-top:2px;}
+.screen{width:390px;height:760px;overflow:hidden;border-radius:30px;border:1px solid #243029;position:relative;
+  background:linear-gradient(180deg,#eaf3ee 0,#f4f7f5 220px,#f4f7f5 100%);box-shadow:0 24px 60px -30px #000;}
+.scl{height:760px;overflow:hidden;padding-bottom:84px;}
+
+/* shared chrome */
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:13px 22px 4px;font-size:14px;font-weight:600;}
+.statusbar .ic{display:flex;gap:6px;opacity:.8;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 12px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .mark{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--green-l);border:1px solid var(--line);}
+.brand .mark svg{width:20px;height:20px;}
+.brand .t1{font-size:15px;font-weight:700;}
+.brand .t2{font-size:10.5px;color:var(--green);font-weight:600;}
+.pill{font-size:11px;font-weight:600;padding:6px 11px;border-radius:999px;background:var(--card);border:1px solid var(--line-2);color:var(--green-d);}
+.pill.live{color:var(--live);border-color:#f0c9c7;background:#fdeceb;display:inline-flex;align-items:center;gap:5px;}
+.pill.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--live);}
+.scrhead{padding:6px 18px 8px;}
+.scrhead .h{font-size:21px;font-weight:700;}
+.scrhead .s{font-size:12px;color:var(--slate);margin-top:2px;}
+.wrap{padding:0 16px;display:flex;flex-direction:column;gap:16px;}
+
+/* section header */
+.sh{display:flex;align-items:center;gap:9px;margin-bottom:11px;}
+.sh .ico{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:var(--green-l);border:1px solid var(--line);}
+.sh .ico svg{width:15px;height:15px;}
+.sh .tt{font-size:15px;font-weight:700;}
+.sh .ss{font-size:11px;color:var(--slate);margin-top:1px;}
+.sh .cnt{margin-inline-start:auto;font-size:11px;font-weight:700;color:var(--green-d);padding:3px 10px;border-radius:999px;background:var(--green-l);}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:0 4px 14px -12px rgba(12,60,40,.18);}
+
+/* tab bar */
+.tabbar{position:absolute;bottom:0;left:0;width:390px;display:flex;justify-content:space-around;align-items:center;
+  padding:9px 6px 22px;background:rgba(255,255,255,.97);border-top:1px solid var(--line);}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-weight:600;color:var(--faint);flex:1;}
+.tab svg{width:21px;height:21px;}
+.tab.on{color:var(--green);}
+
+/* flags / teams */
+.flag{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:18px;background:#f3f6f4;border:1px solid var(--line);}
+.tname{font-size:13px;font-weight:600;}
+
+/* hero generic */
+.hero{position:relative;overflow:hidden;border-radius:var(--r-lg);padding:18px 16px 16px;background:var(--card);border:1px solid var(--line);box-shadow:0 10px 28px -18px rgba(12,60,40,.2);}
+.hero::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--green),var(--green-mid),var(--gold));}
+
+/* small stat */
+.sstat{flex:1;text-align:center;padding:11px 4px;}
+.sstat .v{font-size:20px;font-weight:700;color:var(--green-d);}
+.sstat .l{font-size:10.5px;color:var(--slate);font-weight:600;margin-top:2px;}
+
+/* chips row */
+.chips{display:flex;gap:7px;overflow:hidden;padding-bottom:2px;}
+.chip{font-size:11.5px;font-weight:600;padding:7px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line-2);color:var(--slate);white-space:nowrap;}
+.chip.on{background:var(--green);color:#fff;border-color:var(--green);}
+
+/* match card */
+.mc{padding:12px 13px;margin-bottom:9px;}
+.mc .rd{font-size:10px;color:var(--green-d);font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.mc .rd::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--green-mid);}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.mside{display:flex;align-items:center;gap:8px;flex:1;}
+.mside.l{justify-content:flex-end;flex-direction:row-reverse;}
+.mvs{display:flex;flex-direction:column;align-items:center;min-width:50px;}
+.mvs .tm{font-size:13px;font-weight:700;color:var(--green-d);}
+.mvs .sc{font-size:18px;font-weight:700;}
+.mvs .vs{font-size:9px;color:var(--faint);font-weight:600;}
+.mmeta{display:flex;align-items:center;gap:5px;justify-content:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--line);font-size:10.5px;color:var(--slate);}
+.daylbl{font-size:11px;font-weight:700;color:var(--ink);margin:2px 0 8px;display:flex;align-items:center;gap:7px;}
+.daylbl::after{content:"";flex:1;height:1px;background:var(--line);}
+
+/* progress */
+.prow{margin-bottom:7px;}
+.prow .pt{display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:4px;}
+.prow .bar{height:6px;border-radius:99px;background:#eef2f0;overflow:hidden;}
+.prow .fill{height:6px;border-radius:99px;}
+
+/* standings */
+.gcard{padding:13px;margin-bottom:13px;}
+.gtitle{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--gold);padding:4px 10px;border-radius:999px;background:var(--gold-l);}
+.thead{display:flex;font-size:9.5px;color:var(--faint);font-weight:600;padding:0 6px 6px;}
+.trow{display:flex;align-items:center;padding:7px 6px;border-radius:10px;margin-bottom:3px;}
+.trow .rk{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;}
+.trow .nm{flex:1;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding-inline-start:7px;}
+.trow .col{width:34px;text-align:center;font-size:12px;font-weight:600;color:var(--slate);}
+.trow .pts{width:34px;text-align:center;font-size:15px;font-weight:700;}
+.ql{background:rgba(18,165,96,.10);} .ql .rk{background:var(--green-mid);color:#fff;}
+.th{background:rgba(184,136,46,.09);} .th .rk{background:var(--gold-l);color:var(--gold);border:1px solid #e6d3a4;}
+.no .rk{color:var(--faint);}
+.qline{display:flex;align-items:center;gap:8px;margin:4px 0;}
+.qline span{font-size:8.5px;font-weight:700;color:var(--green-mid);}
+.qline::before,.qline::after{content:"";flex:1;height:1px;background:rgba(18,165,96,.3);}
+
+/* list rows */
+.lrow{display:flex;align-items:center;gap:11px;padding:11px 12px;margin-bottom:8px;}
+.lrow .li{width:32px;height:32px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;background:var(--green-l);}
+.lrow .li svg{width:16px;height:16px;color:var(--green-d);}
+.lrow .lt{font-size:13px;font-weight:600;}
+.lrow .ls{font-size:11px;color:var(--slate);margin-top:1px;}
+.lrow .chev{margin-inline-start:auto;color:var(--faint);}
+
+/* teams grid */
+.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.tcell{padding:13px 6px;text-align:center;border-radius:var(--r-sm);background:var(--card);border:1px solid var(--line);position:relative;}
+.tcell .fl{font-size:26px;}
+.tcell .nm{font-size:11.5px;font-weight:600;margin-top:6px;}
+.hostbadge{position:absolute;top:6px;inset-inline-start:6px;font-size:8px;font-weight:700;color:var(--green-d);background:var(--green-l);padding:2px 6px;border-radius:6px;}
+
+/* scorer */
+.scrow{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:7px;}
+.scrow .rk{font-size:14px;font-weight:700;color:var(--faint);width:18px;text-align:center;}
+.scrow .av{width:34px;height:34px;border-radius:50%;background:#eef3f0;display:grid;place-items:center;font-size:15px;}
+.scrow .nm{font-size:13px;font-weight:600;}
+.scrow .tm{font-size:10.5px;color:var(--slate);margin-top:1px;display:flex;align-items:center;gap:4px;}
+.scrow .g{margin-inline-start:auto;text-align:center;}
+.scrow .g .n{font-size:17px;font-weight:700;color:var(--green-d);}
+.scrow .g .u{font-size:9px;color:var(--faint);}
+
+/* bracket */
+.bracket{display:flex;gap:10px;padding:4px 2px;}
+.bcol{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:8px;}
+.bcol .ch{font-size:10px;font-weight:700;color:var(--green-d);text-align:center;margin-bottom:2px;}
+.btie{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 7px;font-size:10px;}
+.btie .bt{display:flex;align-items:center;gap:5px;padding:2px 0;}
+.btie .bt .f{font-size:13px;}
+.btie .bt .s{margin-inline-start:auto;font-weight:700;}
+.btie .win{color:var(--green-d);}
+.btie .div{height:1px;background:var(--line);margin:3px 0;}
+
+/* profile */
+.phero{padding:18px 16px;text-align:center;position:relative;overflow:hidden;}
+.phero::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--green),var(--gold));}
+.phero .bigflag{font-size:54px;}
+.phero .pn{font-size:22px;font-weight:700;margin-top:6px;}
+.phero .pmeta{font-size:12px;color:var(--slate);margin-top:4px;}
+.bigstats{display:flex;gap:9px;margin-top:14px;}
+.bstat{flex:1;text-align:center;padding:13px 4px;border-radius:var(--r-sm);background:var(--green-l);}
+.bstat .v{font-size:22px;font-weight:700;color:var(--green-d);}
+.bstat .l{font-size:10px;color:var(--slate);font-weight:600;margin-top:2px;}
+.form{display:flex;gap:6px;justify-content:center;margin-top:4px;}
+.fd{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;}
+.fw{background:var(--green-mid);} .fdr{background:var(--gold);} .fl{background:var(--live);}
+
+/* player */
+.pchip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--green-d);background:var(--green-l);padding:5px 11px;border-radius:999px;}
+.biogrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:13px;}
+.biotile{background:#f7faf8;border:1px solid var(--line);border-radius:10px;padding:10px;}
+.biotile .l{font-size:10px;color:var(--slate);}
+.biotile .v{font-size:13px;font-weight:600;margin-top:3px;}
+
+/* match detail */
+.mdhead{padding:18px 16px 14px;text-align:center;position:relative;overflow:hidden;}
+.mdhead::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--green),var(--gold));}
+.mdteams{display:flex;align-items:center;justify-content:space-around;margin-top:6px;}
+.mdteams .t{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;}
+.mdteams .t .f{font-size:38px;}
+.mdteams .t .n{font-size:12px;font-weight:600;}
+.mdteams .sc{font-size:30px;font-weight:700;}
+.mdteams .min{font-size:10px;color:var(--live);font-weight:700;background:#fdeceb;padding:2px 8px;border-radius:6px;margin-top:4px;}
+.seg{display:flex;background:#eef2f0;border-radius:11px;padding:3px;margin-top:4px;}
+.seg div{flex:1;text-align:center;font-size:11px;font-weight:600;padding:7px 0;border-radius:9px;color:var(--slate);}
+.seg div.on{background:#fff;color:var(--green-d);box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.ev{display:flex;align-items:center;gap:10px;padding:9px 4px;font-size:12px;}
+.ev .mn{font-size:11px;font-weight:700;color:var(--green-d);width:34px;}
+.ev .ei{width:22px;text-align:center;}
+.statline{display:flex;align-items:center;gap:10px;padding:7px 2px;font-size:11px;}
+.statline .l,.statline .r{width:28px;text-align:center;font-weight:700;}
+.statline .mid{flex:1;text-align:center;color:var(--slate);font-size:10.5px;}
+.statline .track{flex:1;height:5px;background:#eef2f0;border-radius:99px;display:flex;}
+</style>
+</head>
+<body>
+
+<div class="pagehead">
+  <h1>كأس آسيا 2027 — نظام التصميم الموحّد</h1>
+  <p>الهوية الفاتحة الرسمية مطبّقة على كل الشاشات الخارجية (التبويبات) والداخلية (التفاصيل). الأخضر الرسمي للهوية، لمسة ذهبية للبطولة، وأسطح بيضاء نظيفة بحدود ناعمة.</p>
+  <div class="legend">
+    <span><i class="sw" style="background:#0a8a4f"></i> الأخضر الرسمي (الهوية)</span>
+    <span><i class="sw" style="background:#b8882e"></i> الذهبي (لمسة بطولية)</span>
+    <span><i class="sw" style="background:#12a560"></i> أخضر التأهل</span>
+    <span><i class="sw" style="background:#d8413c"></i> الأحمر (مباشر)</span>
+  </div>
+</div>
+
+<div class="gallery">
+
+<!-- ============ 1) HOME ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg><svg width="22" viewBox="0 0 26 14" fill="none"><rect x="1" y="1.5" width="21" height="11" rx="3" stroke="currentColor" opacity=".5"/><rect x="3" y="3.5" width="15" height="7" rx="1.5" fill="currentColor"/></svg></span></div>
+  <div class="topbar">
+    <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="1.8"><path d="M6 4h12v3a6 6 0 0 1-12 0V4z" fill="rgba(10,138,79,.18)"/><path d="M6 5H3.5v2A2.5 2.5 0 0 0 6 9.5M18 5h2.5v2A2.5 2.5 0 0 1 18 9.5M9 14h6M10 14v4M14 14v4M8 19h8"/></svg></div><div><div class="t1">كأس آسيا</div><div class="t2">السعودية 2027</div></div></div>
+    <span class="pill">مركز كأس آسيا</span>
+  </div>
+  <div class="wrap">
+    <div class="hero">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+        <div>
+          <div style="display:flex;gap:6px;margin:4px 0 10px"><span style="font-size:10.5px;font-weight:600;color:var(--gold);background:var(--gold-l);border:1px solid #ecd9a8;padding:5px 9px;border-radius:999px">تغطية خاصة</span><span style="font-size:10.5px;font-weight:600;color:var(--green-d);background:var(--green-l);border:1px solid #bfe6ce;padding:5px 9px;border-radius:999px">تستضيفها السعودية</span></div>
+          <div style="font-size:29px;font-weight:700;line-height:1.08">كأس آسيا <span style="color:var(--green)">2027</span></div>
+          <div style="font-size:12px;color:var(--slate);line-height:1.7;margin-top:8px;max-width:200px">السعودية تستقبل نخبة آسيا في بطولة تحتفي بالمنتخبات والجماهير.</div>
+          <div style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--green-d);margin-top:11px;padding:6px 10px;border-radius:9px;background:var(--green-l)"><svg width="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>٧ يناير — ٥ فبراير ٢٠٢٧</div>
+        </div>
+        <img src="emblem.png" style="width:88px;flex-shrink:0" alt="">
+      </div>
+      <div style="display:flex;margin-top:16px;border-radius:14px;background:#f7faf8;border:1px solid var(--line);overflow:hidden">
+        <div class="sstat"><div class="v">24</div><div class="l">منتخب</div></div>
+        <div class="sstat" style="border-right:1px solid var(--line);border-left:1px solid var(--line)"><div class="v">6</div><div class="l">مجموعات</div></div>
+        <div class="sstat"><div class="v">8</div><div class="l">ملاعب</div></div>
+      </div>
+      <div style="margin-top:12px;border-radius:14px;padding:13px;background:var(--green-d)">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:#bff0d3;margin-bottom:10px"><svg width="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>الانطلاق بعد</div>
+        <div style="display:flex;gap:7px">
+          <div style="flex:1;text-align:center;border-radius:11px;padding:9px 2px;background:rgba(255,255,255,.12)"><div style="font-size:22px;font-weight:700;color:#fff">191</div><div style="font-size:9px;color:#a9dcc0;font-weight:600;margin-top:2px">يوم</div></div>
+          <div style="flex:1;text-align:center;border-radius:11px;padding:9px 2px;background:rgba(255,255,255,.12)"><div style="font-size:22px;font-weight:700;color:#fff">06</div><div style="font-size:9px;color:#a9dcc0;font-weight:600;margin-top:2px">ساعة</div></div>
+          <div style="flex:1;text-align:center;border-radius:11px;padding:9px 2px;background:rgba(255,255,255,.12)"><div style="font-size:22px;font-weight:700;color:#fff">24</div><div style="font-size:9px;color:#a9dcc0;font-weight:600;margin-top:2px">دقيقة</div></div>
+          <div style="flex:1;text-align:center;border-radius:11px;padding:9px 2px;background:rgba(255,255,255,.12)"><div style="font-size:22px;font-weight:700;color:#fff">55</div><div style="font-size:9px;color:#a9dcc0;font-weight:600;margin-top:2px">ثانية</div></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="sh"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></div><div><div class="tt">لوحة البطولة</div><div class="ss">اختصارات المتابعة اليومية</div></div></div>
+      <div class="tgrid">
+        <div class="tcell"><div style="width:40px;height:40px;border-radius:12px;margin:0 auto 8px;display:grid;place-items:center;background:var(--gold-l)"><svg width="19" viewBox="0 0 24 24" fill="none" stroke="#b8882e" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg></div><div style="font-size:18px;font-weight:700">51</div><div style="font-size:10.5px;color:var(--slate);font-weight:600">المباريات</div></div>
+        <div class="tcell"><div style="width:40px;height:40px;border-radius:12px;margin:0 auto 8px;display:grid;place-items:center;background:var(--blue-l)"><svg width="19" viewBox="0 0 24 24" fill="none" stroke="#2f6fb5" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg></div><div style="font-size:18px;font-weight:700">جديد</div><div style="font-size:10.5px;color:var(--slate);font-weight:600">التوقعات</div></div>
+        <div class="tcell"><div style="width:40px;height:40px;border-radius:12px;margin:0 auto 8px;display:grid;place-items:center;background:var(--green-l)"><svg width="19" viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg></div><div style="font-size:18px;font-weight:700">6</div><div style="font-size:10.5px;color:var(--slate);font-weight:600">المجموعات</div></div>
+      </div>
+    </div>
+    <div class="card" style="display:flex;align-items:center;gap:12px;padding:14px">
+      <div style="width:46px;height:46px;border-radius:13px;flex-shrink:0;display:grid;place-items:center;background:var(--green)"><svg width="23" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg></div>
+      <div style="flex:1"><div style="font-size:14px;font-weight:700">نظام التوقعات داخل التطبيق</div><div style="font-size:11px;color:var(--slate);margin-top:2px">بطاقات، احتمالات، نقاط، ومتصدرون</div></div>
+      <div style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--green-l)"><svg width="14" viewBox="0 0 24 24" fill="none" stroke="#076b3d" stroke-width="2.5"><path d="M15 6l-6 6 6 6"/></svg></div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">الرئيسية <span>خارجية — Home</span></div></div>
+
+<!-- ============ 2) MATCHES ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">المباريات</div><div class="s">الجدول الكامل بتوقيت الرياض</div></div>
+  <div class="wrap">
+    <div class="hero" style="padding:0;display:flex">
+      <div class="sstat" style="padding:15px 4px"><div class="v">51</div><div class="l">مباراة</div></div>
+      <div class="sstat" style="padding:15px 4px;border-right:1px solid var(--line);border-left:1px solid var(--line)"><div class="v" style="color:var(--gold)">3</div><div class="l">للأخضر</div></div>
+      <div class="sstat" style="padding:15px 4px"><div class="v" style="color:var(--slate)">0</div><div class="l">منتهية</div></div>
+    </div>
+    <div class="chips"><span class="chip on">الكل</span><span class="chip">الجولة الأولى</span><span class="chip">الجولة الثانية</span><span class="chip">دور الـ16</span></div>
+    <div>
+      <div class="daylbl">الخميس ٧ يناير ٢٠٢٧</div>
+      <div class="card mc">
+        <div class="rd">الجولة الأولى · المجموعة الأولى</div>
+        <div class="mrow"><div class="mside l"><span class="flag">🇸🇦</span><span class="tname">السعودية</span></div><div class="mvs"><span class="tm">7:00 م</span><span class="vs">ضد</span></div><div class="mside"><span class="flag">🇺🇿</span><span class="tname">أوزبكستان</span></div></div>
+        <div class="mmeta"><svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>استاد الملك فهد الدولي — الرياض</div>
+      </div>
+      <div class="card mc">
+        <div class="rd">الجولة الأولى · المجموعة الأولى</div>
+        <div class="mrow"><div class="mside l"><span class="flag">🇮🇳</span><span class="tname">الهند</span></div><div class="mvs"><span class="tm">4:00 م</span><span class="vs">ضد</span></div><div class="mside"><span class="flag">🇹🇭</span><span class="tname">تايلاند</span></div></div>
+        <div class="mmeta"><svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>استاد الأول بارك — الرياض</div>
+      </div>
+      <div class="daylbl">الجمعة ٨ يناير ٢٠٢٧</div>
+      <div class="card mc">
+        <div class="rd">الجولة الأولى · المجموعة الثانية</div>
+        <div class="mrow"><div class="mside l"><span class="flag">🇯🇵</span><span class="tname">اليابان</span></div><div class="mvs"><span class="tm">7:00 م</span><span class="vs">ضد</span></div><div class="mside"><span class="flag">🇮🇶</span><span class="tname">العراق</span></div></div>
+        <div class="mmeta"><svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>مدينة الملك عبدالله — جدة</div>
+      </div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">المباريات <span>خارجية — Matches</span></div></div>
+
+<!-- ============ 3) PREDICTIONS ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">التوقعات</div><div class="s">نظام كأس آسيا داخل التطبيق</div></div>
+  <div class="wrap">
+    <div class="hero">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:var(--green)"><svg width="23" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg></div>
+        <div><div style="font-size:15px;font-weight:700">توقّع النتيجة قبل صافرة البداية</div><div style="font-size:11px;color:var(--slate);margin-top:2px">النقاط تعتمد على صحة النتيجة والجرأة والتسلسل.</div></div>
+      </div>
+      <div style="display:flex;gap:7px;margin-top:13px">
+        <div style="flex:1;text-align:center;padding:9px 2px;border-radius:12px;background:#f7faf8;border:1px solid var(--line)"><div style="font-size:17px;font-weight:700;color:var(--gold)">320</div><div style="font-size:9px;color:var(--slate);font-weight:600">نقطة</div></div>
+        <div style="flex:1;text-align:center;padding:9px 2px;border-radius:12px;background:#f7faf8;border:1px solid var(--line)"><div style="font-size:17px;font-weight:700;color:var(--gold)">7</div><div style="font-size:9px;color:var(--slate);font-weight:600">صحيحة</div></div>
+        <div style="flex:1;text-align:center;padding:9px 2px;border-radius:12px;background:#f7faf8;border:1px solid var(--line)"><div style="font-size:17px;font-weight:700;color:var(--gold)">3</div><div style="font-size:9px;color:var(--slate);font-weight:600">مطابقة</div></div>
+        <div style="flex:1;text-align:center;padding:9px 2px;border-radius:12px;background:#f7faf8;border:1px solid var(--line)"><div style="font-size:17px;font-weight:700;color:var(--gold)">4</div><div style="font-size:9px;color:var(--slate);font-weight:600">سلسلة</div></div>
+      </div>
+    </div>
+    <div class="seg"><div class="on">المباريات</div><div>المتصدرون</div></div>
+    <div class="card" style="padding:13px;border-color:rgba(184,136,46,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:11px;font-weight:600;color:var(--slate)">الجولة الأولى</span><span style="font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-l);padding:3px 9px;border-radius:999px">7:00 م</span></div>
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="flex:1;text-align:center"><span class="flag" style="margin:0 auto">🇸🇦</span><div style="font-size:12px;font-weight:700;margin-top:6px">السعودية</div><div style="font-size:20px;font-weight:700;color:var(--gold);margin-top:4px">2</div></div>
+        <div style="text-align:center;padding-top:14px"><div style="font-size:10px;color:var(--faint);font-weight:700">VS</div></div>
+        <div style="flex:1;text-align:center"><span class="flag" style="margin:0 auto">🇺🇿</span><div style="font-size:12px;font-weight:700;margin-top:6px">أوزبكستان</div><div style="font-size:20px;font-weight:700;color:var(--gold);margin-top:4px">1</div></div>
+      </div>
+      <div style="margin-top:13px">
+        <div class="prow"><div class="pt"><span>السعودية</span><span style="color:var(--gold);font-weight:700">52%</span></div><div class="bar"><div class="fill" style="width:52%;background:var(--gold)"></div></div></div>
+        <div class="prow"><div class="pt"><span>تعادل</span><span style="color:var(--green-mid);font-weight:700">26%</span></div><div class="bar"><div class="fill" style="width:26%;background:var(--green-mid)"></div></div></div>
+        <div class="prow"><div class="pt"><span>أوزبكستان</span><span style="color:var(--green-d);font-weight:700">22%</span></div><div class="bar"><div class="fill" style="width:22%;background:var(--green-d)"></div></div></div>
+      </div>
+      <div style="text-align:center;font-size:13px;font-weight:700;color:#fff;background:var(--green);padding:11px;border-radius:12px;margin-top:13px">احفظ توقعك</div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">التوقعات <span>خارجية — Predictions</span></div></div>
+
+<!-- ============ 4) GROUPS ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">المجموعات</div><div class="s">يتأهل الأول والثاني من كل مجموعة</div></div>
+  <div class="wrap">
+    <div style="display:flex;gap:16px;font-size:11px;color:var(--slate)"><span style="display:inline-flex;align-items:center;gap:5px"><i style="width:14px;height:8px;border-radius:2px;background:var(--green-mid);display:inline-block"></i>متأهل</span><span style="display:inline-flex;align-items:center;gap:5px"><i style="width:14px;height:8px;border-radius:2px;background:var(--gold);display:inline-block"></i>المركز الثالث</span></div>
+    <div class="card gcard">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="gtitle"><svg width="11" viewBox="0 0 24 24" fill="currentColor"><path d="M4 3v18M4 4h13l-2 4 2 4H4"/></svg>المجموعة الأولى</span><div class="thead" style="padding:0"><span style="width:34px;text-align:center">لعب</span><span style="width:34px;text-align:center">فارق</span><span style="width:34px;text-align:center">نقاط</span></div></div>
+      <div class="trow ql"><span class="rk">1</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇸🇦</span>السعودية</span><span class="col">3</span><span class="col">+5</span><span class="pts">9</span></div>
+      <div class="trow ql"><span class="rk">2</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇺🇿</span>أوزبكستان</span><span class="col">3</span><span class="col">+2</span><span class="pts">6</span></div>
+      <div class="qline"><span>حدّ التأهل</span></div>
+      <div class="trow th"><span class="rk">3</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇹🇭</span>تايلاند</span><span class="col">3</span><span class="col">−2</span><span class="pts">3</span></div>
+      <div class="trow no"><span class="rk">4</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇮🇳</span>الهند</span><span class="col">3</span><span class="col">−5</span><span class="pts">0</span></div>
+    </div>
+    <div class="card gcard">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="gtitle"><svg width="11" viewBox="0 0 24 24" fill="currentColor"><path d="M4 3v18M4 4h13l-2 4 2 4H4"/></svg>المجموعة الثانية</span><div class="thead" style="padding:0"><span style="width:34px;text-align:center">لعب</span><span style="width:34px;text-align:center">فارق</span><span style="width:34px;text-align:center">نقاط</span></div></div>
+      <div class="trow ql"><span class="rk">1</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇯🇵</span>اليابان</span><span class="col">3</span><span class="col">+6</span><span class="pts">9</span></div>
+      <div class="trow ql"><span class="rk">2</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇮🇶</span>العراق</span><span class="col">3</span><span class="col">+1</span><span class="pts">4</span></div>
+      <div class="qline"><span>حدّ التأهل</span></div>
+      <div class="trow th"><span class="rk">3</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇻🇳</span>فيتنام</span><span class="col">3</span><span class="col">−2</span><span class="pts">3</span></div>
+      <div class="trow no"><span class="rk">4</span><span class="nm"><span class="flag" style="width:24px;height:24px;font-size:15px">🇰🇬</span>قيرغيزستان</span><span class="col">3</span><span class="col">−5</span><span class="pts">1</span></div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">المجموعات <span>خارجية — Groups</span></div></div>
+
+<!-- ============ 5) MORE ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">المزيد</div><div class="s">الملاعب والمنتخبات ومصدر التغطية</div></div>
+  <div class="wrap">
+    <div class="sh"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></div><div><div class="tt">استكشف</div><div class="ss">الهدّافون وشجرة الأدوار</div></div></div>
+    <div class="card lrow"><div class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9a6 6 0 0 0 12 0V3H6zM4 4H2v3a3 3 0 0 0 3 3M20 4h2v3a3 3 0 0 1-3 3M9 21h6M12 15v6"/></svg></div><div><div class="lt">الهدّافون</div><div class="ls">متصدّرو الأهداف والصناعة</div></div><span class="chev"><svg width="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="card lrow"><div class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M6 6h6v5H6M14 9h4v5h-4M18 11h0"/></svg></div><div><div class="lt">شجرة الأدوار</div><div class="ls">الطريق إلى النهائي</div></div><span class="chev"><svg width="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="card lrow"><div class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div><div><div class="lt">المنتخبات</div><div class="ls">٢٤ منتخباً متأهلاً</div></div><span class="chev"><svg width="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="card lrow"><div class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13"/></svg></div><div><div class="lt">ملاعب الاستضافة</div><div class="ls">٨ ملاعب في ٤ مدن</div></div><span class="chev"><svg width="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="card lrow"><div class="li" style="background:var(--blue-l)"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fb5" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div><div><div class="lt">لغة التطبيق</div><div class="ls">العربية</div></div><span class="chev"><svg width="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div style="text-align:center;font-size:11px;color:var(--faint);margin-top:4px">تغطية خاصة من <b style="color:var(--green-d)">سبق</b></div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">المزيد <span>خارجية — More</span></div></div>
+
+<!-- ============ 6) TEAMS ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">المنتخبات</div><div class="s">المتأهّلون إلى السعودية 2027</div></div>
+  <div class="wrap">
+    <div class="tgrid">
+      <div class="tcell"><span class="hostbadge">مضيف</span><div class="fl">🇸🇦</div><div class="nm">السعودية</div></div>
+      <div class="tcell"><div class="fl">🇯🇵</div><div class="nm">اليابان</div></div>
+      <div class="tcell"><div class="fl">🇰🇷</div><div class="nm">كوريا الجنوبية</div></div>
+      <div class="tcell"><div class="fl">🇦🇺</div><div class="nm">أستراليا</div></div>
+      <div class="tcell"><div class="fl">🇮🇷</div><div class="nm">إيران</div></div>
+      <div class="tcell"><div class="fl">🇶🇦</div><div class="nm">قطر</div></div>
+      <div class="tcell"><div class="fl">🇮🇶</div><div class="nm">العراق</div></div>
+      <div class="tcell"><div class="fl">🇦🇪</div><div class="nm">الإمارات</div></div>
+      <div class="tcell"><div class="fl">🇺🇿</div><div class="nm">أوزبكستان</div></div>
+      <div class="tcell"><div class="fl">🇯🇴</div><div class="nm">الأردن</div></div>
+      <div class="tcell"><div class="fl">🇴🇲</div><div class="nm">عُمان</div></div>
+      <div class="tcell"><div class="fl">🇧🇭</div><div class="nm">البحرين</div></div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">المنتخبات <span>داخلية — Teams</span></div></div>
+
+<!-- ============ 7) SCORERS ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">الهدّافون</div><div class="s">متصدّرو الأهداف والصناعة</div></div>
+  <div class="wrap">
+    <div class="seg"><div class="on">أهداف</div><div>صناعة</div></div>
+    <div class="card scrow"><span class="rk" style="color:var(--gold)">1</span><span class="av">⚽</span><div><div class="nm">صالح الشهري</div><div class="tm"><span style="font-size:12px">🇸🇦</span>السعودية</div></div><div class="g"><div class="n">5</div><div class="u">أهداف</div></div></div>
+    <div class="card scrow"><span class="rk">2</span><span class="av">⚽</span><div><div class="nm">تاكومي مينامينو</div><div class="tm"><span style="font-size:12px">🇯🇵</span>اليابان</div></div><div class="g"><div class="n">4</div><div class="u">أهداف</div></div></div>
+    <div class="card scrow"><span class="rk">3</span><span class="av">⚽</span><div><div class="nm">سون هيونغ مين</div><div class="tm"><span style="font-size:12px">🇰🇷</span>كوريا الجنوبية</div></div><div class="g"><div class="n">4</div><div class="u">أهداف</div></div></div>
+    <div class="card scrow"><span class="rk">4</span><span class="av">⚽</span><div><div class="nm">مهدي طارمي</div><div class="tm"><span style="font-size:12px">🇮🇷</span>إيران</div></div><div class="g"><div class="n">3</div><div class="u">أهداف</div></div></div>
+    <div class="card scrow"><span class="rk">5</span><span class="av">⚽</span><div><div class="nm">أيمن حسين</div><div class="tm"><span style="font-size:12px">🇮🇶</span>العراق</div></div><div class="g"><div class="n">3</div><div class="u">أهداف</div></div></div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">الهدّافون <span>داخلية — Scorers</span></div></div>
+
+<!-- ============ 8) BRACKET ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div class="scrhead"><div class="h">شجرة الأدوار</div><div class="s">الطريق إلى النهائي</div></div>
+  <div class="wrap">
+    <div class="chips"><span class="chip on">دور الـ16</span><span class="chip">ربع النهائي</span><span class="chip">نصف النهائي</span><span class="chip">النهائي</span></div>
+    <div class="bracket">
+      <div class="bcol">
+        <div class="ch">دور الـ16</div>
+        <div class="btie"><div class="bt win"><span class="f">🇸🇦</span>السعودية<span class="s">2</span></div><div class="div"></div><div class="bt"><span class="f">🇴🇲</span>عُمان<span class="s">0</span></div></div>
+        <div class="btie"><div class="bt win"><span class="f">🇯🇵</span>اليابان<span class="s">3</span></div><div class="div"></div><div class="bt"><span class="f">🇧🇭</span>البحرين<span class="s">1</span></div></div>
+        <div class="btie"><div class="bt win"><span class="f">🇰🇷</span>كوريا<span class="s">1</span></div><div class="div"></div><div class="bt"><span class="f">🇯🇴</span>الأردن<span class="s">0</span></div></div>
+        <div class="btie"><div class="bt win"><span class="f">🇮🇷</span>إيران<span class="s">2</span></div><div class="div"></div><div class="bt"><span class="f">🇦🇪</span>الإمارات<span class="s">1</span></div></div>
+      </div>
+      <div class="bcol">
+        <div class="ch">ربع النهائي</div>
+        <div class="btie"><div class="bt win"><span class="f">🇸🇦</span>السعودية<span class="s">1</span></div><div class="div"></div><div class="bt"><span class="f">🇯🇵</span>اليابان<span class="s">0</span></div></div>
+        <div class="btie"><div class="bt"><span class="f">🇰🇷</span>كوريا<span class="s">—</span></div><div class="div"></div><div class="bt"><span class="f">🇮🇷</span>إيران<span class="s">—</span></div></div>
+      </div>
+      <div class="bcol">
+        <div class="ch">النهائي</div>
+        <div class="btie" style="border-color:var(--gold);background:var(--gold-l)"><div class="bt"><span class="f">🇸🇦</span>السعودية<span class="s">—</span></div><div class="div"></div><div class="bt"><span class="f">⚪</span>؟<span class="s">—</span></div><div style="text-align:center;margin-top:5px"><svg width="16" viewBox="0 0 24 24" fill="#b8882e"><path d="M6 3h12v2h3v3a4 4 0 0 1-4 4 6 6 0 0 1-4 3v2h3v2H8v-2h3v-2a6 6 0 0 1-4-3 4 4 0 0 1-4-4V5h3V3z"/></svg></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+  </div>
+</div></div><div class="caption">شجرة الأدوار <span>داخلية — Bracket</span></div></div>
+
+<!-- ============ 9) TEAM PROFILE ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div style="padding:6px 18px 4px"><span style="font-size:12px;color:var(--green-d);font-weight:600">‹ ملف المنتخب</span></div>
+  <div class="wrap">
+    <div class="hero phero">
+      <div class="bigflag">🇸🇦</div>
+      <div class="pn">السعودية</div>
+      <div class="pmeta">المجموعة الأولى · المضيف</div>
+      <div class="bigstats">
+        <div class="bstat"><div class="v">3</div><div class="l">لعب</div></div>
+        <div class="bstat"><div class="v">9</div><div class="l">نقاط</div></div>
+        <div class="bstat"><div class="v">+5</div><div class="l">فارق</div></div>
+        <div class="bstat"><div class="v">1</div><div class="l">المركز</div></div>
+      </div>
+      <div style="margin-top:14px"><div style="font-size:11px;color:var(--slate);font-weight:600;margin-bottom:6px">الفورمة</div><div class="form"><span class="fd fw">ف</span><span class="fd fw">ف</span><span class="fd fw">ف</span><span class="fd fdr">ت</span><span class="fd fl">خ</span></div></div>
+    </div>
+    <div class="sh"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="tt">المباراة القادمة</div></div></div>
+    <div class="card mc">
+      <div class="rd">دور الـ16</div>
+      <div class="mrow"><div class="mside l"><span class="flag">🇸🇦</span><span class="tname">السعودية</span></div><div class="mvs"><span class="tm">8:00 م</span><span class="vs">ضد</span></div><div class="mside"><span class="flag">🇴🇲</span><span class="tname">عُمان</span></div></div>
+      <div class="mmeta"><svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>استاد الملك فهد الدولي — الرياض</div>
+    </div>
+    <div class="sh"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div><div><div class="tt">القائمة</div></div></div>
+    <div class="card lrow"><span class="av" style="width:34px;height:34px;border-radius:50%;background:#eef3f0;display:grid;place-items:center;font-size:15px">🧤</span><div><div class="lt">حُرّاس المرمى</div><div class="ls">٣ لاعبين</div></div><span class="chev"><svg width="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+  </div>
+</div></div><div class="caption">ملف المنتخب <span>داخلية — Team profile</span></div></div>
+
+<!-- ============ 10) PLAYER PROFILE ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div style="padding:6px 18px 4px"><span style="font-size:12px;color:var(--green-d);font-weight:600">‹ ملف اللاعب</span></div>
+  <div class="wrap">
+    <div class="hero phero">
+      <div style="width:84px;height:84px;border-radius:50%;margin:0 auto;background:var(--green-l);border:2px solid var(--green);display:grid;place-items:center;font-size:36px">🧑</div>
+      <div class="pn">صالح الشهري</div>
+      <div class="pmeta">مهاجم · <span style="font-size:13px">🇸🇦</span> السعودية · #11</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:10px"><span class="pchip">الاتحاد</span><span class="pchip">٢٧ سنة</span></div>
+    </div>
+    <div class="sh"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg></div><div><div class="tt">أرقام كأس آسيا</div></div></div>
+    <div class="card" style="display:flex;padding:0">
+      <div class="bstat" style="flex:1;background:none;border-radius:0;border-left:1px solid var(--line)"><div class="v">5</div><div class="l">أهداف</div></div>
+      <div class="bstat" style="flex:1;background:none;border-radius:0;border-left:1px solid var(--line)"><div class="v">2</div><div class="l">صناعة</div></div>
+      <div class="bstat" style="flex:1;background:none;border-radius:0"><div class="v">5</div><div class="l">مباريات</div></div>
+    </div>
+    <div class="sh"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></div><div><div class="tt">المعلومات الشخصية</div></div></div>
+    <div class="card biogrid">
+      <div class="biotile"><div class="l">الطول</div><div class="v">١٧٥ سم</div></div>
+      <div class="biotile"><div class="l">الميلاد</div><div class="v">١٩٩٩</div></div>
+      <div class="biotile"><div class="l">الجنسية</div><div class="v">السعودية</div></div>
+      <div class="biotile"><div class="l">القيمة السوقية</div><div class="v">€٤.٥م</div></div>
+    </div>
+  </div>
+</div></div><div class="caption">ملف اللاعب <span>داخلية — Player profile</span></div></div>
+
+<!-- ============ 11) MATCH DETAIL ============ -->
+<div class="phone"><div class="screen"><div class="scl">
+  <div class="statusbar"><span>9:41</span><span class="ic"><svg width="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg></span></div>
+  <div style="padding:6px 18px 4px;display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--green-d);font-weight:600">‹ المباراة</span><span class="pill live">مباشر</span></div>
+  <div class="wrap">
+    <div class="hero mdhead">
+      <div style="font-size:11px;color:var(--slate);font-weight:600">الجولة الأولى · المجموعة الأولى</div>
+      <div class="mdteams">
+        <div class="t"><span class="f">🇸🇦</span><span class="n">السعودية</span></div>
+        <div style="text-align:center"><div class="sc">2 - 1</div><div class="min">63'</div></div>
+        <div class="t"><span class="f">🇺🇿</span><span class="n">أوزبكستان</span></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--slate);margin-top:10px"><svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/></svg> استاد الملك فهد الدولي — الرياض</div>
+    </div>
+    <div class="seg"><div class="on">الأحداث</div><div>الإحصاءات</div><div>التشكيلات</div></div>
+    <div class="card" style="padding:6px 12px">
+      <div class="ev"><span class="mn">12'</span><span class="ei">⚽</span><span>صالح الشهري <span style="color:var(--slate);font-size:10px">— السعودية</span></span></div>
+      <div style="height:1px;background:var(--line)"></div>
+      <div class="ev"><span class="mn">34'</span><span class="ei">🟨</span><span>علي البليهي <span style="color:var(--slate);font-size:10px">— السعودية</span></span></div>
+      <div style="height:1px;background:var(--line)"></div>
+      <div class="ev"><span class="mn">51'</span><span class="ei">⚽</span><span>إيغور سيرغييف <span style="color:var(--slate);font-size:10px">— أوزبكستان</span></span></div>
+      <div style="height:1px;background:var(--line)"></div>
+      <div class="ev"><span class="mn">58'</span><span class="ei">⚽</span><span>فراس البريكان <span style="color:var(--slate);font-size:10px">— السعودية</span></span></div>
+    </div>
+    <div class="card" style="padding:10px 13px">
+      <div class="statline"><span class="l" style="color:var(--green-d)">58%</span><div class="track"><div style="width:58%;background:var(--green);border-radius:99px"></div><div style="flex:1;background:#cfdcd5;border-radius:99px"></div></div><span class="r">42%</span></div>
+      <div class="statline" style="padding:0 0 6px"><span class="mid">الاستحواذ</span></div>
+    </div>
+  </div>
+</div></div><div class="caption">تفاصيل المباراة <span>داخلية — Match detail</span></div></div>
+
+</div>
+</body>
+</html>

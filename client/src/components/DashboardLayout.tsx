@@ -1,7 +1,8 @@
-import { ReactNode, useState, useEffect, useMemo } from "react";
+import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic } from "lucide-react";
+import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
   SidebarContent,
@@ -18,12 +19,14 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { DirectionProvider } from "@radix-ui/react-direction";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "./ThemeToggle";
+import { DashboardThemePickerButton } from "./DashboardThemePickerButton";
 import { AutoPublishBanner } from "./AutoPublishBanner";
 import { EditorPresenceBar } from "./admin/EditorPresenceBar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -40,39 +44,56 @@ import { useToast } from "@/hooks/use-toast";
 import { useNav, trackNavClick } from "@/nav/useNav";
 import { AppBreadcrumbs } from "./AppBreadcrumbs";
 import { InternalAnnouncement } from "./InternalAnnouncement";
+import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
+import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const STORAGE_KEY = "sabq.sidebar.v1";
+const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
   const { user, isLoading } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
   
-  // Load collapsed state from localStorage
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+  const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : {};
+      return localStorage.getItem(OPEN_GROUP_STORAGE_KEY);
     } catch {
-      return {};
+      return null;
     }
   });
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Save collapsed state to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsedGroups));
+      if (openGroupId) {
+        localStorage.setItem(OPEN_GROUP_STORAGE_KEY, openGroupId);
+      } else {
+        localStorage.removeItem(OPEN_GROUP_STORAGE_KEY);
+      }
     } catch (error) {
       console.error("Failed to save sidebar state:", error);
     }
-  }, [collapsedGroups]);
+  }, [openGroupId]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
 
   // Mark moderator offline when closing tab/browser
   // إزالة المشرف من المتصلين عند إغلاق التبويب
@@ -104,7 +125,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     audioSummaries: false,
   }), []);
   
-  const { treeFiltered, activeItem } = useNav({
+  const { treeFiltered, activeItem, parents, flat } = useNav({
     role,
     flags,
     pathname: location,
@@ -115,22 +136,44 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     allRoles: user?.roles && user.roles.length > 0 ? user.roles : (user?.role ? [user.role] : []),
   });
 
-  const toggleGroup = (groupId: string) => {
-    setCollapsedGroups(prev => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  };
+  useEffect(() => {
+    const activeGroup = parents.find((parent) => parent.children && parent.children.length > 0);
+    setOpenGroupId(activeGroup?.id || null);
+  }, [location, parents]);
+
+  const navigableItems = useMemo(() => {
+    const seenPaths = new Set<string>();
+    return flat.filter((item) => {
+      if (!item.path || seenPaths.has(item.path)) return false;
+      seenPaths.add(item.path);
+      return true;
+    });
+  }, [flat]);
+
+  const quickCreateItem = navigableItems.find((item) =>
+    item.id === "new_article"
+    || item.id === "opinion_author_new_article"
+    || item.id === "reporter_new_article"
+  );
+  const { favoriteItems } = useDashboardFavorites(navigableItems);
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase("ar");
+  const searchResults = normalizedSearch
+    ? navigableItems
+        .filter((item) => (item.labelAr || item.labelKey).toLocaleLowerCase("ar").includes(normalizedSearch))
+        .slice(0, 8)
+    : [];
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+      <DashboardThemeProvider>
+        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+          </div>
         </div>
-      </div>
+      </DashboardThemeProvider>
     );
   }
 
@@ -164,19 +207,30 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return 'س';
   };
 
+  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل (مثل بطاقة الوكالة في بوابة الناشر)
+  const isIdentitySidebar =
+    role === "opinion_author" || role === "angle_writer" || role === "reporter";
+  const identityDisplayName =
+    user.firstName && user.lastName
+      ? `${user.firstName} ${user.lastName}`
+      : user.firstName || user.name || user.email || (role === "reporter" ? "مراسل" : "كاتب");
+  const identityRoleLabel =
+    role === "reporter" ? "مراسل" : role === "angle_writer" ? "كاتب زاوية" : "كاتب رأي";
+  const IdentityRoleIcon = role === "reporter" ? Mic : PenLine;
+
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
     const isActive = activeItem?.id === item.id;
     const hasChildren = item.children && item.children.length > 0;
 
     if (hasChildren) {
-      const isOpen = !collapsedGroups[item.id];
+      const isOpen = openGroupId === item.id;
 
       return (
         <Collapsible
           key={item.id}
           open={isOpen}
-          onOpenChange={() => toggleGroup(item.id)}
+          onOpenChange={(nextOpen) => setOpenGroupId(nextOpen ? item.id : null)}
         >
           <SidebarMenuItem>
             <CollapsibleTrigger asChild>
@@ -185,10 +239,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 className="w-full"
               >
                 <span className="flex items-center gap-3 flex-1">
-                  {Icon && <Icon className="h-5 w-5" />}
+                  {Icon && <Icon className="h-4 w-4" />}
                   <span>{item.labelAr || item.labelKey}</span>
                 </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -196,20 +250,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 {item.children?.map((child) => {
                   const ChildIcon = child.icon;
                   const isChildActive = activeItem?.id === child.id;
-                  
+
                   return (
                     <SidebarMenuSubItem key={child.id}>
                       <SidebarMenuSubButton
                         asChild
                         isActive={isChildActive}
                       >
-                        <Link 
+                        <Link
                           href={child.path || "#"}
                           onClick={() => handleNavClick(child)}
                         >
-                          <span className="flex items-center gap-3">
-                            {ChildIcon && <ChildIcon className="h-4 w-4" />}
-                            <span>{child.labelAr || child.labelKey}</span>
+                          <span className="flex min-w-0 items-center gap-3">
+                            {ChildIcon && <ChildIcon className="h-4 w-4 shrink-0" />}
+                            <span className="truncate">{child.labelAr || child.labelKey}</span>
                           </span>
                         </Link>
                       </SidebarMenuSubButton>
@@ -230,13 +284,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           isActive={isActive}
           tooltip={item.labelAr || item.labelKey}
         >
-          <Link 
+          <Link
             href={item.path || "#"}
             onClick={() => handleNavClick(item)}
           >
-            <span className="flex items-center gap-3">
-              {Icon && <Icon className="h-5 w-5" />}
-              <span>{item.labelAr || item.labelKey}</span>
+            <span className="flex min-w-0 items-center gap-3">
+              {Icon && <Icon className="h-4 w-4 shrink-0" />}
+              <span className="truncate">{item.labelAr || item.labelKey}</span>
             </span>
           </Link>
         </SidebarMenuButton>
@@ -248,7 +302,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navGroups: NavItem[][] = [];
   let currentGroup: NavItem[] = [];
 
-  treeFiltered.forEach((item) => {
+  const navigationTree = quickCreateItem
+    ? treeFiltered.filter((item) => item.id !== quickCreateItem.id)
+    : treeFiltered;
+
+  navigationTree.forEach((item) => {
     if (item.divider && currentGroup.length > 0) {
       navGroups.push(currentGroup);
       currentGroup = [item];
@@ -267,6 +325,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   } as React.CSSProperties;
 
   return (
+    <DashboardThemeProvider>
+    <DirectionProvider dir="rtl">
     <SidebarProvider style={sidebarStyle}>
       <div className="flex h-screen w-full" dir="rtl">
         <Sidebar side="right" collapsible="offcanvas" className="border-l-0">
@@ -286,12 +346,151 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </div>
               </SidebarGroupLabel>
+              {isIdentitySidebar && (
+                <div className="mb-3 px-2" data-testid="sidebar-identity-card">
+                  <div className="relative overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar-accent/30">
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/12 via-primary/5 to-transparent"
+                    />
+                    <div className="relative space-y-2.5 p-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12 border shadow-sm">
+                          {user.profileImageUrl ? (
+                            <AvatarImage src={user.profileImageUrl} alt={identityDisplayName} />
+                          ) : null}
+                          <AvatarFallback className="bg-primary text-sm text-primary-foreground">
+                            {getInitials(user.firstName, user.lastName, user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-sm font-bold leading-snug tracking-tight"
+                            data-testid="sidebar-identity-name"
+                            title={identityDisplayName}
+                          >
+                            {identityDisplayName}
+                          </p>
+                          {user.email && (
+                            <p
+                              className="mt-0.5 truncate text-[11px] text-muted-foreground"
+                              data-testid="sidebar-identity-email"
+                              title={user.email}
+                              dir="ltr"
+                            >
+                              {user.email}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge
+                        className={cn(
+                          "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
+                        )}
+                        data-testid="sidebar-identity-role-badge"
+                      >
+                        <IdentityRoleIcon className="h-3 w-3" />
+                        {identityRoleLabel}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="mb-3 space-y-3 px-2">
+                {quickCreateItem && (
+                  <Button asChild className="w-full justify-start gap-2 shadow-sm">
+                    <Link
+                      href={quickCreateItem.path || "/dashboard/articles/new"}
+                      onClick={() => handleNavClick(quickCreateItem)}
+                      data-testid="sidebar-quick-create-article"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
+                    </Link>
+                  </Button>
+                )}
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    ref={searchInputRef}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="ابحث في لوحة التحكم"
+                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background"
+                    aria-label="البحث في لوحة التحكم"
+                    data-testid="sidebar-navigation-search"
+                  />
+                  <kbd className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    ⌘K
+                  </kbd>
+                </div>
+
+                {!normalizedSearch && (
+                  <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-2" data-testid="sidebar-favorites">
+                    <div className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-muted-foreground">
+                      <Star className="h-3.5 w-3.5 fill-warning text-warning" />
+                      <span>المفضلة</span>
+                    </div>
+                    {favoriteItems.length > 0 ? (
+                      <div className="space-y-0.5">
+                        {favoriteItems.map((item) => {
+                          const FavoriteIcon = item.icon;
+                          return (
+                            <Link
+                              key={item.id}
+                              href={item.path || "#"}
+                              onClick={() => handleNavClick(item)}
+                              className="flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-xs hover:bg-sidebar-accent"
+                              data-testid={`sidebar-favorite-link-${item.id}`}
+                            >
+                              {FavoriteIcon && <FavoriteIcon className="h-3.5 w-3.5 shrink-0" />}
+                              <span className="truncate">{item.labelAr || item.labelKey}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="px-1 py-1 text-[11px] leading-relaxed text-muted-foreground">
+                        ادخل أي قسم واضغط ★ بجانب اسم الصفحة لتثبيتها هنا.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
               <SidebarGroupContent>
-                {navGroups.map((group, groupIndex) => (
-                  <SidebarMenu key={groupIndex} className={groupIndex > 0 ? "mt-4 pt-4 border-t" : ""}>
-                    {group.map(renderNavItem)}
-                  </SidebarMenu>
-                ))}
+                {normalizedSearch ? (
+                  <div className="px-2">
+                    <p className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
+                      {searchResults.length > 0 ? `${searchResults.length} نتائج` : "لا توجد نتائج"}
+                    </p>
+                    <div className="space-y-1">
+                      {searchResults.map((item) => {
+                        const ResultIcon = item.icon;
+                        return (
+                          <Link
+                            key={item.id}
+                            href={item.path || "#"}
+                            onClick={() => {
+                              handleNavClick(item);
+                              setSearchQuery("");
+                            }}
+                            className="flex min-w-0 items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm hover:border-sidebar-border hover:bg-sidebar-accent"
+                          >
+                            {ResultIcon && <ResultIcon className="h-4 w-4 shrink-0" />}
+                            <span className="truncate">{item.labelAr || item.labelKey}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  navGroups.map((group, groupIndex) => (
+                    <SidebarMenu key={groupIndex} className={groupIndex > 0 ? "mt-4 pt-4 border-t" : ""}>
+                      {group.map(renderNavItem)}
+                    </SidebarMenu>
+                  ))
+                )}
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
@@ -313,8 +512,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>الرئيسية</span>
               </Link>
             </Button>
+            {role !== "opinion_author" && role !== "angle_writer" && (
+              <EditorPresenceBar />
+            )}
+            <DashboardThemePickerButton />
             <ThemeToggle />
-            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 md:h-9 md:w-9 rounded-full" data-testid="button-user-menu">
@@ -377,12 +579,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           
           <InternalAnnouncement />
           <AutoPublishBanner />
-          {role !== 'opinion_author' && role !== 'angle_writer' && (
-            <div className="px-3 md:px-6 pt-3">
-              <EditorPresenceBar />
-            </div>
-          )}
-          
+
           <div className="flex-1 overflow-auto p-3 md:p-6">
             <AppBreadcrumbs role={role} flags={flags} />
             {children}
@@ -390,5 +587,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+    </DirectionProvider>
+    </DashboardThemeProvider>
   );
 }

@@ -70,7 +70,7 @@ struct KeywordArticlesView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -117,11 +117,11 @@ struct KeywordArticlesView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(keyword)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 26, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text("أخبار ومقالات رأي تحمل هذا الوسم")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 15, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(4)
 
@@ -155,9 +155,9 @@ struct KeywordArticlesView: View {
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: isFollowing ? "checkmark.circle.fill" : "plus.circle")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                 Text(isFollowing ? "متابع" : "متابعة الوسم")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
             }
             .foregroundStyle(isFollowing ? .white : SabqTheme.primaryEnd)
             .padding(.horizontal, 16)
@@ -211,7 +211,7 @@ private struct CompactOpinionKeywordRow: View {
                 }
 
                 Text(opinion.title)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -220,15 +220,15 @@ private struct CompactOpinionKeywordRow: View {
                 HStack(spacing: 12) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                         Text(opinion.readingTime)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .monospacedDigit()
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Text(opinion.dateFormatted)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Spacer(minLength: 0)
@@ -261,7 +261,7 @@ private struct CompactOpinionKeywordRow: View {
             .frame(width: 80, height: 80)
             .overlay {
                 Image(systemName: "text.quote")
-                    .font(.system(size: 28, weight: .light))
+                    .font(SabqFonts.app(size: 28, weight: .light))
                     .foregroundStyle(SabqTheme.gold.opacity(0.7))
             }
     }

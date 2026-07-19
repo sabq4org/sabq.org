@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle } from "lucide-react";
+import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy, Lightbulb, Newspaper, ChevronLeft, Compass, Play, Goal, Square, Video, Flag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Header } from "@/components/Header";
+import { AccountSectionHeader } from "@/components/AccountSectionHeader";
 
 interface NotificationPrefs {
   id: string;
@@ -19,11 +21,21 @@ interface NotificationPrefs {
   mostRead: boolean;
   webPush: boolean;
   dailyDigest: boolean;
+  matchesOnly: boolean;
+  editorialDrafts: boolean;
   quietHoursStart?: string | null;
   quietHoursEnd?: string | null;
   whatsappPhone?: string | null;
   whatsappEnabled?: boolean;
   updatedAt?: string;
+}
+
+interface RecommendationPrefs {
+  enableDailyDigest: boolean;
+  enablePersonalized: boolean;
+  enableTrending: boolean;
+  enableCrossCategory: boolean;
+  digestTime?: string;
 }
 
 interface UserWithRoles {
@@ -35,6 +47,30 @@ interface UserWithRoles {
 interface ReporterNotificationPrefs {
   notifyOnPublish: boolean;
 }
+
+interface SportsAlertPrefs {
+  kickoff: boolean;
+  goals: boolean;
+  cards: boolean;
+  varReview: boolean;
+  fulltime: boolean;
+}
+
+const SPORTS_ALERT_DEFAULTS: SportsAlertPrefs = {
+  kickoff: true,
+  goals: true,
+  cards: true,
+  varReview: true,
+  fulltime: true,
+};
+
+const SPORTS_ALERT_ROWS: { key: keyof SportsAlertPrefs; icon: typeof Play; title: string; desc: string }[] = [
+  { key: "kickoff", icon: Play, title: "انطلاق المباراة", desc: "إشعار عند صافرة بداية مباراة فريقك" },
+  { key: "goals", icon: Goal, title: "الأهداف", desc: "كل هدف فور تسجيله (يشمل ركلات الجزاء)" },
+  { key: "cards", icon: Square, title: "البطاقات", desc: "البطاقات الصفراء والحمراء" },
+  { key: "varReview", icon: Video, title: "حالات الفار (VAR)", desc: "إلغاء هدف، احتساب ركلة جزاء، أو تسلل بعد المراجعة" },
+  { key: "fulltime", icon: Flag, title: "نهاية المباراة", desc: "النتيجة النهائية عند صافرة النهاية" },
+];
 
 export default function NotificationSettings() {
   const { toast } = useToast();
@@ -50,6 +86,12 @@ export default function NotificationSettings() {
     queryKey: ["/api/me/notification-prefs"],
   });
 
+  const { data: recData } = useQuery<{ preferences: RecommendationPrefs }>({
+    queryKey: ["/api/recommendations/preferences"],
+    retry: false,
+  });
+  const recPrefs = recData?.preferences;
+
   useEffect(() => {
     setWhatsappPhone(prefs?.whatsappPhone ?? "");
     setWhatsappEnabled(prefs?.whatsappEnabled ?? false);
@@ -60,9 +102,47 @@ export default function NotificationSettings() {
     enabled: !!user,
   });
 
+  const { data: sportsAlertData } = useQuery<{ preferences: SportsAlertPrefs }>({
+    queryKey: ["/api/sports/alert-prefs"],
+    retry: false,
+  });
+  const sportsAlerts = sportsAlertData?.preferences ?? SPORTS_ALERT_DEFAULTS;
+
+  const updateSportsAlertsMutation = useMutation({
+    mutationFn: async (data: Partial<SportsAlertPrefs>) => {
+      return await apiRequest("/api/sports/alert-prefs", {
+        method: "PUT",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/sports/alert-prefs"] });
+      const prev = queryClient.getQueryData<{ preferences: SportsAlertPrefs }>(["/api/sports/alert-prefs"]);
+      queryClient.setQueryData<{ preferences: SportsAlertPrefs }>(["/api/sports/alert-prefs"], {
+        preferences: { ...(prev?.preferences ?? SPORTS_ALERT_DEFAULTS), ...data },
+      });
+      return { prev };
+    },
+    onError: (_err, _data, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["/api/sports/alert-prefs"], ctx.prev);
+      toast({ title: "خطأ", description: "تعذر حفظ تفضيلات تنبيهات المباريات", variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sports/alert-prefs"] });
+    },
+  });
+
   // Check if user is a reporter/editor/admin (can have articles assigned)
   const isReporter = user?.role === 'reporter' || user?.role === 'editor' || user?.role === 'admin' || user?.role === 'superadmin' ||
     user?.roles?.some(r => ['reporter', 'editor', 'admin', 'superadmin'].includes(r.name));
+
+  // محررون/أدمن فقط يستقبلون إشعارات مسودات المراسلين (DraftSubmitted)
+  const editorialRoles = ['editor', 'admin', 'superadmin', 'senior_editor', 'editor_in_chief'];
+  const isEditor = (user?.role ? editorialRoles.includes(user.role) : false) ||
+    (user?.roles?.some(r => editorialRoles.includes(r.name)) ?? false);
+
+  const matchesOnly = prefs?.matchesOnly ?? false;
 
   const updatePrefsMutation = useMutation({
     mutationFn: async (data: Partial<NotificationPrefs>) => {
@@ -77,6 +157,30 @@ export default function NotificationSettings() {
       toast({
         title: "تم الحفظ",
         description: "تم حفظ إعدادات الإشعارات بنجاح",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء حفظ الإعدادات",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateRecMutation = useMutation({
+    mutationFn: async (data: Partial<RecommendationPrefs>) => {
+      return await apiRequest("/api/recommendations/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations/preferences"] });
+      toast({
+        title: "تم الحفظ",
+        description: "تم حفظ إعدادات التوصيات بنجاح",
       });
     },
     onError: () => {
@@ -116,6 +220,10 @@ export default function NotificationSettings() {
     updatePrefsMutation.mutate({ [key]: value });
   };
 
+  const handleRecToggle = (key: keyof RecommendationPrefs, value: boolean) => {
+    updateRecMutation.mutate({ [key]: value });
+  };
+
   const handleQuietHoursChange = (start: string, end: string) => {
     updatePrefsMutation.mutate({
       quietHoursStart: start || null,
@@ -132,7 +240,7 @@ export default function NotificationSettings() {
   const handleWhatsappPhoneSave = () => {
     const normalized = normalizePhone(whatsappPhone);
     const digits = normalized.replace(/[^0-9]/g, "");
-    
+
     if (!digits) {
       const prevPhone = prefs?.whatsappPhone ?? "";
       const prevEnabled = prefs?.whatsappEnabled ?? false;
@@ -146,7 +254,7 @@ export default function NotificationSettings() {
       });
       return;
     }
-    
+
     if (digits.length < 10 || digits.length > 15) {
       toast({
         title: "خطأ",
@@ -155,7 +263,7 @@ export default function NotificationSettings() {
       });
       return;
     }
-    
+
     const prevPhone = prefs?.whatsappPhone ?? "";
     setWhatsappPhone(normalized);
     updatePrefsMutation.mutate({ whatsappPhone: normalized }, {
@@ -169,11 +277,11 @@ export default function NotificationSettings() {
     return (
       <div dir="rtl" className="min-h-screen bg-background">
         <Header user={user || undefined} />
-        <div className="container max-w-4xl mx-auto py-8 px-4">
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="h-32 bg-muted rounded"></div>
-            <div className="h-32 bg-muted rounded"></div>
+            <div className="h-8 w-1/3 rounded bg-muted"></div>
+            <div className="h-32 rounded bg-muted"></div>
+            <div className="h-32 rounded bg-muted"></div>
           </div>
         </div>
       </div>
@@ -183,21 +291,103 @@ export default function NotificationSettings() {
   return (
     <div dir="rtl" className="min-h-screen bg-background">
       <Header user={user || undefined} />
-      <div className="container max-w-4xl mx-auto py-8 px-4">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">إعدادات الإشعارات</h1>
-          <p className="text-muted-foreground">
-            تحكم في الإشعارات التي تتلقاها وأوقات استلامها
-          </p>
+      <div className="border-b border-primary/10 bg-ai-gradient-soft">
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <AccountSectionHeader
+            icon={Bell}
+            title="إعدادات الإشعارات"
+            subtitle="مكان واحد للتحكم في كل إشعاراتك: العام، المباريات، والتوصيات والملخص اليومي"
+            testId="text-page-title"
+          />
         </div>
+      </div>
 
-      <div className="space-y-6">
-        {/* Notification Types */}
-        <Card>
+      <div className="container mx-auto max-w-7xl space-y-8 px-4 sm:px-6 lg:px-8 py-8">
+        {/* === المباريات === */}
+        <section className="scroll-fade-in rounded-2xl border border-emerald-600/10 bg-emerald-50/70 p-1 dark:border-emerald-400/10 dark:bg-emerald-950/25">
+        <Card className="border-0 bg-transparent shadow-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              أنواع الإشعارات
+              <span className="rounded-lg bg-emerald-600/10 p-2">
+                <Trophy className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
+              </span>
+              المباريات
+            </CardTitle>
+            <CardDescription>
+              تنبيهات المباريات تصلك تلقائياً عن الفرق التي تتابعها (بدء المباراة، الأهداف، النتيجة النهائية)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="matches-only" className="text-base font-medium">
+                  وضع المباريات فقط
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  استلم إشعارات المباريات فقط، مع كتم الملخص اليومي وإشعارات المقالات الجديدة
+                </p>
+              </div>
+              <Switch
+                id="matches-only"
+                checked={matchesOnly}
+                onCheckedChange={(checked) => handleToggle("matchesOnly", checked)}
+                data-testid="switch-matches-only"
+              />
+            </div>
+
+            <div className="space-y-1 rounded-lg border border-border/60 bg-background/60 p-3">
+              <p className="mb-1 text-base font-medium">أنواع تنبيهات المباريات</p>
+              <p className="mb-3 text-sm text-muted-foreground">
+                تُطبَّق على كل الفِرق التي تتابعها — اختر الأحداث التي تهمّك فقط
+              </p>
+              {SPORTS_ALERT_ROWS.map(({ key, icon: Icon, title, desc }) => (
+                <div key={key} className="flex items-center justify-between gap-4 py-2">
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-5 w-5 shrink-0 text-primary" />
+                    <div>
+                      <Label htmlFor={`sports-alert-${key}`} className="text-base font-medium">{title}</Label>
+                      <p className="text-sm text-muted-foreground">{desc}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    id={`sports-alert-${key}`}
+                    checked={sportsAlerts[key]}
+                    onCheckedChange={(checked) => updateSportsAlertsMutation.mutate({ [key]: checked })}
+                    data-testid={`switch-sports-alert-${key}`}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/60 p-3">
+              <div className="flex items-center gap-3">
+                <Compass className="h-5 w-5 shrink-0 text-primary" />
+                <div>
+                  <p className="text-base font-medium">الفرق التي تتابعها</p>
+                  <p className="text-sm text-muted-foreground">
+                    تابع فرقك من صفحة الرياضة بالضغط على نجمة المتابعة ⭐ بجانب كل فريق للتحكم في تنبيهات مبارياتها
+                  </p>
+                </div>
+              </div>
+              <Link href="/sports">
+                <Button variant="outline" size="sm" data-testid="link-manage-follows">
+                  متابعة الفرق
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+        </section>
+
+        {/* === عام === */}
+        <Card className="scroll-fade-in border-0 shadow-sm dark:border dark:border-card-border">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="rounded-lg bg-primary/10 p-2">
+                <Bell className="h-5 w-5 text-primary" />
+              </span>
+              عام
             </CardTitle>
             <CardDescription>
               اختر الإشعارات التي تريد استلامها
@@ -234,13 +424,16 @@ export default function NotificationSettings() {
                     المقالات المطابقة لاهتماماتك
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    مقالات جديدة تتعلق بمواضيع تهمك
+                    {matchesOnly
+                      ? "معطّل بسبب «وضع المباريات فقط»"
+                      : "مقالات جديدة تتعلق بمواضيع تهمك"}
                   </p>
                 </div>
               </div>
               <Switch
                 id="interest-match"
-                checked={prefs?.interest ?? true}
+                checked={!matchesOnly && (prefs?.interest ?? true)}
+                disabled={matchesOnly}
                 onCheckedChange={(checked) => handleToggle("interest", checked)}
                 data-testid="switch-interest-match"
               />
@@ -290,6 +483,107 @@ export default function NotificationSettings() {
           </CardContent>
         </Card>
 
+        {/* === التوصيات والملخص اليومي === */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-primary" />
+              التوصيات والملخص اليومي
+            </CardTitle>
+            <CardDescription>
+              تحكم في التوصيات المخصصة والملخص اليومي للمقالات
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Daily Digest */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Newspaper className="h-5 w-5 text-primary" />
+                <div>
+                  <Label htmlFor="daily-digest" className="text-base font-medium">
+                    الملخص اليومي
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {matchesOnly
+                      ? "معطّل بسبب «وضع المباريات فقط»"
+                      : "ملخص يومي للمقالات المهمة في اهتماماتك"}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="daily-digest"
+                checked={!matchesOnly && (recPrefs?.enableDailyDigest ?? false)}
+                disabled={matchesOnly}
+                onCheckedChange={(checked) => handleRecToggle("enableDailyDigest", checked)}
+                data-testid="switch-daily-digest"
+              />
+            </div>
+
+            {/* Personalized */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <div>
+                  <Label htmlFor="rec-personalized" className="text-base font-medium">
+                    محتوى مخصص
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    مقالات مشابهة لما قرأته سابقاً
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="rec-personalized"
+                checked={recPrefs?.enablePersonalized ?? true}
+                onCheckedChange={(checked) => handleRecToggle("enablePersonalized", checked)}
+                data-testid="switch-rec-personalized"
+              />
+            </div>
+
+            {/* Trending */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="h-5 w-5 text-chart-1" />
+                <div>
+                  <Label htmlFor="rec-trending" className="text-base font-medium">
+                    الأكثر رواجاً
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    المقالات الشائعة في مجالات اهتمامك
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="rec-trending"
+                checked={recPrefs?.enableTrending ?? true}
+                onCheckedChange={(checked) => handleRecToggle("enableTrending", checked)}
+                data-testid="switch-rec-trending"
+              />
+            </div>
+
+            {/* Cross Category */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Compass className="h-5 w-5 text-accent" />
+                <div>
+                  <Label htmlFor="rec-cross" className="text-base font-medium">
+                    اكتشاف محتوى جديد
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    مقالات من أقسام أخرى قد تثير اهتمامك
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="rec-cross"
+                checked={recPrefs?.enableCrossCategory ?? true}
+                onCheckedChange={(checked) => handleRecToggle("enableCrossCategory", checked)}
+                data-testid="switch-rec-cross"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Reporter Notifications - Only shown to reporters/editors */}
         {isReporter && (
           <Card>
@@ -321,6 +615,42 @@ export default function NotificationSettings() {
                   onCheckedChange={(checked) => updateReporterPrefsMutation.mutate(checked)}
                   disabled={updateReporterPrefsMutation.isPending}
                   data-testid="switch-notify-on-publish"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* === غرفة الأخبار / المسودات — محررون وأدمن فقط === */}
+        {isEditor && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Newspaper className="h-5 w-5 text-primary" />
+                غرفة الأخبار
+              </CardTitle>
+              <CardDescription>
+                إشعارات سير العمل التحريري الخاصة بالمحررين
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <PenTool className="h-5 w-5 text-primary" />
+                  <div>
+                    <Label htmlFor="editorial-drafts" className="text-base font-medium">
+                      مسودات المراسلين الجديدة
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      إشعار عند إرسال أي مراسل مسودة خبر جديدة للمراجعة
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="editorial-drafts"
+                  checked={prefs?.editorialDrafts ?? true}
+                  onCheckedChange={(checked) => handleToggle("editorialDrafts", checked)}
+                  data-testid="switch-editorial-drafts"
                 />
               </div>
             </CardContent>
@@ -400,7 +730,7 @@ export default function NotificationSettings() {
                     }
                     const prevEnabled = prefs?.whatsappEnabled ?? false;
                     setWhatsappEnabled(checked);
-                    updatePrefsMutation.mutate({ 
+                    updatePrefsMutation.mutate({
                       whatsappEnabled: checked,
                       whatsappPhone: normalized || null
                     }, {
@@ -457,21 +787,9 @@ export default function NotificationSettings() {
           </CardContent>
         </Card>
 
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <Button
-            onClick={() => {
-              toast({
-                title: "تم الحفظ",
-                description: "يتم حفظ التغييرات تلقائياً",
-              });
-            }}
-            data-testid="button-save-settings"
-          >
-            تم الحفظ
-          </Button>
-        </div>
-      </div>
+        <p className="text-center text-sm text-muted-foreground">
+          يتم حفظ كل تغيير تلقائياً
+        </p>
       </div>
     </div>
   );

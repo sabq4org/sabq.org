@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
@@ -33,6 +34,8 @@ interface AutoImageSettings {
   articleTypes: string[];
   skipCategories: string[];
   defaultStyle: string;
+  newsStyle: string;
+  articleStyle: string;
   provider: string;
   autoPublish: boolean;
   generateOnSave: boolean;
@@ -41,9 +44,9 @@ interface AutoImageSettings {
   currentMonthGenerations?: number;
 }
 
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
-  <div className="flex items-center gap-3 mb-4">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
+const SectionHeader = ({ title }: { title: string }) => (
+  <div className="mb-4 flex items-center gap-3">
+    <div className="h-8 w-1 rounded-full bg-border" />
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
@@ -54,6 +57,8 @@ export default function AutoImageSettingsPage() {
     articleTypes: ["news", "analysis"],
     skipCategories: ["opinion", "columns"],
     defaultStyle: "photorealistic",
+    newsStyle: "photorealistic",
+    articleStyle: "photorealistic",
     provider: "nano-banana",
     autoPublish: false,
     generateOnSave: false,
@@ -76,19 +81,30 @@ export default function AutoImageSettingsPage() {
     queryKey: ["/api/auto-image/settings"]
   });
   
-  // Update local settings when data is fetched
+  // Update local settings when data is fetched (backfill newsStyle/articleStyle from legacy defaultStyle)
   useEffect(() => {
     if (data) {
-      setSettings(data);
+      const newsStyle = data.newsStyle || data.defaultStyle || "photorealistic";
+      const articleStyle = data.articleStyle || data.defaultStyle || "photorealistic";
+      setSettings({
+        ...data,
+        newsStyle,
+        articleStyle,
+        defaultStyle: newsStyle,
+      });
     }
   }, [data]);
 
   // Update settings mutation
   const updateSettingsMutation = useMutation({
     mutationFn: async (updatedSettings: AutoImageSettings) => {
+      const payload = {
+        ...updatedSettings,
+        defaultStyle: updatedSettings.newsStyle || updatedSettings.defaultStyle,
+      };
       return await apiRequest<{ success: boolean }>("/api/auto-image/settings", {
         method: "PUT",
-        body: JSON.stringify(updatedSettings)
+        body: JSON.stringify(payload)
       });
     },
     onSuccess: () => {
@@ -179,23 +195,13 @@ export default function AutoImageSettingsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6 space-y-6" dir="rtl">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-purple-100 dark:bg-purple-950/50">
-              <Wand2 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground" data-testid="text-page-title">
-                إعدادات التوليد التلقائي للصور
-              </h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                تحكم في إعدادات توليد الصور بالذكاء الاصطناعي للمقالات
-              </p>
-            </div>
-          </div>
-          <Button
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Wand2}
+          title="إعدادات التوليد التلقائي للصور"
+          description="تحكم في إعدادات توليد الصور بالذكاء الاصطناعي للمقالات"
+          titleTestId="text-page-title"
+          actions={<Button
             onClick={handleSaveSettings}
             disabled={updateSettingsMutation.isPending}
             size="lg"
@@ -213,64 +219,60 @@ export default function AutoImageSettingsPage() {
                 حفظ الإعدادات
               </>
             )}
-          </Button>
-        </div>
+          </Button>}
+        />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
+          <Card className="border-border/70 bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">صور الشهر</p>
-                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  <p className="text-2xl font-bold">
                     {settings.currentMonthGenerations || 0}
                   </p>
                 </div>
-                <div className="p-2 rounded-md bg-purple-500/20">
-                  <ImageIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="rounded-md bg-muted p-2">
+                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
+          <Card className="border-border/70 bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">الحد الأقصى</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  <p className="text-2xl font-bold">
                     {settings.maxMonthlyGenerations || 100}
                   </p>
                 </div>
-                <div className="p-2 rounded-md bg-blue-500/20">
-                  <Zap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="rounded-md bg-muted p-2">
+                  <Zap className="h-5 w-5 text-muted-foreground" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
+          <Card className="border-border/70 bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">نسبة الاستخدام</p>
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  <p className="text-2xl font-bold">
                     {usagePercentage}%
                   </p>
                 </div>
-                <div className="p-2 rounded-md bg-amber-500/20">
-                  <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <div className="rounded-md bg-muted p-2">
+                  <Sparkles className="h-5 w-5 text-muted-foreground" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className={`hover-elevate active-elevate-2 transition-all ${
-            settings.enabled
-              ? 'bg-green-50 dark:bg-card'
-              : 'bg-gray-50 dark:bg-card'
-          }`}>
+          <Card className="border-border/70 bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -301,7 +303,7 @@ export default function AutoImageSettingsPage() {
 
         {/* Usage Progress */}
         {settings.maxMonthlyGenerations && (
-          <Card className="hover-elevate transition-all bg-gradient-to-l from-purple-50 to-blue-50 dark:from-card dark:to-card">
+          <Card className="border-border/70 bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">استخدام الشهر الحالي</span>
@@ -326,13 +328,13 @@ export default function AutoImageSettingsPage() {
         )}
 
         {/* Main Settings */}
-        <Card className="hover-elevate transition-all bg-violet-50 dark:bg-card">
+        <Card className="border-border/70 bg-card">
           <CardContent className="p-6">
-            <SectionHeader title="الإعدادات الرئيسية" color="bg-violet-500" />
+            <SectionHeader title="الإعدادات الرئيسية" />
             
             <div className="space-y-6">
               {/* Enable/Disable Toggle */}
-              <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-black/20 rounded-lg">
+              <div className="flex items-center justify-between rounded-lg bg-muted/30 p-4">
                 <div>
                   <Label htmlFor="enabled" className="text-base font-medium">
                     تفعيل التوليد التلقائي
@@ -356,7 +358,7 @@ export default function AutoImageSettingsPage() {
               {/* Provider Selection */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-violet-500" />
+                  <Zap className="h-4 w-4 text-muted-foreground" />
                   مزود خدمة التوليد
                 </Label>
                 <Select
@@ -381,34 +383,65 @@ export default function AutoImageSettingsPage() {
                 </p>
               </div>
 
-              {/* Default Style */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Palette className="h-4 w-4 text-violet-500" />
-                  النمط الافتراضي للصور
-                </Label>
-                <Select
-                  value={settings.defaultStyle}
-                  onValueChange={(value) => 
-                    setSettings({ ...settings, defaultStyle: value })
-                  }
-                >
-                  <SelectTrigger data-testid="select-style">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {styleOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Style by content kind */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-muted-foreground" />
+                    نمط صور الأخبار
+                  </Label>
+                  <Select
+                    value={settings.newsStyle}
+                    onValueChange={(value) =>
+                      setSettings({ ...settings, newsStyle: value, defaultStyle: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-news-style">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {styleOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    للأخبار والتحليلات
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-muted-foreground" />
+                    نمط صور المقالات
+                  </Label>
+                  <Select
+                    value={settings.articleStyle}
+                    onValueChange={(value) =>
+                      setSettings({ ...settings, articleStyle: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-article-style">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {styleOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    لمقالات الرأي والأعمدة
+                  </p>
+                </div>
               </div>
 
               {/* Auto Generation Options */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-black/20 rounded-lg">
+                <div className="flex items-center justify-between rounded-lg bg-muted/30 p-4">
                   <div>
                     <Label htmlFor="generateOnSave">
                       توليد عند الحفظ
@@ -427,7 +460,7 @@ export default function AutoImageSettingsPage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-black/20 rounded-lg">
+                <div className="flex items-center justify-between rounded-lg bg-muted/30 p-4">
                   <div>
                     <Label htmlFor="autoPublish">
                       النشر التلقائي للصور
@@ -451,14 +484,14 @@ export default function AutoImageSettingsPage() {
         </Card>
 
         {/* Article Types Settings */}
-        <Card className="hover-elevate transition-all bg-blue-50 dark:bg-card">
+        <Card className="border-border/70 bg-card">
           <CardContent className="p-6">
-            <SectionHeader title="أنواع المقالات" color="bg-blue-500" />
+            <SectionHeader title="أنواع المقالات" />
             <p className="text-sm text-muted-foreground mb-4">
               اختر أنواع المقالات التي سيتم توليد صور لها تلقائياً
             </p>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {articleTypeOptions.map(type => (
                 <div
                   key={type.value}
@@ -493,9 +526,9 @@ export default function AutoImageSettingsPage() {
         </Card>
 
         {/* Skip Categories Settings */}
-        <Card className="hover-elevate transition-all bg-orange-50 dark:bg-card">
+        <Card className="border-border/70 bg-card">
           <CardContent className="p-6">
-            <SectionHeader title="الفئات المستثناة" color="bg-orange-500" />
+            <SectionHeader title="الفئات المستثناة" />
             <p className="text-sm text-muted-foreground mb-4">
               الفئات التي لن يتم توليد صور لها تلقائياً
             </p>
@@ -558,9 +591,9 @@ export default function AutoImageSettingsPage() {
         </Card>
 
         {/* Advanced Settings */}
-        <Card className="hover-elevate transition-all bg-slate-50 dark:bg-card">
+        <Card className="border-border/70 bg-card">
           <CardContent className="p-6">
-            <SectionHeader title="إعدادات متقدمة" color="bg-slate-500" />
+            <SectionHeader title="إعدادات متقدمة" />
             
             <div className="space-y-6">
               {/* Prompt Template */}

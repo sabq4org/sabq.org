@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth, hasAnyPermission } from "@/hooks/useAuth";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -41,6 +39,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
@@ -167,10 +167,9 @@ function SortableRow({
 }
 
 // Section Header component matching Dashboard style
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
-  <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
-    <h3 className="text-lg font-bold text-foreground">{title}</h3>
+const SectionHeader = ({ title }: { title: string }) => (
+  <div className="px-1">
+    <h2 className="text-base font-semibold text-foreground">{title}</h2>
   </div>
 );
 
@@ -600,10 +599,10 @@ export default function ArticlesManagement() {
 
   // Update articles order mutation with optimistic updates
   const updateOrderMutation = useMutation({
-    mutationFn: async (data: { 
+    mutationFn: async (data: {
       articleOrders: Array<{ id: string; displayOrder: number }>;
       newOrderedArticles: Article[];
-      queryKey: (string | undefined)[];
+      queryKey: (string | number | undefined)[];
     }) => {
       return await apiRequest("/api/admin/articles/update-order", {
         method: "POST",
@@ -614,15 +613,17 @@ export default function ArticlesManagement() {
     onMutate: async (data) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
-      
-      // Store the previous state for rollback (deep clone)
-      const previousArticles = queryClient.getQueryData<Article[]>(data.queryKey);
+
+      // Store the previous state for rollback
+      const previousData = queryClient.getQueryData<{ articles: Article[]; total: number; page: number; limit: number; totalPages: number }>(data.queryKey);
       const previousLocalArticles = [...localArticles];
-      
-      // Optimistically update the cache with cloned array
-      queryClient.setQueryData(data.queryKey, [...data.newOrderedArticles]);
-      
-      return { previousArticles: previousArticles ? [...previousArticles] : undefined, previousLocalArticles, queryKey: data.queryKey };
+
+      // Optimistically update the cache, preserving the paginated response shape
+      if (previousData) {
+        queryClient.setQueryData(data.queryKey, { ...previousData, articles: [...data.newOrderedArticles] });
+      }
+
+      return { previousData, previousLocalArticles, queryKey: data.queryKey };
     },
     onSuccess: () => {
       // Invalidate homepage and related caches for instant update
@@ -637,8 +638,8 @@ export default function ArticlesManagement() {
     },
     onError: (error: any, _variables, context) => {
       // Rollback to the previous state with fresh copies
-      if (context?.previousArticles && context?.queryKey) {
-        queryClient.setQueryData(context.queryKey, [...context.previousArticles]);
+      if (context?.previousData && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, { ...context.previousData, articles: [...context.previousData.articles] });
       }
       if (context?.previousLocalArticles) {
         setLocalArticles([...context.previousLocalArticles]);
@@ -743,7 +744,7 @@ export default function ArticlesManagement() {
     }));
 
     // Build the current query key at call time to avoid stale closures
-    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter];
+    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage];
 
     updateOrderMutation.mutate({
       articleOrders,
@@ -762,32 +763,24 @@ export default function ArticlesManagement() {
     return badges[status as keyof typeof badges] || <Badge>{status}</Badge>;
   };
 
-  const formatScheduledDate = (date: string | Date | null | undefined) => {
+  const formatArticleDate = (date: string | Date | null | undefined) => {
     if (!date) return null;
     try {
-      return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
+      return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } catch {
       return null;
     }
   };
 
-  const formatDraftDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    try {
-      return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
-    } catch {
-      return null;
-    }
-  };
-
-  const formatPublishedDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    try {
-      return format(new Date(date), "d MMM yyyy - HH:mm");
-    } catch {
-      return null;
-    }
-  };
+  const formatScheduledDate = formatArticleDate;
+  const formatDraftDate = formatArticleDate;
+  const formatPublishedDate = formatArticleDate;
 
   const getTypeBadge = (type: string) => {
     const badges = {
@@ -854,18 +847,14 @@ export default function ArticlesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 md:space-y-6 p-3 md:p-0 overflow-x-hidden">
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="overflow-x-hidden pb-10 space-y-5 md:space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold" data-testid="heading-title">
-              إدارة الأخبار والمقالات
-            </h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
-              إدارة المحتوى الإخباري والمقالات
-            </p>
-          </div>
-          {canCreateArticle && (
+        <DashboardPageHeader
+          icon={Newspaper}
+          title="إدارة الأخبار والمقالات"
+          description="إدارة المحتوى الإخباري والمقالات من مكان واحد"
+          titleTestId="heading-title"
+          actions={canCreateArticle ? (
             <Button
               onClick={() => setLocation("/dashboard/articles/new")}
               className="gap-2 w-full sm:w-auto"
@@ -875,100 +864,96 @@ export default function ArticlesManagement() {
               <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
               مقال جديد
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
-        {/* Status Cards - Matching Dashboard Style */}
-        <div className="space-y-3">
-          <SectionHeader title="إحصائيات المقالات" color="bg-emerald-500" />
+        {/* Status filter chips — compact; selected = darker filled */}
+        <div className="space-y-2">
+          <SectionHeader title="إحصائيات المقالات" />
         {metricsLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="h-24">
-                <CardContent className="pt-4">
-                  <Skeleton className="h-4 w-16 mb-2" />
-                  <Skeleton className="h-8 w-20" />
+              <Card key={i} className="rounded-xl border-border/60">
+                <CardContent className="p-2.5 sm:p-3">
+                  <Skeleton className="mb-1.5 h-3 w-10" />
+                  <Skeleton className="h-5 w-12" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            {/* Published Card */}
-            <Card
-              onClick={() => setActiveStatus('published')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card ${
-                activeStatus === 'published' ? 'ring-2 ring-emerald-500' : ''
-              }`}
-              data-testid="card-stat-published"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">منشورة</CardTitle>
-                <div className="p-2 rounded-md bg-emerald-500/20">
-                  <Newspaper className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{metrics.published.toLocaleString('en-US')}</div>
-              </CardContent>
-            </Card>
-
-            {/* Scheduled Card */}
-            <Card
-              onClick={() => setActiveStatus('scheduled')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-indigo-50 dark:bg-card ${
-                activeStatus === 'scheduled' ? 'ring-2 ring-indigo-500' : ''
-              }`}
-              data-testid="card-stat-scheduled"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">مجدولة</CardTitle>
-                <div className="p-2 rounded-md bg-indigo-500/20">
-                  <Clock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{metrics.scheduled.toLocaleString('en-US')}</div>
-              </CardContent>
-            </Card>
-
-            {/* Draft Card */}
-            <Card
-              onClick={() => setActiveStatus('draft')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card ${
-                activeStatus === 'draft' ? 'ring-2 ring-amber-500' : ''
-              }`}
-              data-testid="card-stat-draft"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">مسودة</CardTitle>
-                <div className="p-2 rounded-md bg-amber-500/20">
-                  <FilePenLine className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{metrics.draft.toLocaleString('en-US')}</div>
-              </CardContent>
-            </Card>
-
-            {/* Archived Card */}
-            <Card
-              onClick={() => setActiveStatus('archived')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-slate-50 dark:bg-card ${
-                activeStatus === 'archived' ? 'ring-2 ring-slate-500' : ''
-              }`}
-              data-testid="card-stat-archived"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">مؤرشفة</CardTitle>
-                <div className="p-2 rounded-md bg-slate-500/20">
-                  <Archive className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{metrics.archived.toLocaleString('en-US')}</div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2" role="tablist" aria-label="تصفية حسب الحالة">
+            {([
+              {
+                key: "published" as const,
+                label: "منشورة",
+                value: metrics.published,
+                Icon: Newspaper,
+                idle: "border-emerald-200/70 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100",
+                active: "border-emerald-700 bg-emerald-700 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600",
+                iconIdle: "bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-published",
+              },
+              {
+                key: "scheduled" as const,
+                label: "مجدولة",
+                value: metrics.scheduled,
+                Icon: Clock,
+                idle: "border-sky-200/70 bg-sky-50/40 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
+                active: "border-sky-700 bg-sky-700 text-white shadow-sm dark:border-sky-500 dark:bg-sky-600",
+                iconIdle: "bg-sky-100/90 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-scheduled",
+              },
+              {
+                key: "draft" as const,
+                label: "مسودة",
+                value: metrics.draft,
+                Icon: FilePenLine,
+                idle: "border-amber-200/70 bg-amber-50/40 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
+                active: "border-amber-700 bg-amber-700 text-white shadow-sm dark:border-amber-500 dark:bg-amber-600",
+                iconIdle: "bg-amber-100/90 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-draft",
+              },
+              {
+                key: "archived" as const,
+                label: "مؤرشفة",
+                value: metrics.archived,
+                Icon: Archive,
+                idle: "border-rose-200/70 bg-rose-50/40 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
+                active: "border-rose-800 bg-rose-800 text-white shadow-sm dark:border-rose-500 dark:bg-rose-700",
+                iconIdle: "bg-rose-100/90 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-archived",
+              },
+            ]).map((card) => {
+              const isActive = activeStatus === card.key;
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveStatus(card.key)}
+                  className={`rounded-xl border px-2 py-2 text-start transition-colors sm:px-3 sm:py-2.5 ${
+                    isActive ? card.active : card.idle
+                  }`}
+                  data-testid={card.testId}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-[11px] font-semibold sm:text-xs">{card.label}</span>
+                    <span className={`rounded-md p-1 ${isActive ? card.iconActive : card.iconIdle}`}>
+                      <card.Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <div className="mt-1 text-base font-bold tabular-nums sm:text-lg">
+                    {card.value.toLocaleString("en-US")}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
@@ -979,8 +964,8 @@ export default function ArticlesManagement() {
 
         {/* Filters - Mobile Optimized */}
         <div className="space-y-3">
-          <SectionHeader title="البحث والفلاتر" color="bg-blue-500" />
-        <div className="bg-card rounded-lg border border-border p-3 md:p-4">
+          <SectionHeader title="البحث والفلاتر" />
+        <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
           <div className="flex flex-col gap-3">
             {/* Search */}
             <div>
@@ -1039,14 +1024,14 @@ export default function ArticlesManagement() {
 
         {/* Articles List Section */}
         <div className="space-y-3">
-          <SectionHeader title="قائمة المقالات" color="bg-indigo-500" />
+          <SectionHeader title="قائمة المقالات" />
 
           {/* Bulk Actions Toolbar */}
           {selectedArticles.size > 0 && (
-            <div className="bg-card rounded-lg border border-border p-3 md:p-4">
+            <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
               <div className="flex items-center justify-between gap-4">
-                <div className="text-sm text-muted-foreground">
-                  تم تحديد {selectedArticles.size} مقال
+                <div className="text-sm text-muted-foreground tabular-nums">
+                  تم تحديد {selectedArticles.size.toLocaleString("en-US")} مقال
                 </div>
                 <div className="flex items-center gap-2">
                   {activeStatus !== "archived" && (
@@ -1089,7 +1074,7 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
+          <div className="hidden overflow-hidden rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:block">
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
@@ -1341,12 +1326,12 @@ export default function ArticlesManagement() {
               articles.map((article) => (
                 <div 
                   key={article.id} 
-                  className={`border rounded-lg p-3 space-y-2 hover-elevate active-elevate-2 transition-all ${
+                  className={`space-y-2 rounded-2xl border p-3 shadow-sm transition-all hover-elevate active-elevate-2 ${
                     isResubmittedAfterRevision(article)
-                      ? "bg-amber-50 dark:bg-card border-amber-300 dark:border-border"
+                      ? "border-amber-300 bg-amber-50 dark:border-border dark:bg-card"
                       : isAwaitingContributorRevision(article)
-                        ? "bg-orange-50 dark:bg-card border-orange-300 dark:border-border"
-                        : "bg-blue-50 dark:bg-card"
+                        ? "border-orange-300 bg-orange-50 dark:border-border dark:bg-card"
+                        : "border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
@@ -1604,8 +1589,8 @@ export default function ArticlesManagement() {
                 <ChevronRight className="h-4 w-4 ml-1" />
                 السابق
               </Button>
-              <span className="text-sm text-muted-foreground" data-testid="text-pagination-info">
-                الصفحة {currentPage} من {totalPages}
+              <span className="text-sm tabular-nums text-muted-foreground" data-testid="text-pagination-info">
+                الصفحة {currentPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
               </span>
               <Button
                 variant="outline"
@@ -1620,13 +1605,14 @@ export default function ArticlesManagement() {
             </div>
           )}
         </div>
+      </DashboardPageShell>
 
       {/* Bulk Action Bar - Mobile Only */}
       {selectedArticles.size > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">
-              {selectedArticles.size} مقال محدد
+            <span className="text-sm font-medium tabular-nums">
+              {selectedArticles.size.toLocaleString("en-US")} مقال محدد
             </span>
             <Button
               size="sm"
@@ -1666,7 +1652,6 @@ export default function ArticlesManagement() {
           </div>
         </div>
       )}
-        </div>
 
       {/* Archive Confirmation Dialog — captures the reason that's pushed
           back to the author/reporter as a notification body. */}

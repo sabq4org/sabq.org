@@ -9,6 +9,8 @@ interface ArticleStatusBreakdownProps {
   needsChanges: number;
   rejected: number;
   loading?: boolean;
+  title?: string;
+  emptyLabel?: string;
 }
 
 const STATUS_CONFIG = [
@@ -26,6 +28,8 @@ export function ArticleStatusBreakdown({
   needsChanges,
   rejected,
   loading,
+  title = "توزيع المقالات",
+  emptyLabel = "لا توجد مقالات",
 }: ArticleStatusBreakdownProps) {
   const total = published + draft + pending + needsChanges + rejected;
   const values: Record<string, number> = { published, draft, pending, needsChanges, rejected };
@@ -38,14 +42,14 @@ export function ArticleStatusBreakdown({
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
           <FileText className="h-4 w-4" />
-          توزيع المقالات
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {loading ? (
           <div className="h-[140px] w-full animate-pulse rounded bg-muted" />
         ) : total === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">لا توجد مقالات</p>
+          <p className="text-sm text-muted-foreground text-center py-6">{emptyLabel}</p>
         ) : (
           <div className="flex items-center gap-4">
             <div className="w-[120px] h-[120px] shrink-0">

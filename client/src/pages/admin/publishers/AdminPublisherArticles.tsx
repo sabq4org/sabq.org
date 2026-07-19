@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { AdminPublisherNav } from "@/components/admin/publishers/AdminPublisherNav";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +33,8 @@ import {
   Clock,
   Building2,
   Calendar,
-  Loader2
+  Loader2,
+  MessageSquareWarning
 } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -40,6 +43,28 @@ import type { Article, Publisher } from "@shared/schema";
 interface PublisherArticle extends Article {
   publisher?: Publisher;
   publisherName?: string;
+}
+
+/** مؤقت SLA للمواد المعلقة: أخضر <4 ساعات، كهرماني <24، أحمر بعدها */
+function SlaChip({ submittedAt }: { submittedAt: string | Date | null }) {
+  if (!submittedAt) return null;
+  const hours = (Date.now() - new Date(submittedAt).getTime()) / 3_600_000;
+  const className = hours < 4
+    ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-200"
+    : hours < 24
+      ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-200"
+      : "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-200";
+  const label = hours < 1
+    ? `${Math.max(1, Math.round(hours * 60))} دقيقة`
+    : hours < 48
+      ? `${Math.round(hours)} ساعة`
+      : `${Math.round(hours / 24)} يوم`;
+  return (
+    <Badge variant="outline" className={`gap-1 ${className}`} data-testid="badge-sla">
+      <Clock className="h-3 w-3" />
+      بانتظار المراجعة منذ {label}
+    </Badge>
+  );
 }
 
 export default function AdminPublisherArticles() {
@@ -54,7 +79,7 @@ export default function AdminPublisherArticles() {
   
   const [actionDialog, setActionDialog] = useState<{
     open: boolean;
-    action: "approve" | "reject" | null;
+    action: "approve" | "reject" | "request_changes" | null;
     article: PublisherArticle | null;
     reason: string;
   }>({
@@ -132,6 +157,32 @@ export default function AdminPublisherArticles() {
     },
   });
 
+  // إعادة المادة للناشر بملاحظات («تحتاج تعديلات») بدل الرفض النهائي
+  const requestChangesMutation = useMutation({
+    mutationFn: async ({ articleId, notes }: { articleId: string; notes: string }) => {
+      return apiRequest(`/api/admin/publishers/articles/${articleId}/request-changes`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/publishers/articles"] });
+      toast({
+        title: "أُعيدت للناشر",
+        description: "أُرسلت الملاحظات للناشر وسيعدّل المادة ويعيد إرسالها",
+      });
+      setActionDialog({ open: false, action: null, article: null, reason: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل في إعادة المادة للناشر",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleApprove = (article: PublisherArticle) => {
     setActionDialog({
       open: true,
@@ -150,6 +201,10 @@ export default function AdminPublisherArticles() {
     });
   };
 
+  const handleRequestChanges = (article: PublisherArticle) => {
+    setActionDialog({ open: true, action: "request_changes", article, reason: "" });
+  };
+
   const confirmAction = () => {
     if (!actionDialog.article) return;
 
@@ -164,9 +219,22 @@ export default function AdminPublisherArticles() {
         });
         return;
       }
-      rejectMutation.mutate({ 
-        articleId: actionDialog.article.id, 
-        reason: actionDialog.reason 
+      rejectMutation.mutate({
+        articleId: actionDialog.article.id,
+        reason: actionDialog.reason
+      });
+    } else if (actionDialog.action === "request_changes") {
+      if (actionDialog.reason.trim().length < 5) {
+        toast({
+          title: "خطأ",
+          description: "اكتب ملاحظات واضحة للناشر (٥ أحرف على الأقل)",
+          variant: "destructive",
+        });
+        return;
+      }
+      requestChangesMutation.mutate({
+        articleId: actionDialog.article.id,
+        notes: actionDialog.reason,
       });
     }
   };
@@ -183,21 +251,19 @@ export default function AdminPublisherArticles() {
     return matchesSearch && matchesPublisher;
   });
 
-  const isProcessing = approveMutation.isPending || rejectMutation.isPending;
+  const isProcessing = approveMutation.isPending || rejectMutation.isPending || requestChangesMutation.isPending;
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            مراجعة مقالات الناشرين
-          </h1>
-          <p className="text-muted-foreground">
-            راجع ووافق على المقالات المقدمة من الناشرين
-          </p>
-        </div>
-      </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <DashboardPageHeader
+        icon={FileText}
+        title="مراجعة مقالات الناشرين"
+        description="راجع المقالات المقدمة من الناشرين واتخذ الإجراء المناسب."
+        titleTestId="text-page-title"
+      />
+
+      <AdminPublisherNav />
 
       <Card>
         <CardHeader>
@@ -296,10 +362,22 @@ export default function AdminPublisherArticles() {
                           </Badge>
                         )}
                         {article.status === "draft" && (
-                          <Badge variant="secondary" className="gap-1">
-                            <Clock className="h-3 w-3" />
-                            مسودة
-                          </Badge>
+                          <div className="flex flex-col items-start gap-1">
+                            {article.publisherStatus === "pending" ? (
+                              <SlaChip submittedAt={article.publisherSubmittedAt as any} />
+                            ) : (
+                              <Badge variant="secondary" className="gap-1">
+                                <Clock className="h-3 w-3" />
+                                مسودة
+                              </Badge>
+                            )}
+                            {article.publisherStatus === "needs_changes" && (
+                              <Badge variant="outline" className="gap-1 bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/40 dark:text-orange-200">
+                                <MessageSquareWarning className="h-3 w-3" />
+                                أُعيدت للناشر
+                              </Badge>
+                            )}
+                          </div>
                         )}
                         {article.status === "archived" && (
                           <Badge variant="destructive" className="gap-1">
@@ -333,6 +411,7 @@ export default function AdminPublisherArticles() {
                                 size="sm"
                                 onClick={() => handleApprove(article)}
                                 disabled={isProcessing}
+                                title="موافقة ونشر"
                                 data-testid={`button-approve-${article.id}`}
                               >
                                 <CheckCircle className="h-4 w-4 text-green-600" />
@@ -340,8 +419,19 @@ export default function AdminPublisherArticles() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={() => handleRequestChanges(article)}
+                                disabled={isProcessing}
+                                title="طلب تعديلات من الناشر"
+                                data-testid={`button-request-changes-${article.id}`}
+                              >
+                                <MessageSquareWarning className="h-4 w-4 text-orange-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => handleReject(article)}
                                 disabled={isProcessing}
+                                title="رفض نهائي"
                                 data-testid={`button-reject-${article.id}`}
                               >
                                 <XCircle className="h-4 w-4 text-red-600" />
@@ -402,23 +492,33 @@ export default function AdminPublisherArticles() {
         <AlertDialogContent data-testid="dialog-confirm-action">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {actionDialog.action === "approve" ? "تأكيد الموافقة" : "تأكيد الرفض"}
+              {actionDialog.action === "approve"
+                ? "تأكيد الموافقة"
+                : actionDialog.action === "request_changes"
+                  ? "طلب تعديلات من الناشر"
+                  : "تأكيد الرفض"}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-4">
                 <p>
                   {actionDialog.action === "approve"
                     ? `هل أنت متأكد من الموافقة على المقال "${actionDialog.article?.title}"؟ سيتم نشر المقال وخصم رصيد من حساب الناشر.`
-                    : `هل أنت متأكد من رفض المقال "${actionDialog.article?.title}"؟`}
+                    : actionDialog.action === "request_changes"
+                      ? `ستُعاد "${actionDialog.article?.title}" إلى الناشر مع ملاحظاتك ليعدّلها ويعيد إرسالها — دون رفضها نهائياً.`
+                      : `هل أنت متأكد من رفض المقال "${actionDialog.article?.title}"؟`}
                 </p>
-                
-                {actionDialog.action === "reject" && (
+
+                {(actionDialog.action === "reject" || actionDialog.action === "request_changes") && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سبب الرفض *</label>
+                    <label className="text-sm font-medium">
+                      {actionDialog.action === "reject" ? "سبب الرفض *" : "الملاحظات للناشر *"}
+                    </label>
                     <Textarea
                       value={actionDialog.reason}
                       onChange={(e) => setActionDialog({ ...actionDialog, reason: e.target.value })}
-                      placeholder="أدخل سبب رفض المقال..."
+                      placeholder={actionDialog.action === "reject"
+                        ? "أدخل سبب رفض المقال..."
+                        : "مثال: العنوان طويل، والصورة منخفضة الجودة — يرجى استبدالها..."}
                       dir="rtl"
                       rows={4}
                       data-testid="textarea-reject-reason"
@@ -438,7 +538,11 @@ export default function AdminPublisherArticles() {
               data-testid="button-confirm"
             >
               {isProcessing && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-              {actionDialog.action === "approve" ? "موافقة ونشر" : "تأكيد الرفض"}
+              {actionDialog.action === "approve"
+                ? "موافقة ونشر"
+                : actionDialog.action === "request_changes"
+                  ? "إعادة للناشر"
+                  : "تأكيد الرفض"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

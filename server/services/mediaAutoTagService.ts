@@ -24,6 +24,37 @@ const SKIP_ENTITY_TYPES = new Set([
 
 const MAX_TAGS = 10;
 const MAX_DESC = 400;
+// Private-storage images are downloaded server-side and inlined as base64 for
+// Gemini; cap the bytes so a huge original can't blow up memory or the API call.
+const MAX_PRIVATE_IMAGE_BYTES = 15 * 1024 * 1024;
+
+/**
+ * Download a private gs:// object to base64 so analyzeImage can inline it.
+ * Returns null (→ "skipped") on any failure: wrong bucket, missing object,
+ * oversized file, or a storage provider that doesn't serve gs:// paths.
+ */
+async function downloadGsObjectToBase64(gsUrl: string): Promise<string | null> {
+  try {
+    const parts = gsUrl.replace("gs://", "").split("/");
+    const bucketName = parts[0];
+    const objectPath = parts.slice(1).join("/");
+    if (!bucketName || !objectPath) return null;
+
+    const { objectStorageClient, getBucketConfig } = await import("../objectStorage");
+    if (bucketName !== getBucketConfig().bucketName) return null;
+
+    const file = objectStorageClient.bucket(bucketName).file(objectPath);
+    const [exists] = await file.exists();
+    if (!exists) return null;
+
+    const [buf] = await file.download();
+    if (!buf || buf.length === 0 || buf.length > MAX_PRIVATE_IMAGE_BYTES) return null;
+    return buf.toString("base64");
+  } catch (error: any) {
+    console.warn("[Media Auto-Tag] gs:// download failed:", gsUrl, error?.message || error);
+    return null;
+  }
+}
 
 export interface AutoTagContext {
   mimeType?: string | null;
@@ -34,12 +65,13 @@ export interface AutoTagContext {
 
 /**
  * Decide whether a freshly-uploaded asset should be auto-analyzed. We need a
- * publicly fetchable https URL (analyzeImage downloads the bytes), an image MIME,
- * and a library-bound context (not an avatar/logo/reporter upload).
+ * fetchable source — public https URL, or a private gs:// path we can download
+ * from object storage — an image MIME, and a library-bound context (not an
+ * avatar/logo/reporter upload).
  */
 export function shouldAutoTag(ctx: AutoTagContext): boolean {
   if (!ctx.mimeType || !ctx.mimeType.startsWith("image/")) return false;
-  if (!ctx.url || !ctx.url.startsWith("https://")) return false;
+  if (!ctx.url || !(ctx.url.startsWith("https://") || ctx.url.startsWith("gs://"))) return false;
   if (ctx.category && SKIP_CATEGORIES.has(ctx.category)) return false;
   if (ctx.entityType && SKIP_ENTITY_TYPES.has(ctx.entityType)) return false;
   return true;
@@ -86,9 +118,11 @@ export async function analyzeAndTagMedia(mediaFileId: string): Promise<"done" | 
 
   if (!row) return "skipped";
 
-  // analyzeImage downloads the URL server-side, so it must be public https.
-  const fetchUrl = row.url && row.url.startsWith("https://") ? row.url : null;
-  if (!fetchUrl || row.type !== "image" || !row.mimeType?.startsWith("image/")) {
+  // Public https URLs are downloaded by analyzeImage itself; private gs://
+  // objects are fetched here from object storage and inlined as base64.
+  const isHttps = !!row.url && row.url.startsWith("https://");
+  const isGs = !!row.url && row.url.startsWith("gs://");
+  if ((!isHttps && !isGs) || row.type !== "image" || !row.mimeType?.startsWith("image/")) {
     await db
       .update(mediaFiles)
       .set({ aiAnalysisStatus: "skipped", aiAnalyzedAt: new Date() })
@@ -96,9 +130,23 @@ export async function analyzeAndTagMedia(mediaFileId: string): Promise<"done" | 
     return "skipped";
   }
 
+  let imageBase64: string | undefined;
+  if (isGs) {
+    const b64 = await downloadGsObjectToBase64(row.url!);
+    if (!b64) {
+      await db
+        .update(mediaFiles)
+        .set({ aiAnalysisStatus: "skipped", aiAnalyzedAt: new Date() })
+        .where(eq(mediaFiles.id, mediaFileId));
+      return "skipped";
+    }
+    imageBase64 = b64;
+  }
+
   try {
     const result = await analyzeImage({
-      imageUrl: fetchUrl,
+      imageUrl: row.url!,
+      imageBase64,
       checkQuality: true,
       generateAltText: true,
       detectContent: true,
@@ -207,7 +255,7 @@ export async function backfillUntagged(batchSize = 6): Promise<BackfillResult> {
   // the per-image retag endpoint to retry a "failed" row explicitly.
   const pendingCond = and(
     eq(mediaFiles.type, "image"),
-    sql`${mediaFiles.url} LIKE 'https://%'`,
+    sql`(${mediaFiles.url} LIKE 'https://%' OR ${mediaFiles.url} LIKE 'gs://%')`,
     or(
       isNull(mediaFiles.aiAnalysisStatus),
       eq(mediaFiles.aiAnalysisStatus, "pending"),

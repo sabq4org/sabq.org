@@ -1,7 +1,11 @@
 package com.sabq.smart.feature.worldcup
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import com.sabq.smart.ui.theme.SabqTheme
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -10,29 +14,93 @@ import java.time.format.DecimalStyle
 import java.util.Locale
 
 /**
- * لوحة ألوان «الملعب الليلي» الموحّدة للقسم — ثابتة عبر الوضعين (مطابقة لـiOS WCTheme).
+ * يفرض الوضع الداكن على شجرة فرعية بصرف النظر عن نمط التطبيق — تستخدمه
+ * الأسطح الداكنة الثابتة (مركز المباراة، بطاقة اللاعب، شريط الهوم،
+ * بطاقات الملعب) لتبقى بيضاء النص مهما كان الوضع. عند `null` تتبع
+ * الألوان التكيّفية نمط التطبيق (فاتح/داكن) — مطابقة لـiOS WCTheme.
+ */
+val LocalWcForceDark = staticCompositionLocalOf<Boolean?> { null }
+
+/**
+ * لوحة ألوان قسم المونديال. الرموز المُعلَّمة (royal/azure/gold/...)
+ * ثابتة عبر الوضعين كهوية بصرية، بينما الأسطح والنصوص تكيّفية
+ * (`@Composable get()`) تتبع `LocalWcForceDark` ثم نمط التطبيق —
+ * 1:1 مع iOS `WCTheme` (هيرو فاتح في الوضع الفاتح).
  */
 object WcColors {
-    val stadiumTop = Color(0.02f, 0.15f, 0.11f)
+    // ── رموز ثابتة (هوية الملعب) ──
+    val stadiumTop = Color(0.03f, 0.18f, 0.12f)
     val stadiumMid = Color(0.03f, 0.18f, 0.13f)
-    val stadiumBottom = Color(0.02f, 0.22f, 0.16f)
-    val emerald = Color(0.20f, 0.83f, 0.60f)
-    val emeraldDeep = Color(0.06f, 0.50f, 0.36f)
-    val pitchTop = Color(0.13f, 0.55f, 0.35f)
-    val pitchBottom = Color(0.09f, 0.42f, 0.27f)
-    val liveRed = Color(0.90f, 0.22f, 0.22f)
-    val sky = Color(0.35f, 0.66f, 0.96f)
-    val gold = Color(0.92f, 0.68f, 0.20f)
-    val leaf = Color(0.40f, 0.73f, 0.22f)
+    val stadiumBottom = Color(0.05f, 0.28f, 0.18f)
+    val heroTop = Color(0.03f, 0.34f, 0.22f)
+    val heroBottom = Color(0.08f, 0.56f, 0.36f)
+    val royal = Color(0.06f, 0.50f, 0.33f)
+    val emerald = Color(0.16f, 0.74f, 0.48f) // azure — إبراز ساطع
+    val pitchTop = Color(0.06f, 0.34f, 0.20f)
+    val pitchBottom = Color(0.04f, 0.22f, 0.13f)
+    val liveRed = Color(0.93f, 0.26f, 0.30f)
+    val sky = Color(0.18f, 0.70f, 0.60f)
+    val gold = Color(0.96f, 0.72f, 0.20f)
+    val leaf = Color(0.45f, 0.78f, 0.30f)
 
-    val card = Color.White.copy(alpha = 0.06f)
-    val cardStroke = Color.White.copy(alpha = 0.10f)
-    val onDark = Color.White
-    val onDarkDim = Color.White.copy(alpha = 0.62f)
-    val chipFill = Color.White.copy(alpha = 0.10f)
+    private val darkMode: Boolean
+        @Composable @ReadOnlyComposable
+        get() = LocalWcForceDark.current ?: SabqTheme.colors.isDark
 
+    // ── أسطح/نصوص تكيّفية ──
+    /** نص/أيقونة العلامة: أخضر غامق على الفاتح، أخضر فاتح على الداكن. */
+    val emeraldDeep: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color(0.22f, 0.80f, 0.52f) else Color(0.04f, 0.42f, 0.28f)
+
+    /** نص أساسي. */
+    val onDark: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color.White else Color(0.06f, 0.13f, 0.10f)
+
+    /** نص ثانوي. */
+    val onDarkDim: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color.White.copy(alpha = 0.62f) else Color(0.36f, 0.46f, 0.42f)
+
+    /** سطح بطاقة مرتفع. */
+    val card: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color.White.copy(alpha = 0.06f) else Color.White
+
+    /** حدّ البطاقة. */
+    val cardStroke: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color.White.copy(alpha = 0.10f) else Color(0.04f, 0.42f, 0.28f, 0.12f)
+
+    /** ظلّ البطاقة — خفيف في الفاتح ليرفعها عن الخلفية الخضراء. */
+    val cardShadow: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color.Transparent else Color(0.04f, 0.20f, 0.13f, 0.10f)
+
+    /** تعبئة شارة/شريحة خفيفة. */
+    val chipFill: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color.White.copy(alpha = 0.10f) else Color(0.10f, 0.55f, 0.35f, 0.08f)
+
+    /** خلفية صلبة لورقة سفلية (ModalBottomSheet) — تتبع لون القسم
+     *  التكيّفي بدل الأخضر الداكن الثابت، مطابقة iOS WCPlayerSheet/SquadSheet. */
+    val sheetBackground: Color
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) Color(0.04f, 0.16f, 0.11f) else Color(0.94f, 0.98f, 0.95f)
+
+    /** خلفية القسم — أخضر خفيف جدًا في الفاتح، أخضر داكن في الداكن. */
     val sectionBackground: Brush
-        get() = Brush.verticalGradient(listOf(stadiumTop, stadiumMid, stadiumBottom))
+        @Composable @ReadOnlyComposable
+        get() = if (darkMode) {
+            Brush.verticalGradient(
+                listOf(Color(0.03f, 0.12f, 0.08f), Color(0.04f, 0.16f, 0.11f), Color(0.03f, 0.12f, 0.08f)),
+            )
+        } else {
+            Brush.verticalGradient(
+                listOf(Color(0.91f, 0.97f, 0.93f), Color(0.94f, 0.98f, 0.95f), Color(0.91f, 0.97f, 0.93f)),
+            )
+        }
 }
 
 /**
@@ -54,6 +122,10 @@ object WcFormat {
 
     fun time(f: WcFixture): String = instant(f.date)?.let { timeFmt.format(it) } ?: ""
     fun day(f: WcFixture): String = instant(f.date)?.let { dayFmt.format(it) } ?: ""
+
+    /** يوم انطلاق المباراة من سلسلة ISO (kickoffAt) — لسجلّ التوقّعات. */
+    fun dayFromIso(iso: String?): String =
+        iso?.let { instant(it)?.let { i -> dayFmt.format(i) } } ?: "كأس العالم 2026"
 
     /** مفتاح اليوم بتوقيت الرياض من سلسلة ISO (تصل بإزاحة +03:00 فالقصّ مباشر) */
     fun dayKey(iso: String): String = iso.take(10)

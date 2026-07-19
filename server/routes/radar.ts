@@ -1,18 +1,17 @@
 /**
  * مسارات رادار سبق الذكي — لوحة التحكم فقط (لا شيء هنا عام).
  *
- * الصلاحيات تعتمد رموز المقالات القائمة (مبذورة في كل البيئات — لا حاجة
- * لبذر رموز جديدة): العرض articles.view، التحويل/التصدير articles.create،
- * إدارة المصادر والقواعد والتشغيل اليدوي articles.publish.
+ * الوصول محصور بمسؤول النظام (system_admin / system.admin / superadmin).
+ * لا يُمرَّر "admin" هنا حتى لا يفتح requireRole الباب لكل السوبر يوزر.
  *
  * وفق ADR-001: لا استيراد db هنا — كل الاستعلامات في services/radar/repo.ts.
  */
 import type { Express } from "express";
 import { z } from "zod";
-import { requireAuth, requirePermission } from "../rbac";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { requireAuth, requireRole } from "../rbac";
 import { insertRadarAlertRuleSchema, insertRadarSourceSchema } from "@shared/schema";
 import {
+  countActiveXWatches,
   createRule,
   createSource,
   deleteRule,
@@ -22,18 +21,29 @@ import {
   listRules,
   listSources,
   radarStats,
+  sourceHealthSummary,
   updateItem,
   updateRule,
   updateSource,
 } from "../services/radar/repo";
 import { fetchSingleSource, runRadarCycle } from "../services/radar/cycle";
+import { isRadarForceDisabled } from "../services/radar/flags";
 import { transformItem } from "../services/radar/transformer";
 import { exportItemToArticle } from "../services/radar/exporter";
 import { isTelegramConfigured } from "../services/radar/alerts";
+import { detectWatchType, xProvidersConfigured } from "../services/radar/xProvider";
 
-const canView = requirePermission(PERMISSION_CODES.ARTICLES_VIEW);
-const canWork = requirePermission(PERMISSION_CODES.ARTICLES_CREATE);
-const canManage = requirePermission(PERMISSION_CODES.ARTICLES_PUBLISH);
+const RADAR_DISABLED_MESSAGE = "الرادار متوقف إجبارياً — الجلب معطّل";
+
+const SYSTEM_ADMIN_ONLY = requireRole(
+  "system_admin",
+  "system.admin",
+  "superadmin",
+  "super_admin",
+);
+const canView = SYSTEM_ADMIN_ONLY;
+const canWork = SYSTEM_ADMIN_ONLY;
+const canManage = SYSTEM_ADMIN_ONLY;
 
 const RADAR_STATUSES = ["new", "analyzed", "ready", "exported", "dismissed"] as const;
 
@@ -46,6 +56,7 @@ const itemsQuerySchema = z.object({
     .optional(),
   minScore: z.coerce.number().int().min(0).max(100).optional(),
   sourceId: z.string().optional(),
+  channel: z.enum(["x", "feed"]).optional(),
   breaking: z.coerce.boolean().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
@@ -61,6 +72,15 @@ export function registerRadarRoutes(app: Express) {
     } catch (error) {
       console.error("[Radar API] stats failed:", error);
       res.status(500).json({ message: "تعذر جلب إحصاءات الرادار" });
+    }
+  });
+
+  app.get("/api/radar/health", requireAuth, canView, async (_req, res) => {
+    try {
+      res.json(await sourceHealthSummary());
+    } catch (error) {
+      console.error("[Radar API] health failed:", error);
+      res.status(500).json({ message: "تعذر جلب صحة الشبكة" });
     }
   });
 
@@ -200,6 +220,9 @@ export function registerRadarRoutes(app: Express) {
   });
 
   app.post("/api/radar/sources/:id/fetch", requireAuth, canManage, async (req, res) => {
+    if (isRadarForceDisabled()) {
+      return res.status(503).json({ message: RADAR_DISABLED_MESSAGE, forceDisabled: true });
+    }
     try {
       const inserted = await fetchSingleSource(String(req.params.id));
       res.json({ inserted });
@@ -210,6 +233,104 @@ export function registerRadarRoutes(app: Express) {
       }
       console.error("[Radar API] manual fetch failed:", error);
       res.status(502).json({ message: "فشل جلب المصدر — تحقق من الرابط" });
+    }
+  });
+
+  // ---------- رصدات إكس ----------
+  // الرصدة مصدر من نوع "x" — التعديل/الحذف/الجلب اليدوي عبر مسارات المصادر نفسها
+
+  const watchBodySchema = z.object({
+    value: z.string().trim().min(1).max(200),
+    type: z.enum(["keyword", "hashtag", "account", "query", "trend"]).optional(),
+    label: z.string().trim().min(1).max(120).optional(),
+    provider: z.enum(["auto", "official", "twitterapiio"]).optional(),
+    language: z.string().trim().min(2).max(10).optional(),
+    categorySlug: z.string().trim().max(80).optional(),
+    // 1 دقيقة لحسابات X-A (SLA ≤ 2د) — الحد الأدنى كان 2 سابقاً
+    fetchIntervalMinutes: z.coerce.number().int().min(1).max(1440).optional(),
+    tier: z.enum(["A", "B", "C"]).optional(),
+    region: z.string().trim().max(40).optional(),
+    weight: z.coerce.number().min(0.1).max(5).optional(),
+  });
+
+  function defaultWatchInterval(xType: string): number {
+    if (xType === "trend") return 15;
+    if (xType === "account" && process.env.RADAR_X_FAST_POLL_ENABLED !== "false") return 1;
+    return 5;
+  }
+
+  function maxActiveXWatches(): number {
+    const raw = Number(process.env.RADAR_X_MAX_ACTIVE_WATCHES ?? 80);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 80;
+  }
+
+  app.get("/api/radar/watches", requireAuth, canView, async (_req, res) => {
+    try {
+      const sources = await listSources();
+      res.json({
+        watches: sources.filter((source) => source.type === "x"),
+        providers: xProvidersConfigured(),
+        maxActive: maxActiveXWatches(),
+        activeCount: sources.filter((s) => s.type === "x" && s.isActive).length,
+      });
+    } catch (error) {
+      console.error("[Radar API] watches failed:", error);
+      res.status(500).json({ message: "تعذر جلب الرصدات" });
+    }
+  });
+
+  app.post("/api/radar/watches", requireAuth, canManage, async (req, res) => {
+    const parsed = watchBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "بيانات الرصدة غير صالحة", issues: parsed.error.issues });
+    }
+    const { value, label, provider, language, categorySlug, fetchIntervalMinutes, tier, region, weight } =
+      parsed.data;
+    const xType = parsed.data.type ?? detectWatchType(value);
+    try {
+      const activeX = await countActiveXWatches();
+      const maxX = maxActiveXWatches();
+      if (activeX >= maxX) {
+        return res.status(429).json({
+          message: `بلغت الحد الأقصى لرصدات إكس النشطة (${maxX}). عطّل رصدة أو ارفع RADAR_X_MAX_ACTIVE_WATCHES.`,
+          activeCount: activeX,
+          maxActive: maxX,
+        });
+      }
+      const watch = await createSource({
+        name: label ?? value,
+        // رابط اصطناعي فريد — إضافة نفس الرصدة مرتين تصطدم بقيد url
+        url: `x:${xType}:${value.toLowerCase()}`,
+        type: "x",
+        language: language ?? "ar",
+        categorySlug: categorySlug ?? null,
+        fetchIntervalMinutes: fetchIntervalMinutes ?? defaultWatchInterval(xType),
+        isActive: true,
+        xType,
+        xValue: value,
+        xProvider: provider ?? "auto",
+        tier: tier ?? (xType === "account" ? "A" : null),
+        region: region ?? null,
+        weight: weight ?? 1,
+      });
+      // جلبة أولى فورية — معطّلة أثناء القفل الإجباري
+      let inserted: number | null = null;
+      let fetchError: string | null = null;
+      if (!isRadarForceDisabled()) {
+        try {
+          inserted = await fetchSingleSource(watch.id);
+        } catch (error) {
+          fetchError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      res.status(201).json({ watch, inserted, fetchError, forceDisabled: isRadarForceDisabled() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/duplicate|unique/i.test(message)) {
+        return res.status(409).json({ message: "هذه الرصدة موجودة مسبقًا" });
+      }
+      console.error("[Radar API] create watch failed:", error);
+      res.status(500).json({ message: "تعذر إضافة الرصدة" });
     }
   });
 
@@ -265,6 +386,9 @@ export function registerRadarRoutes(app: Express) {
   // ---------- تشغيل يدوي لدورة كاملة (تشخيص/تجربة) ----------
 
   app.post("/api/radar/run", requireAuth, canManage, async (_req, res) => {
+    if (isRadarForceDisabled()) {
+      return res.status(503).json({ message: RADAR_DISABLED_MESSAGE, forceDisabled: true });
+    }
     try {
       res.json({ summary: await runRadarCycle() });
     } catch (error) {

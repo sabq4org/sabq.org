@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1">
+<title>كأس آسيا 2027 — الرئيسية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#0a8a4f; --green-d:#076b3d; --green-l:#e7f5ed; --green-mid:#12a560;
+  --gold:#b8882e; --gold-l:#faf2dd;
+  --ink:#13201b; --slate:#5a6b63; --faint:#92a39a;
+  --line:#e4eae6; --line-2:#d4ddd8;
+  --bg:#f4f7f5; --card:#ffffff;
+  --live:#d8413c;
+  --r-lg:22px; --r-md:16px; --r-sm:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+html,body{background:#eef2f0;}
+body{
+  font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;
+  width:390px; margin:0 auto; color:var(--ink);
+  background:
+    linear-gradient(180deg,#eaf3ee 0, #f4f7f5 220px, #f4f7f5 100%);
+  padding-bottom:92px; position:relative;
+}
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:13px 22px 4px;font-size:14px;font-weight:600;color:var(--ink);}
+.statusbar .icons{display:flex;gap:6px;align-items:center;opacity:.85;}
+
+/* top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .mark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--green-l);border:1px solid var(--line);}
+.brand .mark svg{width:21px;height:21px;}
+.brand .t1{font-size:16px;font-weight:700;line-height:1.1;color:var(--ink);}
+.brand .t2{font-size:11px;color:var(--green);font-weight:600;margin-top:1px;}
+.hubbtn{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--green-d);
+  padding:8px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line-2);}
+
+.wrap{padding:0 16px;display:flex;flex-direction:column;gap:18px;}
+
+/* hero */
+.hero{position:relative;overflow:hidden;border-radius:var(--r-lg);padding:20px 18px 18px;background:var(--card);
+  border:1px solid var(--line);box-shadow:0 10px 30px -16px rgba(12,60,40,.18);}
+.hero::before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:linear-gradient(90deg,var(--green),var(--green-mid),var(--gold));}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;}
+.badges{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px;margin-top:4px;}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:6px 10px;border-radius:999px;}
+.badge.gold{background:var(--gold-l);color:var(--gold);border:1px solid #ecd9a8;}
+.badge.host{background:var(--green-l);color:var(--green-d);border:1px solid #bfe6ce;}
+.htitle{font-size:31px;font-weight:700;line-height:1.08;letter-spacing:-.4px;color:var(--ink);}
+.htitle .yr{color:var(--green);}
+.hsub{font-size:12.5px;color:var(--slate);line-height:1.7;margin-top:9px;max-width:220px;}
+.hdate{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--green-d);margin-top:12px;
+  padding:7px 11px;border-radius:10px;background:var(--green-l);}
+.emblem{width:96px;flex-shrink:0;}
+.emblem img{width:100%;display:block;}
+
+.metrics{display:flex;margin-top:18px;border-radius:var(--r-md);background:#f7faf8;border:1px solid var(--line);overflow:hidden;}
+.metric{flex:1;text-align:center;padding:13px 4px;position:relative;}
+.metric + .metric::before{content:"";position:absolute;inset-inline-start:0;top:18%;height:64%;width:1px;background:var(--line-2);}
+.metric .v{font-size:23px;font-weight:700;color:var(--green-d);font-variant-numeric:tabular-nums;}
+.metric .l{font-size:11px;color:var(--slate);font-weight:600;margin-top:3px;}
+
+.count{margin-top:14px;border-radius:var(--r-md);padding:14px;background:var(--green-d);position:relative;overflow:hidden;}
+.count::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.10),transparent 60%);}
+.count .ch{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#bff0d3;margin-bottom:11px;position:relative;}
+.count .cells{display:flex;gap:8px;position:relative;}
+.cell{flex:1;text-align:center;border-radius:var(--r-sm);padding:10px 2px;background:rgba(255,255,255,.12);}
+.cell .n{font-size:24px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:1px;}
+.cell .u{font-size:10px;color:#a9dcc0;font-weight:600;margin-top:3px;}
+
+/* section header */
+.sh{display:flex;align-items:center;gap:9px;margin-bottom:12px;}
+.sh .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--green-l);border:1px solid var(--line);}
+.sh .ic svg{width:16px;height:16px;}
+.sh .tt{font-size:16px;font-weight:700;color:var(--ink);}
+.sh .ss{font-size:11.5px;color:var(--slate);margin-top:1px;}
+.sh .cnt{margin-inline-start:auto;font-size:11px;font-weight:700;color:var(--green-d);padding:4px 10px;border-radius:999px;background:var(--green-l);}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.tile{border-radius:var(--r-md);padding:15px 8px;text-align:center;background:var(--card);border:1px solid var(--line);box-shadow:0 4px 14px -10px rgba(12,60,40,.15);}
+.tile .ti{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;margin:0 auto 9px;}
+.tile .ti svg{width:20px;height:20px;}
+.tile .v{font-size:19px;font-weight:700;color:var(--ink);}
+.tile .l{font-size:11px;color:var(--slate);font-weight:600;margin-top:2px;}
+
+/* predictions banner */
+.pban{display:flex;align-items:center;gap:13px;border-radius:var(--r-md);padding:15px;background:var(--card);
+  border:1px solid var(--line);box-shadow:0 8px 24px -16px rgba(12,60,40,.2);}
+.pban .pi{width:48px;height:48px;border-radius:14px;flex-shrink:0;display:grid;place-items:center;background:var(--green);}
+.pban .pi svg{width:24px;height:24px;}
+.pban .pt{font-size:14.5px;font-weight:700;color:var(--ink);}
+.pban .ps{font-size:11.5px;color:var(--slate);line-height:1.5;margin-top:3px;}
+.pban .pgo{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;background:var(--green-l);}
+.pban .pgo svg{width:15px;height:15px;color:var(--green-d);}
+
+/* match cards */
+.mcard{border-radius:var(--r-md);padding:13px 14px;background:var(--card);border:1px solid var(--line);margin-bottom:10px;box-shadow:0 4px 14px -12px rgba(12,60,40,.16);}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.mside{display:flex;align-items:center;gap:9px;flex:1;}
+.mside.left{justify-content:flex-end;flex-direction:row-reverse;}
+.flag{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:19px;background:#f3f6f4;border:1px solid var(--line);overflow:hidden;}
+.tname{font-size:13.5px;font-weight:600;color:var(--ink);}
+.mvs{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:54px;}
+.mvs .time{font-size:14px;font-weight:700;color:var(--green-d);}
+.mvs .vs{font-size:10px;color:var(--faint);font-weight:600;}
+.mmeta{display:flex;align-items:center;gap:6px;justify-content:center;margin-top:11px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--slate);}
+.mround{font-size:10.5px;color:var(--green-d);font-weight:600;margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.mround::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--green-mid);}
+.viewall{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:700;color:#fff;padding:13px;border-radius:var(--r-sm);margin-top:3px;background:var(--green);}
+
+/* venues */
+.venue{display:flex;align-items:center;gap:11px;border-radius:var(--r-sm);padding:12px;background:var(--card);border:1px solid var(--line);margin-bottom:8px;}
+.venue .vi{width:34px;height:34px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;background:var(--green-l);}
+.venue .vi svg{width:17px;height:17px;color:var(--green-d);}
+.venue .vn{font-size:13px;font-weight:600;color:var(--ink);}
+.venue .vc{font-size:11px;color:var(--slate);margin-top:1px;}
+.venue .vchev{margin-inline-start:auto;color:var(--faint);}
+
+.sig{text-align:center;font-size:11px;color:var(--faint);padding:4px 0 2px;}
+.sig b{color:var(--green-d);font-weight:700;}
+
+/* tab bar */
+.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:390px;
+  display:flex;justify-content:space-around;align-items:center;padding:10px 6px 26px;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border-top:1px solid var(--line);}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--faint);flex:1;}
+.tab svg{width:22px;height:22px;}
+.tab.active{color:var(--green);}
+</style>
+</head>
+<body>
+
+<div class="statusbar">
+  <span>9:41</span>
+  <span class="icons"><svg viewBox="0 0 24 24" width="15" fill="currentColor"><path d="M2 16h3v4H2zm5-3h3v7H7zm5-4h3v11h-3zm5-4h3v15h-3z"/></svg>
+  <svg viewBox="0 0 24 24" width="16" fill="currentColor"><path d="M12 6c3.3 0 6.3 1.3 8.5 3.4l-1.4 1.4C17.3 9.1 14.8 8 12 8s-5.3 1.1-7.1 2.8L3.5 9.4C5.7 7.3 8.7 6 12 6zm0 4c1.9 0 3.6.7 4.9 1.9l-1.5 1.5c-.9-.8-2.1-1.4-3.4-1.4s-2.5.6-3.4 1.4L7.1 11.9C8.4 10.7 10.1 10 12 10z"/></svg>
+  <svg viewBox="0 0 26 14" width="24" fill="none"><rect x="1" y="1.5" width="21" height="11" rx="3" stroke="currentColor" opacity=".5"/><rect x="3" y="3.5" width="15" height="7" rx="1.5" fill="currentColor"/><rect x="23.5" y="5" width="1.5" height="4" rx="1" fill="currentColor" opacity=".5"/></svg></span>
+</div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="1.8"><path d="M6 4h12v3a6 6 0 0 1-12 0V4z" fill="rgba(10,138,79,.18)"/><path d="M6 5H3.5v2A2.5 2.5 0 0 0 6 9.5M18 5h2.5v2A2.5 2.5 0 0 1 18 9.5M9 14h6M10 14v4M14 14v4M8 19h8"/></svg></div>
+    <div>
+      <div class="t1">كأس آسيا</div>
+      <div class="t2">السعودية 2027</div>
+    </div>
+  </div>
+  <div class="hubbtn"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>مركز كأس آسيا</div>
+</div>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="badges">
+          <span class="badge gold"><svg viewBox="0 0 24 24" width="12" fill="currentColor"><path d="M6 3h12v2h3v3a4 4 0 0 1-4 4 6 6 0 0 1-4 3v2h3v2H8v-2h3v-2a6 6 0 0 1-4-3 4 4 0 0 1-4-4V5h3V3z"/></svg>تغطية خاصة</span>
+          <span class="badge host"><svg viewBox="0 0 24 24" width="12" fill="currentColor"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>تستضيفها السعودية</span>
+        </div>
+        <div class="htitle">كأس آسيا <span class="yr">2027</span></div>
+        <div class="hsub">السعودية تستقبل نخبة آسيا في بطولة تحتفي بالمنتخبات، الجماهير، والملاعب الجديدة.</div>
+        <div class="hdate"><svg viewBox="0 0 24 24" width="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>٧ يناير ٢٠٢٧ — ٥ فبراير ٢٠٢٧</div>
+      </div>
+      <div class="emblem"><img src="emblem.png" alt="كأس آسيا 2027"></div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><div class="v">24</div><div class="l">منتخب</div></div>
+      <div class="metric"><div class="v">6</div><div class="l">مجموعات</div></div>
+      <div class="metric"><div class="v">8</div><div class="l">ملاعب</div></div>
+    </div>
+
+    <div class="count">
+      <div class="ch"><svg viewBox="0 0 24 24" width="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>الانطلاق بعد</div>
+      <div class="cells">
+        <div class="cell"><div class="n">191</div><div class="u">يوم</div></div>
+        <div class="cell"><div class="n">06</div><div class="u">ساعة</div></div>
+        <div class="cell"><div class="n">24</div><div class="u">دقيقة</div></div>
+        <div class="cell"><div class="n">55</div><div class="u">ثانية</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div>
+    <div class="sh">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></div>
+      <div><div class="tt">لوحة البطولة</div><div class="ss">اختصارات المتابعة اليومية</div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="ti" style="background:var(--gold-l)"><svg viewBox="0 0 24 24" fill="none" stroke="#b8882e" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg></div><div class="v">51</div><div class="l">المباريات</div></div>
+      <div class="tile"><div class="ti" style="background:#e8f0fb"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6fb5" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg></div><div class="v">جديد</div><div class="l">التوقعات</div></div>
+      <div class="tile"><div class="ti" style="background:var(--green-l)"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg></div><div class="v">6</div><div class="l">المجموعات</div></div>
+    </div>
+  </div>
+
+  <!-- PREDICTIONS BANNER -->
+  <div class="pban">
+    <div class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg></div>
+    <div style="flex:1">
+      <div class="pt">نظام التوقعات داخل التطبيق</div>
+      <div class="ps">بطاقات مباريات، احتمالات، نقاط، ومتصدرون دون مغادرة التطبيق</div>
+    </div>
+    <div class="pgo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 6l-6 6 6 6"/></svg></div>
+  </div>
+
+  <!-- NEXT MATCHES -->
+  <div>
+    <div class="sh">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+      <div><div class="tt">أقرب المباريات</div></div>
+      <div class="cnt">3</div>
+    </div>
+
+    <div class="mcard">
+      <div class="mround">الجولة الأولى · المجموعة الأولى</div>
+      <div class="mrow">
+        <div class="mside left"><span class="flag">🇸🇦</span><span class="tname">السعودية</span></div>
+        <div class="mvs"><span class="time">7:00 م</span><span class="vs">ضد</span></div>
+        <div class="mside"><span class="flag">🇺🇿</span><span class="tname">أوزبكستان</span></div>
+      </div>
+      <div class="mmeta"><svg viewBox="0 0 24 24" width="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>استاد الملك فهد الدولي — الرياض</div>
+    </div>
+
+    <div class="mcard">
+      <div class="mround">الجولة الأولى · المجموعة الثانية</div>
+      <div class="mrow">
+        <div class="mside left"><span class="flag">🇯🇵</span><span class="tname">اليابان</span></div>
+        <div class="mvs"><span class="time">4:00 م</span><span class="vs">ضد</span></div>
+        <div class="mside"><span class="flag">🇮🇶</span><span class="tname">العراق</span></div>
+      </div>
+      <div class="mmeta"><svg viewBox="0 0 24 24" width="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>مدينة الملك عبدالله الرياضية — جدة</div>
+    </div>
+
+    <div class="mcard">
+      <div class="mround">الجولة الأولى · المجموعة الثالثة</div>
+      <div class="mrow">
+        <div class="mside left"><span class="flag">🇰🇷</span><span class="tname">كوريا الجنوبية</span></div>
+        <div class="mvs"><span class="time">7:00 م</span><span class="vs">ضد</span></div>
+        <div class="mside"><span class="flag">🇯🇴</span><span class="tname">الأردن</span></div>
+      </div>
+      <div class="mmeta"><svg viewBox="0 0 24 24" width="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg>استاد الأمير محمد بن فهد — الدمام</div>
+    </div>
+
+    <div class="viewall"><svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>عرض كل المباريات</div>
+  </div>
+
+  <!-- VENUES -->
+  <div>
+    <div class="sh">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#0a8a4f" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></div>
+      <div><div class="tt">مدن وملاعب</div><div class="ss">الاستضافة السعودية</div></div>
+      <div class="cnt">8</div>
+    </div>
+    <div class="venue"><div class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg></div><div><div class="vn">استاد الملك فهد الدولي</div><div class="vc">الرياض</div></div><span class="vchev"><svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="venue"><div class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg></div><div><div class="vn">مدينة الملك عبدالله الرياضية</div><div class="vc">جدة</div></div><span class="vchev"><svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="venue"><div class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.3"/></svg></div><div><div class="vn">استاد الأمير محمد بن فهد</div><div class="vc">الدمام</div></div><span class="vchev"><svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+  </div>
+
+  <div class="sig">تغطية خاصة من <b>سبق</b></div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tabbar">
+  <div class="tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>الرئيسية</div>
+  <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>المباريات</div>
+  <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5-4.4-2.7L7.4 19l1.2-5L4.8 8.4 9.8 8z"/></svg>التوقعات</div>
+  <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="2"/><rect x="3" y="11" width="18" height="5" rx="2"/><rect x="3" y="18" width="11" height="3" rx="1.5"/></svg>المجموعات</div>
+  <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>المزيد</div>
+</div>
+
+</body>
+</html>

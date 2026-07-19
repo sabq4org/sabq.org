@@ -1,5 +1,6 @@
 import textToSpeech from '@google-cloud/text-to-speech';
 import { retryWithBackoff } from '../utils/retryWithBackoff';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 import type { TTSOptions, Voice } from './elevenlabs';
 
 export const GOOGLE_ARABIC_VOICES: Voice[] = [
@@ -90,9 +91,10 @@ export class GoogleTTSService {
     const speakingRate = options.voiceSettings?.speed ?? 1.0;
     const stability = options.voiceSettings?.stability ?? 0.75;
     const pitch = (stability - 0.5) * 4;
+    const text = normalizeTextForTts(options.text, { language: options.language ?? 'auto' });
 
     const request = {
-      input: { text: options.text },
+      input: { text },
       voice: {
         languageCode: this.languageCode,
         name: voiceId,

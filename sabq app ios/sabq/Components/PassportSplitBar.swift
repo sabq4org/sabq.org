@@ -20,7 +20,7 @@ struct PassportSplitBar: View {
                         .fill(Self.amber)
                         .frame(width: 8, height: 8)
                     Text("ذكاء اصطناعي \(clamped)%")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(Self.amber)
                 }
@@ -29,7 +29,7 @@ struct PassportSplitBar: View {
 
                 HStack(spacing: 5) {
                     Text("\(humanPct)% بشري")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(Self.emerald)
                     RoundedRectangle(cornerRadius: 2, style: .continuous)

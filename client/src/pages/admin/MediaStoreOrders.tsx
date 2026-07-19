@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -220,17 +221,13 @@ export default function MediaStoreOrders() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-4 md:p-6 space-y-6" dir="rtl">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600">
-              <ShoppingBag className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">إدارة طلبات المتجر الإعلامي</h1>
-              <p className="text-muted-foreground">إدارة ومتابعة جميع طلبات الخدمات الإعلامية</p>
-            </div>
-          </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={ShoppingBag}
+          title="إدارة طلبات المتجر الإعلامي"
+          description="إدارة ومتابعة جميع طلبات الخدمات الإعلامية."
+          titleTestId="text-page-title"
+          actions={
           <Button 
             variant="outline" 
             size="sm" 
@@ -240,14 +237,15 @@ export default function MediaStoreOrders() {
             <RefreshCw className="w-4 h-4 ml-2" />
             تحديث
           </Button>
-        </div>
+          }
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card" data-testid="card-total-orders">
+          <Card data-testid="card-total-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الطلبات</CardTitle>
-              <div className="p-2 rounded-md bg-purple-500/20">
-                <ShoppingBag className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <ShoppingBag className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -257,72 +255,72 @@ export default function MediaStoreOrders() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-yellow-50 dark:bg-card" data-testid="card-pending-orders">
+          <Card data-testid="card-pending-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">قيد الانتظار</CardTitle>
-              <div className="p-2 rounded-md bg-yellow-500/20">
-                <Clock className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+              <div className="rounded-lg bg-muted p-2 text-amber-600">
+                <Clock className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400" data-testid="text-pending-orders">
+              <div className="text-2xl font-bold" data-testid="text-pending-orders">
                 {statsLoading ? "..." : (statsData?.pendingOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-paid-orders">
+          <Card data-testid="card-paid-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">تم الدفع</CardTitle>
-              <div className="p-2 rounded-md bg-blue-500/20">
-                <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <div className="rounded-lg bg-muted p-2 text-primary">
+                <CreditCard className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-paid-orders">
+              <div className="text-2xl font-bold" data-testid="text-paid-orders">
                 {statsLoading ? "..." : (statsData?.paidOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-orange-50 dark:bg-card" data-testid="card-processing-orders">
+          <Card data-testid="card-processing-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">قيد التنفيذ</CardTitle>
-              <div className="p-2 rounded-md bg-orange-500/20">
-                <Loader2 className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+              <div className="rounded-lg bg-muted p-2 text-amber-600">
+                <Loader2 className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-processing-orders">
+              <div className="text-2xl font-bold" data-testid="text-processing-orders">
                 {statsLoading ? "..." : (statsData?.processingOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-completed-orders">
+          <Card data-testid="card-completed-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">مكتمل</CardTitle>
-              <div className="p-2 rounded-md bg-green-500/20">
-                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <div className="rounded-lg bg-muted p-2 text-emerald-600">
+                <CheckCircle className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-completed-orders">
+              <div className="text-2xl font-bold" data-testid="text-completed-orders">
                 {statsLoading ? "..." : (statsData?.completedOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card" data-testid="card-revenue">
+        <Card data-testid="card-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
-            <div className="p-2 rounded-md bg-emerald-500/20">
-              <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+              <CreditCard className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-total-revenue">
+            <div className="text-3xl font-bold" data-testid="text-total-revenue">
               {statsLoading ? "..." : formatPrice(statsData?.totalRevenueSAR || "0")}
             </div>
           </CardContent>

@@ -149,6 +149,7 @@ actor APIClient {
 
     func markLoggedOut() {
         authToken = nil
+        csrfToken = nil
         KeychainHelper.delete(forKey: "sabq_auth_token")
         // Also drop the legacy boolean in case an older build wrote it.
         UserDefaults.standard.removeObject(forKey: "sabq_is_authenticated")
@@ -325,6 +326,16 @@ actor APIClient {
         try await get(APIHomepageResponse.self, path: "/homepage-lite")
     }
 
+    /// إشارة خفيفة: هل نُشر محتوى جديد؟ نفس مسار الويب — لا يجلب الرئيسية.
+    func fetchCacheInvalidationCheck() async throws -> APICacheInvalidationCheck {
+        try await get(
+            APICacheInvalidationCheck.self,
+            path: "/cache-invalidation/check",
+            ignoreCache: true,
+            apiRoot: publicAPIBaseURL
+        )
+    }
+
     // MARK: - Articles
 
     func fetchArticles(page: Int = 1, perPage: Int = 20) async throws -> APIPaginatedList<APIArticle> {
@@ -346,40 +357,42 @@ actor APIClient {
         // v1 returns `{"error":"NOT_FOUND"}` for short-hash slugs like
         // `8myc61P`, and even when v1 succeeds its payload omits the rich
         // HTML body. Public-first, v1 fallback only when public misses.
-        if let publicArticle = try? await get(
-            APIArticle.self,
-            path: "/articles/\(slug)",
-            apiRoot: publicAPIBaseURL
-        ) {
-            return publicArticle
+        do {
+            return try await get(
+                APIArticle.self,
+                path: "/articles/\(slug)",
+                apiRoot: publicAPIBaseURL
+            )
+        } catch where Self.isFallbackWorthy(error) {
+            // Fallback: v1 wrapped shape. Used for content that's not on the
+            // public surface (rare).
+            return try await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)").item
         }
-        // Fallback: v1 wrapped shape. Used for content that's not on the
-        // public surface (rare).
-        let v1 = try await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)").item
-        return v1
     }
 
     func fetchRelated(slug: String) async throws -> [APIArticle] {
         // Public API returns a bare JSON array; v1 doesn't have this
         // endpoint (404). Mirror fetchArticle: public-first, v1 fallback.
-        if let bare = try? await get(
-            [APIArticle].self,
-            path: "/articles/\(slug)/related",
-            apiRoot: publicAPIBaseURL
-        ) {
-            return bare
+        do {
+            return try await get(
+                [APIArticle].self,
+                path: "/articles/\(slug)/related",
+                apiRoot: publicAPIBaseURL
+            )
+        } catch where Self.isFallbackWorthy(error) {
+            do {
+                return try await get(
+                    WrappedArray<APIArticle>.self,
+                    path: "/articles/\(slug)/related",
+                    apiRoot: publicAPIBaseURL
+                ).items
+            } catch where Self.isFallbackWorthy(error) {
+                return try await get(
+                    WrappedArray<APIArticle>.self,
+                    path: "/articles/\(slug)/related"
+                ).items
+            }
         }
-        if let wrapped = try? await get(
-            WrappedArray<APIArticle>.self,
-            path: "/articles/\(slug)/related",
-            apiRoot: publicAPIBaseURL
-        ) {
-            return wrapped.items
-        }
-        return try await get(
-            WrappedArray<APIArticle>.self,
-            path: "/articles/\(slug)/related"
-        ).items
     }
 
     /// Content Passport (digital fingerprint). Lives at /api/articles/:slug/passport,
@@ -400,9 +413,9 @@ actor APIClient {
         ).items
     }
 
-    func fetchAudioSummary(slug: String) async throws -> APIAudioSummary {
-        try await get(WrappedObject<APIAudioSummary>.self, path: "/articles/\(slug)/summary-audio").item
-    }
+    // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
+    // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
+    // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.
 
     func fetchAIInsights(slug: String) async throws -> [String: String] {
         try await get([String: String].self, path: "/articles/\(slug)/ai-insights")
@@ -442,8 +455,15 @@ actor APIClient {
     /// public `/api/breaking-ticker/active` route (NOT the v1 mobile root) and
     /// returns `nil` when no topic is active — the endpoint answers `200 null`
     /// in that case, which decodes cleanly into the optional.
-    func fetchBreakingTicker() async throws -> APIBreakingTicker? {
-        try await get(APIBreakingTicker?.self, path: "/breaking-ticker/active", apiRoot: publicAPIBaseURL)
+    /// - Parameter ignoreCache: `true` عند السحب للتحديث / إشارة النشر حتى لا
+    ///   يبقى الشريط الأحمر على نسخة SWR قديمة.
+    func fetchBreakingTicker(ignoreCache: Bool = false) async throws -> APIBreakingTicker? {
+        try await get(
+            APIBreakingTicker?.self,
+            path: "/breaking-ticker/active",
+            ignoreCache: ignoreCache,
+            apiRoot: publicAPIBaseURL
+        )
     }
 
     // MARK: - Search
@@ -520,12 +540,16 @@ actor APIClient {
 
     // MARK: - Stories
 
+    // القصص تعيش على الجذر العام `/api/stories` (لا `/api/v1`) — الجذر
+    // الافتراضي كان يعيد 404 فتختفي القصص بصمت خلف try? لدى كل مستهلك
+    // خارج استجابة /homepage المدمجة.
     func fetchStories() async throws -> [APIStory] {
-        try await get(WrappedArray<APIStory>.self, path: "/stories").items
+        try await get(WrappedArray<APIStory>.self, path: "/stories", apiRoot: publicAPIBaseURL).items
     }
 
-    func fetchStory(id: Int) async throws -> APIStory {
-        try await get(WrappedObject<APIStory>.self, path: "/stories/\(id)").item
+    // الخادم يستعلم القصة المفردة بالـ slug لا بمعرّف رقمي.
+    func fetchStory(slug: String) async throws -> APIStory {
+        try await get(WrappedObject<APIStory>.self, path: "/stories/\(slug)", apiRoot: publicAPIBaseURL).item
     }
 
     // MARK: - Opinions
@@ -547,7 +571,7 @@ actor APIClient {
                 query: query,
                 apiRoot: publicAPIBaseURL
             ).items
-        } catch {
+        } catch where Self.isFallbackWorthy(error) {
             return try await get(
                 WrappedArray<APIOpinion>.self,
                 path: "/opinion",
@@ -559,7 +583,7 @@ actor APIClient {
     func fetchOpinion(slug: String) async throws -> APIOpinion {
         do {
             return try await get(WrappedObject<APIOpinion>.self, path: "/opinion/\(slug)", apiRoot: publicAPIBaseURL).item
-        } catch {
+        } catch where Self.isFallbackWorthy(error) {
             return try await get(WrappedObject<APIOpinion>.self, path: "/opinion/\(slug)").item
         }
     }
@@ -592,17 +616,16 @@ actor APIClient {
     }
 
     func fetchArticlesByKeyword(_ keyword: String) async throws -> [APIArticle] {
-        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
-        let encodedKeyword = keyword.addingPercentEncoding(withAllowedCharacters: allowed) ?? keyword
-
+        // لا ترميز مسبق هنا: buildURL يرمّز كل مقطع بنفسه، والترميز المزدوج
+        // يجعل الخادم يبحث عن "%D8%B1..." حرفيًا فتعود كل كلمة عربية فارغة
         do {
             return try await get(
                 WrappedArray<APIArticle>.self,
-                path: "/keyword/\(encodedKeyword)",
+                path: "/keyword/\(keyword)",
                 apiRoot: publicAPIBaseURL
             ).items
-        } catch {
-            return try await get(WrappedArray<APIArticle>.self, path: "/keyword/\(encodedKeyword)").items
+        } catch where Self.isFallbackWorthy(error) {
+            return try await get(WrappedArray<APIArticle>.self, path: "/keyword/\(keyword)").items
         }
     }
 
@@ -639,7 +662,48 @@ actor APIClient {
 
     func login(email: String, password: String) async throws -> APILoginResponse {
         await ensureCSRF()
-        return try await post(APILoginResponse.self, path: "/auth/login", body: APILoginRequest(email: email, password: password))
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/login",
+            body: APILoginRequest(email: email, phone: nil, password: password)
+        )
+    }
+
+    /// دخول بحساب سبق بالبريد/الجوال + كلمة المرور. يكتشف البريد بوجود «@».
+    func loginWithIdentifier(_ identifier: String, password: String) async throws -> APILoginResponse {
+        await ensureCSRF()
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isEmail = trimmed.contains("@")
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/login",
+            body: APILoginRequest(
+                email: isEmail ? trimmed.lowercased() : nil,
+                phone: isEmail ? nil : trimmed,
+                password: password
+            )
+        )
+    }
+
+    /// إرسال رمز تحقّق للجوال (Twilio Verify). الرقم بأي صيغة سعودية — الخادم يطبّعه.
+    func sendPhoneCode(_ phone: String) async throws -> APIPhoneSendResponse {
+        await ensureCSRF()
+        return try await post(
+            APIPhoneSendResponse.self,
+            path: "/auth/phone/send",
+            body: APIPhoneSendRequest(phone: phone)
+        )
+    }
+
+    /// التحقّق من الرمز → جلسة عضو سبق (يُنشئ الحساب إن لم يكن موجودًا).
+    func verifyPhoneCode(_ phone: String, code: String) async throws -> APILoginResponse {
+        await ensureCSRF()
+        let deviceInfo = await Self.currentDeviceInfo()
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/phone/verify",
+            body: APIPhoneVerifyRequest(phone: phone, code: code, deviceInfo: deviceInfo)
+        )
     }
 
     func register(name: String, email: String, password: String) async throws -> APILoginResponse {
@@ -754,8 +818,9 @@ actor APIClient {
         // version always failed with "الصورة مطلوبة (base64)" because
         // `req.body.image` was undefined.
         let base64 = imageData.base64EncodedString()
+        let mime = Self.detectImageMimeType(imageData) ?? "image/png"
         struct Body: Encodable { let image: String }
-        let body = Body(image: "data:image/png;base64,\(base64)")
+        let body = Body(image: "data:\(mime);base64,\(base64)")
         return try await post(APIAvatarUploadResponse.self, path: "/members/profile/image", body: body).user
     }
 
@@ -849,7 +914,8 @@ actor APIClient {
         osVersion: String? = nil,
         appVersion: String? = nil,
         locale: String? = nil,
-        timezone: String? = nil
+        timezone: String? = nil,
+        installationId: String? = nil
     ) async throws {
         struct Body: Encodable {
             let token: String
@@ -860,11 +926,15 @@ actor APIClient {
             let appVersion: String?
             let locale: String?
             let timezone: String?
+            let bundleId: String?
+            let installationId: String?
         }
         try await postRaw(path: "/members/push-token", body: Body(
             token: token, provider: provider, platform: platform,
             deviceName: deviceName, osVersion: osVersion, appVersion: appVersion,
-            locale: locale, timezone: timezone
+            locale: locale, timezone: timezone,
+            bundleId: Bundle.main.bundleIdentifier,
+            installationId: installationId
         ))
     }
 
@@ -879,6 +949,32 @@ actor APIClient {
         request.httpBody = try JSONEncoder().encode(Body(token: token))
         let (_, response) = try await session.data(for: request)
         try ensureSuccess(response)
+    }
+
+    // MARK: - Live Activity (push-to-update) tokens
+
+    /// Register the ActivityKit push token for a live match so the backend can
+    /// push lock-screen updates (score/minute) via APNs while the app is
+    /// closed/locked. The token differs from the device push token and rotates
+    /// per activity. Public endpoint — works for guests too.
+    func registerLiveActivityToken(fixtureId: Int, token: String) async throws {
+        struct Body: Encodable {
+            let fixtureId: Int
+            let token: String
+            let bundleId: String?
+        }
+        // نرسل bundleId صراحةً (كما يفعل تطبيق الرياضة) كي يختار الخادم apns-topic
+        // ومفتاح APNs الصحيحين بدل الاعتماد على الافتراضي.
+        try await postRaw(
+            path: "/live-activity/register",
+            body: Body(fixtureId: fixtureId, token: token, bundleId: Bundle.main.bundleIdentifier)
+        )
+    }
+
+    /// Tell the backend the live activity is over so it stops pushing updates.
+    func endLiveActivityToken(token: String) async throws {
+        struct Body: Encodable { let token: String }
+        try await postRaw(path: "/live-activity/end", body: Body(token: token))
     }
 
     /// Latest 50 editorial notifications (scheduled/published/rejected/
@@ -908,12 +1004,50 @@ actor APIClient {
     }
 
     func fetchNotificationPreferences() async throws -> EditorialNotificationPreferences {
-        struct Response: Decodable { let preferences: EditorialNotificationPreferences }
-        return try await get(Response.self, path: "/notifications/preferences").preferences
+        // غياب مفتاح preferences = الافتراضي (الكل مفعّل) بدل إفشال الشاشة.
+        struct Response: Decodable { let preferences: EditorialNotificationPreferences? }
+        return try await get(Response.self, path: "/notifications/preferences").preferences ?? .allOn
     }
 
     func updateNotificationPreferences(_ prefs: EditorialNotificationPreferences) async throws {
         let url = try buildURL(path: "/notifications/preferences")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(prefs)
+        let (_, response) = try await session.data(for: request)
+        try ensureSuccess(response)
+    }
+
+    // MARK: - Sports follows + match-event alerts
+
+    /// متابعات المستخدم الرياضية (فِرق/بطولات). يتطلّب جلسة عضو (Bearer).
+    func fetchSportsFollows() async throws -> [SportsFollow] {
+        struct Response: Decodable { let follows: [SportsFollow] }
+        return try await get(Response.self, path: "/sports/follows").follows
+    }
+
+    /// متابعة فريق/بطولة (idempotent على الخادم).
+    func addSportsFollow(kind: String, refId: String, refName: String, refLogo: String?) async throws {
+        struct Body: Encodable { let kind: String; let refId: String; let refName: String; let refLogo: String? }
+        try await postRaw(path: "/sports/follows",
+                          body: Body(kind: kind, refId: refId, refName: refName, refLogo: refLogo))
+    }
+
+    /// إلغاء متابعة — نمرّر (kind, refId) في الجسم لا في المسار (buildURL يرمّز `?`).
+    func removeSportsFollow(kind: String, refId: String) async throws {
+        struct Body: Encodable { let kind: String; let refId: String }
+        try await deleteRaw(path: "/sports/follows", body: Body(kind: kind, refId: refId))
+    }
+
+    /// تفضيلات أنواع تنبيهات المباريات (الافتراضي «الكل مفعّل»).
+    func fetchSportsAlertPreferences() async throws -> SportsAlertPreferences {
+        struct Response: Decodable { let preferences: SportsAlertPreferences }
+        return try await get(Response.self, path: "/sports/alert-prefs").preferences
+    }
+
+    func updateSportsAlertPreferences(_ prefs: SportsAlertPreferences) async throws {
+        let url = try buildURL(path: "/sports/alert-prefs")
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         applyHeaders(&request)
@@ -1165,7 +1299,7 @@ actor APIClient {
         } catch APIError.apiMessage(let message)
             where message.localizedCaseInsensitiveContains("لا يوجد رابط قصير") {
             return nil
-        } catch {
+        } catch where Self.isFallbackWorthy(error) {
             let fallback = try await get(APIShortlink.self, path: "/shortlinks/article/\(articleId)")
             return fallback.resolvedURLString
         }
@@ -1464,6 +1598,18 @@ actor APIClient {
         }
     }
 
+    /// الاحتياطي (v1 بعد public أو شكل بديل) يليق فقط بـ«غير موجود هنا»
+    /// (404) أو «شكل استجابة مختلف» (فشل فك). أخطاء الشبكة و5xx تُرمى
+    /// مباشرة — كان try? يبتلعها فيطلق طلبًا ثانيًا يضاعف الحمل على خادم
+    /// متعثر أصلًا ويحوّل «خطأ خادم» إلى «المحتوى غير موجود» أمام المستخدم.
+    nonisolated static func isFallbackWorthy(_ error: Error) -> Bool {
+        guard let api = error as? APIError else { return false }
+        switch api {
+        case .notFound, .decodingError: return true
+        default: return false
+        }
+    }
+
     private func perform<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
         try await decode(type, from: session, request: request)
     }
@@ -1475,7 +1621,17 @@ actor APIClient {
         }
         switch http.statusCode {
         case 200...299:
-            return try decoder.decode(type, from: data)
+            do {
+                return try decoder.decode(type, from: data)
+            } catch {
+                // DecodingError الخام كان يتسرّب للمستخدم برسالة إنجليزية
+                // تقنية ("The data couldn't be read…") عبر localizedDescription
+                // في واجهة عربية. التفاصيل للتشخيص في الكونسول فقط.
+                #if DEBUG
+                print("[API] decode failure for \(T.self):", error)
+                #endif
+                throw APIError.decodingError
+            }
         default:
             if let apiErr = try? decoder.decode(APIErrorResponse.self, from: data) {
                 // Surface the pending-activation contract as a structured

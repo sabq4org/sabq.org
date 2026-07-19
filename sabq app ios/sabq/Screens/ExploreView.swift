@@ -19,7 +19,6 @@ struct ExploreView: View {
     @State private var recentSearches: [String] = {
         UserDefaults.standard.stringArray(forKey: "sabq_recent_searches") ?? []
     }()
-    @State private var trendingKeywords: [String] = []
     @State private var apiResults: [Article] = []
     @State private var isSearching = false
     @State private var submittedQuery = ""
@@ -76,14 +75,6 @@ struct ExploreView: View {
         .navigationDestination(for: ArticleCategory.self) { category in
             CategoryArticlesView(category: category)
         }
-        .task {
-            let kw = await NewsService.fetchTrending()
-            if !kw.isEmpty {
-                trendingKeywords = kw
-            } else if !articlesStore.trendingKeywords.isEmpty {
-                trendingKeywords = articlesStore.trendingKeywords
-            }
-        }
         .onChange(of: trimmedSearchText) { _, newValue in
             scheduleSearch(for: newValue)
         }
@@ -100,43 +91,6 @@ struct ExploreView: View {
             recentSearchesSection
                 .animatedAppear(index: 4)
         }
-    }
-
-    private var trendingPillsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(icon: "flame.fill", title: "الأكثر بحثاً", tint: SabqTheme.coral)
-
-            FlowLayout(spacing: 8) {
-                ForEach(trendingKeywords.prefix(14), id: \.self) { keyword in
-                    NavigationLink(value: KeywordRoute(keyword: keyword)) {
-                        Text("#\(keyword)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(SabqTheme.ink)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(SabqTheme.paleFill)
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
     }
 
     private var sectionsGridSection: some View {
@@ -163,7 +117,7 @@ struct ExploreView: View {
                     recentSearches.removeAll()
                     UserDefaults.standard.set([String](), forKey: "sabq_recent_searches")
                 }
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             }
 
@@ -175,9 +129,9 @@ struct ExploreView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                             Text(recent)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .padding(.horizontal, 11)
@@ -215,7 +169,7 @@ struct ExploreView: View {
         } else {
             VStack(alignment: .leading, spacing: 14) {
                 Text("\(displayResults.count) نتيجة")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
@@ -241,10 +195,10 @@ struct ExploreView: View {
     private func sectionTitle(icon: String, title: String, tint: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(tint)
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(SabqFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
             Spacer(minLength: 0)
         }

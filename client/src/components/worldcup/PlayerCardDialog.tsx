@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Cake, History, Ruler, Shirt, Trophy, Weight } from "lucide-react";
+import { Activity, Cake, History, Ruler, Shirt, TrendingUp, Trophy, Weight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { WcPlayerCard, WcPlayerCareerStop, WcPlayerTournamentStats } from "./wcTypes";
+import { formatMarketValue, type WcPlayerCard, type WcPlayerCareerStop, type WcPlayerMarket, type WcPlayerTournamentStats } from "./wcTypes";
 
 /**
  * بطاقة اللاعب الشاملة — تُفتح بالضغط على أي لاعب في مركز المونديال
@@ -167,6 +167,144 @@ function TrophiesList({ player }: { player: WcPlayerCard }) {
   );
 }
 
+// فورمة اللاعب + xG (SportMonks) — /api/world-cup/player/:id/form
+interface WcPlayerFormMatch {
+  date: string;
+  opponent: string;
+  opponentLogo: string;
+  homeAway: "home" | "away";
+  result: "W" | "D" | "L";
+  scoreFor: number;
+  scoreAgainst: number;
+  xg: number | null;
+  goals: number;
+  rating: number | null;
+  league: string;
+}
+interface WcPlayerForm {
+  available: boolean;
+  matches: WcPlayerFormMatch[];
+}
+
+function PlayerForm({ playerId }: { playerId: number }) {
+  const { data } = useQuery<WcPlayerForm>({
+    queryKey: [`/api/world-cup/player/${playerId}/form`],
+    enabled: playerId != null,
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  });
+  const matches = Array.isArray(data?.matches) ? data!.matches : [];
+  if (matches.length === 0) return null;
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-1">
+        <Activity className="h-3.5 w-3.5" />
+        الفورمة الأخيرة · الأهداف المتوقّعة
+      </h4>
+      <div className="space-y-1.5">
+        {matches.map((m, i) => (
+          <div key={i} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-1.5">
+            <span
+              className={`h-6 w-6 rounded-full grid place-items-center text-[10px] font-black text-white shrink-0 ${
+                m.result === "W" ? "bg-emerald-500" : m.result === "L" ? "bg-red-500" : "bg-zinc-400"
+              }`}
+            >
+              {m.result === "W" ? "ف" : m.result === "L" ? "خ" : "ت"}
+            </span>
+            <span className="h-6 w-6 rounded-full bg-white ring-1 ring-border p-0.5 shrink-0">
+              {m.opponentLogo && (
+                <img src={m.opponentLogo} alt="" className="h-full w-full object-contain" loading="lazy" />
+              )}
+            </span>
+            <span className="text-sm font-bold tabular-nums shrink-0" dir="ltr">
+              {m.scoreFor}-{m.scoreAgainst}
+            </span>
+            <span className="flex-1" />
+            {m.goals > 0 && (
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
+                {m.goals} ⚽
+              </span>
+            )}
+            {m.xg != null && (
+              <span
+                className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700 dark:text-emerald-300 shrink-0"
+                dir="ltr"
+              >
+                xG {m.xg.toFixed(2)}
+              </span>
+            )}
+            {m.rating != null && (
+              <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-black tabular-nums shrink-0 ${ratingColor(m.rating)}`}>
+                {m.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// مخطّط بسيط (SVG) لتطوّر القيمة السوقية عبر الزمن — أخضر صاعد/أحمر هابط.
+function MarketSparkline({ history }: { history: { time: number; value: number }[] }) {
+  if (history.length < 2) return null;
+  const W = 260;
+  const H = 56;
+  const pad = 4;
+  const vals = history.map((h) => h.value);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const n = history.length;
+  const pts = history
+    .map((h, i) => {
+      const x = pad + (i / (n - 1)) * (W - 2 * pad);
+      const y = H - pad - ((h.value - min) / span) * (H - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const up = vals[n - 1] >= vals[0];
+  const stroke = up ? "#10b981" : "#ef4444";
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-14" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// القيمة السوقية وتاريخها (TheSports) — /api/world-cup/player/:id/market
+function PlayerMarketValue({ playerId }: { playerId: number }) {
+  const { data } = useQuery<WcPlayerMarket>({
+    queryKey: [`/api/world-cup/player/${playerId}/market`],
+    enabled: playerId != null,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+  if (!data?.available) return null;
+  const history = Array.isArray(data.history) ? data.history : [];
+  const current = data.marketValue ?? (history.length ? history[history.length - 1].value : null);
+  const formatted = formatMarketValue(current, data.currency);
+  if (!formatted && history.length < 2) return null;
+  const peak = history.length ? Math.max(...history.map((h) => h.value)) : null;
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-1">
+        <TrendingUp className="h-3.5 w-3.5" />
+        القيمة السوقية
+      </h4>
+      <div className="rounded-xl bg-muted/40 px-3 py-3">
+        <div className="flex items-baseline justify-between mb-1">
+          <span className="text-lg font-black text-emerald-600 tabular-nums">{formatted ?? "—"}</span>
+          {peak != null && peak !== current && (
+            <span className="text-[10px] text-muted-foreground">الأعلى: {formatMarketValue(peak, data.currency)}</span>
+          )}
+        </div>
+        {history.length >= 2 && <MarketSparkline history={history} />}
+      </div>
+    </div>
+  );
+}
+
 export function PlayerCardDialog({ playerId, onClose }: PlayerCardDialogProps) {
   const { data: player, isLoading } = useQuery<WcPlayerCard>({
     queryKey: [`/api/world-cup/player/${playerId}`],
@@ -271,6 +409,10 @@ export function PlayerCardDialog({ playerId, onClose }: PlayerCardDialogProps) {
               {player.stats && (
                 <TournamentStats stats={player.stats} isGoalkeeper={player.positionEn === "Goalkeeper"} />
               )}
+
+              {playerId != null && <PlayerMarketValue playerId={playerId} />}
+
+              {playerId != null && <PlayerForm playerId={playerId} />}
 
               {player.career.length > 0 && <CareerList career={player.career} />}
 

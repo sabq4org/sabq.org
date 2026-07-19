@@ -227,6 +227,19 @@ function presenceList(): PresenceEntry[] {
   return Array.from(presence.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/**
+ * المحررون النشطون حاليًا على مقال محدد (خلال TTL). يستخدمه رادار الفجوات
+ * التحريرية لعرض مَن يحرّر مسودة التغطية الآن.
+ */
+export function getEditorsForArticle(
+  articleId: string
+): { userId: string; userName: string; userAvatar: string | null }[] {
+  const now = Date.now();
+  return Array.from(presence.values())
+    .filter((entry) => entry.articleId === articleId && now - entry.updatedAt <= PRESENCE_TTL_MS)
+    .map((entry) => ({ userId: entry.userId, userName: entry.userName, userAvatar: entry.userAvatar }));
+}
+
 function broadcastLocal(event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of clients) {
@@ -318,8 +331,11 @@ router.post("/api/editor-presence/heartbeat", requireAuth, (req: Request, res: R
     return res.status(401).json({ message: "Unauthorized" });
   }
 
+  // Prefer Arabic/full name from session. Session used to omit firstName/lastName
+  // and presence fell back to the email local-part (e.g. alawijan1).
   const userName =
     [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+    (typeof user.name === "string" ? user.name.trim() : "") ||
     (user.displayName as string | undefined)?.trim() ||
     (typeof user.email === "string" ? user.email.split("@")[0] : "") ||
     "محرر";

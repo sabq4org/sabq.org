@@ -10,6 +10,21 @@ nonisolated struct FlexKey: CodingKey, Sendable {
     init?(intValue: Int) { stringValue = "\(intValue)"; self.intValue = intValue }
 }
 
+/// معرّف احتياطي مشتق ثابت عندما يغيب `id` من الخادم — `UUID()` عشوائي جديد
+/// مع كل فكّ ترميز كان يمنح المادة نفسها معرّفًا مختلفًا في كل جلبة، فيكسر
+/// التمييز بالمعرّف (تكرار في القوائم وفقدان حالة الحفظ/الإعجاب).
+/// FNV-1a صراحةً لأن `hashValue` في Swift عشوائي البذرة لكل إقلاع.
+nonisolated enum StableID {
+    static func fnv1a(_ s: String) -> String {
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in s.utf8 {
+            h ^= UInt64(b)
+            h = h &* 0x100000001b3
+        }
+        return String(h, radix: 16)
+    }
+}
+
 // MARK: - API Article
 
 /// One photo inside a `weekly_photos` article — image + Arabic caption +
@@ -110,13 +125,8 @@ nonisolated struct APIArticle: Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
 
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
 
         title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
 
@@ -134,6 +144,7 @@ nonisolated struct APIArticle: Decodable {
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
+        id = rawId ?? slug ?? "derived-\(StableID.fnv1a(title))"
 
         if let cat = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("category")) {
             categoryName = (try? cat.decode(String.self, forKey: FlexKey("nameAr")))
@@ -339,17 +350,13 @@ nonisolated struct APICategory: Decodable, Identifiable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         name = (try? c.decode(String.self, forKey: FlexKey("nameAr")))
             ?? (try? c.decode(String.self, forKey: FlexKey("name")))
             ?? ""
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        id = rawId ?? slug ?? "derived-\(StableID.fnv1a(name))"
         description = try? c.decode(String.self, forKey: FlexKey("description"))
         articlesCount = (try? c.decode(Int.self, forKey: FlexKey("articles_count")))
             ?? (try? c.decode(Int.self, forKey: FlexKey("count")))
@@ -359,6 +366,26 @@ nonisolated struct APICategory: Decodable, Identifiable, Hashable {
 }
 
 // MARK: - Homepage Response
+
+/// استجابة `/api/cache-invalidation/check` — طابع زمني يتغيّر عند كل نشر/إبطال.
+/// العميل يستطلعها بدل جلب الرئيسية كاملة كل دورة.
+nonisolated struct APICacheInvalidationCheck: Decodable {
+    let lastUpdate: Double
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        if let d = try? c.decode(Double.self, forKey: FlexKey("lastUpdate")) {
+            lastUpdate = d
+        } else if let i = try? c.decode(Int.self, forKey: FlexKey("lastUpdate")) {
+            lastUpdate = Double(i)
+        } else if let s = try? c.decode(String.self, forKey: FlexKey("lastUpdate")),
+                  let d = Double(s) {
+            lastUpdate = d
+        } else {
+            lastUpdate = 0
+        }
+    }
+}
 
 nonisolated struct APIHomepageResponse: Decodable {
     let hero: [APIArticle]
@@ -598,15 +625,11 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        id = rawId ?? slug ?? "derived-\(StableID.fnv1a(title))"
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
         excerpt = try? c.decode(String.self, forKey: FlexKey("excerpt"))
@@ -764,9 +787,33 @@ nonisolated struct APITrendingResponse: Decodable {
 
 // MARK: - Auth
 
+/// دخول بحساب سبق — البريد أو الجوال + كلمة المرور (nil يُحذف من JSON تلقائيًّا).
 nonisolated struct APILoginRequest: Encodable {
-    let email: String
+    let email: String?
+    let phone: String?
     let password: String
+}
+
+// دخول/تسجيل بالجوال (Twilio Verify)
+nonisolated struct APIPhoneSendRequest: Encodable {
+    let phone: String
+}
+
+nonisolated struct APIPhoneSendResponse: Decodable {
+    let success: Bool
+    let message: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        success = (try? c.decode(Bool.self, forKey: FlexKey("success"))) ?? false
+        message = try? c.decode(String.self, forKey: FlexKey("message"))
+    }
+}
+
+nonisolated struct APIPhoneVerifyRequest: Encodable {
+    let phone: String
+    let code: String
+    let deviceInfo: APIDeviceInfo?
 }
 
 nonisolated struct APIAvatarUploadResponse: Decodable {
@@ -1116,13 +1163,8 @@ nonisolated struct APIUser: Decodable, Identifiable {
 
     nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         firstName = (try? c.decode(String.self, forKey: FlexKey("firstName")))
             ?? (try? c.decode(String.self, forKey: FlexKey("first_name")))
         lastName = (try? c.decode(String.self, forKey: FlexKey("lastName")))
@@ -1132,6 +1174,7 @@ nonisolated struct APIUser: Decodable, Identifiable {
         lastNameEn = (try? c.decode(String.self, forKey: FlexKey("lastNameEn")))
             ?? (try? c.decode(String.self, forKey: FlexKey("last_name_en")))
         email = try? c.decode(String.self, forKey: FlexKey("email"))
+        id = rawId ?? email.map { "derived-\(StableID.fnv1a($0))" } ?? UUID().uuidString
         let rawAvatar = (try? c.decode(String.self, forKey: FlexKey("profileImageUrl")))
             ?? (try? c.decode(String.self, forKey: FlexKey("profile_image_url")))
             ?? (try? c.decode(String.self, forKey: FlexKey("avatar")))
@@ -1854,6 +1897,35 @@ nonisolated struct APITodayInsights: Decodable {
         let likes: Int
         let comments: Int
         let articlesRead: Int
+
+        init(readingTime: Int = 0, completionRate: Int = 0, likes: Int = 0,
+             comments: Int = 0, articlesRead: Int = 0) {
+            self.readingTime = readingTime
+            self.completionRate = completionRate
+            self.likes = likes
+            self.comments = comments
+            self.articlesRead = articlesRead
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: FlexKey.self)
+            readingTime = (try? c.decode(Int.self, forKey: FlexKey("readingTime"))) ?? 0
+            completionRate = (try? c.decode(Int.self, forKey: FlexKey("completionRate"))) ?? 0
+            likes = (try? c.decode(Int.self, forKey: FlexKey("likes"))) ?? 0
+            comments = (try? c.decode(Int.self, forKey: FlexKey("comments"))) ?? 0
+            articlesRead = (try? c.decode(Int.self, forKey: FlexKey("articlesRead"))) ?? 0
+        }
+    }
+
+    // فك متسامح (نمط FlexKey المتّبع في بقية الملف): تغيير صغير في شكل
+    // الاستجابة كان يُفشل الفك كاملًا فتختفي بطاقة الرحلة المعرفية كليًا.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        greeting = (try? c.decode(String.self, forKey: FlexKey("greeting"))) ?? ""
+        metrics = (try? c.decode(Metrics.self, forKey: FlexKey("metrics"))) ?? Metrics()
+        topInterests = (try? c.decode([String].self, forKey: FlexKey("topInterests"))) ?? []
+        aiPhrase = try? c.decode(String.self, forKey: FlexKey("aiPhrase"))
+        quickSummary = try? c.decode(String.self, forKey: FlexKey("quickSummary"))
     }
 }
 
@@ -1888,6 +1960,22 @@ nonisolated struct APIHajjArticle: Decodable, Identifiable {
     let isPinned: Bool?
     let hajjTag: String              // "من عرفات", "في منى", ...
     let hajjEmoji: String            // 🏔️, 🪨, ...
+
+    // hajjTag/hajjEmoji بقيم افتراضية فارغة: صف واحد ناقص كان يُفشل فك
+    // المصفوفة كاملةً فيختفي بلوك الحج بأكمله.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = try c.decode(String.self, forKey: FlexKey("id"))
+        title = try c.decode(String.self, forKey: FlexKey("title"))
+        slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        excerpt = try? c.decode(String.self, forKey: FlexKey("excerpt"))
+        imageUrl = try? c.decode(String.self, forKey: FlexKey("imageUrl"))
+        publishedAt = try? c.decode(String.self, forKey: FlexKey("publishedAt"))
+        isBreaking = try? c.decode(Bool.self, forKey: FlexKey("isBreaking"))
+        isPinned = try? c.decode(Bool.self, forKey: FlexKey("isPinned"))
+        hajjTag = (try? c.decode(String.self, forKey: FlexKey("hajjTag"))) ?? ""
+        hajjEmoji = (try? c.decode(String.self, forKey: FlexKey("hajjEmoji"))) ?? ""
+    }
 }
 
 // MARK: - Article reactions (like toggle)
@@ -1900,6 +1988,14 @@ nonisolated struct APIHajjArticle: Decodable, Identifiable {
 nonisolated struct APIArticleReactionResponse: Decodable {
     let liked: Bool
     let likesCount: Int
+
+    // liked إلزامي (جوهر الاستجابة)؛ likesCount متسامح — إسقاطه من الخادم
+    // كان يرمي خطأ فك فيتجمّد زر الإعجاب كليًا بدل أن يفقد العدّاد فقط.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        liked = try c.decode(Bool.self, forKey: FlexKey("liked"))
+        likesCount = (try? c.decode(Int.self, forKey: FlexKey("likesCount"))) ?? 0
+    }
 }
 
 // MARK: - Editorial notifications (push history + preferences)
@@ -2067,4 +2163,47 @@ nonisolated struct EditorialNotificationPreferences: Codable, Hashable {
         rejectedEnabled: true,
         revisionEnabled: true
     )
+
+    init(scheduledEnabled: Bool, publishedEnabled: Bool,
+         rejectedEnabled: Bool, revisionEnabled: Bool) {
+        self.scheduledEnabled = scheduledEnabled
+        self.publishedEnabled = publishedEnabled
+        self.rejectedEnabled = rejectedEnabled
+        self.revisionEnabled = revisionEnabled
+    }
+
+    // متسامح: حقل مفقود = مفعّل (الافتراضي allOn) بدل إفشال شاشة
+    // التفضيلات كاملةً عند أي إضافة/إسقاط خادمي. encode يبقى مولَّدًا.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        scheduledEnabled = (try? c.decode(Bool.self, forKey: FlexKey("scheduledEnabled"))) ?? true
+        publishedEnabled = (try? c.decode(Bool.self, forKey: FlexKey("publishedEnabled"))) ?? true
+        rejectedEnabled = (try? c.decode(Bool.self, forKey: FlexKey("rejectedEnabled"))) ?? true
+        revisionEnabled = (try? c.decode(Bool.self, forKey: FlexKey("revisionEnabled"))) ?? true
+    }
+}
+
+/// تفضيلات أنواع تنبيهات المباريات (عامّة لكل المستخدم) — تُطبَّق على إشعارات
+/// الفِرق التي يتابعها. تدور عبر `GET` / `PUT /api/v1/sports/alert-prefs`.
+nonisolated struct SportsAlertPreferences: Codable, Hashable {
+    var kickoff: Bool
+    var goals: Bool
+    var cards: Bool
+    var varReview: Bool
+    var fulltime: Bool
+
+    static let allOn = SportsAlertPreferences(
+        kickoff: true, goals: true, cards: true, varReview: true, fulltime: true
+    )
+}
+
+/// متابعة رياضية واحدة (فريق/بطولة). تُستخدم لمعرفة ما إذا كان المستخدم يتابع
+/// منتخبًا في صفحته. الحقول الزائدة (userId/createdAt) يتجاهلها Codable.
+nonisolated struct SportsFollow: Codable, Hashable, Identifiable {
+    let id: String
+    let kind: String
+    let refId: String
+    let refName: String
+    let refLogo: String?
+    var notify: Bool
 }

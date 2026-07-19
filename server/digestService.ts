@@ -6,6 +6,7 @@ import {
   interests,
   categories,
   userRecommendationPrefs,
+  userNotificationPrefs,
   notificationsInbox,
   readingHistory,
   recommendationLog,
@@ -84,6 +85,15 @@ export async function generateDailyDigest(userId: string): Promise<DailyDigest |
 
     if (prefs && !prefs.dailyDigest) {
       console.log(`⏸️ [DIGEST] User ${userId} has disabled daily digest`);
+      return null;
+    }
+
+    // «وضع المباريات فقط» يكتم الملخص اليومي
+    const notifPrefs = await db.query.userNotificationPrefs.findFirst({
+      where: eq(userNotificationPrefs.userId, userId),
+    });
+    if (notifPrefs?.matchesOnly) {
+      console.log(`⏸️ [DIGEST] User ${userId} is in matches-only mode`);
       return null;
     }
 

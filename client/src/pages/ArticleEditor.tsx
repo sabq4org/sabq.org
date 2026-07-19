@@ -88,6 +88,8 @@ import {
   Mail,
   User,
   SpellCheck,
+  Frame,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -102,6 +104,7 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
@@ -125,9 +128,15 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { TagInput } from "@/components/TagInput";
 import { ReporterSelect } from "@/components/ReporterSelect";
 import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
+import {
+  WriterEditorialNoticesAside,
+  WriterEditorialNoticesMobile,
+} from "@/components/WriterEditorialNotices";
 import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
+import { HeroImageSuggestions } from "@/components/dashboard/HeroImageSuggestions";
+import { HeroRightsDialog } from "@/components/dashboard/HeroRightsDialog";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { PollEditor, type PollData } from "@/components/PollEditor";
 import { WeeklyPhotosEditor } from "@/components/WeeklyPhotosEditor";
@@ -140,6 +149,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { WriterDayPicker } from "@/pages/opinion-author/WriterPriorityRail";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
 import { InfographicAiDialog } from "@/components/InfographicAiDialog";
@@ -148,6 +158,7 @@ import { StoryCardsGenerator } from "@/components/StoryCardsGenerator";
 import { AutoImageGenerator } from "@/components/AutoImageGenerator";
 import { ThumbnailGenerator } from "@/components/ThumbnailGenerator";
 import { ImageUploadDialog } from "@/components/ImageUploadDialog";
+import { LogoComposerDialog } from "@/components/LogoComposerDialog";
 import { Progress } from "@/components/ui/progress";
 import { ArticleTimeline } from "@/components/dashboard/ArticleTimeline";
 import type { Editor } from "@tiptap/react";
@@ -155,6 +166,12 @@ import type { MediaFile } from "@shared/schema";
 import { SortableAttachmentItem } from "@/components/article-editor/SortableAttachmentItem";
 import { ImageCaptionForm } from "@/components/article-editor/ImageCaptionForm";
 import { generateSlug } from "@/lib/slug";
+import { cn } from "@/lib/utils";
+import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
+
+// تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
+// غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
+const HERO_RIGHTS_GATE_ENABLED = false;
 
 export default function ArticleEditor() {
   const params = useParams<{ id: string }>();
@@ -272,11 +289,13 @@ export default function ArticleEditor() {
   } | null>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showLogoComposer, setShowLogoComposer] = useState(false);
   const [showAIImageDialog, setShowAIImageDialog] = useState(false);
   const [showInfographicDialog, setShowInfographicDialog] = useState(false);
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
   const [showAlbumUploadDialog, setShowAlbumUploadDialog] = useState(false);
   const [showAttachmentUploadDialog, setShowAttachmentUploadDialog] = useState(false);
+  const [showFeaturedImageHint, setShowFeaturedImageHint] = useState(true);
   const [albumImages, setAlbumImages] = useState<string[]>([]);
   const [isUploadingAlbumImage, setIsUploadingAlbumImage] = useState(false);
   const [uploadingAlbumProgress, setUploadingAlbumProgress] = useState(0);
@@ -308,9 +327,22 @@ export default function ArticleEditor() {
   const [thumbnailOpen, setThumbnailOpen] = useState(false);
   const [smartLinksOpen, setSmartLinksOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
-  
-  // Muqtarab angles state
-  const [selectedAngleIds, setSelectedAngleIds] = useState<string[]>([]);
+  const [newsletterOpen, setNewsletterOpen] = useState(false);
+  const [imageToolsOpen, setImageToolsOpen] = useState(false);
+  const [autoImageOpen, setAutoImageOpen] = useState(false);
+  const [titleCardOpen, setTitleCardOpen] = useState(true);
+
+  // على الديسكتوب أبقِ بطاقة العنوان مفتوحة دائماً
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const forceOpen = () => {
+      if (mq.matches) setTitleCardOpen(true);
+    };
+    forceOpen();
+    mq.addEventListener("change", forceOpen);
+    return () => mq.removeEventListener("change", forceOpen);
+  }, []);
   
   // Use ref for immediate lock with URL tracking (prevents concurrent uploads even in StrictMode)
   const savingMediaMapRef = useRef<Map<string, Promise<string | null>>>(new Map());
@@ -386,13 +418,21 @@ export default function ArticleEditor() {
   const contentNoun = isOpinionContext ? 'مقال' : 'خبر';
   const contentNounAccusative = isOpinionContext ? 'مقالاً' : 'خبراً';
 
-  // Permission check: require articles.create for new articles, articles.edit/edit_any/edit_own for editing
-  const canAccessEditor = user && hasAnyPermission(
-    user, 
-    "articles.create", 
-    "articles.edit", 
-    "articles.edit_any", 
-    "articles.edit_own"
+  // Permission check: require articles.create for new articles, articles.edit/edit_any/edit_own for editing.
+  // Opinion authors use opinion.* codes (ROLE_PERMISSIONS_MAP) — without them the editor redirects away
+  // before the article query can run, which looks like "التعديل لا يجلب البيانات".
+  const canAccessEditor = user && (
+    hasAnyPermission(
+      user,
+      "articles.create",
+      "articles.edit",
+      "articles.edit_any",
+      "articles.edit_own",
+      "opinion.create",
+      "opinion.edit_own",
+      "opinion.edit_any",
+      "opinion.view",
+    )
   );
   
   // Check if user can publish directly (otherwise saves as draft)
@@ -439,7 +479,6 @@ export default function ArticleEditor() {
   const canGenerateImages = user && hasPermission(user, PERMISSION_CODES.ARTICLES_GENERATE_IMAGES);
   const canUseInfographics = user && hasPermission(user, PERMISSION_CODES.ARTICLES_INFOGRAPHICS);
   const canUseNewsType = user && hasPermission(user, PERMISSION_CODES.ARTICLES_NEWS_TYPE);
-  const canUseMuqtarabAngles = user && hasPermission(user, PERMISSION_CODES.ARTICLES_MUQTARAB_ANGLES);
   const canUseComprehensiveEdit = user && hasPermission(user, PERMISSION_CODES.ARTICLES_COMPREHENSIVE_EDIT);
   const canUseContentTypeSelector = user && hasPermission(user, PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR);
   const canHideFromHomepage = user && hasPermission(user, PERMISSION_CODES.ARTICLES_HIDE_HOMEPAGE);
@@ -521,11 +560,21 @@ export default function ArticleEditor() {
     return isCoreCategory;
   });
 
-  const { data: article } = useQuery<ArticleWithDetails>({
-    queryKey: isNewArticle ? ["article-editor-new"] : ["/api/dashboard/articles", id],
-    enabled: !isNewArticle && !!user,
-    refetchOnMount: true, // Always fetch fresh data when opening editor
-    staleTime: 0, // Consider data stale immediately to ensure fresh data
+  // Load via /api/admin/articles/:id (same surface as save PATCH/POST) — the legacy
+  // /api/dashboard/articles/:id path uses a heavier getArticleById join that can stall
+  // and left the form empty with no loading/error UI.
+  const {
+    data: article,
+    isLoading: isArticleLoading,
+    isError: isArticleError,
+    isFetched: isArticleFetched,
+    refetch: refetchArticle,
+    error: articleError,
+  } = useQuery<ArticleWithDetails>({
+    queryKey: isNewArticle ? ["article-editor-new"] : ["/api/admin/articles", id],
+    enabled: !isNewArticle && !!user && !!id && !isUserLoading,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
   // Fetch media assets for this article
@@ -534,6 +583,63 @@ export default function ArticleEditor() {
     enabled: !isNewArticle && !!article?.id,
   });
   const mediaAssets = Array.isArray(mediaAssetsRaw) ? mediaAssetsRaw : [];
+
+  // مقالات الرأي: اليوم الأسبوعي المخصص لكاتب المقال — يعبّئ الجدولة تلقائياً ويبقى قابلاً للتغيير
+  const writerSlotPrefillRef = useRef<string | null>(null);
+  const { data: writerSlotData } = useQuery<{
+    suggestion: { weekday: number; publishTime: string; nextSlot: string } | null;
+  }>({
+    queryKey: [`/api/opinion-writers/${opinionAuthorId}/next-slot`],
+    enabled: Boolean(canSchedule && articleType === "opinion" && opinionAuthorId),
+    staleTime: 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!canSchedule || articleType !== "opinion" || !opinionAuthorId) return;
+    const suggestion = writerSlotData?.suggestion;
+    if (!suggestion?.nextSlot) return;
+    if (writerSlotPrefillRef.current === opinionAuthorId) return;
+    if (article && article.status !== "draft") return;
+    if (publishType === "scheduled" || scheduledAt) return;
+    writerSlotPrefillRef.current = opinionAuthorId;
+    const d = new Date(suggestion.nextSlot);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setPublishType("scheduled");
+    setScheduledAt(
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    );
+  }, [canSchedule, articleType, opinionAuthorId, writerSlotData, article, publishType, scheduledAt]);
+
+  // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره من حوار في مكانه
+  // (دون مغادرة المحرر وفقدان المسودة)، ثم يُستكمل الإرسال تلقائياً.
+  const { data: writerOwnSchedule } = useQuery<{ canChoose?: boolean; dayLoads?: number[] }>({
+    queryKey: ["/api/opinion-author/schedule"],
+    enabled: Boolean(isOpinionAuthor),
+    staleTime: 5 * 60 * 1000,
+  });
+  const [showDayGate, setShowDayGate] = useState(false);
+  const dayGateContinueRef = useRef(false);
+
+  const handleSubmitForReviewGated = () => {
+    if (isOpinionAuthor && writerOwnSchedule?.canChoose) {
+      dayGateContinueRef.current = true;
+      setShowDayGate(true);
+      return;
+    }
+    void handleSaveAndSubmitForReview();
+  };
+
+  useEffect(() => {
+    if (!showDayGate) return;
+    // ثبّت الكاتب يومه من داخل الحوار — أغلقه، وأكمل الإرسال إن كان قد بدأه
+    if (writerOwnSchedule && writerOwnSchedule.canChoose === false) {
+      const shouldSubmit = dayGateContinueRef.current;
+      dayGateContinueRef.current = false;
+      setShowDayGate(false);
+      if (shouldSubmit) void handleSaveAndSubmitForReview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writerOwnSchedule, showDayGate]);
 
   // Fetch existing social cards for this article
   const { data: existingSocialCardsRaw } = useQuery<Array<{ platform: string; imageUrl: string }>>({
@@ -563,37 +669,6 @@ export default function ArticleEditor() {
     }
   }, [existingSocialCards]);
 
-  // Fetch available Muqtarab angles (use public endpoint)
-  const { data: availableAnglesRaw } = useQuery<{ id: string; nameAr: string; colorHex: string; iconKey: string }[]>({
-    queryKey: ["/api/muqtarab/angles"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/muqtarab/angles"));
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.angles || data || [];
-    },
-  });
-  const availableAngles = Array.isArray(availableAnglesRaw) ? availableAnglesRaw : [];
-
-  // Fetch article's linked angles when editing
-  const { data: articleAnglesRaw } = useQuery<{ id: string; nameAr: string; colorHex: string }[]>({
-    queryKey: ["/api/admin/articles", id, "angles"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/admin/articles/${id}/angles`));
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !isNewArticle && !!id,
-  });
-  const articleAngles = Array.isArray(articleAnglesRaw) ? articleAnglesRaw : [];
-
-  // Sync article angles to state when loaded
-  useEffect(() => {
-    if (articleAngles.length > 0) {
-      setSelectedAngleIds(articleAngles.map(a => a.id));
-    }
-  }, [articleAngles]);
-
   // ===== Article Edit Lock Management =====
   // Extracted to hooks/useArticleEditLock.ts (refactor: article-editor-split)
   const { lockStatus, isLockedByOther } = useArticleEditLock({
@@ -605,7 +680,10 @@ export default function ArticleEditor() {
 
   // Load article data when editing
   useEffect(() => {
-    if (article && !isNewArticle) {
+    // Guard: ignore list payloads / mismatched ids (can happen if queryKey briefly lacked id)
+    if (!article || isNewArticle || Array.isArray(article) || !article.id || (id && article.id !== id)) {
+      return;
+    }
       console.log('[ArticleEditor] Loading article data:', {
         articleId: article.id,
         reporterId: article.reporterId,
@@ -727,8 +805,7 @@ export default function ArticleEditor() {
           })
           .catch(err => console.error('[ArticleEditor] Error loading poll:', err));
       }
-    }
-  }, [article, isNewArticle]);
+  }, [article, isNewArticle, id]);
 
   // Auto-save draft key - unique per article or "new" for new articles
   const autoSaveKey = `article-draft-${isNewArticle ? 'new' : id}`;
@@ -896,10 +973,70 @@ export default function ArticleEditor() {
       }
     };
   }, [
-    title, subtitle, content, excerpt, categoryId, articleType, 
+    title, subtitle, content, excerpt, categoryId, articleType,
     imageUrl, thumbnailUrl, keywords, newsType, metaTitle, metaDescription,
     saveDraftToLocalStorage
   ]);
+
+  // حاجز الحقوق: معرّف الصورة التي أوقفت النشر، وتجاوزٌ لمرة واحدة بعد
+  // قرار المحرر (توثيق أو نشر واعٍ بدون توثيق)
+  const [rightsGateMediaId, setRightsGateMediaId] = useState<string | null>(null);
+  const rightsGateBypassRef = useRef(false);
+
+  // اختيار صورة من المكتبة (من المنتقي أو من شريط الاقتراحات): يضبط الحالة
+  // ويُظهر تنبيهًا فقاعيًا بنواقص الصورة (نص بديل/حقوق/محتوى حسّاس) إن وُجدت
+  const applyLibraryImage = (media: MediaFile) => {
+    // Use url (display URL) which is either https:// or proxy URL —
+    // originalUrl might be gs:// which browsers can't display
+    setImageUrl(media.url);
+    setIsAiGeneratedImage((media as any).isAiGenerated || false);
+    setHeroImageMediaId(media.id);
+    const mediaNotes: string[] = [];
+    if (!media.altText) {
+      mediaNotes.push("بلا نص بديل — بعد حفظ الخبر استخدم زر «وصف وتعليق ذكي»");
+    }
+    if (!media.rightsVerified && !media.creditText) {
+      mediaNotes.push("حقوق الاستخدام غير موثّقة — يمكن توثيقها من مكتبة الوسائط");
+    }
+    if (media.aiHasSensitiveContent) {
+      mediaNotes.push("قد تحتوي محتوى حسّاسًا بحسب التحليل الذكي");
+    }
+    if (mediaNotes.length > 0) {
+      toast({
+        title: "تم اختيار الصورة — يوجد تنبيه",
+        description: mediaNotes.join(" · "),
+        duration: 9000,
+      });
+    } else {
+      toast({
+        title: "تم اختيار الصورة",
+        description: "تم إضافة الصورة من المكتبة",
+      });
+    }
+  };
+
+  // تذكير فقاعي (مرة واحدة لكل جلسة تحرير): كُتب عنوان ولا توجد صورة بارزة →
+  // ذكّر المحرر بأن مكتبة الوسائط تعرض اقتراحات ذكية لهذا الخبر بدل رفع صورة جديدة
+  const librarySuggestionToastShownRef = useRef(false);
+  useEffect(() => {
+    if (librarySuggestionToastShownRef.current || isOpinionAuthor) return;
+    if (!title || title.trim().length < 20 || imageUrl) return;
+    const timer = setTimeout(() => {
+      if (librarySuggestionToastShownRef.current) return;
+      librarySuggestionToastShownRef.current = true;
+      toast({
+        title: "💡 جرّب اقتراحات المكتبة",
+        description: "مكتبة الوسائط تحتوي آلاف الصور — افتح «اقتراحات ذكية» لترى ما يناسب هذا الخبر قبل رفع صورة جديدة.",
+        duration: 10000,
+        action: (
+          <ToastAction altText="فتح المكتبة" onClick={() => setShowMediaPicker(true)}>
+            فتح المكتبة
+          </ToastAction>
+        ),
+      });
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [title, imageUrl, isOpinionAuthor, toast]);
 
   // Helper function to save uploaded images to media library (memoized to prevent duplicate uploads)
   const saveToMediaLibrary = useCallback(async (imageUrl: string): Promise<string | null> => {
@@ -1007,11 +1144,93 @@ export default function ArticleEditor() {
     }
   }, [imageUrl, heroImageMediaId, isNewArticle, saveToMediaLibrary]);
 
+  const uploadFeaturedImageFile = async (file: File): Promise<boolean> => {
+    setIsUploadingImage(true);
+
+    try {
+      type UploadedImage = {
+        id: string;
+        url: string;
+        duplicateOf?: { title?: string | null } | null;
+      };
+
+      const uploadFile = async (uploadFileValue: File): Promise<UploadedImage> => {
+        const formData = new FormData();
+        formData.append("file", uploadFileValue);
+        formData.append("purpose", "article-hero");
+        formData.append("entityType", "article");
+        return (await apiRequest("/api/media/upload", {
+          method: "POST",
+          body: formData,
+          isFormData: true,
+        })) as UploadedImage;
+      };
+
+      const declaredFile = isAvifFile(file) && file.type.toLowerCase() !== "image/avif"
+        ? new File([file], file.name, { type: "image/avif", lastModified: file.lastModified })
+        : file;
+
+      let uploaded: UploadedImage;
+      let usedBrowserFallback = false;
+      try {
+        uploaded = await uploadFile(declaredFile);
+      } catch (initialError) {
+        if (!isAvifFile(declaredFile)) throw initialError;
+
+        console.warn("[AVIF Upload] Server conversion failed; retrying in browser");
+        let browserConvertedFile: File;
+        try {
+          browserConvertedFile = await transcodeAvifInBrowser(declaredFile);
+        } catch (browserConversionError) {
+          console.warn("[AVIF Upload] Browser conversion also failed:", browserConversionError);
+          throw initialError;
+        }
+
+        uploaded = await uploadFile(browserConvertedFile);
+        usedBrowserFallback = true;
+      }
+
+      setImageUrl(uploaded.url);
+      setIsAiGeneratedImage(false);
+      setHeroImageMediaId(uploaded.id);
+
+      if (uploaded.duplicateOf) {
+        toast({
+          title: "⚠️ صورة مطابقة موجودة مسبقًا في المكتبة",
+          description: `الصورة مرفوعة سابقًا${uploaded.duplicateOf.title ? ` («${uploaded.duplicateOf.title}»)` : ""} — يُفضّل مستقبلًا اختيارها من المكتبة أو من شريط الاقتراحات بدل إعادة الرفع.`,
+          duration: 9000,
+        });
+      } else {
+        toast({
+          title: usedBrowserFallback ? "تم تحويل AVIF ورفعه بنجاح" : "تم الرفع بنجاح",
+          description: usedBrowserFallback
+            ? "حوّل المتصفح الصورة تلقائياً إلى WEBP قبل رفعها."
+            : `الرابط: ${uploaded.url.substring(0, 50)}...`,
+        });
+      }
+      return true;
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast({
+        title: "خطأ",
+        description: error instanceof Error && error.message
+          ? error.message
+          : "فشل رفع الصورة — الصيغ المدعومة: JPEG و PNG و WEBP (و HEIC من الآيفون)",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    const hasSupportedImageExtension = /\.(jpe?g|png|webp|avif|heic|heif)$/i.test(file.name);
+    if (!file.type.startsWith('image/') && !hasSupportedImageExtension) {
       toast({
         title: "خطأ",
         description: "الرجاء اختيار ملف صورة فقط",
@@ -1029,36 +1248,7 @@ export default function ArticleEditor() {
       return;
     }
 
-    setIsUploadingImage(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("entityType", "article");
-      const uploaded = (await apiRequest("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-      })) as { id: string; url: string };
-
-      setImageUrl(uploaded.url);
-      setIsAiGeneratedImage(false);
-      setHeroImageMediaId(uploaded.id);
-
-      toast({
-        title: "تم الرفع بنجاح",
-        description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
-      });
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      toast({
-        title: "خطأ",
-        description: "فشل رفع الصورة",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploadingImage(false);
-    }
+    await uploadFeaturedImageFile(file);
   };
 
   // Handler for uploading infographic banner image (horizontal 16:9 for card displays)
@@ -1217,11 +1407,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const safeAlbumImages = albumSource.filter(url => typeof url === 'string' && url.trim().length > 0);
       const normalizedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
       const normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
+      const effectiveSlug = slug?.trim() || generateSlug(title) || `opinion-${Date.now()}`;
       console.log('[Save Article] Album images count:', safeAlbumImages.length, 'original:', albumImages?.length);
       
       const articleData: any = {
         title,
-        slug,
+        slug: isOpinionAuthor ? effectiveSlug : slug,
         content,
         excerpt,
         categoryId: categoryId || null,
@@ -1284,7 +1475,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.newsType = "regular";
         articleData.isFeatured = false;
         // Add opinionAuthorId for opinion articles
-        if (opinionAuthorId) {
+        if (!isOpinionAuthor && opinionAuthorId) {
           articleData.opinionAuthorId = opinionAuthorId;
         }
       }
@@ -1349,49 +1540,22 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           typeof data.updatedAt === "string" ? data.updatedAt : new Date(data.updatedAt).toISOString(),
         );
       }
-      
-      // Sync angles if any are selected and we have an article ID
-      if (savedArticleId && selectedAngleIds.length > 0) {
-        try {
-          // Get current angles for comparison
-          const currentAnglesRes = await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`));
-          const currentAngles = currentAnglesRes.ok ? await currentAnglesRes.json() : [];
-          const currentAngleIds = currentAngles.map((a: any) => a.id);
 
-          // Add new angles
-          for (const angleId of selectedAngleIds) {
-            if (!currentAngleIds.includes(angleId)) {
-              await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ angleId }),
-              });
-            }
-          }
-          
-          // Remove unselected angles
-          for (const angleId of currentAngleIds) {
-            if (!selectedAngleIds.includes(angleId)) {
-              await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles/${angleId}`), {
-                method: "DELETE",
-              });
-            }
-          }
-        } catch (err) {
-          console.error("Error syncing angles:", err);
-        }
-      } else if (savedArticleId && selectedAngleIds.length === 0) {
-        // Remove all angles if none selected
-        try {
-          const currentAnglesRes = await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`));
-          const currentAngles = currentAnglesRes.ok ? await currentAnglesRes.json() : [];
-          for (const angle of currentAngles) {
-            await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles/${angle.id}`), {
-              method: "DELETE",
-            });
-          }
-        } catch (err) {
-          console.error("Error removing angles:", err);
+      // تذكير فقاعي بعد النشر: الصورة البارزة بلا نص بديل → اعرض زر التوليد الذكي
+      // (غير مُعطِّل للنشر — الخبر منشور فعلًا، وهذا تحسين لاحق بضغطة واحدة)
+      if (variables?.publishNow && imageUrl) {
+        const heroAsset = (Array.isArray(mediaAssets) ? mediaAssets : []).find((a: any) => a?.displayOrder === 0);
+        if (!heroAsset?.altText) {
+          toast({
+            title: "الصورة البارزة بلا نص بديل",
+            description: "الخبر منشور، ويُنصح بتوليد الوصف الذكي للصورة لتحسين الوصول ونتائج البحث.",
+            duration: 10000,
+            action: (
+              <ToastAction altText="توليد الوصف الذكي" onClick={() => { void handleGenerateHeroCaption(); }}>
+                توليد الوصف
+              </ToastAction>
+            ),
+          });
         }
       }
 
@@ -1426,12 +1590,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/homepage-lite"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/muqtarab"] });
       
       // If updating existing article, also invalidate its specific query
       if (!isNewArticle && id) {
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles", id] });
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id, "angles"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
       }
       
       // Determine the correct success message
@@ -1643,13 +1805,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     if (!title || typeof title !== 'string' || !title.trim()) {
       missingFields.push("العنوان الرئيسي");
     }
-    if (!slug || typeof slug !== 'string' || !slug.trim()) {
+    if (!isOpinionAuthor && (!slug || typeof slug !== 'string' || !slug.trim())) {
       missingFields.push("رابط المقال (Slug)");
     }
     if (!content || typeof content !== 'string' || !content.trim()) {
       missingFields.push("محتوى المقال");
     }
-    if (!categoryId) {
+    if (!isOpinionAuthor && !categoryId) {
       missingFields.push("التصنيف");
     }
 
@@ -1663,6 +1825,24 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       return { ok: false };
     }
 
+    // حاجز الحقوق (غير مانع): عند النشر بصورة بارزة بلا حقوق موثّقة، افتح
+    // نموذج التوثيق السريع. فحص best-effort — أي فشل فيه لا يعطّل النشر.
+    if (HERO_RIGHTS_GATE_ENABLED && publishNow && !isOpinionAuthor && imageUrl && heroImageMediaId && !rightsGateBypassRef.current) {
+      try {
+        const gov = (await apiRequest(`/api/media/${heroImageMediaId}/governance`, {
+          method: "GET",
+        })) as { rightsVerified?: boolean; creditText?: string | null } | null;
+        if (gov && !gov.rightsVerified && !gov.creditText) {
+          setRightsGateMediaId(heroImageMediaId);
+          return { ok: false };
+        }
+      } catch (error) {
+        console.warn('[handleSave] rights check failed (non-blocking):', error);
+      }
+    }
+    rightsGateBypassRef.current = false;
+
+    let savedArticleIdForReview: string | null = null;
     try {
       console.log('[handleSave] Calling saveArticleMutation.mutateAsync');
       const saved = await saveArticleMutation.mutateAsync({
@@ -1673,19 +1853,39 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       });
       const articleId = saved?.id || id;
       if (!articleId) return { ok: false };
-      if (options?.submitForReview) {
-        setReviewStatus(saved?.reviewStatus ?? "pending_review");
+      savedArticleIdForReview = articleId;
+      if (options?.submitForReview && savedArticleIdForReview) {
+        // Some deployed server versions save the new row successfully but
+        // ignore submitForReview on the create request. Never show a success
+        // toast based on an optimistic client state: confirm the persisted
+        // review status, with the dedicated submit endpoint as a safe fallback.
+        const confirmed = saved?.reviewStatus === "pending_review"
+          ? saved
+          : await apiRequest(`/api/my/articles/${articleId}/submit-review`, { method: "POST" });
+
+        if (confirmed?.reviewStatus !== "pending_review") {
+          throw new Error("لم يؤكد الخادم استلام المقال للمراجعة");
+        }
+
+        setReviewStatus("pending_review");
         markArticleSubmittedInAnalyticsCache(queryClient, {
           id: articleId,
-          reviewStatus: saved?.reviewStatus ?? "pending_review",
-          status: saved?.status,
-          updatedAt: saved?.updatedAt,
+          reviewStatus: "pending_review",
+          status: confirmed?.status ?? saved?.status,
+          updatedAt: confirmed?.updatedAt ?? saved?.updatedAt,
         });
         invalidateContributorAnalytics(queryClient);
       }
       return { ok: true, articleId };
     } catch (err) {
       console.error('[handleSave] Save failed:', err);
+      if (options?.submitForReview && savedArticleIdForReview) {
+        toast({
+          title: "لم يتم الإرسال",
+          description: err instanceof Error ? err.message : "تعذر تأكيد وصول المقال إلى فريق التحرير",
+          variant: "destructive",
+        });
+      }
       return { ok: false };
     }
   };
@@ -2021,6 +2221,56 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     return null;
   }
 
+  // Editing an existing article: show loading / error instead of an empty form
+  if (!isNewArticle && (isUserLoading || isArticleLoading)) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground" data-testid="article-editor-loading">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm">جاري تحميل المقال...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!isNewArticle && (isArticleError || (isArticleFetched && !article?.id))) {
+    const message =
+      articleError instanceof Error && articleError.message
+        ? articleError.message
+        : "تعذر جلب بيانات المقال. تحقق من الصلاحيات أو أعد المحاولة.";
+    return (
+      <DashboardLayout>
+        <div className="mx-auto max-w-lg space-y-4 py-16 text-center" data-testid="article-editor-error">
+          <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
+          <h2 className="text-lg font-semibold">تعذر تحميل المقال</h2>
+          <p className="text-sm text-muted-foreground">{message}</p>
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="outline" onClick={() => refetchArticle()} data-testid="button-retry-load-article">
+              <RefreshCw className="h-4 w-4 ml-2" />
+              إعادة المحاولة
+            </Button>
+            <Button variant="ghost" asChild>
+              <Link href={isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles"}>
+                العودة
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const plainContentLength = (content || "").replace(/<[^>]*>/g, "").trim().length;
+  const publishReadiness = [
+    { id: "title", label: "العنوان", ok: Boolean(title?.trim()) },
+    { id: "content", label: "المحتوى", ok: plainContentLength >= 20 },
+    { id: "category", label: "التصنيف", ok: isOpinionAuthor || Boolean(categoryId) },
+    { id: "image", label: "الصورة", ok: isOpinionAuthor || Boolean(imageUrl) },
+    { id: "seo", label: "SEO", ok: Boolean((metaTitle || title)?.trim()) && Boolean((metaDescription || excerpt)?.trim()) },
+  ];
+  const readinessReady = publishReadiness.filter((item) => item.ok).length;
+  const readinessTotal = publishReadiness.length;
+
   return (
     <DashboardLayout>
       {/* Draft Recovery Dialog */}
@@ -2103,48 +2353,26 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           editor matches the rest of the dashboard. */}
       <div className="article-editor-stage" dir="rtl">
         <style>{`
-          /* Flat, no-shadow cards with sharp 1px borders and a very
-             faint cool tint. Inputs / selects / textareas / the
-             editor surface stay white so they pop out of the card
-             instead of blending into it. */
+          /* محايد: بطاقات بيضاء مضغوطة — بدون تلوين عشوائي يضيّع المساحة والمعنى */
           .article-editor-stage .shadcn-card {
             box-shadow: none !important;
             border-width: 1px;
-            border-color: hsl(var(--border));
+            border-color: hsl(var(--border) / 0.9);
+            background-color: hsl(var(--card));
           }
-
-          /* Cool palette — sky / slate / mint / cyan / lavender / teal.
-             Direct-child Cards of each grid column rotate through these.
-             Opacity is tiny so the colour reads as "paper of a different
-             stock" rather than a coloured panel. */
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+1) {
-            background-color: hsl(210 40% 97.5%);  /* slate paper */
-            border-color: hsl(210 25% 88%);
+          .article-editor-stage .shadcn-card > div:first-child {
+            padding: 0.875rem 1.25rem 0.5rem;
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+2) {
-            background-color: hsl(205 70% 97%);    /* sky paper */
-            border-color: hsl(205 50% 88%);
+          .article-editor-stage .shadcn-card > div:first-child .text-2xl {
+            font-size: 0.975rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+3) {
-            background-color: hsl(160 45% 97%);    /* mint paper */
-            border-color: hsl(160 30% 86%);
+          .article-editor-stage .shadcn-card > div:last-child {
+            padding-left: 1.25rem;
+            padding-right: 1.25rem;
+            padding-bottom: 1.1rem;
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+4) {
-            background-color: hsl(190 55% 97%);    /* cyan paper */
-            border-color: hsl(190 40% 86%);
-          }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+5) {
-            background-color: hsl(240 35% 97.5%);  /* lavender paper */
-            border-color: hsl(240 25% 88%);
-          }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+6) {
-            background-color: hsl(180 35% 97%);    /* teal paper */
-            border-color: hsl(180 25% 86%);
-          }
-
-          /* Force every interactive surface inside a tinted card back to
-             white so they read as distinct fields, not as part of the
-             card itself. */
           .article-editor-stage .shadcn-card input:not([type="checkbox"]):not([type="radio"]),
           .article-editor-stage .shadcn-card textarea,
           .article-editor-stage .shadcn-card select,
@@ -2154,43 +2382,20 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           .article-editor-stage .shadcn-card [contenteditable="true"] {
             background-color: hsl(var(--background)) !important;
           }
-          /* The rich-text editor wrapper (toolbar + surface) — keep its
-             outer wrapper neutral so the giant editor block doesn't
-             flood the page with one tint. */
-          .article-editor-stage .shadcn-card .tiptap,
-          .article-editor-stage .shadcn-card .editor-shell,
-          .article-editor-stage .shadcn-card [data-editor-shell] {
+          .article-editor-stage .shadcn-card [data-editor-shell],
+          .article-editor-stage .shadcn-card .tiptap {
             background-color: hsl(var(--background)) !important;
             border-radius: 0.5rem;
+            width: 100%;
+            max-width: none !important;
           }
-
-          /* Dark mode — cool tones at low lightness, sharp borders. */
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+1) {
-            background-color: hsl(210 25% 12%);
-            border-color: hsl(210 15% 22%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+2) {
-            background-color: hsl(205 30% 13%);
-            border-color: hsl(205 20% 23%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+3) {
-            background-color: hsl(160 20% 12%);
-            border-color: hsl(160 15% 22%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+4) {
-            background-color: hsl(190 25% 12%);
-            border-color: hsl(190 18% 22%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+5) {
-            background-color: hsl(240 20% 13%);
-            border-color: hsl(240 15% 23%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+6) {
-            background-color: hsl(180 20% 12%);
-            border-color: hsl(180 15% 22%);
+          .article-editor-stage .shadcn-card .ProseMirror,
+          .article-editor-stage .shadcn-card .rich-text-editor__content {
+            width: 100% !important;
+            max-width: none !important;
           }
         `}</style>
-       <div className="container mx-auto">
+       <div className="w-full min-w-0">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
         {coEditors.length > 0 && (
           <div
@@ -2220,7 +2425,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               className="gap-2"
               onClick={() => {
                 if (id) {
-                  queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles", id] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
                 }
               }}
               data-testid="button-refresh-concurrent-editors"
@@ -2256,7 +2461,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         )}
 
         {/* Page Header with Actions - Mobile Optimized */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 p-4 shadow-sm">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-border/70 bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/70 p-4 shadow-sm">
           {/* Title Row */}
           <div className="flex items-center gap-3 min-w-0">
             <Button
@@ -2266,7 +2471,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               className="shrink-0"
               data-testid="button-back"
             >
-              <Link href="/dashboard/articles">
+              <Link href={isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles"}>
                 <a className="gap-2">
                   <ArrowRight className="h-4 w-4" />
                   <span className="hidden sm:inline">العودة</span>
@@ -2281,7 +2486,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 {isNewArticle ? `${contentNoun} جديد` : `تحرير ال${contentNoun}`}
               </h1>
               <p className="hidden sm:block text-xs text-muted-foreground mt-0.5">
-                {isNewArticle ? `اكتب ${contentNounAccusative} جديداً وحدد إعدادات النشر` : `حدّث محتوى ال${contentNoun} وأعدّ نشره`}
+                {isNewArticle
+                  ? isOpinionAuthor
+                    ? "اكتب مقالك واحفظه أو أرسله إلى فريق التحرير"
+                    : `اكتب ${contentNounAccusative} جديداً وحدد إعدادات النشر`
+                  : `حدّث محتوى ال${contentNoun} وأعدّ إرساله`}
               </p>
             </div>
             {/* Auto-save indicator - visible on desktop */}
@@ -2308,7 +2517,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
 
           {/* Actions Row */}
-          <div className="flex items-center justify-between sm:justify-end gap-2">
+          <div className={isOpinionAuthor ? "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end" : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end"}>
             {/* Auto-save indicator - visible on mobile only */}
             {(autoSaveStatus === "saving" || autoSaveStatus === "saved") && (
               <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted-foreground" data-testid="autosave-indicator-mobile">
@@ -2330,13 +2539,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2">
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
               {!isNewArticle && id && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => window.open(`/dashboard/article/${id}/preview`, '_blank')}
-                  className="gap-1.5 sm:gap-2"
+                  className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                   data-testid="button-preview"
                 >
                   <Eye className="h-4 w-4" />
@@ -2348,7 +2557,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 size="sm"
                 onClick={() => handleSave(false)}
                 disabled={isSaving || isLockedByOther}
-                className="gap-1.5 sm:gap-2"
+                className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                 data-testid="button-save-draft"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -2359,7 +2568,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => void handleSaveAndSubmitForReview()}
+                  onClick={handleSubmitForReviewGated}
                   disabled={
                     submitReviewMutation.isPending ||
                     isSaving ||
@@ -2380,13 +2589,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 size="sm"
                 onClick={() => {
                   if (!canPublish) {
-                    void handleSaveAndSubmitForReview();
+                    handleSubmitForReviewGated();
                     return;
                   }
                   void handleSave(true);
                 }}
                 disabled={isSaving || submitReviewMutation.isPending || isLockedByOther}
-                className="gap-1.5 sm:gap-2"
+                className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                 data-testid="button-publish"
               >
                 {isSaving ? (
@@ -2407,9 +2616,51 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-          {/* Main Content Area - 70% */}
-          <div className="lg:col-span-7 space-y-6">
+
+        {isOpinionAuthor && writerOwnSchedule?.canChoose && (
+          <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20 sm:flex-row sm:items-center sm:justify-between" data-testid="banner-day-missing">
+            <div className="flex items-start gap-2.5">
+              <Calendar className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="text-sm font-bold">لم تحدد يومك الأسبوعي للنشر بعد</p>
+                <p className="text-xs text-muted-foreground">
+                  اكتب مقالك واحفظه بحرية — لكن لن يمكن إرساله للمراجعة قبل تحديد يوم نشرك الأسبوعي.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/40"
+              onClick={() => setShowDayGate(true)}
+              data-testid="button-pick-day-now"
+            >
+              تحديد اليوم الآن
+            </Button>
+          </div>
+        )}
+
+        <Dialog open={showDayGate} onOpenChange={(open) => { if (!open) { dayGateContinueRef.current = false; } setShowDayGate(open); }}>
+          <DialogContent className="max-w-lg" data-testid="dialog-day-gate">
+            <DialogHeader>
+              <DialogTitle>قبل إرسال مقالتك — حدد يومك الأسبوعي</DialogTitle>
+              <DialogDescription>
+                لم تحدد بعد اليوم الذي تُنشر فيه مقالاتك أسبوعياً. اختره الآن وسيُستكمل إرسال
+                مقالتك تلقائياً — مسودتك محفوظة ولن تفقد شيئاً.
+              </DialogDescription>
+            </DialogHeader>
+            <WriterDayPicker dayLoads={writerOwnSchedule?.dayLoads ?? []} />
+          </DialogContent>
+        </Dialog>
+
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:pb-0"}>
+          {/* Main Content Area — contents على الموبايل لدمج الترتيب مع الشريط الجانبي */}
+          <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "contents lg:col-span-8 lg:flex lg:min-w-0 lg:flex-col lg:gap-5"}>
+            {isOpinionAuthor && (
+              <div className="lg:hidden">
+                <WriterEditorialNoticesMobile />
+              </div>
+            )}
             {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-card dark:border-border p-4 space-y-3">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
@@ -2424,83 +2675,138 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </div>
             )}
             {/* Reporter Info Banner - shows actual person who entered content */}
-            {(() => {
+            {!isOpinionAuthor && (() => {
               const sourceMetadata = (article as any)?.sourceMetadata;
               const reporter = (article as any)?.reporter;
               const enteredBy = (article as any)?.enteredBy;
-              
-              // Priority: 1. sourceMetadata.senderName (email/WhatsApp) 
-              //           2. reporter from users table (if not generic)
-              //           3. author from users table (the person who entered via editor)
-              let enteredByName = null;
-              let sourceType = null;
-              
-              // Helper to check if name is generic (should be skipped)
+              const isOpinionArticle = articleType === "opinion";
+
+              // Priority: 1. sourceMetadata.senderName (email/WhatsApp)
+              //           2. for news: reporter (byline field) — skip for opinion
+              //           3. enteredBy = submitter / editor who entered (never opinion author)
+              let enteredByName: string | null = null;
+              let sourceType: string | null = null;
+
               const isGenericName = (name: string) => {
-                const genericNames = ['صحيفة سبق', 'سبق', 'صحيفة'];
+                const genericNames = ["صحيفة سبق", "سبق", "صحيفة"];
                 return genericNames.includes(name?.trim());
               };
-              
+
               if (sourceMetadata?.senderName) {
                 enteredByName = sourceMetadata.senderName;
-                // Check both 'type' and 'source' fields for compatibility
                 const entryMethod = sourceMetadata.type || sourceMetadata.source;
-                sourceType = entryMethod === 'whatsapp' ? 'عبر الواتساب' : 
-                             entryMethod === 'email' ? 'عبر البريد الذكي' : null;
-              } else if (reporter?.firstName || reporter?.lastName) {
-                const fullName = [reporter.firstName, reporter.lastName].filter(Boolean).join(' ');
+                sourceType =
+                  entryMethod === "whatsapp"
+                    ? "عبر الواتساب"
+                    : entryMethod === "email"
+                      ? "عبر البريد الذكي"
+                      : null;
+              } else if (
+                !isOpinionArticle &&
+                (reporter?.firstName || reporter?.lastName)
+              ) {
+                const fullName = [reporter.firstName, reporter.lastName]
+                  .filter(Boolean)
+                  .join(" ");
                 if (fullName && !isGenericName(fullName)) {
                   enteredByName = fullName;
+                  sourceType = "المراسل";
                 }
               }
-              
-              // Fallback to enteredBy (author) if no reporter name found
+
               if (!enteredByName && (enteredBy?.firstName || enteredBy?.lastName)) {
-                const authorName = [enteredBy.firstName, enteredBy.lastName].filter(Boolean).join(' ');
-                if (authorName && !isGenericName(authorName)) {
-                  enteredByName = authorName;
-                  sourceType = 'المحرر';
+                const editorName = [enteredBy.firstName, enteredBy.lastName]
+                  .filter(Boolean)
+                  .join(" ");
+                if (editorName && !isGenericName(editorName)) {
+                  enteredByName = editorName;
+                  sourceType = "المحرر";
                 }
               }
-              
+
               if (!enteredByName) return null;
-              
+
               return (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-card border border-blue-200 dark:border-border rounded-lg text-sm">
-                  <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-blue-700 dark:text-blue-300">
-                    تم إدخال الخبر بواسطة: <strong>{enteredByName}</strong>
-                    {sourceType && <span className="text-blue-500 dark:text-blue-400 mr-2">({sourceType})</span>}
-                  </span>
+                <div className="flex flex-col gap-1 p-3 bg-blue-50 dark:bg-card border border-blue-200 dark:border-border rounded-lg text-sm">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="text-blue-700 dark:text-blue-300">
+                      أُدخلت المادة في النظام بواسطة:{" "}
+                      <strong>{enteredByName}</strong>
+                      {sourceType && (
+                        <span className="text-blue-500 dark:text-blue-400 mr-2">
+                          ({sourceType})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {isOpinionArticle && (
+                    <p className="text-xs text-blue-600/80 dark:text-blue-400/80 pr-6">
+                      هذا المحرّر الذي أدخل المادة — كاتب الرأي الظاهر للقارئ يُختار من
+                      «كاتب المقال» في الشريط الجانبي.
+                    </p>
+                  )}
                 </div>
               );
             })()}
+            {/* Content panel — title/subtitle; order يتحكم بترتيب الموبايل */}
+            <div className="contents" data-editor-panel="content-head">
             {/* Title with AI */}
+            <Collapsible
+              open={titleCardOpen}
+              onOpenChange={setTitleCardOpen}
+              className="order-[20] lg:order-none"
+            >
             <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>العنوان الرئيسي</CardTitle>
-                  {isInfographic && (
-                    <InfographicAiDialog
-                      content={content}
-                      title={title}
-                      category={categories?.find(c => c.id === categoryId)?.nameAr}
-                      onApplySuggestions={handleApplyInfographicSuggestions}
-                    />
-                  )}
+              <CardHeader className="py-3 sm:py-6">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="flex min-w-0 items-center gap-2 text-base sm:text-lg">
+                    <span>العنوان الرئيسي</span>
+                    <span className="text-xs font-normal tabular-nums text-muted-foreground" data-testid="title-char-count">
+                      {(title || "").length}/200
+                    </span>
+                  </CardTitle>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isInfographic && (
+                      <InfographicAiDialog
+                        content={content}
+                        title={title}
+                        category={categories?.find(c => c.id === categoryId)?.nameAr}
+                        onApplySuggestions={handleApplyInfographicSuggestions}
+                      />
+                    )}
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 lg:hidden"
+                        data-testid="button-toggle-title-card"
+                        aria-label={titleCardOpen ? "طي العنوان" : "فتح العنوان"}
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${titleCardOpen ? "rotate-180" : ""}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
                 </div>
+                {!titleCardOpen && (
+                  <p className="mt-2 truncate text-sm text-muted-foreground lg:hidden" data-testid="title-card-collapsed-preview">
+                    {(title || "").trim() || "عنوان…"}
+                  </p>
+                )}
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
+              <CollapsibleContent>
+              <CardContent className="space-y-3 pt-0 sm:pt-0">
+                <div className="flex items-center gap-2">
                   <Input
                     value={title}
                     onChange={(e) => handleTitleChange(e.target.value)}
                     placeholder="اكتب عنوان المقال..."
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                     disabled={isLockedByOther}
                     data-testid="input-title"
                   />
-                  <Button
+                  {!isOpinionAuthor && <Button
                     variant="outline"
                     size="icon"
                     onClick={() => proofreadTitleMutation.mutate()}
@@ -2513,8 +2819,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     ) : (
                       <SpellCheck className="h-4 w-4" />
                     )}
-                  </Button>
-                  <Button
+                  </Button>}
+                  {!isOpinionAuthor && <Button
                     variant="outline"
                     size="icon"
                     onClick={handleGenerateTitle}
@@ -2527,26 +2833,30 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                  </Button>
+                  </Button>}
                 </div>
-                <InlineHeadlineSuggestions
+                {!isOpinionAuthor && <InlineHeadlineSuggestions
                   language="ar"
                   editorInstance={editorInstance}
                   currentTitle={title}
                   onTitleChange={setTitle}
                   onSlugChange={setSlug}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {(title || "").length}/200 حرف
-                </p>
+                />}
               </CardContent>
+              </CollapsibleContent>
             </Card>
+            </Collapsible>
 
             {/* Subtitle - Hidden for opinion articles */}
             {articleType !== "opinion" && !isOpinionAuthor && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>العنوان الفرعي</CardTitle>
+              <Card className="order-[30] lg:order-none">
+                <CardHeader className="py-3 sm:py-6">
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                    <span>العنوان الفرعي</span>
+                    <span className="text-xs font-normal tabular-nums text-muted-foreground" data-testid="subtitle-char-count">
+                      {(subtitle || "").length}/120
+                    </span>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Input
@@ -2557,119 +2867,57 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     disabled={isLockedByOther}
                     data-testid="input-subtitle"
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {(subtitle || "").length}/120 حرف
-                    {(subtitle || "").length > 100 && (
-                      <span className="text-amber-500 mr-2">قريب من الحد الأقصى</span>
-                    )}
-                  </p>
+                  {(subtitle || "").length > 100 && (
+                    <p className="text-xs text-amber-500 mt-2">قريب من الحد الأقصى</p>
+                  )}
                 </CardContent>
               </Card>
             )}
 
-            {/* Newsletter Content - البريد الذكي */}
-            {articleType !== "opinion" && !isOpinionAuthor && (
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      البريد الذكي
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      عنوان فرعي وملخص مخصص للنشرة الإخبارية
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (!title || !content) {
-                        toast({
-                          title: "تنبيه",
-                          description: "يجب إدخال العنوان والمحتوى أولاً",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      setIsGeneratingNewsletterContent(true);
-                      try {
-                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
-                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
-                          method: "POST",
-                          body: JSON.stringify({ title, content, excerpt }),
-                        });
-                        if (data.success) {
-                          setNewsletterSubtitle(data.subtitle);
-                          setNewsletterExcerpt(data.excerpt);
-                          toast({
-                            title: "تم التوليد بنجاح",
-                            description: "تم إنشاء العنوان والملخص للنشرة الإخبارية",
-                          });
-                        } else {
-                          throw new Error(data.message);
-                        }
-                      } catch (error: any) {
-                        toast({
-                          title: "خطأ",
-                          description: error.message || "فشل توليد محتوى النشرة",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setIsGeneratingNewsletterContent(false);
-                      }
-                    }}
-                    disabled={isGeneratingNewsletterContent || !title || !content}
-                    data-testid="button-generate-newsletter-content"
-                  >
-                    {isGeneratingNewsletterContent ? (
-                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 ml-2" />
-                    )}
-                    توليد ذكي
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
-                    <Input
-                      value={newsletterSubtitle}
-                      onChange={(e) => setNewsletterSubtitle(e.target.value)}
-                      placeholder="عنوان جذاب للنشرة الإخبارية..."
-                      maxLength={150}
-                      disabled={isLockedByOther}
-                      data-testid="input-newsletter-subtitle"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(newsletterSubtitle || "").length}/150 حرف
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">ملخص النشرة</label>
-                    <Textarea
-                      value={newsletterExcerpt}
-                      onChange={(e) => setNewsletterExcerpt(e.target.value)}
-                      placeholder="ملخص مختصر يظهر في النشرة..."
-                      rows={3}
-                      maxLength={300}
-                      disabled={isLockedByOther}
-                      data-testid="input-newsletter-excerpt"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(newsletterExcerpt || "").length}/300 حرف
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
+            </div>
+
+            {/* Media panel — مباشرة بعد العنوان وقبل المحتوى */}
+            <div className="order-[40] space-y-5 lg:order-none" data-editor-panel="media">
             {/* Featured Image */}
+            {!isOpinionAuthor && showFeaturedImageHint && (
+              <div
+                className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
+                role="note"
+                data-testid="featured-image-guidance"
+              >
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="min-w-0 flex-1 leading-6 text-muted-foreground">
+                  أضف الصورة البارزة هنا بعد العنوان، ثم أكمل كتابة المحتوى أسفلها.
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-ml-2 -mt-1 h-8 w-8 shrink-0 text-muted-foreground"
+                  onClick={() => setShowFeaturedImageHint(false)}
+                  aria-label="إخفاء إرشاد الصورة البارزة"
+                  data-testid="button-dismiss-featured-image-guidance"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>الصورة البارزة</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* شريط الاقتراح التلقائي: لا صورة بعد + عنوان مكتوب → أفضل صور
+                    الأرشيف ملاءمةً للخبر، باختيار بنقرة واحدة */}
+                {!imageUrl && !isOpinionAuthor && (
+                  <HeroImageSuggestions
+                    articleTitle={title}
+                    articleContent={content}
+                    onPick={applyLibraryImage}
+                    onOpenLibrary={() => setShowMediaPicker(true)}
+                  />
+                )}
                 {imageUrl && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg border">
                     <img
@@ -2680,93 +2928,146 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     />
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => document.getElementById("image-upload")?.click()}
-                    disabled={isUploadingImage}
-                    className="gap-2"
-                    data-testid="button-upload-image"
-                  >
-                    {isUploadingImage ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ImagePlus className="h-4 w-4" />
-                    )}
-                    {imageUrl ? "تغيير الصورة" : "رفع صورة"}
-                  </Button>
-                  {!isOpinionAuthor && (
+                {imageUrl && isOpinionAuthor && (
+                  <div className="flex justify-end pt-1">
                     <Button
-                      variant="outline"
-                      onClick={() => setShowMediaPicker(true)}
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setImageUrl("");
+                        setIsAiGeneratedImage(false);
+                        setThumbnailUrl("");
+                        setHeroImageMediaId(null);
+                        setImageFocalPoint(null);
+                      }}
                       className="gap-2"
-                      data-testid="button-choose-from-library"
+                      data-testid="button-delete-image"
                     >
-                      <ImageIcon className="h-4 w-4" />
-                      اختر من المكتبة
+                      <X className="h-4 w-4" />
+                      حذف الصورة
                     </Button>
-                  )}
-                  {!isOpinionAuthor && imageUrl && (
-                    <span title={!article?.id ? "متاح بعد حفظ الخبر" : undefined}>
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <div className={cn("flex flex-wrap gap-2", isOpinionAuthor && "flex-col sm:flex-row")}>
+                    {!isOpinionAuthor ? (
+                      <Button
+                        onClick={() => setShowMediaPicker(true)}
+                        className="gap-2 flex-1 sm:flex-none min-w-[10rem]"
+                        data-testid="button-choose-from-library"
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        {imageUrl ? "تغيير الصورة" : "اختر صورة"}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant={isOpinionAuthor ? "default" : "outline"}
+                      onClick={() => document.getElementById("image-upload")?.click()}
+                      disabled={isUploadingImage}
+                      className={cn("gap-2", isOpinionAuthor ? "w-full sm:w-auto" : "flex-1 sm:flex-none")}
+                      data-testid="button-upload-image"
+                    >
+                      {isUploadingImage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ImagePlus className="h-4 w-4" />
+                      )}
+                      {isOpinionAuthor ? (imageUrl ? "تغيير الصورة" : "رفع صورة") : "رفع من الجهاز"}
+                    </Button>
+                    {!isOpinionAuthor && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setImageToolsOpen((open) => !open)}
+                        className="gap-2 text-muted-foreground"
+                        data-testid="button-toggle-image-tools"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                        المزيد
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", imageToolsOpen && "rotate-180")} />
+                      </Button>
+                    )}
+                  </div>
+                  {!isOpinionAuthor && imageToolsOpen && (
+                    <div className="flex flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/30 p-3">
+                      {imageUrl && (
+                        <span title={!article?.id ? "متاح بعد حفظ الخبر" : undefined}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleGenerateHeroCaption}
+                            disabled={!article?.id || generatingCaption}
+                            className="gap-2"
+                            data-testid="button-ai-hero-caption"
+                          >
+                            {generatingCaption ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <FileText className="h-4 w-4 text-primary" />
+                            )}
+                            وصف وتعليق ذكي
+                          </Button>
+                        </span>
+                      )}
                       <Button
                         variant="outline"
-                        onClick={handleGenerateHeroCaption}
-                        disabled={!article?.id || generatingCaption}
+                        size="sm"
+                        onClick={() => setShowLogoComposer(true)}
+                        disabled={isUploadingImage}
                         className="gap-2"
-                        data-testid="button-ai-hero-caption"
+                        data-testid="button-logo-composer"
                       >
-                        {generatingCaption ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <FileText className="h-4 w-4 text-primary" />
-                        )}
-                        وصف وتعليق ذكي
+                        <Frame className="h-4 w-4" />
+                        أدوات الشعار
                       </Button>
-                    </span>
-                  )}
-                  {canGenerateImages && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowAIImageDialog(true)}
-                      className="gap-2"
-                      data-testid="button-generate-ai-image"
-                    >
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      توليد بالذكاء الاصطناعي
-                    </Button>
-                  )}
-                  {canUseInfographics && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowInfographicDialog(true)}
-                      className="gap-2"
-                      data-testid="button-generate-infographic"
-                    >
-                      <LayoutGrid className="h-4 w-4 text-primary" />
-                      إنفوجرافيك
-                    </Button>
-                  )}
-                  {canGenerateImages && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowStoryCardsDialog(true)}
-                      className="gap-2"
-                      data-testid="button-generate-story-cards"
-                    >
-                      <Layers className="h-4 w-4 text-primary" />
-                      قصص مصورة
-                    </Button>
+                      {canGenerateImages && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowAIImageDialog(true)}
+                          className="gap-2"
+                          data-testid="button-generate-ai-image"
+                        >
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          توليد بالذكاء الاصطناعي
+                        </Button>
+                      )}
+                      {canUseInfographics && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowInfographicDialog(true)}
+                          className="gap-2"
+                          data-testid="button-generate-infographic"
+                        >
+                          <LayoutGrid className="h-4 w-4 text-primary" />
+                          إنفوجرافيك
+                        </Button>
+                      )}
+                      {canGenerateImages && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowStoryCardsDialog(true)}
+                          className="gap-2"
+                          data-testid="button-generate-story-cards"
+                        >
+                          <Layers className="h-4 w-4 text-primary" />
+                          قصص مصورة
+                        </Button>
+                      )}
+                    </div>
                   )}
                   <input
                     id="image-upload"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
                     onChange={handleImageUpload}
                     className="hidden"
                   />
                 </div>
                 {/* Delete Image Button and AI Label Toggle - Show only when there's an image */}
-                {imageUrl && (
+                {imageUrl && !isOpinionAuthor && (
                   <div className="flex flex-col gap-3 mt-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -2848,7 +3149,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </Card>
 
             {/* Focal Point Picker - Collapsible */}
-            {imageUrl && (
+            {imageUrl && !isOpinionAuthor && (
               <Collapsible open={focalPointOpen} onOpenChange={setFocalPointOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -2878,31 +3179,56 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
             
-            {/* Auto Image Generation - Hidden for infographics */}
-            {canGenerateImages && articleType !== "infographic" && (
-              <AutoImageGenerator
-                articleId={id}
-                title={title}
-                content={content}
-                excerpt={excerpt}
-                category={categories.find(c => c.id === categoryId)?.nameAr}
-                language="ar"
-                articleType={articleType}
-                hasImage={!!imageUrl}
-                onImageGenerated={(url, altText) => {
-                  setImageUrl(url);
-                  setIsAiGeneratedImage(true);
-                  // Update alt text in SEO if needed
-                  toast({
-                    title: "تم توليد الصورة بنجاح",
-                    description: `${altText}`,
-                  });
-                }}
-              />
+            {/* Auto Image Generation — مطوي افتراضياً حتى لا يزاحم مسار الكتابة */}
+            {!isOpinionAuthor && canGenerateImages && articleType !== "infographic" && (
+              <Collapsible open={autoImageOpen} onOpenChange={setAutoImageOpen}>
+                {!autoImageOpen ? (
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-muted/40 hover:text-foreground"
+                      data-testid="collapsible-auto-image"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        التوليد التلقائي للصور
+                      </span>
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </CollapsibleTrigger>
+                ) : null}
+                <CollapsibleContent>
+                  <AutoImageGenerator
+                    articleId={id}
+                    title={title}
+                    content={content}
+                    excerpt={excerpt}
+                    category={categories.find(c => c.id === categoryId)?.nameAr}
+                    language="ar"
+                    articleType={articleType}
+                    hasImage={!!imageUrl}
+                    onImageGenerated={(url, altText) => {
+                      setImageUrl(url);
+                      setIsAiGeneratedImage(true);
+                      toast({
+                        title: "تم توليد الصورة بنجاح",
+                        description: `${altText}`,
+                      });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAutoImageOpen(false)}
+                    className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    طي القسم
+                  </button>
+                </CollapsibleContent>
+              </Collapsible>
             )}
             
             {/* Thumbnail Generation - Collapsible - Hidden for infographics */}
-            {imageUrl && articleType !== "infographic" && (
+            {imageUrl && !isOpinionAuthor && articleType !== "infographic" && (
               <Collapsible open={thumbnailOpen} onOpenChange={setThumbnailOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -3039,12 +3365,175 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Card>
             )}
 
+
+            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
+            {!isNewArticle && !isOpinionAuthor && (
+              <Card data-testid="card-media-album">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <LayoutGrid className="h-4 w-4 text-primary" />
+                      ألبوم الصور
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {albumImages.length} صورة
+                    </Badge>
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    صور إضافية تظهر داخل المقال
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAlbumUploadDialog(true)}
+                      disabled={isUploadingAlbumImage}
+                      className="gap-2"
+                      data-testid="button-add-album-image"
+                    >
+                      {isUploadingAlbumImage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ImagePlus className="h-4 w-4" />
+                      )}
+                      إضافة صور
+                    </Button>
+                  </div>
+                  {albumImages.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {albumImages.map((url, index) => (
+                        <div
+                          key={`album-${index}`}
+                          className="relative group rounded-lg overflow-hidden border bg-muted/30"
+                          data-testid={`album-image-${index}`}
+                        >
+                          <img
+                            src={url}
+                            alt={`صورة الألبوم ${index + 1}`}
+                            className="block w-full max-w-full h-auto transition-transform group-hover:scale-105"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                const newImages = albumImages.filter((_, i) => i !== index);
+                                setAlbumImages(newImages);
+                                toast({
+                                  title: "تم حذف الصورة",
+                                  description: "تم حذف الصورة من الألبوم",
+                                });
+                              }}
+                              data-testid={`button-delete-album-image-${index}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+                            {index + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20">
+                      <LayoutGrid className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground mb-2">لا توجد صور في الألبوم</p>
+                      <p className="text-xs text-muted-foreground">اضغط على «إضافة صور» لرفع صور جديدة</p>
+                    </div>
+                  )}
+                  {isUploadingAlbumImage && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">جاري رفع الصور...</span>
+                        <span className="font-medium">{uploadingAlbumProgress}%</span>
+                      </div>
+                      <Progress value={uploadingAlbumProgress} className="h-2" />
+                    </div>
+                  )}
+
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-base flex items-center gap-2">
+                          <Paperclip className="h-4 w-4" />
+                          المرفقات
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          صور من البريد أو واتساب — يمكن إعادة ترتيبها بالسحب
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length} مرفق
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowAttachmentUploadDialog(true)}
+                          className="gap-2"
+                          data-testid="button-add-attachment"
+                        >
+                          <ImagePlus className="h-4 w-4" />
+                          إضافة
+                        </Button>
+                      </div>
+                    </div>
+                    {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
+                      <div className="max-h-[400px] overflow-y-auto rounded-lg border bg-muted/10 p-2" dir="rtl">
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={handleAttachmentDragEnd}
+                        >
+                          <SortableContext
+                            items={mediaAssets
+                              .filter((asset: any) => asset.mediaFile?.url || asset.url)
+                              .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+                              .map((asset: any) => asset.id)}
+                            strategy={rectSortingStrategy}
+                          >
+                            <div className="grid grid-cols-2 gap-3">
+                              {mediaAssets
+                                .filter((asset: any) => asset.mediaFile?.url || asset.url)
+                                .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+                                .map((asset: any, index: number) => (
+                                  <SortableAttachmentItem
+                                    key={asset.id}
+                                    asset={asset}
+                                    index={index}
+                                    onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+                                    isDeleting={deleteAttachmentMutation.isPending}
+                                  />
+                                ))}
+                            </div>
+                          </SortableContext>
+                        </DndContext>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-lg p-6 text-center bg-muted/20">
+                        <Paperclip className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                        <p className="text-sm text-muted-foreground">لا توجد مرفقات</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            </div>
+
+            <div className="contents" data-editor-panel="content-body">
             {/* Content Editor */}
-            <Card>
+            <Card className="order-[50] lg:order-none">
               <CardHeader className="space-y-3">
                 <CardTitle>محتوى المقال</CardTitle>
                 {/* AI Buttons - stacked on mobile, inline on desktop */}
-                {canUseAIGenerate && (
+                {!isOpinionAuthor && canUseAIGenerate && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end gap-2">
                       {/* Edit + Generate Button - Rewrites content then generates metadata - requires comprehensive_edit permission */}
@@ -3139,6 +3628,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   placeholder="ابدأ بكتابة المقال..."
                   editorRef={setEditorInstance}
                   disabled={isLockedByOther}
+                  imageUploadPurpose="article-inline"
                 />
                 {articleType === "weekly_photos" && (
                   <div className="border-t pt-6">
@@ -3152,10 +3642,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </Card>
 
             {/* Excerpt */}
-            <Card>
+            {!isOpinionAuthor && <Card className="order-[55] lg:order-none">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>الملخص</CardTitle>
+                  <CardTitle>الملخص / الموجز</CardTitle>
                   <Button
                     variant="outline"
                     size="sm"
@@ -3169,7 +3659,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <Textarea
                   value={excerpt}
                   onChange={(e) => {
@@ -3178,27 +3668,143 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       setMetaDescription(e.target.value);
                     }
                   }}
-                  placeholder="ملخص قصير للمقال..."
+                  placeholder="ملخص قصير يظهر كـ«الموجز» في صفحة المقال..."
                   rows={4}
                   disabled={isLockedByOther}
                   data-testid="textarea-excerpt"
                 />
+                <p className="text-xs text-muted-foreground">
+                  عند الحفظ يُحدَّث صندوق الموجز في الصفحة العامة بنفس النص. امسح الحقل واحفظ لإخفائه.
+                </p>
               </CardContent>
-            </Card>
+            </Card>}
 
-            {/* Poll Editor */}
-            {canUsePolls && (
+            {/* البريد الذكي — أسفل الصفحة على الموبايل (order عالي) */}
+            {articleType !== "opinion" && !isOpinionAuthor && (
+              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen} className="order-[90] lg:order-none">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        data-testid="collapsible-newsletter-content"
+                      >
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            البريد الذكي
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            عنوان فرعي وملخص مخصص للنشرة الإخبارية
+                          </p>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${newsletterOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </CollapsibleTrigger>
+                    <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!title || !content) {
+                        toast({
+                          title: "تنبيه",
+                          description: "يجب إدخال العنوان والمحتوى أولاً",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setIsGeneratingNewsletterContent(true);
+                      try {
+                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
+                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
+                          method: "POST",
+                          body: JSON.stringify({ title, content, excerpt }),
+                        });
+                        if (data.success) {
+                          setNewsletterSubtitle(data.subtitle);
+                          setNewsletterExcerpt(data.excerpt);
+                          toast({
+                            title: "تم التوليد بنجاح",
+                            description: "تم إنشاء العنوان والملخص للنشرة الإخبارية",
+                          });
+                        } else {
+                          throw new Error(data.message);
+                        }
+                      } catch (error: any) {
+                        toast({
+                          title: "خطأ",
+                          description: error.message || "فشل توليد محتوى النشرة",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsGeneratingNewsletterContent(false);
+                      }
+                    }}
+                    disabled={isGeneratingNewsletterContent || !title || !content}
+                    data-testid="button-generate-newsletter-content"
+                  >
+                    {isGeneratingNewsletterContent ? (
+                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 ml-2" />
+                    )}
+                    توليد ذكي
+                    </Button>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
+                    <Input
+                      value={newsletterSubtitle}
+                      onChange={(e) => setNewsletterSubtitle(e.target.value)}
+                      placeholder="عنوان جذاب للنشرة الإخبارية..."
+                      maxLength={150}
+                      disabled={isLockedByOther}
+                      data-testid="input-newsletter-subtitle"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(newsletterSubtitle || "").length}/150 حرف
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">ملخص النشرة</label>
+                    <Textarea
+                      value={newsletterExcerpt}
+                      onChange={(e) => setNewsletterExcerpt(e.target.value)}
+                      placeholder="ملخص مختصر يظهر في النشرة..."
+                      rows={3}
+                      maxLength={300}
+                      disabled={isLockedByOther}
+                      data-testid="input-newsletter-excerpt"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(newsletterExcerpt || "").length}/300 حرف
+                    </p>
+                  </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
+
+
+            {/* Poll Editor — أسفل الصفحة على الموبايل */}
+            {!isOpinionAuthor && canUsePolls && (
+              <div className="order-[91] lg:order-none">
               <PollEditor 
                 poll={pollData} 
                 onChange={setPollData}
                 articleContent={content}
                 articleTitle={title}
               />
+              </div>
             )}
 
             {/* Smart Links Panel - Collapsible - Hidden for infographics */}
-            {canUseSmartLinks && articleType !== "infographic" && (
-              <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen}>
+            {!isOpinionAuthor && canUseSmartLinks && articleType !== "infographic" && (
+              <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen} className="order-[92] lg:order-none">
                 <Card>
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-smart-links">
@@ -3213,7 +3819,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <CardContent className="pt-0">
-                      <div className="h-[500px]" data-testid="smart-links-container">
+                      <div className="h-[min(320px,50vh)] sm:h-[420px] lg:h-[500px]" data-testid="smart-links-container">
                         <SmartLinksPanel
                           articleContent={content}
                           articleId={isNewArticle ? undefined : id}
@@ -3227,8 +3833,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Article Timeline - Collapsible - Only shown when editing existing articles */}
-            {!isNewArticle && id && (
-              <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen}>
+            {!isOpinionAuthor && !isNewArticle && id && (
+              <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen} className="order-[93] lg:order-none">
                 <Card>
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-timeline">
@@ -3249,13 +3855,99 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </Card>
               </Collapsible>
             )}
+            </div>
+
+
           </div>
 
-          {/* Settings Sidebar - 30% */}
-          <div className="lg:col-span-3 space-y-6">
+          {isOpinionAuthor && <WriterEditorialNoticesAside />}
+
+          {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى */}
+          {!isOpinionAuthor && <div
+            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2"
+            data-editor-panel="publish"
+          >
+            <div
+              className="order-[10] rounded-2xl border border-border/70 bg-card p-4 shadow-sm lg:order-none"
+              data-testid="publish-readiness"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="relative flex h-12 w-12 shrink-0 items-center justify-center"
+                  aria-hidden
+                >
+                  <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      className="stroke-muted"
+                      strokeWidth="3"
+                    />
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      className={cn(
+                        "transition-[stroke-dashoffset] duration-500",
+                        readinessReady === readinessTotal ? "stroke-emerald-500" : "stroke-primary",
+                      )}
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 15.5}`}
+                      strokeDashoffset={`${2 * Math.PI * 15.5 * (1 - readinessReady / readinessTotal)}`}
+                    />
+                  </svg>
+                  <span className="absolute text-[11px] font-bold tabular-nums">
+                    {readinessReady}/{readinessTotal}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold tracking-tight">جاهزية النشر</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {readinessReady === readinessTotal
+                      ? "كل العناصر الأساسية جاهزة"
+                      : `${readinessTotal - readinessReady} متبقية قبل اكتمال المسار`}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    readinessReady === readinessTotal ? "bg-emerald-500" : "bg-primary",
+                  )}
+                  style={{ width: `${(readinessReady / readinessTotal) * 100}%` }}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {publishReadiness.map((item) => (
+                  <span
+                    key={item.id}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold",
+                      item.ok
+                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-border/70 bg-muted/40 text-muted-foreground",
+                    )}
+                    data-testid={`readiness-chip-${item.id}`}
+                  >
+                    {item.ok ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
+                    )}
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
             {/* Article Type - Hidden for opinion authors and users without content type permission */}
             {!isOpinionAuthor && canUseContentTypeSelector && (
-              <Card>
+              <Card className="order-[60] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Hash className="h-4 w-4" />
@@ -3350,7 +4042,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             
             {/* Data Infographic Editor - shown when infographic type is 'data' - hidden for opinion authors */}
             {!isOpinionAuthor && canUseInfographics && isInfographic && infographicType === "data" && (
-              <Card>
+              <Card className="order-[70] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
@@ -3367,81 +4059,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Card>
             )}
 
-            {/* News Type - Hidden for opinion articles and users without news_type permission */}
-            {articleType !== "opinion" && canUseNewsType && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    نوع الخبر
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RadioGroup value={newsType} onValueChange={(value: any) => setNewsType(value)}>
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <RadioGroupItem value="breaking" id="breaking" />
-                      <Label htmlFor="breaking" className="flex items-center gap-2 cursor-pointer">
-                        خبر عاجل
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <RadioGroupItem value="regular" id="regular" />
-                      <Label htmlFor="regular" className="flex items-center gap-2 cursor-pointer">
-                        خبر عادي
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                  
-                  {/* Featured Article Checkbox - Independent from newsType */}
-                  <div className="pt-4 border-t mt-4">
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <Checkbox 
-                        id="isFeatured"
-                        checked={isFeatured}
-                        onCheckedChange={(checked) => setIsFeatured(checked as boolean)}
-                        data-testid="checkbox-is-featured"
-                      />
-                      <Label htmlFor="isFeatured" className="flex items-center gap-2 cursor-pointer text-sm">
-                        <Star className="h-4 w-4 text-yellow-500" />
-                        <div>
-                          <div className="font-medium">خبر مميز</div>
-                          <div className="text-xs text-muted-foreground">
-                            سيظهر المقال في قسم الأخبار المميزة
-                          </div>
-                        </div>
-                      </Label>
-                    </div>
-                  </div>
-                  
-                  {/* Hide from Homepage Option - Requires permission */}
-                  {canHideFromHomepage && (
-                    <div className="pt-4 border-t mt-4">
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <Checkbox 
-                          id="hideFromHomepage"
-                          checked={hideFromHomepage}
-                          onCheckedChange={(checked) => setHideFromHomepage(checked as boolean)}
-                          data-testid="checkbox-hide-from-homepage"
-                        />
-                        <Label htmlFor="hideFromHomepage" className="flex items-center gap-2 cursor-pointer text-sm">
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">إخفاء من الواجهة الرئيسية</div>
-                            <div className="text-xs text-muted-foreground">
-                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية
-                            </div>
-                          </div>
-                        </Label>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Video Template - Hidden for opinion authors */}
             {!isOpinionAuthor && (
-            <Card>
+            <Card className="order-[70] lg:order-none">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Play className="h-4 w-4" />
@@ -3670,7 +4290,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Category */}
-            <Card>
+            <Card className="order-[61] lg:order-none">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>التصنيف</span>
@@ -3708,98 +4328,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </SelectContent>
                   </Select>
                 )}
-                
-                {/* Muqtarab Angles - Compact inline section (hidden for opinion authors and users without muqtarab_angles permission) */}
-                {!isOpinionAuthor && canUseMuqtarabAngles && availableAngles.length > 0 && (
-                  <div className="pt-3 border-t">
-                    <Label className="text-xs text-muted-foreground mb-2 block">زوايا مُقترب</Label>
-                    <div className="flex flex-wrap gap-1.5" data-testid="angles-selector">
-                      {availableAngles.map((angle) => {
-                        const isSelected = selectedAngleIds.includes(angle.id);
-                        return (
-                          <Badge
-                            key={angle.id}
-                            variant={isSelected ? "default" : "outline"}
-                            className="cursor-pointer text-xs transition-all"
-                            style={{
-                              backgroundColor: isSelected ? angle.colorHex : 'transparent',
-                              borderColor: angle.colorHex,
-                              color: isSelected ? 'white' : angle.colorHex,
-                            }}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedAngleIds(prev => prev.filter(id => id !== angle.id));
-                              } else {
-                                setSelectedAngleIds(prev => [...prev, angle.id]);
-                              }
-                            }}
-                            data-testid={`badge-angle-${angle.id}`}
-                          >
-                            {angle.nameAr}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* SEO Optimization */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>تحسين محركات البحث (SEO)</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => generateSeoMutation.mutate()}
-                    disabled={generateSeoMutation.isPending || !title || !content}
-                    title={!title || !content ? "يجب إدخال العنوان والمحتوى أولاً" : "توليد SEO ذكي بالذكاء الاصطناعي"}
-                    data-testid="button-generate-seo"
-                  >
-                    <Sparkles className={`h-4 w-4 ml-1 ${generateSeoMutation.isPending ? 'text-muted-foreground animate-pulse' : 'text-primary'}`} />
-                    <span className="text-sm">{generateSeoMutation.isPending ? 'جاري التوليد...' : 'توليد SEO'}</span>
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label>عنوان Meta (50-60 حرف) - {metaTitle.length}/60</Label>
-                  <Input
-                    value={metaTitle}
-                    onChange={(e) => setMetaTitle(e.target.value)}
-                    placeholder="عنوان محسّن لمحركات البحث"
-                    maxLength={60}
-                    data-testid="input-meta-title"
-                  />
-                </div>
-                <div>
-                  <Label>وصف Meta (140-160 حرف) - {metaDescription.length}/160</Label>
-                  <Textarea
-                    value={metaDescription}
-                    onChange={(e) => setMetaDescription(e.target.value)}
-                    placeholder="وصف مقنع لمحركات البحث"
-                    maxLength={160}
-                    rows={3}
-                    data-testid="textarea-meta-description"
-                  />
-                </div>
-                <div>
-                  <Label>الكلمات المفتاحية</Label>
-                  <Input
-                    value={keywords.join(", ")}
-                    onChange={(e) => setKeywords(e.target.value.split(",").map(k => k.trim()).filter(Boolean))}
-                    placeholder="كلمة1, كلمة2, كلمة3"
-                    data-testid="input-keywords"
-                  />
-                </div>
               </CardContent>
             </Card>
 
             {/* Reporter - Hidden for opinion articles */}
             {articleType !== "opinion" && (
-              <Card>
+              <Card className="order-[62] lg:order-none">
                 <CardHeader>
                   <CardTitle>المراسل</CardTitle>
                 </CardHeader>
@@ -3814,9 +4348,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Opinion Author - Shown only for opinion articles */}
             {articleType === "opinion" && (
-              <Card>
+              <Card className="order-[62] lg:order-none">
                 <CardHeader>
-                  <CardTitle>كاتب المقال</CardTitle>
+                  <CardTitle>كاتب المقال (يظهر للقارئ)</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isOpinionAuthor ? (
@@ -3834,7 +4368,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Publishing */}
-            <Card>
+            <Card className="order-[64] lg:order-none">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
@@ -3854,7 +4388,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                             onCheckedChange={(checked) => setPublishType(checked ? "scheduled" : "instant")}
                           />
                         </div>
-                        
+
+                        {articleType === "opinion" && writerSlotData?.suggestion && (
+                          <p className="text-xs text-muted-foreground">
+                            اليوم المخصص للكاتب:{" "}
+                            <b className="text-foreground">
+                              {["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][writerSlotData.suggestion.weekday]}{" "}
+                              — {writerSlotData.suggestion.publishTime}
+                            </b>
+                          </p>
+                        )}
+
                         {publishType === "scheduled" && (
                           <div className="space-y-2">
                             <Label>التاريخ والوقت</Label>
@@ -3985,9 +4529,81 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </CardContent>
             </Card>
 
+            {/* News Type — تحت بطاقة النشر */}
+            {articleType !== "opinion" && canUseNewsType && (
+              <Card className="order-[65] lg:order-none">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    نوع الخبر
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <RadioGroup value={newsType} onValueChange={(value: any) => setNewsType(value)}>
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <RadioGroupItem value="breaking" id="breaking" />
+                      <Label htmlFor="breaking" className="flex items-center gap-2 cursor-pointer">
+                        خبر عاجل
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <RadioGroupItem value="regular" id="regular" />
+                      <Label htmlFor="regular" className="flex items-center gap-2 cursor-pointer">
+                        خبر عادي
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                  
+                  {/* Featured Article Checkbox - Independent from newsType */}
+                  <div className="pt-4 border-t mt-4">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Checkbox 
+                        id="isFeatured"
+                        checked={isFeatured}
+                        onCheckedChange={(checked) => setIsFeatured(checked as boolean)}
+                        data-testid="checkbox-is-featured"
+                      />
+                      <Label htmlFor="isFeatured" className="flex items-center gap-2 cursor-pointer text-sm">
+                        <Star className="h-4 w-4 text-yellow-500" />
+                        <div>
+                          <div className="font-medium">خبر مميز</div>
+                          <div className="text-xs text-muted-foreground">
+                            سيظهر المقال في قسم الأخبار المميزة
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
+                  
+                  {/* Hide from Homepage Option - Requires permission */}
+                  {canHideFromHomepage && (
+                    <div className="pt-4 border-t mt-4">
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        <Checkbox 
+                          id="hideFromHomepage"
+                          checked={hideFromHomepage}
+                          onCheckedChange={(checked) => setHideFromHomepage(checked as boolean)}
+                          data-testid="checkbox-hide-from-homepage"
+                        />
+                        <Label htmlFor="hideFromHomepage" className="flex items-center gap-2 cursor-pointer text-sm">
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">إخفاء من الواجهة الرئيسية</div>
+                            <div className="text-xs text-muted-foreground">
+                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Article Media Attachments - Visible in Sidebar for editing articles */}
             {!isNewArticle && (
-              <Card>
+              <Card className="order-[71] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
@@ -4072,35 +4688,46 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Card>
             )}
 
-            {/* SEO Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Hash className="h-4 w-4" />
-                  إعدادات SEO
-                </CardTitle>
+            {/* SEO Settings — حقول + معاينة + أدوات متقدمة (تحليل/سوشال). الألبوم نُقل لقسم الوسائط */}
+            <Card className="order-[72] lg:order-none">
+              <CardHeader className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-primary" />
+                    تحسين الظهور (SEO)
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => generateSeoMutation.mutate()}
+                    disabled={generateSeoMutation.isPending || !title || !content}
+                    title={!title || !content ? "يجب إدخال العنوان والمحتوى أولاً" : "توليد SEO ذكي بالذكاء الاصطناعي"}
+                    className="gap-1.5 shrink-0"
+                    data-testid="button-generate-seo"
+                  >
+                    <Sparkles className={`h-4 w-4 ${generateSeoMutation.isPending ? 'text-muted-foreground animate-pulse' : 'text-primary'}`} />
+                    <span className="text-xs sm:text-sm">{generateSeoMutation.isPending ? 'جاري التوليد...' : 'توليد SEO'}</span>
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  عنوان ووصف الظهور في البحث، مع تحليل متقدم وبطاقات السوشال بعد الحفظ.
+                </p>
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="seo" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="seo">الحقول</TabsTrigger>
                     <TabsTrigger value="preview">المعاينة</TabsTrigger>
-                    {!isNewArticle && (
-                      <TabsTrigger value="media-captions">
-                        <ImageIcon className="h-4 w-4 ml-2" />
-                        ألبوم الصور
-                      </TabsTrigger>
-                    )}
                   </TabsList>
                   
                   <TabsContent value="seo" className="space-y-4">
                     {/* SEO AI Analysis Button */}
                     {!isNewArticle && (
-                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div>
+                      <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-lg">
+                        <div className="min-w-0">
                           <p className="text-sm font-medium">تحليل SEO بالذكاء الاصطناعي</p>
                           <p className="text-xs text-muted-foreground">
-                            احصل على توصيات تلقائية لتحسين ظهور المقال في محركات البحث
+                            توصيات لتحسين ظهور المقال في محركات البحث
                           </p>
                         </div>
                         <Button
@@ -4249,31 +4876,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Slug (الرابط)</Label>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSlug(generateSlug(title))}
-                          className="h-auto py-1 px-2 text-xs"
-                        >
-                          توليد تلقائي
-                        </Button>
-                      </div>
-                      <Input
-                        value={slug}
-                        onChange={(e) => setSlug(e.target.value)}
-                        placeholder="article-slug"
-                        dir="ltr"
-                        maxLength={150}
-                        data-testid="input-slug"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {(slug || "").length}/150 حرف
-                      </p>
-                    </div>
-
                     <TagInput
                       label="الكلمات المفتاحية"
                       tags={keywords}
@@ -4290,192 +4892,67 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       slug={slug}
                     />
                   </TabsContent>
-
-                  {!isNewArticle && (
-                    <TabsContent value="media-captions" className="space-y-4">
-                      {/* Album Images Section */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <Label className="text-base flex items-center gap-2">
-                              <LayoutGrid className="h-4 w-4" />
-                              ألبوم الصور
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              صور إضافية تظهر داخل المقال
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              {albumImages.length} صورة
-                            </Badge>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setShowAlbumUploadDialog(true)}
-                              disabled={isUploadingAlbumImage}
-                              className="gap-2"
-                              data-testid="button-add-album-image"
-                            >
-                              {isUploadingAlbumImage ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <ImagePlus className="h-4 w-4" />
-                              )}
-                              إضافة صور
-                            </Button>
-                          </div>
-                        </div>
-                        
-                        {/* Album Images Grid - preserve original image proportions */}
-                        {albumImages.length > 0 ? (
-                          <div className="grid grid-cols-2 gap-3">
-                            {albumImages.map((url, index) => (
-                              <div 
-                                key={`album-${index}`} 
-                                className="relative group rounded-lg overflow-hidden border bg-muted/30"
-                                data-testid={`album-image-${index}`}
-                              >
-                                <img
-                                  src={url}
-                                  alt={`صورة الألبوم ${index + 1}`}
-                                  className="block w-full max-w-full h-auto transition-transform group-hover:scale-105"
-                                  loading="lazy"
-                                />
-                                {/* Overlay with delete button */}
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                  <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => {
-                                      const newImages = albumImages.filter((_, i) => i !== index);
-                                      setAlbumImages(newImages);
-                                      toast({
-                                        title: "تم حذف الصورة",
-                                        description: "تم حذف الصورة من الألبوم",
-                                      });
-                                    }}
-                                    data-testid={`button-delete-album-image-${index}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                                {/* Image number badge */}
-                                <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
-                                  {index + 1}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20">
-                            <LayoutGrid className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
-                            <p className="text-sm text-muted-foreground mb-2">
-                              لا توجد صور في الألبوم
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              اضغط على "إضافة صور" لرفع صور جديدة
-                            </p>
-                          </div>
-                        )}
-                        
-                        {/* Upload Progress */}
-                        {isUploadingAlbumImage && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">جاري رفع الصور...</span>
-                              <span className="font-medium">{uploadingAlbumProgress}%</span>
-                            </div>
-                            <Progress value={uploadingAlbumProgress} className="h-2" />
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Article Media Attachments Section - for images from Email/WhatsApp */}
-                      {!isNewArticle && (
-                        <div className="space-y-4 pt-6 border-t">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                              <Label className="text-base flex items-center gap-2">
-                                <Paperclip className="h-4 w-4" />
-                                المرفقات
-                              </Label>
-                              <p className="text-xs text-muted-foreground">
-                                صور مرفقة من البريد الإلكتروني أو واتساب
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length} مرفق
-                              </Badge>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowAttachmentUploadDialog(true)}
-                                className="gap-2"
-                                data-testid="button-add-attachment"
-                              >
-                                <ImagePlus className="h-4 w-4" />
-                                إضافة مرفق
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          {/* Media Attachments Grid with Drag-and-Drop Reordering */}
-                          {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
-                            <div className="max-h-[400px] overflow-y-auto rounded-lg border bg-muted/10 p-2" dir="rtl">
-                              <DndContext
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                onDragEnd={handleAttachmentDragEnd}
-                              >
-                                <SortableContext
-                                  items={mediaAssets
-                                    .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                                    .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                                    .map((asset: any) => asset.id)}
-                                  strategy={rectSortingStrategy}
-                                >
-                                  <div className="grid grid-cols-2 gap-3">
-                                    {mediaAssets
-                                      .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                                      .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                                      .map((asset: any, index: number) => (
-                                        <SortableAttachmentItem
-                                          key={asset.id}
-                                          asset={asset}
-                                          index={index}
-                                          onDelete={(id) => deleteAttachmentMutation.mutate(id)}
-                                          isDeleting={deleteAttachmentMutation.isPending}
-                                        />
-                                      ))}
-                                  </div>
-                                </SortableContext>
-                              </DndContext>
-                            </div>
-                          ) : (
-                            <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20">
-                              <Paperclip className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
-                              <p className="text-sm text-muted-foreground mb-2">
-                                لا توجد مرفقات
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                اضغط على "إضافة مرفق" لرفع صور جديدة
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </TabsContent>
-                  )}
                 </Tabs>
               </CardContent>
             </Card>
-          </div>
+          </div>}
         </div>
        </div>
       </div>
+
+      {/* Mobile sticky actions */}
+      {!isOpinionAuthor && (
+        <div
+          className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]"
+          data-testid="editor-mobile-action-bar"
+        >
+          <div className="mx-auto flex max-w-lg items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] text-muted-foreground truncate">
+                جاهز {readinessReady}/{readinessTotal}
+                {(autoSaveStatus === "saving" || autoSaveStatus === "saved") && (
+                  <span className="mr-2">
+                    · {autoSaveStatus === "saving" ? "جاري الحفظ..." : "محفوظ تلقائياً"}
+                  </span>
+                )}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSave(false)}
+              disabled={isSaving || isLockedByOther}
+              className="gap-1.5"
+              data-testid="button-save-draft-mobile-bar"
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              مسودة
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!canPublish) {
+                  void handleSaveAndSubmitForReview();
+                  return;
+                }
+                void handleSave(true);
+              }}
+              disabled={isSaving || submitReviewMutation.isPending || isLockedByOther}
+              className="gap-1.5 min-w-[5.5rem]"
+              data-testid="button-publish-mobile-bar"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {canPublish
+                ? (!isNewArticle && status === "published" ? "تحديث" : publishType === "scheduled" ? "جدولة" : "نشر")
+                : "إرسال"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Media Library Picker - Hidden for opinion authors */}
       {!isOpinionAuthor && (
@@ -4483,25 +4960,34 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           isOpen={showMediaPicker}
           onClose={() => setShowMediaPicker(false)}
           onSelect={(media: MediaFile) => {
-            // Use url (display URL) which is either https:// or proxy URL
-            // originalUrl might be gs:// which browsers can't display
-            const urlToStore = media.url;
-            setImageUrl(urlToStore);
-            // Check if this media is AI generated
-            setIsAiGeneratedImage((media as any).isAiGenerated || false);
-            // Save media ID for caption creation
-            setHeroImageMediaId(media.id);
+            applyLibraryImage(media);
             setShowMediaPicker(false);
-            toast({
-              title: "تم اختيار الصورة",
-              description: "تم إضافة الصورة من المكتبة",
-            });
           }}
           articleTitle={title}
           articleContent={content?.substring(0, 500)}
           currentImageUrl={imageUrl}
+          uploadPurpose="article-library"
         />
       )}
+
+      {/* حاجز الحقوق: توثيق سريع لحقوق الصورة البارزة قبل النشر */}
+      <HeroRightsDialog
+        open={HERO_RIGHTS_GATE_ENABLED && !!rightsGateMediaId}
+        mediaId={rightsGateMediaId}
+        onContinue={() => {
+          setRightsGateMediaId(null);
+          rightsGateBypassRef.current = true;
+          void handleSave(true);
+        }}
+        onCancel={() => setRightsGateMediaId(null)}
+      />
+
+      {/* Logo Composer Dialog - fit/merge logos on white 16:9 canvas */}
+      <LogoComposerDialog
+        open={showLogoComposer}
+        onOpenChange={setShowLogoComposer}
+        onImageReady={uploadFeaturedImageFile}
+      />
 
       {/* AI Image Generator Dialog for Featured Image */}
       <AIImageGeneratorDialog
@@ -4618,6 +5104,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }}
         multiple={true}
         maxFiles={10}
+        uploadPurpose="article-album"
       />
 
       {/* Attachment Upload Dialog - uses MediaLibraryPicker for better integration */}
@@ -4632,6 +5119,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }}
         articleTitle={title}
         articleContent={content?.substring(0, 500)}
+        uploadPurpose="article-attachment"
       />
     </DashboardLayout>
   );

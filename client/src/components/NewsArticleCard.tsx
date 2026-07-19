@@ -83,7 +83,7 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
     <div className="w-full h-full bg-gradient-to-br from-primary/20 via-primary/10 to-background flex items-center justify-center">
       <div className="text-center p-4">
         <BookOpen className="h-12 w-12 mx-auto text-primary/40 mb-2" aria-hidden="true" />
-        <span className="text-sm text-muted-foreground">{categoryName}</span>
+        <span className="text-sm font-medium text-foreground/65">{categoryName}</span>
       </div>
     </div>
   );
@@ -165,7 +165,7 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                     {article.title}
                   </h4>
                   {timeAgo && (
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3 text-xs font-medium text-foreground/65">
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" aria-hidden="true" />
                         {timeAgo}
@@ -276,13 +276,13 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
               </h3>
 
               {article.excerpt && (
-                <p className="text-sm text-muted-foreground line-clamp-3">
+                <p className="line-clamp-3 text-sm font-medium text-foreground/70">
                   {article.excerpt}
                 </p>
               )}
 
               <div className="flex flex-col gap-2 pt-2 border-t">
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4 text-xs font-medium text-foreground/65">
                   {timeAgo && (
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />
@@ -374,12 +374,12 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                   </h3>
 
                   {article.excerpt && (
-                    <p className="text-sm text-muted-foreground line-clamp-3">
+                    <p className="line-clamp-3 text-sm font-medium text-foreground/70">
                       {article.excerpt}
                     </p>
                   )}
 
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-4 text-sm font-medium text-foreground/65">
                     {timeAgo && (
                       <div className="flex items-center gap-1">
                         <Clock className="h-4 w-4" aria-hidden="true" />
@@ -506,7 +506,7 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                   {article.title}
                 </h4>
 
-                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-foreground/65">
                   {timeAgo && (
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />

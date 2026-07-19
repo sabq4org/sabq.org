@@ -16,6 +16,73 @@ import type { NewsletterTemplateType, ArticleSummary } from "./smartNewsletterTe
 
 let openaiClient: OpenAI | null = null;
 
+type NewsletterAiCircuitState = {
+  open: boolean;
+  openedAt?: string;
+  reason?: "quota";
+  logged: boolean;
+};
+
+const newsletterAiCircuit: NewsletterAiCircuitState = {
+  open: false,
+  logged: false,
+};
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function isOpenAIQuotaError(error: unknown): boolean {
+  const candidate = error as {
+    status?: number;
+    code?: string;
+    error?: { code?: string; type?: string; message?: string };
+    message?: string;
+  };
+  const code = candidate?.code || candidate?.error?.code || candidate?.error?.type || "";
+  const message = `${candidate?.message || ""} ${candidate?.error?.message || ""}`.toLowerCase();
+
+  return code === "insufficient_quota"
+    || message.includes("insufficient_quota")
+    || message.includes("quota exceeded")
+    || message.includes("exceeded your current quota")
+    || (candidate?.status === 429 && message.includes("billing"));
+}
+
+/**
+ * يبدأ كل تشغيل نشرة بدائرة مغلقة. أول خطأ حصة يفتحها لبقية الدفعة،
+ * فتستخدم كل وظائف التحسين البدائل المحلية بلا آلاف المحاولات والسجلات.
+ */
+export function resetNewsletterAiCircuit(): void {
+  newsletterAiCircuit.open = false;
+  newsletterAiCircuit.openedAt = undefined;
+  newsletterAiCircuit.reason = undefined;
+  newsletterAiCircuit.logged = false;
+}
+
+export function isNewsletterAiCircuitOpen(): boolean {
+  return newsletterAiCircuit.open;
+}
+
+export function handleNewsletterAiError(operation: string, error: unknown): void {
+  if (isOpenAIQuotaError(error)) {
+    newsletterAiCircuit.open = true;
+    newsletterAiCircuit.openedAt = new Date().toISOString();
+    newsletterAiCircuit.reason = "quota";
+    if (!newsletterAiCircuit.logged) {
+      newsletterAiCircuit.logged = true;
+      console.warn(
+        `[AINewsletterEnhancer] OpenAI quota unavailable during ${operation}; `
+        + "using local defaults for the remainder of this newsletter batch",
+      );
+    }
+    return;
+  }
+
+  // رسالة مضغوطة بلا stack ولا request metadata؛ تمنع تضخيم Railway logs.
+  console.error(`[AINewsletterEnhancer] ${operation} failed: ${getErrorMessage(error)}`);
+}
+
 function getOpenAIClient(): OpenAI | null {
   if (!process.env.OPENAI_API_KEY) {
     return null;
@@ -68,6 +135,9 @@ export async function generateSubjectLines(
   subscriberInterests?: string[]
 ): Promise<SubjectLineResult[]> {
   try {
+    if (isNewsletterAiCircuitOpen()) {
+      return getDefaultSubjectLines(templateType, subscriberName);
+    }
     const client = getOpenAIClient();
     if (!client) {
       return getDefaultSubjectLines(templateType, subscriberName);
@@ -137,7 +207,7 @@ ${topArticle ? `الخبر الأبرز: ${topArticle.title}` : ''}
     const result = JSON.parse(response.choices[0]?.message?.content || '{"subjects": []}');
     return result.subjects || getDefaultSubjectLines(templateType, subscriberName);
   } catch (error) {
-    console.error("[AINewsletterEnhancer] Error generating subject lines:", error);
+    handleNewsletterAiError("subject lines", error);
     return getDefaultSubjectLines(templateType, subscriberName);
   }
 }
@@ -147,6 +217,9 @@ ${topArticle ? `الخبر الأبرز: ${topArticle.title}` : ''}
  */
 export async function generateEngagingSummary(article: Article): Promise<EnhancedArticleSummary> {
   try {
+    if (isNewsletterAiCircuitOpen()) {
+      return createDefaultEnhancedSummary(article);
+    }
     const client = getOpenAIClient();
     if (!client) {
       return createDefaultEnhancedSummary(article);
@@ -212,7 +285,7 @@ export async function generateEngagingSummary(article: Article): Promise<Enhance
       emotionalTone: result.emotionalTone || 'محايد',
     };
   } catch (error) {
-    console.error("[AINewsletterEnhancer] Error generating engaging summary:", error);
+    handleNewsletterAiError("article summary", error);
     return createDefaultEnhancedSummary(article);
   }
 }
@@ -225,6 +298,9 @@ export async function generateDailyQuestion(
   templateType: NewsletterTemplateType
 ): Promise<DailyQuestion> {
   try {
+    if (isNewsletterAiCircuitOpen()) {
+      return getDefaultDailyQuestion(templateType);
+    }
     const client = getOpenAIClient();
     if (!client) {
       return getDefaultDailyQuestion(templateType);
@@ -285,7 +361,7 @@ ${articleTopics}
       engagementType: result.engagementType || 'opinion',
     };
   } catch (error) {
-    console.error("[AINewsletterEnhancer] Error generating daily question:", error);
+    handleNewsletterAiError("daily question", error);
     return getDefaultDailyQuestion(templateType);
   }
 }
@@ -301,6 +377,9 @@ export async function generateSmartPersonalizedIntro(
   topArticle?: Article
 ): Promise<string> {
   try {
+    if (isNewsletterAiCircuitOpen()) {
+      return getDefaultSmartIntro(subscriberName, templateType);
+    }
     const client = getOpenAIClient();
     if (!client) {
       return getDefaultSmartIntro(subscriberName, templateType);
@@ -344,7 +423,7 @@ ${topArticle ? `الخبر الأبرز: ${topArticle.title}` : ''}
 
     return response.choices[0]?.message?.content || getDefaultSmartIntro(subscriberName, templateType);
   } catch (error) {
-    console.error("[AINewsletterEnhancer] Error generating smart intro:", error);
+    handleNewsletterAiError("smart intro", error);
     return getDefaultSmartIntro(subscriberName, templateType);
   }
 }
@@ -357,6 +436,13 @@ export async function scoreArticlesForEngagement(
   subscriberInterests?: string[]
 ): Promise<{ article: Article; score: number; reason: string }[]> {
   try {
+    if (isNewsletterAiCircuitOpen()) {
+      return articles.map((article, index) => ({
+        article,
+        score: 100 - (index * 10),
+        reason: 'ترتيب افتراضي',
+      }));
+    }
     const client = getOpenAIClient();
     if (!client) {
       return articles.map((article, index) => ({
@@ -435,7 +521,7 @@ ${JSON.stringify(articlesList, null, 2)}
 
     return scoredArticles;
   } catch (error) {
-    console.error("[AINewsletterEnhancer] Error scoring articles:", error);
+    handleNewsletterAiError("article scoring", error);
     return articles.map((article, index) => ({
       article,
       score: 100 - (index * 5),
@@ -451,6 +537,9 @@ export async function generateExclusiveTeaser(
   topArticle: Article
 ): Promise<{ title: string; teaser: string } | null> {
   try {
+    if (isNewsletterAiCircuitOpen()) {
+      return null;
+    }
     const client = getOpenAIClient();
     if (!client || !topArticle) {
       return null;
@@ -495,7 +584,7 @@ export async function generateExclusiveTeaser(
     }
     return null;
   } catch (error) {
-    console.error("[AINewsletterEnhancer] Error generating exclusive teaser:", error);
+    handleNewsletterAiError("exclusive teaser", error);
     return null;
   }
 }

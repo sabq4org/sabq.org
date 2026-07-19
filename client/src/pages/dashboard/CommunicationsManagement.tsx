@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,9 +17,9 @@ interface BadgeStats {
   rejectedToday: number;
 }
 
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
+const SectionHeader = ({ title }: { title: string; color: string }) => (
   <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
+    <div className="h-8 w-1 rounded-full bg-border"></div>
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
@@ -71,27 +72,17 @@ export default function CommunicationsManagement() {
   return (
     <DashboardLayout>
       <ErrorBoundary>
-        <div className="p-4 md:p-6 space-y-6" dir="rtl">
-          {/* Page Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-indigo-100 dark:bg-indigo-950/50">
-                <Radio className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground" data-testid="text-page-title">
-                  إدارة قنوات الاتصال
-                </h1>
-                <p className="text-muted-foreground text-sm mt-1">
-                  إدارة البريد الذكي والواتساب في مكان واحد
-                </p>
-              </div>
-            </div>
-          </div>
+        <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+          <DashboardPageHeader
+            icon={Radio}
+            title="إدارة قنوات الاتصال"
+            description="إدارة البريد الذكي والواتساب في مكان واحد"
+            titleTestId="text-page-title"
+          />
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
+            <Card className="border-border/70">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -107,7 +98,7 @@ export default function CommunicationsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
+            <Card className="border-border/70">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -123,7 +114,7 @@ export default function CommunicationsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card">
+            <Card className="border-border/70">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -139,7 +130,7 @@ export default function CommunicationsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-red-50 dark:bg-card">
+            <Card className="border-border/70">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -158,7 +149,7 @@ export default function CommunicationsManagement() {
 
           {/* Tabs Section */}
           <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-            <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
+            <TabsList className="mb-6 grid h-auto w-full grid-cols-2 sm:max-w-md">
               <TabsTrigger value="email" data-testid="tab-email" className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
                 البريد الذكي

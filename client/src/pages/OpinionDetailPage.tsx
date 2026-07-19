@@ -408,7 +408,7 @@ export default function OpinionDetailPage() {
       
       // Add cache busting parameter to prevent browser from caching errors
       const timestamp = article?.updatedAt ? new Date(article.updatedAt).toISOString() : new Date().toISOString();
-      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=google-v1`;
+      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=tafqit-v2`;
       
       // Create audio element
       audioRef.current = new Audio(audioUrl);

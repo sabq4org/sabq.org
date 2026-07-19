@@ -1,6 +1,9 @@
 package com.sabq.smart.feature.settings
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -8,13 +11,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +38,9 @@ import com.sabq.smart.ui.theme.SabqTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,6 +51,11 @@ data class DashboardState(
     val error: String? = null,
     val analytics: ApiContributorAnalytics? = null,
     val ranking: ApiContributorRanking? = null,
+    /** دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة */
+    val pendingSurveys: List<ApiMySurveyInvite> = emptyList(),
+    val schedule: ApiWriterScheduleResponse? = null,
+    val savingDay: Boolean = false,
+    val scheduleError: String? = null,
 )
 
 @HiltViewModel
@@ -54,11 +71,36 @@ class ContributorDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = DashboardState(isLoading = true)
             try {
-                val analytics = api.getContributorAnalytics()
-                val ranking = runCatching { api.getContributorRanking() }.getOrNull()
-                _state.value = DashboardState(isLoading = false, analytics = analytics, ranking = ranking)
+                // رحلات الشبكة الأربع بالتوازي — التسلسل كان يضاعف زمن فتح اللوحة
+                coroutineScope {
+                    val analytics = async { api.getContributorAnalytics() }
+                    val ranking = async { runCatching { api.getContributorRanking() }.getOrNull() }
+                    val pendingSurveys = async { runCatching { api.getMySurveys().items }.getOrDefault(emptyList()) }
+                    val schedule = async { runCatching { api.getContributorSchedule() }.getOrNull() }
+                    _state.value = DashboardState(
+                        isLoading = false,
+                        analytics = analytics.await(),
+                        ranking = ranking.await(),
+                        pendingSurveys = pendingSurveys.await(),
+                        schedule = schedule.await(),
+                    )
+                }
             } catch (e: Exception) {
                 _state.value = DashboardState(isLoading = false, error = "تعذّر تحميل البيانات")
+            }
+        }
+    }
+
+    /** تثبيت اليوم الأسبوعي المختار — مرة واحدة؛ الخادم يرفض التغيير بعدها */
+    fun pickDay(weekday: Int) {
+        viewModelScope.launch {
+            _state.update { it.copy(savingDay = true, scheduleError = null) }
+            try {
+                api.setContributorSchedule(WriterSchedulePickRequest(weekday))
+                val schedule = runCatching { api.getContributorSchedule() }.getOrNull()
+                _state.update { it.copy(savingDay = false, schedule = schedule) }
+            } catch (e: Exception) {
+                _state.update { it.copy(savingDay = false, scheduleError = "تعذر حفظ اليوم — حاول مرة أخرى") }
             }
         }
     }
@@ -78,33 +120,43 @@ private val AccentRed = Color(0xFFEF4444)
 @Composable
 fun ContributorDashboardScreen(
     onBack: () -> Unit,
+    onOpenSurvey: (token: String) -> Unit = {},
+    /** true عند التضمين كتبويب «أدائي» داخل لوحة الكاتب — يخفي الشريط العلوي
+     *  وبطاقات الموعد (انتقلت لتبويب «اليوم»)، مطابقةً لسلوك iOS embedded. */
+    embedded: Boolean = false,
     viewModel: ContributorDashboardViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SabqTheme.colors.background)
-            .statusBarsPadding()
+        modifier = if (embedded) {
+            Modifier.fillMaxSize().background(SabqTheme.colors.background)
+        } else {
+            Modifier
+                .fillMaxSize()
+                .background(SabqTheme.colors.background)
+                .statusBarsPadding()
+        }
     ) {
-        // Top bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Spacer(Modifier.weight(1f))
-            Text(
-                "لوحة الأداء",
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 18.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.ink
-                ),
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = SabqTheme.colors.ink, modifier = Modifier.size(20.dp))
+        if (!embedded) {
+            // Top bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "لوحة الأداء",
+                    style = SabqTheme.typography.compactCardTitle.copy(
+                        fontSize = 18.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.ink
+                    ),
+                )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = SabqTheme.colors.ink, modifier = Modifier.size(20.dp))
+                }
             }
         }
 
@@ -135,8 +187,28 @@ fun ContributorDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     HeaderSection(data)
+                    // موعد النشر الأسبوعي — لكتّاب الرأي فقط: بانر لمن له يوم،
+                    // أو بطاقة الاختيار (مرة واحدة) لمن لا يوم له.
+                    // في وضع التضمين تظهر هذه البطاقات في تبويب «اليوم» بدلاً من هنا.
+                    if (!embedded && data.role == "writer") {
+                        state.schedule?.let { sched ->
+                            sched.banner?.let { WriterScheduleBannerCard(it) }
+                                ?: if (sched.canChoose) {
+                                    WriterDayPickerCard(
+                                        dayLoads = sched.dayLoads,
+                                        saving = state.savingDay,
+                                        errorText = state.scheduleError,
+                                        onPick = viewModel::pickDay,
+                                    )
+                                } else Unit
+                        }
+                    }
+                    state.pendingSurveys.forEach { invite ->
+                        PendingSurveyCard(invite = invite, onOpen = { onOpenSurvey(invite.token) })
+                    }
                     StatsCards(data)
                     OverviewSection(data)
+                    if (data.dailyStats.isNotEmpty()) ChartSection(data.dailyStats)
                     if (data.topArticles.isNotEmpty()) TopArticlesSection(data.topArticles)
                     data.featuredComment?.let { FeaturedCommentCard(it) }
                     AudienceSection(data, state.ranking)
@@ -332,6 +404,50 @@ private fun FeaturedCommentCard(comment: ApiFeaturedComment) {
     }
 }
 
+// ── Chart (أداء المقالات — مطابق لرسم iOS البياني) ─────────────────
+
+@Composable
+private fun ChartSection(dailyStats: List<ApiDailyStat>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionTitle("أداء المقالات")
+        val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+        val maxViews = remember(dailyStats) { dailyStats.maxOf { it.views }.coerceAtLeast(1) }
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(shape)
+                .background(SabqTheme.colors.surface, shape)
+                .border(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.3f), shape)
+                .padding(14.dp),
+        ) {
+            val w = size.width
+            val h = size.height
+            val stepX = if (dailyStats.size > 1) w / (dailyStats.size - 1) else w
+            val points = dailyStats.mapIndexed { i, stat ->
+                Offset(i * stepX, h - (stat.views.toFloat() / maxViews) * h)
+            }
+            val area = Path().apply {
+                moveTo(0f, h)
+                points.forEach { lineTo(it.x, it.y) }
+                lineTo(w, h)
+                close()
+            }
+            drawPath(
+                area,
+                brush = Brush.verticalGradient(
+                    listOf(AccentBlue.copy(alpha = 0.30f), AccentBlue.copy(alpha = 0.05f)),
+                ),
+            )
+            val line = Path().apply {
+                points.firstOrNull()?.let { moveTo(it.x, it.y) }
+                points.drop(1).forEach { lineTo(it.x, it.y) }
+            }
+            drawPath(line, color = AccentBlue, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+        }
+    }
+}
+
 // ── Audience ────────────────────────────────────────────────────────
 
 @Composable
@@ -486,4 +602,68 @@ private fun StatusPill(status: String, reviewStatus: String?) {
 private fun trendPct(current: Int, previous: Int): Int? {
     if (previous <= 0) return if (current > 0) 100 else null
     return ((current - previous).toFloat() / previous * 100).toInt()
+}
+
+
+// ── بطاقة «استطلاع بانتظارك» ────────────────────────────────────────
+// تطابق iOS `PendingSurveysCard`: تظهر لكل دعوة مفتوحة حتى لو فات
+// الكاتبَ إشعارُ الدفع، والنقر يفتح شاشة الاستطلاع بالتوكن الشخصي.
+
+@Composable
+private fun PendingSurveyCard(invite: ApiMySurveyInvite, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface)
+            .border(1.dp, SabqTheme.colors.sky.copy(alpha = 0.35f), shape)
+            .clickable { onOpen() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SabqTheme.colors.sky.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Checklist,
+                contentDescription = null,
+                tint = SabqTheme.colors.sky,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                "استطلاع بانتظارك: ${invite.title}",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                invite.purpose?.let { "رأيك يساعدنا في $it — ${invite.questionsCount} أسئلة" }
+                    ?: "${invite.questionsCount} أسئلة قصيرة، دقائق معدودة",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.5.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            contentDescription = null,
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(18.dp),
+        )
+    }
 }

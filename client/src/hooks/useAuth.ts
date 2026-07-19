@@ -11,9 +11,16 @@ export type User = {
   permissions?: string[]; // All user permissions from RBAC system
   firstName?: string;
   lastName?: string;
+  phoneNumber?: string;
+  authProvider?: string;
   isProfileComplete?: boolean;
   profileImageUrl?: string;
 };
+
+/** هل يحتاج المستخدم إدخال اسم عرض (حسابات الجوال بلا firstName). */
+export function needsDisplayName(user: User | null | undefined): boolean {
+  return Boolean(user?.id) && !(user?.firstName ?? "").trim();
+}
 
 // "*" is a wildcard issued to superuser-equivalent roles (admin,
 // system_admin) by getPermissionsForRoles in rbac-constants. When present
@@ -45,12 +52,24 @@ export function hasAllPermissions(user: User | null | undefined, ...permissionsT
   return permissionsToCheck.every(p => user.permissions?.includes(p) ?? false);
 }
 
+// Superuser roles that should satisfy any check asking for "admin"
+// (matches server/rbac.ts requireRole + SUPERUSER_ROLE_NAMES).
+const SUPERUSER_ROLES = ["system_admin", "system.admin", "superadmin", "super_admin"] as const;
+
 // Helper function to check if user has any of the specified roles
 // Accepts any user object with role/roles properties
 export function hasRole(user: { role?: string; roles?: string[] } | null | undefined, ...rolesToCheck: string[]): boolean {
   if (!user) return false;
-  const userRoles = user.roles || [user.role].filter(Boolean);
-  return rolesToCheck.some(roleToCheck => userRoles.includes(roleToCheck));
+  const userRoles = (user.roles || [user.role].filter(Boolean)) as string[];
+  if (rolesToCheck.some((roleToCheck) => userRoles.includes(roleToCheck))) {
+    return true;
+  }
+  // system_admin-only accounts must pass ProtectedRoute requireRoles={["admin", ...]}
+  // the same way the sidebar maps them to admin via resolveUserRole.
+  const isSuperuser = userRoles.some((r) =>
+    (SUPERUSER_ROLES as readonly string[]).includes(r),
+  );
+  return isSuperuser && rolesToCheck.includes("admin");
 }
 
 // Check if user is staff (has any role beyond reader)
@@ -135,40 +154,65 @@ export function getHighestRole(user: User | null | undefined): string {
 // Get default redirect path based on user's highest role
 export function getDefaultRedirectPath(user: User | null | undefined): string {
   if (!user) return '/';
-  
+
+  // قبل أي وجهة: أكمل الاسم إن كان فارغًا (دخول الجوال).
+  if (needsDisplayName(user)) {
+    return '/complete-name';
+  }
+
   // Comments moderator goes directly to AI moderation dashboard
   if (hasRole(user, 'comments_moderator')) {
     return '/dashboard/ai-moderation';
   }
-  
+
   // Staff members go to dashboard
   if (isStaff(user)) {
     return '/dashboard';
   }
-  
+
   // Regular readers go to home
   return '/';
+}
+
+export function deriveAuthState(
+  user: User | null | undefined,
+  isLoading: boolean,
+  isError: boolean,
+) {
+  return {
+    isAuthenticated: Boolean(user),
+    isUnavailable: !isLoading && isError && !user,
+    shouldRedirectToLogin: !isLoading && !isError && !user,
+  };
 }
 
 export function useAuth(options?: { redirectToLogin?: boolean }) {
   const redirectToLogin = options?.redirectToLogin ?? false;
 
-  const { data: user, isLoading, isError } = useQuery<User | null>({
+  const { data: user, isLoading, isError, isFetching, refetch } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
-    retry: false,
+    // 401 يعيده الـ fetcher كـ null ولا يصل إلى retry. أخطاء الشبكة و5xx
+    // تستخدم سياسة QueryClient العامة (3 محاولات مع backoff).
     staleTime: 5 * 60 * 1000,
   });
 
+  const authState = deriveAuthState(user, isLoading, isError);
+
   useEffect(() => {
-    if (redirectToLogin && !isLoading && (isError || !user)) {
+    // لا نحوّل تعطل الخادم إلى logout. null بلا error فقط يعني 401 مؤكدة.
+    if (redirectToLogin && authState.shouldRedirectToLogin) {
       window.location.href = "/login";
     }
-  }, [user, isLoading, isError, redirectToLogin]);
+  }, [authState.shouldRedirectToLogin, redirectToLogin]);
 
   return {
     user,
     isLoading,
-    isAuthenticated: !!user && !isError,
+    // إن كان لدينا مستخدم محفوظ، يبقى موثقًا أثناء خطأ refetch عابر.
+    isAuthenticated: authState.isAuthenticated,
     isError,
+    isUnavailable: authState.isUnavailable,
+    isRetrying: isFetching && authState.isUnavailable,
+    retryAuth: refetch,
   };
 }

@@ -30,9 +30,123 @@ export const LOYALTY_ACTIONS = {
    *  cron can re-run safely without ever double-awarding a match. Awarded by
    *  `settleFinishedMatches` in server/services/wcPredictionsService.ts. */
   WC_PREDICTION_WIN: "WC_PREDICTION_WIN",
+  /** World Cup 2026 long-term prediction win (champion / top scorer). Source =
+   *  `wc-long:<kind>`. `points` is ALWAYS overridden — the champion pool (10,000)
+   *  is split WEIGHTED by each winner's early-bird weight, the top-scorer pool
+   *  (3,000) split equally. Settled once at tournament end; lifetime dedup keyed
+   *  on source keeps the per-minute settlement cron safe to re-run. Awarded by
+   *  `settleWcLong` in server/services/wcLongPredictionsService.ts. */
+  WC_LONG_PREDICTION_WIN: "WC_LONG_PREDICTION_WIN",
+  /** Asian Cup 2027 smart-prediction reward. Source = the API-Football
+   *  fixtureId. Unlike the World Cup pool-split, `points` is the user's OWN
+   *  skill-based total for that match (tier points × boldness × streak),
+   *  always passed explicitly to awardPoints. No daily cap; the lifetime
+   *  dedup window keeps (userId, action, fixtureId) at most once so the
+   *  per-minute settlement cron re-runs safely. Awarded by
+   *  `settleFinishedMatches` in server/services/acPredictionsService.ts. */
+  AC_PREDICTION_WIN: "AC_PREDICTION_WIN",
+  /** Gulf Cup 27 ("Khaleeji 27") match-prediction win. Source = the fixtureId,
+   *  and `points` is ALWAYS overridden with the user's pari-mutuel share of that
+   *  match's tiered 1000-point pool (+ any carried jackpot). No daily cap; the
+   *  lifetime dedup window keeps (userId, action, fixtureId) at most once so the
+   *  per-minute settlement cron re-runs safely. Awarded by `settleFinishedMatches`
+   *  in server/services/gcPredictionsService.ts. */
+  GC_PREDICTION_WIN: "GC_PREDICTION_WIN",
+  /** Gulf Cup 27 long-term prediction win (champion / top scorer). Source =
+   *  `gc-long:<kind>`. `points` overridden with the pari-mutuel share of the
+   *  long-term pool. Settled once at tournament end. */
+  GC_LONG_PREDICTION_WIN: "GC_LONG_PREDICTION_WIN",
+  /** Roshn Saudi League match-prediction win — the World-Cup engine applied to
+   *  the domestic league. Source = the API-Football fixtureId, and `points` is
+   *  ALWAYS overridden with the per-match split (floor(500 / winners)). No
+   *  daily cap; the lifetime dedup window keeps (userId, action, fixtureId) at
+   *  most once so the per-minute settlement cron re-runs safely. Awarded by
+   *  `settleFinishedMatches` in server/services/rslPredictionsService.ts. */
+  RSL_PREDICTION_WIN: "RSL_PREDICTION_WIN",
+  /** Roshn Saudi League season-long prediction win (champion / top scorer).
+   *  Source = `rsl-long:<kind>`. `points` is ALWAYS overridden — the champion
+   *  pool (10,000) is split WEIGHTED by each winner's early-bird weight (round
+   *  tiers), the top-scorer pool (3,000) split equally. Settled once when the
+   *  season completes; lifetime dedup keyed on source keeps the settlement cron
+   *  safe to re-run. Awarded by `settleRslLong` in
+   *  server/services/rslLongPredictionsService.ts. */
+  RSL_LONG_PREDICTION_WIN: "RSL_LONG_PREDICTION_WIN",
+  /** Generalized Sabq Sports pool-prediction win (any competition: Roshn,
+   *  world leagues, cups, …). Source = the API-Football fixtureId, and `points`
+   *  is ALWAYS overridden with the user's pari-mutuel share of that match's
+   *  tiered 1000-point pool (+ any per-competition carried jackpot). No daily
+   *  cap; the lifetime dedup window keeps (userId, action, fixtureId) at most
+   *  once so the settlement cron re-runs safely. Awarded by
+   *  `settleFinishedMatches` in server/services/sportsPoolPredictionsService.ts. */
+  SPORTS_PREDICTION_WIN: "SPORTS_PREDICTION_WIN",
+  /** Generalized Sabq Sports long-term prediction win (champion / top scorer
+   *  of a competition). Source = `sp-long:<competitionSlug>:<kind>`. `points`
+   *  overridden with the long-term pool share. */
+  SPORTS_LONG_PREDICTION_WIN: "SPORTS_LONG_PREDICTION_WIN",
+  /** Sabq Sports scorer-prediction win (who scores / first scorer in a match).
+   *  Source = the API-Football fixtureId + ':' + kind (`<fixtureId>:match_scorer`
+   *  or `<fixtureId>:first_scorer`). `points` is ALWAYS overridden with the
+   *  user's pari-mutuel share of that match's scorer pool (300) or first-scorer
+   *  pool (200), split equally among the winners. No daily cap; the lifetime
+   *  dedup window keeps (userId, action, fixtureId:kind) at most once so the
+   *  settlement cron re-runs safely. Awarded by `settlePlayerPickMatches` in
+   *  server/services/sportsPoolPlayerPicksService.ts. */
+  SPORTS_SCORER_PREDICTION_WIN: "SPORTS_SCORER_PREDICTION_WIN",
+  /** المنصة المركزية للتوقعات (Prediction Core) — الكود الموحد الذي يستبدل
+   *  تدريجيًا أكواد الفوز المتناثرة أعلاه. Source = `prediction:<ledgerId>`
+   *  (قيد سجل النقاط المركزي)، و`points` هي قيمة المحفظة النهائية بعد مضاعف
+   *  الطبقة (wallet_points من prediction_award_outbox). التسليم من
+   *  deliverPendingAwards في server/services/predictions/outboxService.ts؛
+   *  الازدواج ممنوع بثلاث طبقات: قيد فريد على ledger_id في الصندوق، dedup
+   *  المحفظة على source، وقيد السجل الفريد نفسه. */
+  PREDICTION_WIN: "PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
+
+export type LoyaltyActionMeta = {
+  labelAr: string;
+  icon: string;
+  category: "content" | "engagement" | "account" | "sports" | "admin";
+};
+
+/**
+ * Human-facing action metadata used by admin analytics and member history.
+ *
+ * Keep this beside LOYALTY_ACTIONS so newly introduced award types cannot
+ * silently leak internal enum values into RTL user interfaces. Unknown legacy
+ * actions still receive a safe fallback through getLoyaltyActionMeta().
+ */
+export const LOYALTY_ACTION_META: Record<string, LoyaltyActionMeta> = {
+  READ: { labelAr: "قراءة", icon: "📖", category: "content" },
+  READ_DEEP: { labelAr: "قراءة عميقة", icon: "📕", category: "content" },
+  LIKE: { labelAr: "إعجاب", icon: "♥", category: "engagement" },
+  SHARE: { labelAr: "مشاركة", icon: "↗", category: "engagement" },
+  COMMENT: { labelAr: "تعليق", icon: "💬", category: "engagement" },
+  NOTIFICATION_OPEN: { labelAr: "فتح إشعار", icon: "🔔", category: "engagement" },
+  DAILY_LOGIN: { labelAr: "دخول يومي", icon: "↪", category: "account" },
+  PROFILE_COMPLETE: { labelAr: "إكمال الملف الشخصي", icon: "✓", category: "account" },
+  EMAIL_VERIFIED: { labelAr: "توثيق البريد الإلكتروني", icon: "✉", category: "account" },
+  WC_PREDICTION_WIN: { labelAr: "فوز بتوقّع كأس العالم", icon: "🏆", category: "sports" },
+  WC_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع موسمي لكأس العالم", icon: "🏆", category: "sports" },
+  AC_PREDICTION_WIN: { labelAr: "فوز بتوقّع كأس آسيا", icon: "🏆", category: "sports" },
+  GC_PREDICTION_WIN: { labelAr: "فوز بتوقّع كأس الخليج", icon: "🏆", category: "sports" },
+  GC_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع موسمي لكأس الخليج", icon: "🏆", category: "sports" },
+  RSL_PREDICTION_WIN: { labelAr: "فوز بتوقّع دوري روشن", icon: "🏆", category: "sports" },
+  RSL_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع موسمي لدوري روشن", icon: "🏆", category: "sports" },
+  SPORTS_PREDICTION_WIN: { labelAr: "فوز بتوقّع رياضي", icon: "🏆", category: "sports" },
+  SPORTS_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع رياضي طويل المدى", icon: "🏆", category: "sports" },
+  SPORTS_SCORER_PREDICTION_WIN: { labelAr: "فوز بتوقّع الهدّاف", icon: "⚽", category: "sports" },
+  ADMIN_ADJUSTMENT: { labelAr: "تعديل إداري", icon: "±", category: "admin" },
+};
+
+export function getLoyaltyActionMeta(action: string): LoyaltyActionMeta {
+  return LOYALTY_ACTION_META[action] ?? {
+    labelAr: "نشاط ولاء آخر",
+    icon: "•",
+    category: "engagement",
+  };
+}
 
 // Point values match what production was awarding before the audit.
 // Changing these later is an explicit, separate decision — Phase 1 keeps
@@ -50,6 +164,34 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   // Nominal default only — the settlement engine ALWAYS overrides this with
   // floor(500 / winners) when calling awardPoints.
   WC_PREDICTION_WIN: 500,
+  // Nominal default only — overridden with the weighted (champion) / equal
+  // (top scorer) long-term pool share.
+  WC_LONG_PREDICTION_WIN: 10000,
+  // Nominal default only — the smart engine ALWAYS overrides this with the
+  // user's computed per-match total (tier × boldness × streak).
+  AC_PREDICTION_WIN: 30,
+  // Nominal default only — the engine ALWAYS overrides this with the user's
+  // pari-mutuel share of the match's tiered 1000-point pool.
+  GC_PREDICTION_WIN: 100,
+  // Nominal default only — overridden with the long-term pool share.
+  GC_LONG_PREDICTION_WIN: 500,
+  // Nominal default only — the settlement engine ALWAYS overrides this with
+  // floor(500 / winners) when calling awardPoints.
+  RSL_PREDICTION_WIN: 500,
+  // Nominal default only — overridden with the weighted (champion) / equal
+  // (top scorer) season-long pool share.
+  RSL_LONG_PREDICTION_WIN: 10000,
+  // Nominal default only — overridden with the user's pari-mutuel share of the
+  // match's tiered 1000-point pool.
+  SPORTS_PREDICTION_WIN: 100,
+  // Nominal default only — overridden with the long-term pool share.
+  SPORTS_LONG_PREDICTION_WIN: 500,
+  // Nominal default only — overridden with the user's pari-mutuel share of the
+  // scorer pool (300) or first-scorer pool (200).
+  SPORTS_SCORER_PREDICTION_WIN: 100,
+  // Nominal default only — the outbox ALWAYS overrides this with wallet_points
+  // (base share × loyalty-tier multiplier) computed at settlement time.
+  PREDICTION_WIN: 100,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -70,6 +212,28 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   // No daily cap — wins are inherently rate-limited by the match schedule,
   // and the lifetime dedup below already prevents re-awarding a given match.
   WC_PREDICTION_WIN: null,
+  // Settled once at tournament end; lifetime dedup keyed on source.
+  WC_LONG_PREDICTION_WIN: null,
+  // Same rationale as the World Cup — one settleable match per fixture, dedup
+  // below is the real guard.
+  AC_PREDICTION_WIN: null,
+  // One settleable match per fixture; lifetime dedup below is the real guard.
+  GC_PREDICTION_WIN: null,
+  // Settled once at tournament end; lifetime dedup keyed on source.
+  GC_LONG_PREDICTION_WIN: null,
+  // One settleable match per fixture; lifetime dedup below is the real guard.
+  RSL_PREDICTION_WIN: null,
+  // Settled once at season end; lifetime dedup keyed on source.
+  RSL_LONG_PREDICTION_WIN: null,
+  // One settleable match per fixture; lifetime dedup below is the real guard.
+  SPORTS_PREDICTION_WIN: null,
+  // Settled once per competition; lifetime dedup keyed on source.
+  SPORTS_LONG_PREDICTION_WIN: null,
+  // One settleable pick per (fixture, kind); lifetime dedup keyed on source.
+  SPORTS_SCORER_PREDICTION_WIN: null,
+  // No daily cap — a ledger entry pays at most once (unique outbox row +
+  // lifetime dedup on source=prediction:<ledgerId> below).
+  PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -97,6 +261,27 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   // award a user once, which is the last line of defense that lets the
   // settlement cron re-run / reconcile without double-paying.
   WC_PREDICTION_WIN: 100000,
+  // Lifetime, source=wc-long:<kind> dedup — settled once at tournament end.
+  WC_LONG_PREDICTION_WIN: 100000,
+  // Same lifetime, source=fixtureId dedup as the World Cup.
+  AC_PREDICTION_WIN: 100000,
+  // Lifetime, source=fixtureId dedup — a match pays a user at most once.
+  GC_PREDICTION_WIN: 100000,
+  // Lifetime, source=gc-long:<kind> dedup.
+  GC_LONG_PREDICTION_WIN: 100000,
+  // Lifetime window keyed on source=fixtureId — same guarantee as the World Cup.
+  RSL_PREDICTION_WIN: 100000,
+  // Lifetime, source=rsl-long:<kind> dedup — settled once at season end.
+  RSL_LONG_PREDICTION_WIN: 100000,
+  // Lifetime, source=fixtureId dedup — a match pays a user at most once.
+  SPORTS_PREDICTION_WIN: 100000,
+  // Lifetime, source=sp-long:<competitionSlug>:<kind> dedup.
+  SPORTS_LONG_PREDICTION_WIN: 100000,
+  // Lifetime, source=fixtureId:kind dedup — a (fixture, kind) pays at most once.
+  SPORTS_SCORER_PREDICTION_WIN: 100000,
+  // Lifetime, source=prediction:<ledgerId> dedup — a ledger entry pays at most
+  // once even if the outbox worker retries after a crash mid-delivery.
+  PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------
@@ -156,6 +341,27 @@ export function tierProgress(lifetimePoints: number) {
   const next = nextTier(current.level);
   const pointsToNext = next ? Math.max(0, next.minLifetimePoints - lifetimePoints) : 0;
   return { current, next, pointsToNext };
+}
+
+// ----------------------------------------------------------------------------
+// مضاعف طبقة الولاء لتوقّعات سبق الرياضي (Expansion Phase — multiplier).
+// يُطبَّق على نصيب المستخدم من بركة المباراة قبل awardPoints: كلّما ارتفعت
+// طبقة الولاء زادت مكافأته. الطبقة 1 (القارئ الجديد) = 1.0× (لا علاوة)؛
+// الطبقة 5 (سفير سبق) = 1.5×. القيم وسطيّة لتحفيز الترقّي دون تضخّم المكافآت.
+// مرآة iOS لهذه القيم موجودة في SportsPredictionModels.swift / SportsTheme.
+// ----------------------------------------------------------------------------
+export const LOYALTY_TIER_PREDICTION_MULTIPLIER: Record<LoyaltyTier["level"], number> = {
+  1: 1.0,
+  2: 1.1,
+  3: 1.2,
+  4: 1.3,
+  5: 1.5,
+};
+
+/** مضاعف توقّعات الولاء لعدد نقاط مدى الحياة. */
+export function tierMultiplierForPoints(lifetimePoints: number): number {
+  const tier = computeTier(lifetimePoints);
+  return LOYALTY_TIER_PREDICTION_MULTIPLIER[tier.level];
 }
 
 // Grandfather rule applied during the Phase 1 migration: anyone whose

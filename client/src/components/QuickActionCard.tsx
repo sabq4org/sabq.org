@@ -46,10 +46,10 @@ const QuickActionCardComponent = ({
   return (
     <div
       className={cn(
-        "group relative overflow-visible rounded-xl p-4 cursor-pointer transition-all duration-200",
+        "group relative overflow-visible rounded-xl p-3 cursor-pointer transition-all duration-200 sm:p-4",
         "bg-card/80 backdrop-blur-sm border border-border/50",
-        "hover:bg-card hover:border-border hover:shadow-lg hover:-translate-y-0.5",
-        "active:translate-y-0 active:shadow-md",
+        "hover:bg-card hover:border-border hover:shadow-md hover:-translate-y-0.5",
+        "active:translate-y-0 active:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className
       )}
@@ -59,19 +59,19 @@ const QuickActionCardComponent = ({
       tabIndex={0}
       data-testid={testId}
     >
-      <div className="flex flex-col items-center text-center gap-3">
+      <div className="flex flex-col items-center gap-2 text-center sm:gap-3">
         <div
           className={cn(
-            "h-12 w-12 rounded-xl flex items-center justify-center transition-transform duration-200",
-            "group-hover:scale-110",
+            "flex h-9 w-9 items-center justify-center rounded-lg transition-transform duration-200 sm:h-12 sm:w-12 sm:rounded-xl",
+            "group-hover:scale-105",
             iconBgColor
           )}
         >
-          <Icon className={cn("h-6 w-6", iconColor)} />
+          <Icon className={cn("h-4 w-4 sm:h-6 sm:w-6", iconColor)} />
         </div>
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold leading-tight">{title}</h3>
-          <p className="text-xs text-muted-foreground leading-tight line-clamp-2 hidden sm:block">
+        <div className="space-y-0.5 sm:space-y-1">
+          <h3 className="text-xs font-semibold leading-tight sm:text-sm">{title}</h3>
+          <p className="hidden text-xs leading-tight text-muted-foreground line-clamp-2 sm:block">
             {description}
           </p>
         </div>

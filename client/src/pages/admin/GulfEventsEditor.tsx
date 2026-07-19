@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +13,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Edit, Trash2, Pin, PinOff, Send, Save, History, Zap, Shield,
-  AlertTriangle, Clock, RefreshCw, Link2, FileText,
+  AlertTriangle, Clock, RefreshCw, Link2, FileText, Target, Crosshair,
 } from "lucide-react";
+
+const CARD_SOFT =
+  "rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15";
+const KPI_SKY =
+  "rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15";
+const KPI_EMERALD =
+  "rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15";
+const KPI_CYAN =
+  "rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm dark:border-cyan-900/35 dark:from-cyan-950/15";
+const KPI_AMBER =
+  "rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card shadow-sm dark:border-amber-900/35 dark:from-amber-950/15";
 
 const COUNTRIES = [
   { value: "saudi_arabia", label: "السعودية", flag: "🇸🇦" },
@@ -63,10 +75,10 @@ function timeAgo(dateStr: string) {
   const date = new Date(dateStr);
   const diffMin = Math.floor((now.getTime() - date.getTime()) / 60000);
   if (diffMin < 1) return "الآن";
-  if (diffMin < 60) return `قبل ${diffMin} د`;
+  if (diffMin < 60) return `قبل ${diffMin.toLocaleString("en-US")} د`;
   const diffHrs = Math.floor(diffMin / 60);
-  if (diffHrs < 24) return `قبل ${diffHrs} س`;
-  return `قبل ${Math.floor(diffHrs / 24)} يوم`;
+  if (diffHrs < 24) return `قبل ${diffHrs.toLocaleString("en-US")} س`;
+  return `قبل ${Math.floor(diffHrs / 24).toLocaleString("en-US")} يوم`;
 }
 
 interface EventFormData {
@@ -104,7 +116,7 @@ export default function GulfEventsEditor() {
   const { data: eventsData, isLoading } = useQuery<{ events: any[]; total: number }>({
     queryKey: ["/api/gulf-events"],
     queryFn: async () => {
-      const res = await fetch("/api/gulf-events?limit=200");
+      const res = await fetch(apiUrl("/api/gulf-events?limit=200"));
       return res.json();
     },
     refetchInterval: 15000,
@@ -250,30 +262,77 @@ export default function GulfEventsEditor() {
 
   return (
     <DashboardLayout>
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Shield className="w-8 h-8 text-red-600" />
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-editor-title">لوحة تحكم البث الحي</h1>
-            <p className="text-sm text-muted-foreground">الاعتداءات على دول الخليج</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {stats && (
-            <Badge variant="secondary" className="text-sm">
-              إجمالي: {stats.totalAttacks || 0} | صد: {stats.intercepted || 0}
-            </Badge>
-          )}
-          <Button onClick={() => { resetForm(); setShowForm(true); }} data-testid="button-add-event">
-            <Plus className="w-4 h-4 ml-1" />
+    <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="pb-10">
+      <DashboardPageHeader
+        icon={Shield}
+        title="لوحة تحكم البث الحي"
+        description="إدارة وتحديث البث الحي للأحداث في دول الخليج."
+        titleTestId="text-editor-title"
+        actions={
+          <Button onClick={() => { resetForm(); setShowForm(true); }} data-testid="button-add-event" className="gap-2">
+            <Plus className="h-4 w-4" />
             حدث جديد
           </Button>
-        </div>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className={KPI_SKY}>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">إجمالي الاعتداءات</CardTitle>
+            <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+              <Target className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">
+              {(stats?.totalAttacks || 0).toLocaleString("en-US")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={KPI_EMERALD}>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">تم الصد</CardTitle>
+            <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+              <Crosshair className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">
+              {(stats?.intercepted || 0).toLocaleString("en-US")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={KPI_CYAN}>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">الأحداث المنشورة</CardTitle>
+            <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
+              <Send className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">
+              {events.length.toLocaleString("en-US")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={KPI_AMBER}>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">المسودات</CardTitle>
+            <span className="rounded-lg bg-amber-100/80 p-1.5 dark:bg-amber-950/40">
+              <FileText className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">
+              {(drafts?.length || 0).toLocaleString("en-US")}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {showForm && (
-        <Card>
+        <Card className={CARD_SOFT}>
           <CardHeader>
             <CardTitle className="text-lg">
               {editingId ? "تعديل حدث" : parentEvent ? `إضافة تحديث على: "${parentEvent.content.slice(0, 40)}..."` : "إضافة حدث جديد"}
@@ -377,7 +436,7 @@ export default function GulfEventsEditor() {
                   value={form.publishedAt || ""}
                   onChange={(e) => setForm({ ...form, publishedAt: e.target.value })}
                   data-testid="input-published-at"
-                  className="max-w-xs"
+                  className="max-w-xs tabular-nums"
                 />
                 <span className="text-xs text-muted-foreground">اتركه فارغاً للنشر بالوقت الحالي</span>
               </div>
@@ -414,51 +473,59 @@ export default function GulfEventsEditor() {
         </Card>
       )}
 
-      <Tabs defaultValue="published" className="w-full">
-        <TabsList>
-          <TabsTrigger value="published" data-testid="tab-published">
-            الأحداث المنشورة ({events.length})
+      <Card className={CARD_SOFT}>
+        <CardContent className="p-4 sm:p-5">
+      <Tabs defaultValue="published" className="w-full" dir="rtl">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-sky-50/60 p-1 dark:bg-sky-950/30">
+          <TabsTrigger value="published" data-testid="tab-published" className="tabular-nums data-[state=active]:bg-background">
+            الأحداث المنشورة ({events.length.toLocaleString("en-US")})
           </TabsTrigger>
-          <TabsTrigger value="drafts" data-testid="tab-drafts">
-            المسودات ({drafts?.length || 0})
+          <TabsTrigger value="drafts" data-testid="tab-drafts" className="tabular-nums data-[state=active]:bg-background">
+            المسودات ({(drafts?.length || 0).toLocaleString("en-US")})
           </TabsTrigger>
-          <TabsTrigger value="logs" data-testid="tab-logs">
+          <TabsTrigger value="logs" data-testid="tab-logs" className="data-[state=active]:bg-background">
             <History className="w-4 h-4 ml-1" />
             سجل النشاط
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="published" className="space-y-3 mt-4">
+        <TabsContent value="published" className="mt-4 space-y-3">
           {isLoading ? (
-            <Card className="p-8 text-center">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
-            </Card>
+            <div className="p-8 text-center">
+              <RefreshCw className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
           ) : events.length === 0 ? (
-            <Card className="p-8 text-center">
+            <div className="p-8 text-center">
               <p className="text-muted-foreground">لا توجد أحداث منشورة</p>
-            </Card>
+            </div>
           ) : (
             events.map((event: any) => (
-              <Card key={event.id} className={`p-4 ${event.isPinned ? "border-primary/30" : ""}`} data-testid={`admin-event-${event.id}`}>
+              <Card
+                key={event.id}
+                className={`rounded-xl border-sky-200/40 bg-background/80 p-4 shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/30 ${event.isPinned ? "border-primary/40 ring-1 ring-primary/20" : ""}`}
+                data-testid={`admin-event-${event.id}`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="text-lg">{countryFlag(event.country)}</span>
                       <span className="text-sm font-semibold">{countryLabel(event.country)}</span>
-                      <Badge variant="secondary" className="text-xs">{eventTypeLabel(event.eventType)}</Badge>
+                      <Badge variant="secondary" className="border-sky-200/60 bg-sky-50/80 text-xs dark:border-sky-900/40 dark:bg-sky-950/30">
+                        {eventTypeLabel(event.eventType)}
+                      </Badge>
                       {event.priority === "urgent" && <Badge variant="destructive" className="text-xs">عاجل</Badge>}
-                      {event.priority === "important" && <Badge className="bg-yellow-500 text-white text-xs">مهم</Badge>}
-                      {event.isPinned && <Badge variant="outline" className="text-xs"><Pin className="w-3 h-3 ml-1" />مثبّت</Badge>}
+                      {event.priority === "important" && <Badge className="bg-amber-500 text-white text-xs hover:bg-amber-500">مهم</Badge>}
+                      {event.isPinned && <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"><Pin className="ml-1 h-3 w-3" />مثبّت</Badge>}
                       {event.isUpdate && <Badge variant="outline" className="text-xs">تحديث</Badge>}
                       {event.editedAt && <Badge variant="outline" className="text-xs">معدّل</Badge>}
                     </div>
                     <p className="text-sm leading-relaxed">{event.content}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="mt-2 text-xs tabular-nums text-muted-foreground">
                       {timeAgo(event.publishedAt)} · المصدر: {event.sourceName || SOURCES.find(s => s.value === event.sourceType)?.label}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex flex-shrink-0 items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -466,7 +533,7 @@ export default function GulfEventsEditor() {
                       title="إضافة تحديث"
                       data-testid={`button-add-update-${event.id}`}
                     >
-                      <Link2 className="w-4 h-4" />
+                      <Link2 className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -474,7 +541,7 @@ export default function GulfEventsEditor() {
                       onClick={() => startEdit(event)}
                       data-testid={`button-edit-${event.id}`}
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -482,12 +549,12 @@ export default function GulfEventsEditor() {
                       onClick={() => pinMutation.mutate(event.id)}
                       data-testid={`button-pin-${event.id}`}
                     >
-                      {event.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                      {event.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                     </Button>
                     <Dialog open={deleteConfirm === event.id} onOpenChange={(open) => setDeleteConfirm(open ? event.id : null)}>
                       <DialogTrigger asChild>
                         <Button variant="ghost" size="icon" data-testid={`button-delete-${event.id}`}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
@@ -510,20 +577,20 @@ export default function GulfEventsEditor() {
           )}
         </TabsContent>
 
-        <TabsContent value="drafts" className="space-y-3 mt-4">
+        <TabsContent value="drafts" className="mt-4 space-y-3">
           {!drafts?.length ? (
-            <Card className="p-8 text-center">
+            <div className="p-8 text-center">
               <p className="text-muted-foreground">لا توجد مسودات</p>
-            </Card>
+            </div>
           ) : (
             drafts.map((draft: any) => (
-              <Card key={draft.id} className="p-4" data-testid={`draft-${draft.id}`}>
+              <Card key={draft.id} className="rounded-xl border-amber-200/50 bg-background/80 p-4 shadow-sm dark:border-amber-900/30" data-testid={`draft-${draft.id}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="mb-1 flex items-center gap-2">
                       <span>{countryFlag(draft.country)}</span>
                       <span className="text-sm font-semibold">{countryLabel(draft.country)}</span>
-                      <Badge variant="outline" className="text-xs">مسودة</Badge>
+                      <Badge variant="outline" className="border-amber-300 text-xs text-amber-800 dark:border-amber-800 dark:text-amber-300">مسودة</Badge>
                     </div>
                     <p className="text-sm">{draft.content}</p>
                   </div>
@@ -533,11 +600,11 @@ export default function GulfEventsEditor() {
                       onClick={() => updateMutation.mutate({ id: draft.id, data: { status: "published", publishedAt: new Date().toISOString() } as any })}
                       data-testid={`button-publish-draft-${draft.id}`}
                     >
-                      <Send className="w-3 h-3 ml-1" />
+                      <Send className="ml-1 h-3 w-3" />
                       نشر
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => startEdit(draft)}>
-                      <Edit className="w-3 h-3" />
+                      <Edit className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
@@ -547,33 +614,33 @@ export default function GulfEventsEditor() {
         </TabsContent>
 
         <TabsContent value="logs" className="mt-4">
-          <Card>
-            <CardContent className="p-4">
+          <div className="rounded-xl border border-sky-200/40 bg-background/60 p-4 dark:border-sky-900/30">
               {!logs?.length ? (
-                <p className="text-center text-muted-foreground py-4">لا توجد سجلات</p>
+                <p className="py-4 text-center text-muted-foreground">لا توجد سجلات</p>
               ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="max-h-96 space-y-2 overflow-y-auto">
                   {logs.map((log: any) => (
-                    <div key={log.id} className="flex items-center gap-3 py-2 border-b last:border-0" data-testid={`log-${log.id}`}>
-                      <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
+                    <div key={log.id} className="flex items-center gap-3 border-b border-border/50 py-2 last:border-0" data-testid={`log-${log.id}`}>
+                      <Clock className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm">
                           <span className="font-semibold">{log.editorName}</span>
                           {" — "}
                           <span className="text-muted-foreground">{log.action === "create" ? "نشر" : log.action === "update" ? "تعديل" : log.action === "delete" ? "حذف" : log.action === "pin" ? "تثبيت" : log.action === "unpin" ? "إلغاء تثبيت" : log.action}</span>
                         </p>
-                        {log.details && <p className="text-xs text-muted-foreground truncate">{log.details}</p>}
+                        {log.details && <p className="truncate text-xs text-muted-foreground">{log.details}</p>}
                       </div>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo(log.createdAt)}</span>
+                      <span className="flex-shrink-0 text-xs tabular-nums text-muted-foreground">{timeAgo(log.createdAt)}</span>
                     </div>
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </div>
         </TabsContent>
       </Tabs>
-    </div>
+        </CardContent>
+      </Card>
+    </DashboardPageShell>
     </DashboardLayout>
   );
 }

@@ -29,6 +29,12 @@ class WorldCupViewModel @Inject constructor(
         val teams: List<WcTeam> = emptyList(),
         val assists: List<WcLeader> = emptyList(),
         val cards: List<WcLeader> = emptyList(),
+        val facts: WcCompetitionFacts? = null,
+        val bracket: WcBracket? = null,
+        val news: List<WcNewsItem> = emptyList(),
+        // بطاقة نبض المباراة (ودجت حيّ) + ومضة الهدف
+        val pulse: WcPulse? = null,
+        val pulseGoalFlash: Boolean = false,
         val overviewLoading: Boolean = true,
         val fixturesLoading: Boolean = true,
         val standingsLoading: Boolean = true,
@@ -52,6 +58,9 @@ class WorldCupViewModel @Inject constructor(
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    private var pulseJob: kotlinx.coroutines.Job? = null
+    private var goalFlashJob: kotlinx.coroutines.Job? = null
+
     init { load() }
 
     fun load() {
@@ -63,6 +72,10 @@ class WorldCupViewModel @Inject constructor(
             val teams = async { runCatching { repo.teams() }.getOrDefault(emptyList()) }
             // تشكيلة الأخضر لشريط «مشوار الأخضر» — مكاشة على الخادم فلا تكلفة تذكر
             val saudiSquad = async { runCatching { repo.squad(WC_SAUDI_TEAM_ID).players }.getOrDefault(emptyList()) }
+            // الأقسام التكميلية (حقائق/إقصائي/أخبار) — best-effort تظهر post-render
+            val facts = async { runCatching { repo.facts() }.getOrNull() }
+            val bracket = async { runCatching { repo.bracket() }.getOrNull() }
+            val news = async { runCatching { repo.news(limit = 8) }.getOrDefault(emptyList()) }
             _state.update {
                 it.copy(
                     overview = overview.await(), overviewLoading = false,
@@ -71,9 +84,51 @@ class WorldCupViewModel @Inject constructor(
                     scorers = scorers.await(), scorersLoading = false,
                     teams = teams.await(), teamsLoading = false,
                     saudiSquad = saudiSquad.await(),
+                    facts = facts.await(),
+                    bracket = bracket.await(),
+                    news = news.await(),
                     isRefreshing = false,
                 )
             }
+            startPulse()
+        }
+    }
+
+    /** مباراة النبض: حيّة أولًا → أقرب قادمة → أحدث منتهية → مباراة اليوم */
+    private fun pulseFixtureId(): Int? {
+        val fx = _state.value.fixtures
+        fx.firstOrNull { it.status.live }?.let { return it.id }
+        val nowTs = System.currentTimeMillis() / 1000
+        fx.filter { !it.status.finished && !it.status.live && it.timestamp >= nowTs }
+            .minByOrNull { it.timestamp }?.let { return it.id }
+        fx.filter { it.status.finished }.maxByOrNull { it.timestamp }?.let { return it.id }
+        return _state.value.overview?.matchOfTheDay?.fixture?.id
+    }
+
+    private fun startPulse() {
+        val fixtureId = pulseFixtureId() ?: return
+        pulseJob?.cancel()
+        pulseJob = viewModelScope.launch {
+            while (true) {
+                val prevTotal = _state.value.pulse?.let { it.score.home + it.score.away } ?: 0
+                val p = runCatching { repo.pulse(fixtureId) }.getOrNull()
+                if (p != null) {
+                    val increased = _state.value.pulse != null && (p.score.home + p.score.away) > prevTotal
+                    _state.update { it.copy(pulse = p) }
+                    if (increased) triggerGoalFlash()
+                }
+                val live = _state.value.pulse?.status?.live == true
+                kotlinx.coroutines.delay(if (live) 12_000 else 60_000)
+            }
+        }
+    }
+
+    private fun triggerGoalFlash() {
+        goalFlashJob?.cancel()
+        _state.update { it.copy(pulseGoalFlash = true) }
+        goalFlashJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(5_000)
+            _state.update { it.copy(pulseGoalFlash = false) }
         }
     }
 

@@ -69,9 +69,9 @@ struct BreakingTickerBar: View {
         HStack(spacing: 12) {
             HStack(spacing: 5) {
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(SabqFonts.app(size: 10, weight: .semibold))
                 Text("عاجل")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
@@ -79,7 +79,7 @@ struct BreakingTickerBar: View {
             .background(Capsule().fill(Color.white.opacity(0.20)))
 
             Text(headline.headline)
-                .font(.system(size: 14.5, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
@@ -97,7 +97,7 @@ struct BreakingTickerBar: View {
                 }
             } else {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.7))
             }
         }

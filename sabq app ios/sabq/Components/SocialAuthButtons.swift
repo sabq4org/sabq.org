@@ -40,10 +40,10 @@ struct SocialAuthButtons: View {
         Button(action: startAppleSignIn) {
             HStack(spacing: 10) {
                 Text("تسجيل الدخول بـ Apple")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                 Image(systemName: "applelogo")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
@@ -124,7 +124,7 @@ struct SocialAuthButtons: View {
         Button(action: startGoogleSignIn) {
             HStack(spacing: 10) {
                 Text("المتابعة باستخدام Google")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                 GoogleGLogo()
                     .frame(width: 20, height: 20)
@@ -201,7 +201,7 @@ struct SocialAuthButtons: View {
                 .fill(SabqTheme.outline.opacity(0.5))
                 .frame(height: 1)
             Text("أو")
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             Rectangle()
                 .fill(SabqTheme.outline.opacity(0.5))

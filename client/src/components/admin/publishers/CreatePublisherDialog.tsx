@@ -32,6 +32,8 @@ const createPublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().default(true),
+  publishingEndsAt: z.string().nullable().optional(),
+  autoPublish: z.boolean().default(false),
   notes: z.string().optional(),
 });
 
@@ -49,6 +51,8 @@ const editPublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().default(true),
+  publishingEndsAt: z.string().nullable().optional(),
+  autoPublish: z.boolean().default(false),
   notes: z.string().optional(),
 });
 
@@ -96,6 +100,10 @@ export function CreatePublisherDialog({
           taxNumber: publisher.taxNumber || "",
           address: publisher.address || "",
           isActive: publisher.isActive,
+          publishingEndsAt: publisher.publishingEndsAt
+            ? String(publisher.publishingEndsAt).slice(0, 10)
+            : "",
+          autoPublish: publisher.autoPublish ?? false,
           notes: publisher.notes || "",
         }
       : {
@@ -115,6 +123,8 @@ export function CreatePublisherDialog({
           taxNumber: "",
           address: "",
           isActive: true,
+          publishingEndsAt: "",
+          autoPublish: false,
           notes: "",
         },
   });
@@ -140,6 +150,10 @@ export function CreatePublisherDialog({
         taxNumber: publisher.taxNumber || "",
         address: publisher.address || "",
         isActive: publisher.isActive,
+        publishingEndsAt: publisher.publishingEndsAt
+          ? String(publisher.publishingEndsAt).slice(0, 10)
+          : "",
+        autoPublish: publisher.autoPublish ?? false,
         notes: publisher.notes || "",
       });
       setLogoPreview(publisher.logoUrl || null);
@@ -163,6 +177,8 @@ export function CreatePublisherDialog({
         taxNumber: "",
         address: "",
         isActive: true,
+        publishingEndsAt: "",
+        autoPublish: false,
         notes: "",
       });
       setLogoPreview(null);
@@ -205,28 +221,38 @@ export function CreatePublisherDialog({
     };
     reader.readAsDataURL(file);
 
-    // Upload logo immediately
+    // Upload logo immediately — عبر مسار مكتبة الوسائط المضمون
+    // (المسار القديم /api/admin/publishers/upload-logo يعتمد objectStorage
+    // بتكوين bucket معطوب في الإنتاج فيفشل الرفع دائماً)
     setIsUploadingLogo(true);
     try {
       const formData = new FormData();
-      formData.append('logo', file);
+      formData.append('file', file);
 
-      const response = await fetch('/api/admin/publishers/upload-logo', {
+      const data = await apiRequest<{ url: string }>('/api/media/upload', {
         method: 'POST',
         body: formData,
-        credentials: 'include',
+        isFormData: true,
       });
+      form.setValue('logoUrl', data.url);
 
-      if (!response.ok) {
-        throw new Error('فشل في رفع اللوقو');
+      // في وضع التعديل نحفظ الشعار فوراً — كان يضيع إن أُغلق الحوار
+      // قبل ضغط «حفظ التعديلات» فيبقى حقل الوكالة فارغاً
+      if (mode === "edit" && publisher?.id) {
+        await apiRequest(`/api/admin/publishers/${publisher.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ logoUrl: data.url }),
+          headers: { "Content-Type": "application/json" },
+        });
+        queryClient.invalidateQueries({ queryKey: [`/api/admin/publishers/${publisher.id}`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/publishers"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/overview"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/publishers"] });
       }
 
-      const data = await response.json();
-      form.setValue('logoUrl', data.url);
-      
       toast({
         title: "تم رفع اللوقو",
-        description: "تم رفع شعار الناشر بنجاح",
+        description: mode === "edit" ? "رُفع شعار الوكالة وحُفظ مباشرة" : "تم رفع شعار الناشر بنجاح",
       });
     } catch (error: any) {
       toast({
@@ -283,7 +309,12 @@ export function CreatePublisherDialog({
   const onSubmit = async (data: PublisherFormData) => {
     setIsSubmitting(true);
     try {
-      await createMutation.mutateAsync(data);
+      // تاريخ فارغ = نافذة نشر مفتوحة (null في قاعدة البيانات)
+      const payload = {
+        ...data,
+        publishingEndsAt: data.publishingEndsAt ? data.publishingEndsAt : null,
+      };
+      await createMutation.mutateAsync(payload);
     } finally {
       setIsSubmitting(false);
     }
@@ -572,7 +603,56 @@ export function CreatePublisherDialog({
               )}
             />
 
-            {/* 9. حالة الحساب */}
+            {/* 9. إعدادات النشر */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+              <h3 className="text-sm font-medium">إعدادات النشر</h3>
+
+              <FormField
+                control={form.control}
+                name="publishingEndsAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>النشر متاح حتى تاريخ</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value ?? ""}
+                        data-testid="input-publishing-ends-at"
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      بعد هذا التاريخ يُمنع الناشر من إضافة أو نشر مواد جديدة. اتركه فارغاً لنشر مفتوح بلا تاريخ انتهاء.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="autoPublish"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-md border p-3">
+                    <div>
+                      <FormLabel>نشر فوري بدون مراجعة</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        مواد هذا الناشر تُنشر مباشرة دون المرور بمراجعة التحرير (للناشرين الموثوقين)
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-auto-publish"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* 10. حالة الحساب */}
             <FormField
               control={form.control}
               name="isActive"

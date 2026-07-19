@@ -3,6 +3,8 @@ import Redis from "ioredis";
 let redisClient: Redis | null = null;
 let _redisConnected = false;
 let _initAttempted = false;
+let sessionAdapter: RedisSessionClient | null = null;
+let _redisConfigured = false;
 
 export interface RedisSessionClient {
   get(key: string): Promise<string | null>;
@@ -10,6 +12,8 @@ export interface RedisSessionClient {
   del(keys: string | string[]): Promise<number>;
   expire(key: string, ttl: number): Promise<number>;
   scan(...args: any[]): Promise<any>;
+  /** SET NX PX الذرّي — للأقفال/الـleases (انتخاب القائد). يعيد "OK" عند النجاح وإلا null. */
+  setLock(key: string, val: string, ttlMs: number): Promise<"OK" | null>;
 }
 
 function createSessionAdapter(client: Redis): RedisSessionClient {
@@ -27,28 +31,33 @@ function createSessionAdapter(client: Redis): RedisSessionClient {
     },
     expire: (key: string, ttl: number) => client.expire(key, ttl),
     scan: (...args: any[]) => (client as any).scan(...args),
+    setLock: (key: string, val: string, ttlMs: number) =>
+      client.set(key, val, "PX", ttlMs, "NX") as Promise<"OK" | null>,
   };
 }
 
-let sessionAdapter: RedisSessionClient | null = null;
-
-export function getRedisClient(): RedisSessionClient | null {
-  if (_initAttempted) return _redisConnected ? sessionAdapter : null;
+function ensureRedisInit(): void {
+  if (_initAttempted) return;
   _initAttempted = true;
 
   const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) return null;
+  if (!redisUrl) return;
+
+  _redisConfigured = true;
 
   try {
     const client = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
+      // فشل سريع بدل طابور بلا نهاية عند انقطاع Upstash / تغيّر Static IP
+      maxRetriesPerRequest: 1,
+      commandTimeout: 2500,
+      connectTimeout: 3000,
+      enableOfflineQueue: false,
       retryStrategy(times) {
         if (times > 5) return null;
         return Math.min(times * 200, 2000);
       },
       lazyConnect: true,
       enableReadyCheck: false,
-      connectTimeout: 5000,
     });
 
     client.on("ready", () => {
@@ -73,19 +82,38 @@ export function getRedisClient(): RedisSessionClient | null {
     client.connect().then(() => {
       _redisConnected = true;
     }).catch((err) => {
-      console.warn("[Redis] Failed to connect, falling back to PostgreSQL sessions:", err.message);
+      console.warn(
+        "[Redis] Failed to connect — session failover will use PostgreSQL until Redis recovers:",
+        err.message,
+      );
       _redisConnected = false;
-      sessionAdapter = null;
-      try { client.disconnect(); } catch {}
     });
-
-    return sessionAdapter;
   } catch (err: any) {
     console.error("[Redis] Failed to initialize:", err.message);
-    return null;
+    _redisConfigured = false;
+    sessionAdapter = null;
   }
 }
 
+/**
+ * للجلسات: يعيد الـ adapter إن وُجد REDIS_URL (حتى قبل ready).
+ * الأوامر تفشل بسرعة بفضل commandTimeout / enableOfflineQueue:false
+ * فيحوّلها SessionFailoverStore إلى Postgres.
+ */
+export function getRedisSessionAdapter(): RedisSessionClient | null {
+  ensureRedisInit();
+  return _redisConfigured ? sessionAdapter : null;
+}
+
+/**
+ * لبقية الأنظمة (leader election، alerts…): فقط بعد اتصال ناجح.
+ */
+export function getRedisClient(): RedisSessionClient | null {
+  ensureRedisInit();
+  return _redisConnected ? sessionAdapter : null;
+}
+
 export function isRedisAvailable(): boolean {
+  ensureRedisInit();
   return _redisConnected && sessionAdapter !== null;
 }

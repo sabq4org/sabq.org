@@ -18,6 +18,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- روابط sabq:// العميقة (دعوات الاستطلاعات وغيرها) — تصل للـWebView
+                 عبر حدث appUrlOpen في @capacitor/app ويوجّهها الويب للمسار المناسب -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabq" />
+            </intent-filter>
         </activity>
 
         <provider

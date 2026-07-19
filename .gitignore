@@ -38,6 +38,8 @@ backup_unused_assets
 # Database backups and SQL scripts (NEVER commit to repo)
 *.sql
 !migrations/*.sql
+# DDL تشغيلي بلا بيانات شخصية — زراعة جداول الميزات عبر محرر SQL
+!scripts/sql/*.sql
 *.sql.gz
 *.dump
 *.backup
@@ -48,6 +50,7 @@ backup_unused_assets
 !client/src/**/*.png
 !public/**/*.png
 !android/**/*.png
+!android-native/**/*.png
 !ios/**/*.png
 !attached_assets/**/*.png
 # Apple Wallet pass templates need their icon/logo PNGs committed —
@@ -55,6 +58,9 @@ backup_unused_assets
 !server/lib/passkit/**/*.png
 # Native iOS app asset catalog images must be committed — Xcode Cloud builds from the repo
 !sabq app ios/sabq/Assets.xcassets/**/*.png
+!gulf-cup app ios/GulfCup/Assets.xcassets/**/*.png
+!sports app ios/**/*.png
+!asian-cup app ios/AsianCup/Assets.xcassets/**/*.png
 sabq app ios/sabq/Assets.xcassets/.appicon-backup*/
 # Internal security audit — kept local; contains attack-surface details
 AUDIT_REPORT.md
@@ -79,6 +85,24 @@ sabq app ios/test-results/
 sabq app ios/sabq 2026-05-18 08-30-20/
 sabq app ios/**/xcuserdata/
 sabq app ios/**/*.xcuserstate
+# Sports SwiftUI app (sports app ios/) — sources tracked, build state ignored.
+sports app ios/build/
+sports app ios/DerivedData/
+sports app ios/test-results/
+sports app ios/**/xcuserdata/
+sports app ios/**/*.xcuserstate
+# Asian Cup SwiftUI app (asian-cup app ios/) — same rule.
+asian-cup app ios/build/
+asian-cup app ios/DerivedData/
+asian-cup app ios/**/xcuserdata/
+asian-cup app ios/**/*.xcuserstate
+# Gulf Cup SwiftUI app (gulf-cup app ios/) — sources tracked, build state ignored.
+gulf-cup app ios/build/
+gulf-cup app ios/DerivedData/
+gulf-cup app ios/test-results/
+gulf-cup app ios/**/xcuserdata/
+gulf-cup app ios/**/*.xcuserstate
+.DS_Store
 .vercel
 .env*
 # Templates stay tracked — only filled-in env files are secret.
@@ -92,3 +116,7 @@ playwright-report/
 # they describe the attack surface and must not be published.
 docs/security/تقرير_المراجعة_الأمنية_سبق.docx
 docs/security/تقرير_المراجعة_الأمنية_سبق.json
+
+# Claude Code personal settings
+.claude/settings.local.json
+.claude/worktrees/

@@ -101,15 +101,15 @@ export default function RecommendationAnalytics() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
+      <div className="space-y-6 px-1 pb-8" dir="rtl">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <header className="flex flex-col gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-yellow-500 to-orange-600">
-              <Lightbulb className="h-6 w-6 text-white" />
-            </div>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Lightbulb className="h-5 w-5" />
+            </span>
             <div>
-              <h1 className="text-3xl font-bold" data-testid="text-page-title">
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl" data-testid="text-page-title">
                 إحصائيات نظام التوصيات الذكية
               </h1>
               <p className="text-muted-foreground mt-1">
@@ -119,14 +119,14 @@ export default function RecommendationAnalytics() {
           </div>
 
           {/* Period Selector */}
-          <Tabs value={period} onValueChange={(v) => setPeriod(v as "7" | "30" | "90")}>
-            <TabsList data-testid="tabs-period">
+          <Tabs className="w-full sm:w-auto" value={period} onValueChange={(v) => setPeriod(v as "7" | "30" | "90")}>
+            <TabsList className="grid w-full grid-cols-3 sm:w-auto" data-testid="tabs-period">
               <TabsTrigger value="7" data-testid="tab-7days">آخر 7 أيام</TabsTrigger>
               <TabsTrigger value="30" data-testid="tab-30days">آخر 30 يوم</TabsTrigger>
               <TabsTrigger value="90" data-testid="tab-90days">آخر 90 يوم</TabsTrigger>
             </TabsList>
           </Tabs>
-        </div>
+        </header>
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12">
@@ -138,14 +138,14 @@ export default function RecommendationAnalytics() {
         ) : data ? (
           <>
             {/* Overview Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card" data-testid="card-total-recommendations">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+              <Card className="border-border/70 bg-card shadow-sm" data-testid="card-total-recommendations">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     إجمالي التوصيات
                   </CardTitle>
-                  <div className="p-2 rounded-md bg-purple-500/20">
-                    <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <div className="rounded-lg bg-muted p-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -158,13 +158,13 @@ export default function RecommendationAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-unique-users">
+              <Card className="border-border/70 bg-card shadow-sm" data-testid="card-unique-users">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     مستخدمون نشطون
                   </CardTitle>
-                  <div className="p-2 rounded-md bg-blue-500/20">
-                    <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <div className="rounded-lg bg-muted p-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -177,13 +177,13 @@ export default function RecommendationAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-view-rate">
+              <Card className="border-border/70 bg-card shadow-sm" data-testid="card-view-rate">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     معدل المشاهدة
                   </CardTitle>
-                  <div className="p-2 rounded-md bg-green-500/20">
-                    <Eye className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <div className="rounded-lg bg-muted p-2">
+                    <Eye className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -196,17 +196,17 @@ export default function RecommendationAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card" data-testid="card-ctr">
+              <Card className="border-border/70 bg-card shadow-sm" data-testid="card-ctr">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     نسبة النقر (CTR)
                   </CardTitle>
-                  <div className="p-2 rounded-md bg-amber-500/20">
-                    <MousePointerClick className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <div className="rounded-lg bg-primary/10 p-2">
+                    <MousePointerClick className="h-4 w-4 text-primary" />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-ctr">
+                  <div className="text-2xl font-bold text-primary" data-testid="text-ctr">
                     {data.overview.clickThroughRate.toFixed(1)}%
                   </div>
                   <p className="text-xs text-muted-foreground">

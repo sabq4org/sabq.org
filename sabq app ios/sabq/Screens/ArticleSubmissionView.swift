@@ -19,6 +19,9 @@ struct ArticleSubmissionView: View {
     @State private var title: String = ""
     @State private var articleContent: String = ""
     @State private var pickerItems: [PhotosPickerItem] = []
+    /// العناصر المحمّلة فعلًا (بترتيب مصفوفتَي المعاينة/البيانات) — أساس
+    /// التحميل التفاضلي في loadImages.
+    @State private var loadedItems: [PhotosPickerItem] = []
     @State private var showImagePicker = false
     @State private var previewImages: [UIImage] = []
     @State private var imageData: [Data] = []
@@ -30,15 +33,27 @@ struct ArticleSubmissionView: View {
     @State private var sparkleOpacity: Double = 0
     @State private var sparkleScale: CGFloat = 0.4
 
-    @FocusState private var focusedField: Field?
+    // كان هنا @FocusState — معطّل داخل هذه الـ sheet على iOS الحديث: كتابات
+    // focusedField لا تصل أبداً (أثبتته سجلات EditorFocus)، فتظل SwiftUI ترى
+    // «لا حقل مركّزاً» وتُسقط الكيبورد مع أول إعادة رسم بعد كل حرف.
+    // البديل: UIKit يدير التركيز بنفسه، والإغلاق عبر سلسلة المستجيبين،
+    // وحالة @State عادية لتلوين إطار المحرر فقط.
+    @State private var isBodyEditing = false
+
+    // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره قبل أول إرسال،
+    // ثم يُستكمل الإرسال تلقائياً بعد التثبيت.
+    @State private var writerSchedule: WriterScheduleResponse?
+    @State private var showDayGate = false
+    @State private var savingDay = false
+    @State private var dayGateError: String?
+    /// true فقط عندما تُفتح البوابة من زر الإرسال — عندها يُستكمل الإرسال
+    /// تلقائياً بعد التثبيت. الفتح من التنبيه المبكر لا يُرسل شيئاً.
+    @State private var dayGateShouldContinue = false
 
     enum Stage {
         case form, submitting, success
     }
 
-    enum Field: Hashable {
-        case title, body
-    }
 
     // MARK: - Kind-specific copy
 
@@ -94,7 +109,13 @@ struct ArticleSubmissionView: View {
                 VStack(spacing: 20) {
                     switch screenState {
                     case .form, .submitting:
+                        // لمسة على الترويسة (خارج حقول الإدخال) تُنزل الكيبورد
                         headerHero
+                            .contentShape(Rectangle())
+                            .onTapGesture { sabqDismissKeyboard() }
+                        if kind == .opinion, writerSchedule?.canChoose == true {
+                            dayNoticeBanner
+                        }
                         formCard
                     case .success:
                         successHero
@@ -102,7 +123,7 @@ struct ArticleSubmissionView: View {
                         Color.clear.frame(height: 8)
                         Button { dismiss() } label: {
                             Text("تمام")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(SabqFonts.app(size: 16, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 15)
@@ -115,34 +136,123 @@ struct ArticleSubmissionView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 60)
             }
-            // `.interactively` adds a pan-to-dismiss gesture that races
-            // with UITextView's long-press-to-select. Users reported
-            // the magnifier never appearing and copy/paste menu being
-            // unreliable. `.immediately` removes the pan gesture so
-            // selection / edit menu work like the OS Notes app.
-            .scrollDismissesKeyboard(.immediately)
+            // كانت `.immediately` وتسببت في خروج المؤشر مع كل حرف: أي
+            // كتابة/حذف يحرّك iOS الصفحة تلقائياً ليُبقي المؤشر ظاهراً فوق
+            // الكيبورد، و`.immediately` تعامل هذا التمرير البرمجي كطلب
+            // إسقاط للكيبورد. `.interactively` تُسقطه فقط بسحب الإصبع نحو
+            // الأسفل (إيماءة فعلية لا تمريراً برمجياً) — وهو السلوك الذي
+            // يتوقعه الكاتب.
+            .scrollDismissesKeyboard(.interactively)
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
                 ToolbarItem(placement: .principal) {
                     Text(pageTitle)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("تم") { focusedField = nil }
-                        .font(.system(size: 15, weight: .semibold))
+                    Button("تم") { sabqDismissKeyboard() }
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(pageTint)
                 }
             }
+            .task {
+                guard kind == .opinion else { return }
+                writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+            }
+            .sheet(isPresented: $showDayGate, onDismiss: { dayGateShouldContinue = false }) {
+                dayGateSheet
+            }
+        }
+    }
+
+    // MARK: - Day gate (تحديد اليوم الأسبوعي قبل أول إرسال)
+
+    /// إشارة مبكرة من لحظة فتح الشاشة: الكتابة حرة، لكن الإرسال يتطلب تحديد اليوم
+    private var dayNoticeBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(Color.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("لم تحدد يومك الأسبوعي للنشر بعد")
+                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(SabqTheme.ink)
+                Text("اكتب مقالك بحرية — وسيُطلب تحديد اليوم قبل الإرسال.")
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { showDayGate = true } label: {
+                    Text("تحديد اليوم الآن")
+                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(Color.orange)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.orange.opacity(0.3), lineWidth: 0.5))
+    }
+
+    private var dayGateSheet: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(SabqFonts.app(size: 22, weight: .semibold))
+                        .foregroundStyle(pageTint)
+                    Text("قبل إرسال مقالتك")
+                        .font(SabqFonts.app(size: 17, weight: .heavy))
+                        .foregroundStyle(SabqTheme.ink)
+                }
+                Text("حدد يومك الأسبوعي للنشر أولاً — ستُنشر مقالاتك في هذا اليوم من كل أسبوع. بعد التثبيت يُستكمل إرسال مقالتك تلقائياً.")
+                    .font(SabqFonts.app(size: 13, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                WriterDayPickerCard(
+                    dayLoads: writerSchedule?.dayLoads ?? [],
+                    saving: savingDay,
+                    errorText: dayGateError
+                ) { day in
+                    Task { await pickDayAndContinue(day) }
+                }
+            }
+            .padding(20)
+        }
+        .background(SabqTheme.background)
+        .sabqRTL()
+        .presentationDetents([.medium, .large])
+    }
+
+    private func pickDayAndContinue(_ weekday: Int) async {
+        savingDay = true
+        dayGateError = nil
+        struct Body: Encodable { let weekday: Int }
+        do {
+            _ = try await APIClient.shared.post(WriterSchedulePostResponse.self, path: "/contributor/schedule", body: Body(weekday: weekday))
+            writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+            savingDay = false
+            showDayGate = false
+            if dayGateShouldContinue {
+                dayGateShouldContinue = false
+                await submit()
+            }
+        } catch {
+            savingDay = false
+            dayGateError = "تعذر حفظ اليوم — حاول مرة أخرى"
         }
     }
 
@@ -155,14 +265,14 @@ struct ArticleSubmissionView: View {
                     .fill(pageTint.opacity(0.10))
                     .frame(width: 88, height: 88)
                 Image(systemName: pageIcon)
-                    .font(.system(size: 36, weight: .regular))
+                    .font(SabqFonts.app(size: 36, weight: .regular))
                     .foregroundStyle(pageTint)
             }
             Text(pageTitle)
                 .font(SabqFonts.headline(size: 22))
                 .foregroundStyle(SabqTheme.ink)
             Text(pageSubtitle)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
         }
@@ -182,11 +292,11 @@ struct ArticleSubmissionView: View {
                 fieldLabel("العنوان", required: true)
                 TextField(titlePlaceholder, text: $title, axis: .vertical)
                     .lineLimit(2...3)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
-                    .focused($focusedField, equals: .title)
                     .submitLabel(.next)
-                    .multilineTextAlignment(.trailing)
+                    // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
+                    .multilineTextAlignment(.leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .background(
@@ -195,7 +305,7 @@ struct ArticleSubmissionView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .stroke(focusedField == .title ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: focusedField == .title ? 1 : 0.5)
+                            .stroke(SabqTheme.outline, lineWidth: 0.5)
                     )
 
                 fieldLabel("النص", required: true)
@@ -213,19 +323,16 @@ struct ArticleSubmissionView: View {
                     SabqRichTextEditor(
                         text: $articleContent,
                         minHeight: 180,
-                        isFocused: Binding(
-                            get: { focusedField == .body },
-                            set: { focusedField = $0 ? .body : nil }
-                        ),
                         font: .systemFont(ofSize: 15, weight: .regular),
                         textColor: UIColor(SabqTheme.ink),
-                        tintColor: UIColor(pageTint)
+                        tintColor: UIColor(pageTint),
+                        onEditingChanged: { editing in isBodyEditing = editing }
                     )
                     .padding(8)
 
                     if articleContent.isEmpty {
                         Text(bodyPlaceholder)
-                            .font(.system(size: 15, weight: .regular))
+                            .font(SabqFonts.app(size: 15, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 16)
@@ -238,7 +345,7 @@ struct ArticleSubmissionView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(focusedField == .body ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: focusedField == .body ? 1 : 0.5)
+                        .stroke(isBodyEditing ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: isBodyEditing ? 1 : 0.5)
                 )
 
                 imagesSection
@@ -251,11 +358,11 @@ struct ArticleSubmissionView: View {
     private func fieldLabel(_ text: String, required: Bool = false) -> some View {
         HStack(spacing: 4) {
             Text(text)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
             if required {
                 Text("*")
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                     .foregroundStyle(SabqTheme.coral)
             }
         }
@@ -270,7 +377,7 @@ struct ArticleSubmissionView: View {
                 Spacer(minLength: 0)
                 if !previewImages.isEmpty {
                     Text("\(previewImages.count) / \(maxImages)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .monospacedDigit()
                 }
@@ -309,13 +416,13 @@ struct ArticleSubmissionView: View {
         } label: {
             VStack(spacing: 10) {
                 Image(systemName: "photo.badge.plus")
-                    .font(.system(size: 32, weight: .light))
+                    .font(SabqFonts.app(size: 32, weight: .light))
                     .foregroundStyle(pageTint)
                 Text(kind == .opinion ? "اختر صورة" : "اختر الصور")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text("جودة عالية تُحفظ كما هي بدون ضغط")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             .frame(maxWidth: .infinity)
@@ -349,7 +456,7 @@ struct ArticleSubmissionView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         if index == 0 && kind == .news {
                             Text("الرئيسية")
-                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 9, weight: .heavy))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
@@ -360,7 +467,7 @@ struct ArticleSubmissionView: View {
                             removeImage(at: index)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(SabqFonts.app(size: 18, weight: .bold))
                                 .foregroundStyle(.white, .black.opacity(0.6))
                         }
                         .buttonStyle(.plain)
@@ -382,7 +489,7 @@ struct ArticleSubmissionView: View {
                             .frame(width: 100, height: 100)
                             .overlay {
                                 Image(systemName: "plus")
-                                    .font(.system(size: 22, weight: .bold))
+                                    .font(SabqFonts.app(size: 22, weight: .bold))
                                     .foregroundStyle(pageTint)
                             }
                             .overlay(
@@ -399,7 +506,7 @@ struct ArticleSubmissionView: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("جاري تحميل الصور...")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
@@ -410,61 +517,50 @@ struct ArticleSubmissionView: View {
         guard !items.isEmpty else {
             previewImages = []
             imageData = []
+            loadedItems = []
             return
         }
 
-        loadingImages = true
-        defer { loadingImages = false }
+        // خريطة المحمَّل سابقًا — الحذف/الإضافة يعيدان استخدام الجاهز ويفكّان
+        // ترميز الجديد فقط. قبلها كان حذف صورة واحدة (يُعدِّل pickerItems
+        // فيُطلق onChange) يعيد تحميل وتصغير وضغط كل الصور المتبقية.
+        var known: [PhotosPickerItem: (data: Data, image: UIImage)] = [:]
+        for (i, item) in loadedItems.enumerated()
+        where i < imageData.count && i < previewImages.count {
+            known[item] = (imageData[i], previewImages[i])
+        }
+
+        let hasNew = items.contains { known[$0] == nil }
+        if hasNew { loadingImages = true }
+        defer { if hasNew { loadingImages = false } }
 
         var loadedData: [Data] = []
         var loadedImages: [UIImage] = []
+        var successfulItems: [PhotosPickerItem] = []
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let img = UIImage(data: data) {
+            if let existing = known[item] {
+                loadedData.append(existing.data)
+                loadedImages.append(existing.image)
+                successfulItems.append(item)
+            } else if let data = try? await item.loadTransferable(type: Data.self),
+                      let img = UIImage(data: data) {
                 // Downscale + recompress before we ship base64 to the server.
                 // Raw phone photos are 4-8 MB each; base64 inflates them ~33%
                 // and the server JSON body cap is 10 MB. Two originals could
                 // blow the limit AND drag the upload past the timeout. A
                 // 2000px / 0.7 JPEG keeps print-grade quality for web display
                 // while cutting payload to a few hundred KB per image.
-                let prepared = Self.prepareForUpload(img)
+                let prepared = SabqImageUpload.prepare(img)
                 loadedData.append(prepared.data)
                 loadedImages.append(prepared.image)
+                successfulItems.append(item)
             }
         }
         await MainActor.run {
             imageData = loadedData
             previewImages = loadedImages
+            loadedItems = successfulItems
         }
-    }
-
-    /// Resize so the longest edge is <= maxDimension, then JPEG-encode at
-    /// `quality`. Returns both the bytes we'll upload and a UIImage for the
-    /// preview so what the user sees matches what we send.
-    private static func prepareForUpload(
-        _ image: UIImage,
-        maxDimension: CGFloat = 2000,
-        quality: CGFloat = 0.7
-    ) -> (data: Data, image: UIImage) {
-        let size = image.size
-        let longest = max(size.width, size.height)
-        let scaled: UIImage
-        if longest > maxDimension {
-            let factor = maxDimension / longest
-            let newSize = CGSize(width: size.width * factor, height: size.height * factor)
-            let format = UIGraphicsImageRendererFormat.default()
-            format.scale = 1
-            let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
-            scaled = renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: newSize))
-            }
-        } else {
-            scaled = image
-        }
-        let data = scaled.jpegData(compressionQuality: quality)
-            ?? image.jpegData(compressionQuality: quality)
-            ?? Data()
-        return (data, scaled)
     }
 
     private func removeImage(at index: Int) {
@@ -489,12 +585,12 @@ struct ArticleSubmissionView: View {
                     ProgressView().tint(.white)
                 } else {
                     Image(systemName: kind == .opinion ? "paperplane.fill" : "paperplane.fill")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(SabqFonts.app(size: 14, weight: .heavy))
                 }
                 Text(screenState == .submitting
                      ? "جاري الإرسال..."
                      : (kind == .opinion ? "إرسال المقالة" : "إرسال الخبر"))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -515,7 +611,7 @@ struct ArticleSubmissionView: View {
             // so the eye reads the checkmark first, then the celebration.
             ForEach(0..<5, id: \.self) { index in
                 Image(systemName: "sparkle")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(SabqFonts.app(size: 18, weight: .bold))
                     .foregroundStyle(pageTint)
                     .opacity(sparkleOpacity)
                     .scaleEffect(sparkleScale)
@@ -533,7 +629,7 @@ struct ArticleSubmissionView: View {
                     )
                     .frame(width: 130, height: 130)
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 80, weight: .regular))
+                    .font(SabqFonts.app(size: 80, weight: .regular))
                     .foregroundStyle(pageTint)
                     .scaleEffect(celebrationScale)
                     .symbolRenderingMode(.hierarchical)
@@ -571,7 +667,7 @@ struct ArticleSubmissionView: View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text(kind == .opinion ? "شكراً لك على إثرائنا ✨" : "شكراً لك على إثراء غرفة الأخبار 📰")
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 19, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
@@ -579,7 +675,7 @@ struct ArticleSubmissionView: View {
                 Text(kind == .opinion
                      ? "وصلت مقالتك إلى فريق التحرير. كل كلمة كتبتها تستحق المراجعة بعناية، وسنبذل جهدنا لإبرازها بأفضل صورة."
                      : "وصل خبرك إلى غرفة الأخبار. كل تفصيلة شاركتها تساعدنا على تقديم تغطية أدق وأسرع لقرائنا.")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
@@ -619,15 +715,15 @@ struct ArticleSubmissionView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 36, height: 36)
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text(desc)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -639,8 +735,15 @@ struct ArticleSubmissionView: View {
     // MARK: - Submit action
 
     private func submit() async {
+        // كاتب رأي بلا يوم أسبوعي محدد: بوابة اختيار اليوم أولاً
+        if kind == .opinion, writerSchedule?.canChoose == true {
+            sabqDismissKeyboard()
+            dayGateShouldContinue = true
+            showDayGate = true
+            return
+        }
         errorMessage = nil
-        focusedField = nil
+        sabqDismissKeyboard()
         screenState = .submitting
         do {
             let resp = try await APIClient.shared.submitArticleDraft(
@@ -668,9 +771,9 @@ struct ArticleSubmissionView: View {
     private func errorBanner(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(SabqTheme.coral)
@@ -700,16 +803,27 @@ struct ArticleSubmissionView: View {
 //     its own selection gestures.
 //   • Forces RTL natural alignment so Arabic caret placement +
 //     selection handles land where the reader expects.
-//   • Bridges first-responder state with SwiftUI's `@FocusState` via
-//     the `isFocused` binding so the keyboard toolbar's "تم" still
-//     dismisses correctly.
+//   • Focus is OWNED BY UIKIT: the user's tap grants it, and
+//     sabqDismissKeyboard() (responder-chain resign) takes it away.
+//     There is deliberately NO @FocusState bridge — FocusState writes
+//     never land inside these sheets on modern iOS, which made SwiftUI
+//     revoke focus after every keystroke (EditorFocus logs, 2026-07-18).
+/// يُسقط الكيبورد عبر سلسلة المستجيبين مباشرة — بديل موثوق عن @FocusState
+/// المعطّل داخل الـ sheets على iOS الحديث (زر «تم»، لمسة الترويسة، والإرسال).
+func sabqDismissKeyboard() {
+    UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+    )
+}
+
 struct SabqRichTextEditor: UIViewRepresentable {
     @Binding var text: String
     var minHeight: CGFloat = 180
-    @Binding var isFocused: Bool
     var font: UIFont
     var textColor: UIColor
     var tintColor: UIColor
+    /// لتلوين إطار الحقل فقط — لا يُستخدم لإدارة التركيز
+    var onEditingChanged: ((Bool) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -742,7 +856,14 @@ struct SabqRichTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: SelfSizingTextView, context: Context) {
-        if uiView.text != text {
+        // Keep the coordinator's copy fresh so its bindings never go stale
+        // across SwiftUI re-renders.
+        context.coordinator.parent = self
+        // لا نكتب فوق نص UITextView إلا إذا تغيّر من خارج المحرر فعلاً
+        // (مسح النموذج بعد الإرسال مثلاً). أثناء الكتابة الحية قد تصل تمريرة
+        // render بقيمة SwiftUI أقدم من حرفٍ كتبه المستخدم للتو — الكتابة
+        // فوقها كانت تمسح الحرف. المرجع الحي أثناء التحرير هو UITextView.
+        if uiView.text != text, !uiView.isFirstResponder {
             uiView.text = text
         }
         if uiView.minimumHeight != minHeight {
@@ -758,14 +879,9 @@ struct SabqRichTextEditor: UIViewRepresentable {
         if uiView.tintColor != tintColor {
             uiView.tintColor = tintColor
         }
-
-        let shouldBeFirstResponder = isFocused
-        let isCurrentlyFirstResponder = uiView.isFirstResponder
-        if shouldBeFirstResponder, !isCurrentlyFirstResponder {
-            DispatchQueue.main.async { uiView.becomeFirstResponder() }
-        } else if !shouldBeFirstResponder, isCurrentlyFirstResponder {
-            DispatchQueue.main.async { uiView.resignFirstResponder() }
-        }
+        // لا إدارة تركيز هنا إطلاقاً: UIKit يملك التركيز (لمسة المستخدم تمنحه،
+        // وsabqDismissKeyboard() يسحبه). @FocusState معطّل داخل هذه الـ sheets
+        // على iOS الحديث وكان الاعتماد عليه يُسقط الكيبورد بعد كل حرف.
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
@@ -783,11 +899,16 @@ struct SabqRichTextEditor: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            if !parent.isFocused { parent.isFocused = true }
+            parent.onEditingChanged?(true)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            if parent.isFocused { parent.isFocused = false }
+            // مزامنة أخيرة عند مغادرة الحقل — تضمن أن SwiftUI ترى آخر نص حتى
+            // لو فاتتها تمريرة أثناء التحرير الحي
+            if parent.text != textView.text {
+                parent.text = textView.text
+            }
+            parent.onEditingChanged?(false)
         }
     }
 
@@ -805,12 +926,20 @@ struct SabqRichTextEditor: UIViewRepresentable {
             return CGSize(width: UIView.noIntrinsicMetric, height: max(minimumHeight, ceil(size.height)))
         }
 
+        private var lastLayoutWidth: CGFloat = 0
+
         override func layoutSubviews() {
             super.layoutSubviews()
             // When the width changes (rotation / split-view), the
             // intrinsic height must be recomputed against the new
-            // wrap point.
-            invalidateIntrinsicContentSize()
+            // wrap point. Only then — invalidating on EVERY layout pass
+            // created a relayout loop that nudged the outer ScrollView
+            // on each keystroke (and with scroll-based keyboard
+            // dismissal, kicked the caret out of the editor).
+            if abs(bounds.width - lastLayoutWidth) > 0.5 {
+                lastLayoutWidth = bounds.width
+                invalidateIntrinsicContentSize()
+            }
         }
     }
 }

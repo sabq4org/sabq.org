@@ -11,13 +11,14 @@
  *
  * ADR-001: هذه الخدمة تملك كل استعلامات Drizzle؛ مسار wcPredictions لا يستورد db.
  */
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { wcPredictions, wcPredictionMatches, users } from "@shared/schema";
 import { getFixtures, type WcFixture } from "./worldCupService";
 import { WC_FINISHED_STATUSES, WC_LIVE_STATUSES } from "./worldCupNames";
 import { awardPoints } from "./loyalty";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
+import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 
 const POINTS_POOL = 500;
 
@@ -84,7 +85,23 @@ export type PredictableMatch = {
 
 export type SubmitResult =
   | { ok: true; prediction: { predHome: number; predAway: number; status: string } }
-  | { ok: false; reason: "NOT_FOUND" | "LOCKED" | "INVALID" };
+  | { ok: false; reason: "NOT_FOUND" | "LOCKED" | "INVALID" | "DRAW_NOT_ALLOWED" };
+
+// مونديال 2026 (48 منتخبًا) يبدأ خروج المغلوب بـ«دور الـ32». المزوّد قد يُذيّل
+// الاسم برقم ("Round of 16 - 1") فنطابق بالبادئة لا بالمساواة فقط.
+const KNOCKOUT_ROUND_PREFIXES = [
+  "Round of 32",
+  "Round of 16",
+  "Quarter-finals",
+  "Semi-finals",
+  "3rd Place Final",
+  "Final",
+];
+
+function isKnockoutFixture(fx: WcFixture): boolean {
+  const round = (fx.roundEn ?? "").trim();
+  return KNOCKOUT_ROUND_PREFIXES.some((prefix) => round === prefix || round.startsWith(prefix));
+}
 
 // ---------------------------------------------------------------------------
 // كتابة التوقّع
@@ -106,6 +123,9 @@ export async function submitPrediction(
   const fx = (await getFixtures()).find((f) => f.id === fixtureId);
   if (!fx) return { ok: false, reason: "NOT_FOUND" };
   if (isLocked(fx)) return { ok: false, reason: "LOCKED" };
+  if (predHome === predAway && isKnockoutFixture(fx)) {
+    return { ok: false, reason: "DRAW_NOT_ALLOWED" };
+  }
 
   // لقطة المباراة (open) — نُحدِّث الأسماء/الموعد دون لمس status كي لا نُحيي
   // مباراة مُسوّاة (مستحيل هنا لأنها مقفلة، لكنه احتياط دفاعي).
@@ -244,6 +264,8 @@ export async function getMyPredictions(userId: string) {
       awayTeamLogo: wcPredictionMatches.awayTeamLogo,
       finalHome: wcPredictionMatches.finalHome,
       finalAway: wcPredictionMatches.finalAway,
+      finalPenHome: wcPredictionMatches.finalPenHome,
+      finalPenAway: wcPredictionMatches.finalPenAway,
       matchStatus: wcPredictionMatches.status,
       winnersCount: wcPredictionMatches.winnersCount,
       pointsPerWinner: wcPredictionMatches.pointsPerWinner,
@@ -275,8 +297,18 @@ export async function getMatchPredictionsSummary(fixtureId: number): Promise<Mat
   };
 }
 
-/** لوحة المتصدّرين — الترتيب بمجموع النقاط المكسوبة ثم عدد الإصابات الدقيقة. */
-export async function getLeaderboard(limit = 100) {
+/**
+ * لوحة المتصدّرين — الترتيب بمجموع النقاط المكسوبة ثم عدد الإصابات الدقيقة.
+ *
+ * حسابات مسؤولي النظام (SUPERUSER_ROLE_NAMES) مخفيّة عن بقية الزوار — حتى لا
+ * تثير الشكوك لو ظهر «مسؤول النظام» متصدّرًا — لكن تبقى ظاهرة لصاحبها نفسه
+ * (viewerUserId) كي لا يفقد ترتيبه الشخصي في بطاقة إحصاءاته.
+ */
+export async function getLeaderboard(limit = 100, viewerUserId?: string) {
+  const visibility = viewerUserId
+    ? or(notInArray(users.role, [...SUPERUSER_ROLE_NAMES]), eq(wcPredictions.userId, viewerUserId))
+    : notInArray(users.role, [...SUPERUSER_ROLE_NAMES]);
+
   const rows = await db
     .select({
       userId: wcPredictions.userId,
@@ -289,6 +321,7 @@ export async function getLeaderboard(limit = 100) {
     })
     .from(wcPredictions)
     .innerJoin(users, eq(wcPredictions.userId, users.id))
+    .where(visibility)
     .groupBy(wcPredictions.userId, users.firstName, users.lastName, users.profileImageUrl)
     .having(sql`count(*) filter (where ${wcPredictions.status} <> 'pending') > 0`)
     .orderBy(
@@ -306,6 +339,62 @@ export async function getLeaderboard(limit = 100) {
     correctCount: Number(r.correctCount),
     playedCount: Number(r.playedCount),
   }));
+}
+
+/**
+ * ميتا اللوحة: العدد الكلي للمشاركين المؤهّلين + صف الزائر ورتبته حتى لو كان
+ * خارج الصفحة المعروضة. الرتبة تنافسية: 1 + عدد من يسبقه بمعياري الترتيب
+ * (النقاط ثم الإصابات الدقيقة) على نفس المجموعة المرئية له.
+ */
+export async function getLeaderboardMeta(viewerUserId?: string) {
+  const visibility = viewerUserId
+    ? or(notInArray(users.role, [...SUPERUSER_ROLE_NAMES]), eq(wcPredictions.userId, viewerUserId))
+    : notInArray(users.role, [...SUPERUSER_ROLE_NAMES]);
+
+  const board = db
+    .select({
+      uid: wcPredictions.userId,
+      pts: sql<number>`coalesce(sum(${wcPredictions.pointsAwarded}), 0)::int`.as("pts"),
+      correct: sql<number>`count(*) filter (where ${wcPredictions.status} = 'correct')::int`.as("correct"),
+    })
+    .from(wcPredictions)
+    .innerJoin(users, eq(wcPredictions.userId, users.id))
+    .where(visibility)
+    .groupBy(wcPredictions.userId)
+    .having(sql`count(*) filter (where ${wcPredictions.status} <> 'pending') > 0`)
+    .as("board");
+
+  const [totals] = await db.select({ total: sql<number>`count(*)::int` }).from(board);
+  const total = Number(totals?.total ?? 0);
+  if (!viewerUserId) return { total, viewer: null };
+
+  const [mine] = await db
+    .select({
+      pts: sql<number>`coalesce(sum(${wcPredictions.pointsAwarded}), 0)::int`,
+      correct: sql<number>`count(*) filter (where ${wcPredictions.status} = 'correct')::int`,
+      played: sql<number>`count(*) filter (where ${wcPredictions.status} <> 'pending')::int`,
+    })
+    .from(wcPredictions)
+    .where(eq(wcPredictions.userId, viewerUserId))
+    .groupBy(wcPredictions.userId)
+    .having(sql`count(*) filter (where ${wcPredictions.status} <> 'pending') > 0`);
+  if (!mine) return { total, viewer: null };
+
+  const [ahead] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(board)
+    .where(sql`${board.pts} > ${mine.pts} or (${board.pts} = ${mine.pts} and ${board.correct} > ${mine.correct})`);
+
+  return {
+    total,
+    viewer: {
+      userId: viewerUserId,
+      rank: Number(ahead?.n ?? 0) + 1,
+      totalPoints: Number(mine.pts),
+      correctCount: Number(mine.correct),
+      playedCount: Number(mine.played),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +448,9 @@ export async function settleFinishedMatches(): Promise<SettlementSummary> {
 
           const finalHome = fx.goals.home as number;
           const finalAway = fx.goals.away as number;
+          // ركلات الترجيح (إن حُسمت بها) — نُخزّنها لإظهار «من تأهّل» في السجلّ.
+          const finalPenHome = fx.penalties?.home ?? null;
+          const finalPenAway = fx.penalties?.away ?? null;
 
           const correctRows = await tx
             .select({ userId: wcPredictions.userId })
@@ -406,6 +498,8 @@ export async function settleFinishedMatches(): Promise<SettlementSummary> {
               status: "settled",
               finalHome,
               finalAway,
+              finalPenHome,
+              finalPenAway,
               winnersCount: n,
               predictionsCount: Number(total ?? 0),
               pointsPerWinner: per,

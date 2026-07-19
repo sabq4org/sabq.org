@@ -1,0 +1,101 @@
+{
+  "packId": "us-nationals",
+  "title": "صحف أمريكية وطنية",
+  "version": 1,
+  "sources": [
+    {
+      "name": "NYT — Home Page",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.2,
+      "notes": "عام — مُختبر 200"
+    },
+    {
+      "name": "NYT — World",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.2
+    },
+    {
+      "name": "NYT — Middle East",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.3
+    },
+    {
+      "name": "USA Today — Top Stories",
+      "url": "https://rssfeeds.usatoday.com/usatoday-NewsTopStories",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.1
+    },
+    {
+      "name": "LA Times — World & Nation",
+      "url": "https://www.latimes.com/world-nation/rss2.0.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.1
+    },
+    {
+      "name": "Guardian — US News",
+      "url": "https://www.theguardian.com/us-news/rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.1
+    },
+    {
+      "name": "NYT — Politics",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.15
+    },
+    {
+      "name": "NYT — Business",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "economy",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.15
+    }
+  ],
+  "xOnlyAlternatives": [
+    { "outlet": "Washington Post", "handle": "@washingtonpost", "reason": "لا RSS عام مستقر" },
+    { "outlet": "Wall Street Journal", "handle": "@WSJ", "reason": "RSS يتطلب اشتراكاً" },
+    { "outlet": "Chicago Tribune", "handle": "@chicagotribune", "reason": "RSS محظور/403" }
+  ]
+}
