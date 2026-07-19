@@ -50,6 +50,7 @@ import {
   type TsTeamStatSide,
 } from "./theSportsService";
 import {
+  SAUDI_CLUB_TEAM_IDS,
   SPL_CITY_AR,
   SPL_POSITION_AR,
   SPL_POSITION_ORDER,
@@ -122,6 +123,9 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 504, slug: "kings-cup", name: "كأس خادم الحرمين الشريفين", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2027, category: "saudi" },
   { id: 826, slug: "super-cup", name: "كأس السوبر السعودي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   { id: 1227, slug: "womens-league", name: "الدوري السعودي الممتاز للسيدات", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2026, category: "saudi" },
+  // ودّيات الأندية (API-Football Club Friendlies ≈ 667). الجدول/اللوحات لا تعرض
+  // كل ودّيات العالم — فقط مباريات فيها نادٍ سعودي (انظر isSaudiClubFriendlyRow).
+  { id: 667, slug: "club-friendlies", name: "مباريات ودّية", type: "cup", hasStandings: false, hasScorers: false, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   // بطولات قارية/عالمية تشارك فيها الأندية السعودية. الترتيب متعدّد المجموعات
   // (AFC: مجموعتان، كأس العالم للأندية: 8 مجموعات) فيُترك hasStandings=false حتى
   // ندعم عرض الترتيب متعدّد المجموعات لاحقًا — المباريات والهدّافون يعملان الآن.
@@ -181,6 +185,7 @@ const COMP_NAME_EN: Record<string, string> = {
   "kings-cup": "King's Cup",
   "super-cup": "Saudi Super Cup",
   "womens-league": "Saudi Women's Premier League",
+  "club-friendlies": "Club Friendlies",
   "world-cup": "World Cup",
   "asian-cup": "Asian Cup",
   "afc-champions-league": "AFC Champions League Elite",
@@ -401,6 +406,55 @@ function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture 
 
 // ---------- المباريات ----------
 
+/** API-Football: Club Friendlies (ودّيات الأندية). */
+export const CLUB_FRIENDLIES_LEAGUE_ID = 667;
+export const CLUB_FRIENDLIES_SLUG = "club-friendlies";
+
+/** ودّية أندية فيها نادٍ سعودي — لا ودّيات المنتخبات (league 10) ولا بقية العالم. */
+export function isSaudiClubFriendlyRow(r: any): boolean {
+  const lg = r?.league ?? {};
+  const leagueId = Number(lg.id) || 0;
+  const leagueName = String(lg.name ?? "");
+  // Friendlies (10) = منتخبات؛ نقبل Club Friendlies أو أي اسم ودّي فيه نادٍ سعودي.
+  if (leagueId === 10) return false;
+  const looksFriendly = leagueId === CLUB_FRIENDLIES_LEAGUE_ID || /friendl/i.test(leagueName);
+  if (!looksFriendly) return false;
+  const homeId = Number(r?.teams?.home?.id) || 0;
+  const awayId = Number(r?.teams?.away?.id) || 0;
+  return SAUDI_CLUB_TEAM_IDS.has(homeId) || SAUDI_CLUB_TEAM_IDS.has(awayId);
+}
+
+/** صفّ ضمن بطولاتنا، مع ترشيح الودّيات على الأندية السعودية فقط. */
+function isTrackedBoardRow(r: any, byId: Map<number, SaudiCompetition>): boolean {
+  if (isSaudiClubFriendlyRow(r)) return true;
+  const id = r?.league?.id;
+  if (!id || !byId.has(id)) return false;
+  // لا تُمرَّر كل Club Friendlies عبر byId — فقط عبر isSaudiClubFriendlyRow.
+  if (id === CLUB_FRIENDLIES_LEAGUE_ID) return false;
+  return true;
+}
+
+function boardItemFromTrackedRow(
+  r: any,
+  byId: Map<number, SaudiCompetition>,
+  tr: FxTranslators,
+): SplLiveBoardItem {
+  if (isSaudiClubFriendlyRow(r)) {
+    const friendly = byId.get(CLUB_FRIENDLIES_LEAGUE_ID);
+    return {
+      ...localizeFixture(r, tr),
+      competition: friendly
+        ? compDisplayName(friendly)
+        : isEnglishSports()
+          ? "Club Friendlies"
+          : "مباريات ودّية",
+      competitionSlug: CLUB_FRIENDLIES_SLUG,
+    };
+  }
+  const comp = byId.get(r.league.id)!;
+  return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
+}
+
 export async function getFixtures(comp: SaudiCompetition, seasonOverride?: number): Promise<SplFixture[]> {
   // المونديال: جدول worldCupService المُكمّل (mergeFullKnockoutSchedule) بدل جدول
   // المزوّد الخام — يُرقّي المتأهلين للأدوار الإقصائية فور حسمهم ويُبقي الخانات
@@ -410,6 +464,24 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
     return getWorldCupMergedFixtures();
   }
   const season = seasonOverride ?? await seasonFor(comp);
+  // ودّيات الأندية: موسم Club Friendlies عالمي ضخم — نافذة ±أيام + فلتر أندية سعودية.
+  if (comp.slug === CLUB_FRIENDLIES_SLUG) {
+    return withSWR(`spl:fixtures:${comp.id}:${season}:saudi-clubs`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
+      const today = riyadhDayFmt.format(new Date());
+      const from = shiftRiyadhDay(today, -14);
+      const to = shiftRiyadhDay(today, 60);
+      const rows = await apiGet("fixtures", {
+        league: comp.id,
+        season,
+        from,
+        to,
+        timezone: TIMEZONE,
+      });
+      const saudi = rows.filter(isSaudiClubFriendlyRow);
+      const tr = await fixtureTranslators(saudi);
+      return saudi.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
+    });
+  }
   return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
     const tr = await fixtureTranslators(rows);
@@ -426,8 +498,9 @@ export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixtur
       live: "all",
       timezone: TIMEZONE,
     });
-    const tr = await fixtureTranslators(rows);
-    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
+    const filtered = comp.slug === CLUB_FRIENDLIES_SLUG ? rows.filter(isSaudiClubFriendlyRow) : rows;
+    const tr = await fixtureTranslators(filtered);
+    return filtered.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
 }
 
@@ -486,12 +559,9 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
   return withSWR(`spl:live:all`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    const ours = rows.filter((r: any) => byId.has(r.league?.id));
+    const ours = rows.filter((r: any) => isTrackedBoardRow(r, byId));
     const tr = await fixtureTranslators(ours);
-    let items = ours.map((r: any): SplLiveBoardItem => {
-      const comp = byId.get(r.league.id)!;
-      return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
-    });
+    let items = ours.map((r: any): SplLiveBoardItem => boardItemFromTrackedRow(r, byId, tr));
     // خليجي 27: جدوله مركّب محليًّا (أساس ثابت + تراكب المزوّدين) — نستبدل صفوف
     // المزوّد الخام بجدولنا كي تصل مبارياته للتنبيهات/السنابات حتى قبل ظهور
     // الموسم لدى API-Football (نفس منطق دمج المونديال في لوحة اليوم).
@@ -570,6 +640,14 @@ const riyadhDayFmt = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+/** إزاحة يوم تقويمي (YYYY-MM-DD) بعدد أيام — لحصر نافذة ودّيات الأندية. */
+function shiftRiyadhDay(ymd: string, deltaDays: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  // ظهر UTC يتجنّب انزلاق التاريخ عند التنسيق بتوقيت الرياض.
+  const utc = Date.UTC(y, m - 1, d, 12, 0, 0) + deltaDays * 86_400_000;
+  return riyadhDayFmt.format(new Date(utc));
+}
+
 /**
  * كل مباريات الأندية السعودية اليوم عبر جميع بطولاتنا — في نداء واحد
  * (fixtures?date=اليوم عالمي ثم نُرشّح على معرّفات بطولاتنا). تشمل المقرّرة
@@ -582,12 +660,9 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
   return withSWR(`spl:today:${dateKey}`, TODAY_TTL, TODAY_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { date: dateKey, timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    const ours = rows.filter((r: any) => byId.has(r.league?.id));
+    const ours = rows.filter((r: any) => isTrackedBoardRow(r, byId));
     const tr = await fixtureTranslators(ours);
-    let items = ours.map((r: any): SplLiveBoardItem => {
-      const comp = byId.get(r.league.id)!;
-      return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
-    });
+    let items = ours.map((r: any): SplLiveBoardItem => boardItemFromTrackedRow(r, byId, tr));
     // المونديال: استبدال صفوف المزوّد الخام بجدول worldCupService المُكمّل ليوم
     // التاريخ نفسه — فتظهر مباريات الأدوار الإقصائية بالمتأهلين المُرقّين ورموز
     // FIFA حتى قبل نشرها من المزوّد (نفس منطق getFixtures للجدول الموحّد).
@@ -872,6 +947,9 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
       const lg = r.league ?? {};
       const id = lg.id;
       if (!id) return false;
+      // ودّيات أندية سعودية فقط — لا كل Club Friendlies العالمية.
+      if (isSaudiClubFriendlyRow(r)) return true;
+      if (id === CLUB_FRIENDLIES_LEAGUE_ID) return false;
       if (byId.has(id)) return true; // بطولاتنا المنتقاة تظهر دائمًا
       const leagueName = String(lg.name ?? "");
       if (NOISE_LEAGUE_RE.test(leagueName)) return false; // ودّيات/احتياط/هواة
@@ -908,6 +986,23 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
     return visible
       .map((r: any): SplWorldLiveItem => {
         const lg = r.league ?? {};
+        if (isSaudiClubFriendlyRow(r)) {
+          const friendly = byId.get(CLUB_FRIENDLIES_LEAGUE_ID);
+          return {
+            ...localizeFixture(r, tr),
+            competition: friendly
+              ? compDisplayName(friendly)
+              : isEnglishSports()
+                ? "Club Friendlies"
+                : "مباريات ودّية",
+            competitionSlug: CLUB_FRIENDLIES_SLUG,
+            country: lg.country ?? "World",
+            countryAr: localizeSplCountry(lg.country ?? "World"),
+            flag: lg.flag ?? null,
+            leagueId: lg.id ?? CLUB_FRIENDLIES_LEAGUE_ID,
+            leagueLogo: lg.logo ?? null,
+          };
+        }
         const known = byId.get(lg.id);
         return {
           ...localizeFixture(r, tr),

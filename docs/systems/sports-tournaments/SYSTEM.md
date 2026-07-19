@@ -1,6 +1,8 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
 > آخر مراجعة: 2026-07-19 | المالك: sports
+>
+> **تغيير العقد (ودّيات):** slug `club-friendlies` يعرض أندية سعودية فقط — انظر القسم أدناه.
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
@@ -33,6 +35,12 @@
 ## بطولات الجدول (VARA)
 - ديفولت أول تثبيت: `pro-league`, `world-cup`, `kings-cup`, `uefa-super-cup`, `la-liga`, `premier-league`.
 - ورقة الإعداد: زر «إلغاء التحديد» يفرّغ المفضّلة؛ لا إعادة إلحاق تلقائي بعد الإلغاء.
+
+## ودّيات الأندية السعودية (2026-07-19)
+- slug: `club-friendlies` (API-Football league ≈ 667).
+- تُعرض فقط مباريات فيها نادٍ من `SAUDI_CLUB_TEAM_IDS` (روشن + يلو + سيدات) — **ليس** كل Club Friendlies العالمية ولا ودّيات المنتخبات (league 10).
+- الحقن من `fixtures?date=` / `live=all` عبر `isSaudiClubFriendlyRow` في `saudiLeagueService`؛ استثناء ضيّق من فلتر الضجيج `NOISE_LEAGUE_RE`.
+- VARA: `club-friendlies` ضمن `saudiSlugs`؛ أندية يلو مضافة إلى `saudiTeamIds`.
 
 ## مركز الانتقالات (سعودية مؤكّدة)
 - مصدر أساسي: API-Football عبر `getLeagueTransfers` — افتراضي `since=4` أشهر (لا 18).

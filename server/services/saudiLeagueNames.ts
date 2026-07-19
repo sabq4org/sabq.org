@@ -133,6 +133,15 @@ export const SPL_DIV1_TEAM_AR: Record<number, string> = {
 };
 
 /**
+ * أندية سعودية (روشن + يلو + سيدات) — لترشيح ودّيات الأندية دون فتح كل
+ * Club Friendlies العالمية. لا يشمل المنتخب (23).
+ */
+export const SAUDI_CLUB_TEAM_IDS: Set<number> = new Set([
+  ...Object.keys(SPL_TEAM_AR).map(Number),
+  ...Object.keys(SPL_DIV1_TEAM_AR).map(Number),
+]);
+
+/**
  * تعريب أندية الدوريات العربية (مصر/المغرب/تونس/الجزائر/العراق/الأردن/لبنان/سوريا).
  * المعرّفات من /teams?league={233,200,202,186,542,387,390,425}&season=2025.
  * تُضاف لاحقة البلد لما يلتبس اسمه بأندية شهيرة (الأهلي/الاتحاد/النصر…).
