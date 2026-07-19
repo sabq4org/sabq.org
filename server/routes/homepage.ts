@@ -8,6 +8,17 @@ import { CACHE_TTL, withSWR } from "../memoryCache";
 
 const router: Router = Router();
 
+// The read-only mirror runs against a hot standby. The full trending query
+// aggregates the complete articles/comments history and can be cancelled by
+// PostgreSQL recovery (40001), which must not hold the critical homepage feed
+// hostage. Trending is non-critical and remains enabled on the primary.
+function getHomepageTrendingTopics() {
+  if (process.env.READ_ONLY_MODE === "true") {
+    return Promise.resolve([]);
+  }
+  return storage.getTrendingTopics();
+}
+
 /**
  * Detects an explicit "give me fresh data, skip the server cache" request.
  * The native iOS app's pull-to-refresh issues the request through an ephemeral
@@ -47,7 +58,7 @@ router.get("/api/homepage", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (req: 
           storage.getBreakingNews(5),
           storage.getEditorPicks(6),
           storage.getDeepDiveArticles(6),
-          storage.getTrendingTopics(),
+          getHomepageTrendingTopics(),
         ]);
 
         const allArticles = [
@@ -251,7 +262,7 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
             .orderBy(desc(articles.publishedAt), desc(articles.views))
             .limit(6),
 
-          storage.getTrendingTopics(),
+          getHomepageTrendingTopics(),
         ]);
 
         type ArticleRow = typeof heroResults[number];

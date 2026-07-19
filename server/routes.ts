@@ -3414,7 +3414,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const cacheKey = `categories:list:${withStats}:${includeIfox}`;
       const ttl = withStats ? CACHE_TTL.SHORT : CACHE_TTL.LONG;
       const result = await withSWR(cacheKey, ttl, ttl * 2, async () => {
-        if (withStats) {
+        if (withStats && process.env.READ_ONLY_MODE === "true") {
+          // The mirror uses a hot standby. Full category statistics aggregate
+          // reactions/bookmarks across the complete history and can be
+          // cancelled by replica recovery, delaying the public homepage for
+          // tens of seconds. Preserve the response shape with lightweight
+          // neutral values; the homepage only needs category metadata.
+          const cats = await storage.getAllCategories({ excludeIfox: !includeIfox });
+          return cats.map((category) => ({
+            ...category,
+            articleCount: 0,
+            totalViews: 0,
+            totalLikes: 0,
+            totalBookmarks: 0,
+            pulsePercent: null,
+            pulseLevel: 'calm' as const,
+            hasPulseData: false,
+          }));
+        } else if (withStats) {
           let cats = await storage.getCategoriesWithStats();
           if (!includeIfox) {
             cats = cats.filter(c => !c.isIfoxCategory);
