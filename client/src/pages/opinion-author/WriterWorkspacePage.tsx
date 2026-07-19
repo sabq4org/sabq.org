@@ -24,6 +24,7 @@ import {
   useIsWriterRail,
   type ScheduleBannerData,
 } from "./WriterPriorityRail";
+import { WriterMediaLicenseCard } from "./WriterMediaLicenseCard";
 import {
   ContributorStatsRow,
   PerformanceChart,
@@ -389,6 +390,7 @@ export default function WriterWorkspacePage() {
           ) : (
             <WriterScheduleBanner />
           )}
+          <WriterMediaLicenseCard />
           {railMode ? (
             <section className="rounded-xl border border-border bg-card p-3" dir="rtl">
               <div className="flex items-center justify-between gap-2">
