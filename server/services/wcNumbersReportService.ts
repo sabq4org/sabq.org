@@ -4,9 +4,9 @@
  * لا يُنشر للعامة حتى تفعيل صريح لاحقاً.
  */
 
-import { and, eq, ilike, like, notIlike, or, sql } from "drizzle-orm";
+import { and, eq, ilike, like, notIlike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { articles, articleTags, tags } from "@shared/schema";
+import { articles, articleTags, categories, tags } from "@shared/schema";
 import { CACHE_TTL, withSWR } from "../memoryCache";
 import {
   detectChampion,
@@ -22,8 +22,17 @@ import { isArabTeam } from "./worldCupNames";
 
 const SLUG_PREFIX = "wc26";
 const WORLD_CUP_NEWS_TERMS = ["مونديال", "كأس العالم"] as const;
+/** بداية نافذة تغطية مونديال 2026 (يستبعد أرشيف 2018/2022 وبطولات أخرى). */
+const WC2026_COVERAGE_START = "2026-01-01T00:00:00+03:00";
 
 export type WcNumbersReportStatus = "draft" | "published";
+
+export type SabqCoverageBreakdown = {
+  /** مواد غرفة المباريات الحتمية: wc26-preview-* / wc26-report-* / wc26-* */
+  matchDesk: number;
+  /** مواد تحريرية في قسم الرياضة ضمن نافذة 2026 بعد استبعاد الضوضاء */
+  editorialWindow: number;
+};
 
 export type SabqCoverageStats = {
   totalArticles: number;
@@ -36,6 +45,8 @@ export type SabqCoverageStats = {
   opinions: number;
   totalViews: number;
   avgViews: number;
+  breakdown: SabqCoverageBreakdown;
+  methodology: string[];
   topArticles: Array<{
     id: string;
     title: string;
@@ -117,24 +128,85 @@ function worldCupKeywordPredicate() {
   )!;
 }
 
-function wcArticlesWhere() {
+function matchDeskSlugPredicate() {
+  return or(
+    like(articles.slug, `${SLUG_PREFIX}-%`),
+    like(articles.legacySlug, `${SLUG_PREFIX}-%`),
+  )!;
+}
+
+/** استبعاد كأس العالم للأندية وأي صيغة شائعة لها. */
+function excludeClubWorldCupNoise() {
+  return and(
+    notIlike(articles.title, "%للأندية%"),
+    notIlike(articles.title, "%مونديال الأندية%"),
+    notIlike(articles.title, "%كأس العالم للأندية%"),
+    notIlike(articles.title, "%club world%"),
+  )!;
+}
+
+/**
+ * يستبعد عناوين تشير لمونديالات سابقة (2010/2014/2018/2022)
+ * ما لم تذكر 2026 صراحةً.
+ */
+function excludeLegacyWorldCupYears() {
+  return sql`(
+    ${articles.title} NOT ~* '(^|[^0-9])(2010|2014|2018|2022)([^0-9]|$)'
+    OR ${articles.title} ILIKE '%2026%'
+  )`;
+}
+
+async function getSportsCategoryId(): Promise<string | null> {
+  const [row] = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(eq(categories.slug, "sports"))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
+ * مواد مونديال 2026 فقط:
+ * 1) slug حتمي wc26-* (غرفة المباريات)
+ * 2) تحريري: قسم الرياضة + كلمة مونديال/كأس العالم + نُشر منذ 2026-01-01
+ *    مع استبعاد أندية + سنوات مونديالات سابقة
+ */
+async function wcArticlesWhere(): Promise<SQL | undefined> {
+  const sportsId = await getSportsCategoryId().catch(() => null);
+  const editorial2026 =
+    sportsId != null
+      ? and(
+          eq(articles.categoryId, sportsId),
+          worldCupKeywordPredicate(),
+          sql`${articles.publishedAt} >= ${WC2026_COVERAGE_START}::timestamptz`,
+          excludeClubWorldCupNoise(),
+          excludeLegacyWorldCupYears(),
+        )
+      : undefined;
+
   return and(
     eq(articles.status, "published"),
-    or(
-      like(articles.slug, `${SLUG_PREFIX}-%`),
-      like(articles.legacySlug, `${SLUG_PREFIX}-%`),
-      worldCupKeywordPredicate(),
-    )!,
-    notIlike(articles.title, "%للأندية%"),
+    editorial2026
+      ? or(matchDeskSlugPredicate(), editorial2026)!
+      : matchDeskSlugPredicate(),
   );
 }
 
+const COVERAGE_METHODOLOGY = [
+  "المؤكّد: مواد slug تبدأ بـ wc26- (معاينات/تقارير غرفة مباريات المونديال).",
+  "التحريري: قسم الرياضة + (مونديال أو كأس العالم) في العنوان/SEO/وسم، ونُشرت منذ 2026-01-01.",
+  "مستبعد: كأس العالم للأندية، وعناوين تشير لـ 2010/2014/2018/2022 بلا ذكر 2026.",
+  "لا يُحسب أرشيف المونديالات السابقة ولا المواد خارج قسم الرياضة.",
+] as const;
+
 async function buildSabqCoverage(): Promise<SabqCoverageStats> {
-  const where = wcArticlesWhere();
+  const where = await wcArticlesWhere();
+  const slugPred = matchDeskSlugPredicate();
 
   const [agg] = await db
     .select({
       total: sql<number>`count(*)::int`,
+      matchDesk: sql<number>`count(*) filter (where ${slugPred})::int`,
       aiGenerated: sql<number>`count(*) filter (where ${articles.aiGenerated} = true)::int`,
       previews: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-preview-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-preview-%`})::int`,
       matchReports: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-report-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-report-%`})::int`,
@@ -175,6 +247,7 @@ async function buildSabqCoverage(): Promise<SabqCoverageStats> {
     .orderBy(sql`to_char(timezone('Asia/Riyadh', ${articles.publishedAt}), 'YYYY-MM-DD')`);
 
   const total = Number(agg?.total ?? 0);
+  const matchDesk = Number(agg?.matchDesk ?? 0);
   const totalViews = Number(agg?.totalViews ?? 0);
   const aiGenerated = Number(agg?.aiGenerated ?? 0);
 
@@ -189,6 +262,11 @@ async function buildSabqCoverage(): Promise<SabqCoverageStats> {
     opinions: Number(agg?.opinions ?? 0),
     totalViews,
     avgViews: total > 0 ? Math.round(totalViews / total) : 0,
+    breakdown: {
+      matchDesk,
+      editorialWindow: Math.max(total - matchDesk, 0),
+    },
+    methodology: [...COVERAGE_METHODOLOGY],
     topArticles: top.map((a) => ({
       id: a.id,
       title: a.title,
@@ -352,10 +430,10 @@ function buildStoryBeats(sabq: SabqCoverageStats, tournament: TournamentStats): 
   const champ = tournament.champion?.team?.name;
   return [
     {
-      label: "مواد سبق",
+      label: "مواد مونديال 2026",
       value: String(sabq.totalArticles),
       numericValue: sabq.totalArticles,
-      detail: `${sabq.matchReports} تقرير مباراة · ${sabq.previews} معاينة`,
+      detail: `${sabq.breakdown.matchDesk} غرفة مباريات · ${sabq.breakdown.editorialWindow} تحريري 2026`,
     },
     {
       label: "مشاهدات التغطية",
@@ -382,7 +460,7 @@ function buildStoryBeats(sabq: SabqCoverageStats, tournament: TournamentStats): 
 
 export async function getWcNumbersReport(): Promise<WcNumbersReport> {
   return withSWR(
-    "blocks:wc:numbers-report:v1",
+    "blocks:wc:numbers-report:v2",
     CACHE_TTL.MEDIUM,
     CACHE_TTL.MEDIUM * 2,
     async () => {
@@ -401,7 +479,7 @@ export async function getWcNumbersReport(): Promise<WcNumbersReport> {
         generatedAt: new Date().toISOString(),
         headline,
         subtitle:
-          "مسودة تفاعلية داخلية: أرقام تغطية سبق + نبض البطولة. للمراجعة قبل أي نشر عام.",
+          "مسودة داخلية: عدّاد المواد مضيّق على مونديال 2026 فقط (wc26-* + تحريري رياضة منذ 2026) — راجع المنهجية قبل النشر.",
         sabq,
         tournament,
         platform: platformHighlights(),

@@ -43,6 +43,8 @@ type Report = {
     opinions: number;
     totalViews: number;
     avgViews: number;
+    breakdown: { matchDesk: number; editorialWindow: number };
+    methodology: string[];
     topArticles: Array<{
       id: string;
       title: string;
@@ -560,8 +562,35 @@ export default function Wc2026NumbersReportPage() {
 
                 {tab === "sabq" && (
                   <div className="space-y-6">
+                    <div className="rounded-3xl border border-sky-400/20 bg-sky-500/10 p-5">
+                      <h2 className="mb-2 text-lg font-bold text-white">كيف يُحسب العدد؟</h2>
+                      <p className="mb-3 text-sm text-sky-50/80">
+                        الرقم السابق (~آلاف) كان يلتقط أي ذكر لـ«مونديال/كأس العالم» عبر السنين.
+                        العدّاد الآن مضيّق على مونديال 2026 فقط:
+                      </p>
+                      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-black/20 px-4 py-3">
+                          <p className="text-xs text-white/50">غرفة المباريات (wc26-*)</p>
+                          <p className="text-2xl font-black text-amber-200">
+                            {(data.sabq.breakdown?.matchDesk ?? 0).toLocaleString("en-US")}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-black/20 px-4 py-3">
+                          <p className="text-xs text-white/50">تحريري رياضة منذ 2026-01-01</p>
+                          <p className="text-2xl font-black text-sky-200">
+                            {(data.sabq.breakdown?.editorialWindow ?? 0).toLocaleString("en-US")}
+                          </p>
+                        </div>
+                      </div>
+                      <ul className="space-y-1.5 text-xs text-white/60">
+                        {(data.sabq.methodology ?? []).map((line) => (
+                          <li key={line}>• {line}</li>
+                        ))}
+                      </ul>
+                    </div>
+
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <StatOrb label="إجمالي المواد" value={data.sabq.totalArticles} accent="#f59e0b" />
+                      <StatOrb label="إجمالي مونديال 2026" value={data.sabq.totalArticles} accent="#f59e0b" />
                       <StatOrb label="معاينات مباريات" value={data.sabq.previews} accent="#38bdf8" />
                       <StatOrb label="تقارير مباريات" value={data.sabq.matchReports} accent="#22c55e" />
                       <StatOrb
