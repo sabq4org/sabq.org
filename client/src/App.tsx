@@ -286,6 +286,7 @@ const SuspiciousWordsManagement = lazy(() => retryImport(() => import("@/pages/a
 const StoryAdmin = lazy(() => retryImport(() => import("@/pages/StoryAdmin")));
 const SystemSettings = lazy(() => retryImport(() => import("@/pages/SystemSettings")));
 const SportsTournamentsAdmin = lazy(() => retryImport(() => import("@/pages/dashboard/SportsTournamentsAdmin")));
+const Wc2026NumbersReportPage = lazy(() => retryImport(() => import("@/pages/dashboard/Wc2026NumbersReportPage")));
 const AutoImageSettings = lazy(() => retryImport(() => import("@/pages/AutoImageSettings")));
 const FocalPointDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/FocalPointDashboard")));
 const EditorAlertsSettings = lazy(() => retryImport(() => import("@/pages/dashboard/EditorAlertsSettings")));
@@ -1177,6 +1178,7 @@ function Router() {
         <Route path="/dashboard/story-admin">{() => <LazyRoute component={StoryAdmin} />}</Route>
         <Route path="/dashboard/system-settings">{() => <LazyRoute component={SystemSettings} />}</Route>
         <Route path="/dashboard/sports-tournaments">{() => <LazyRoute component={SportsTournamentsAdmin} />}</Route>
+        <Route path="/dashboard/wc-2026-numbers-report">{() => <LazyRoute component={Wc2026NumbersReportPage} />}</Route>
         <Route path="/dashboard/auto-image-settings">{() => <LazyRoute component={AutoImageSettings} />}</Route>
         <Route path="/dashboard/focal-points">{() => <LazyRoute component={FocalPointDashboard} />}</Route>
         <Route path="/dashboard/editor-alerts">{() => <LazyRoute component={EditorAlertsSettings} />}</Route>

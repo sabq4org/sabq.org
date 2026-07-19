@@ -5,6 +5,12 @@
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
 
+## تقرير كأس العالم 2026 بالأرقام (مسودة داخلية)
+- **لوحة:** `/dashboard/wc-2026-numbers-report` — للمراجعة قبل أي نشر عام (ليست صفحة زائر).
+- **API:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `Cache-Control: private, no-store`.
+- **خدمة:** `server/services/wcNumbersReportService.ts` — يجمع تغطية سبق (`wc26-*` + كلمات مونديال) + إحصائيات البطولة من `worldCupService` (بطل، أهداف، هدّافون، بطاقات، عرب) مع كاش SWR `blocks:wc:numbers-report:v1`.
+- **الحالة:** `status: "draft"` دائماً حتى يُقرَّر مسار نشر عام لاحقاً.
+
 ## مفاتيح AI (حصرية)
 `world-cup-news`, `sportmonks-news`, `kings-cup-news`, `saudi-league-story`, `saudi-league-preview`, `sports-names`, `sports-snaps`, `sports-intel-trends`, `sports-intel-prediction`, `sports-intel-scene`, `sports-intel-digest`, `sports-intel-copilot`, `sports-intel-match-pre`, `sports-intel-match-live`, `sports-intel-match-post`
 

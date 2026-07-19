@@ -1101,6 +1101,15 @@ export const navConfig: NavItem[] = [
         permissions: ["system.manage_settings"],
       },
       {
+        id: "wc_2026_numbers_report",
+        labelKey: "nav.wc_2026_numbers_report",
+        labelAr: "تقرير المونديال بالأرقام (مسودة)",
+        path: "/dashboard/wc-2026-numbers-report",
+        icon: Trophy,
+        roles: ["admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
         id: "admin_tools",
         labelKey: "nav.admin_tools",
         labelAr: "أدوات الإدارة",

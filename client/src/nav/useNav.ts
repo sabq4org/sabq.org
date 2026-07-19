@@ -151,6 +151,7 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
       "audits",
       "system_settings",
       "sports_tournaments",
+      "wc_2026_numbers_report",
       "admin_tools",
       "systems_catalog",
       "ai_hub",
