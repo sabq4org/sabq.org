@@ -11,7 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useCanonical } from "@/hooks/useCanonical";
 import { prefetchArticleDetail, prefetchCategoryPage, prefetchHomeSections, prefetchWhenIdle } from "@/lib/prefetchRoute";
 import { readHomepageCache, writeHomepageCache } from "@/lib/homepageCache";
-import type { ArticleWithDetails, CategoryWithStats, SmartBlock } from "@shared/schema";
+import type { ArticleWithDetails, CategoryWithStats } from "@shared/schema";
 import type { User } from "@/hooks/useAuth";
 
 // === CRITICAL PATH (Eager) - Above the fold content ===
@@ -45,71 +45,10 @@ const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/King
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
-const SmartNewsBlock = lazyNamed(() => import("@/components/SmartNewsBlock"), "SmartNewsBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
-type HomepageSmartBlock = SmartBlock & {
-  articles?: Array<{
-    id: string;
-    title: string;
-    slug: string;
-    englishSlug?: string | null;
-    publishedAt?: string | null;
-    imageUrl?: string | null;
-    thumbnailUrl?: string | null;
-    infographicBannerUrl?: string | null;
-    excerpt?: string | null;
-    views?: number;
-    category?: { nameAr?: string; slug: string; color: string | null } | null;
-  }>;
-};
-
-type HomepageSmartBlocksBundle = {
-  byPlacement: Record<string, HomepageSmartBlock[]>;
-  blockCount: number;
-};
-
-/** طلب واحد + مقالات مضمّنة — بدل 4 قوائم + N استعلامات مقالات */
-function useHomepageSmartBlocks() {
-  return useQuery<HomepageSmartBlocksBundle>({
-    queryKey: ["/api/smart-blocks/homepage"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/smart-blocks/homepage"), {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch smart blocks homepage bundle");
-      return res.json();
-    },
-    staleTime: 60 * 1000,
-  });
-}
-
-function SmartBlocksSlot({
-  blocks,
-}: {
-  blocks: HomepageSmartBlock[] | undefined;
-}) {
-  const list = Array.isArray(blocks) ? blocks : [];
-  if (list.length === 0) return null;
-  return (
-    <>
-      {list.map((block) => (
-        <ErrorBoundary key={block.id} fallback={null}>
-          <Suspense fallback={null}>
-            <SmartNewsBlock
-              config={block}
-              initialArticles={
-                Array.isArray(block.articles)
-                  ? (block.articles as any[])
-                  : []
-              }
-            />
-          </Suspense>
-        </ErrorBoundary>
-      ))}
-    </>
-  );
-}
+// Smart Blocks: معطّلة على واجهة الزائر حالياً (لوحة التحكم فقط).
+// لا تستدعِ /api/smart-blocks/homepage من الصفحة الرئيسية حتى إعادة التفعيل.
 
 function SectionSkeleton({ height = 200 }: { height?: number }) {
   return <div className="animate-pulse bg-muted/30 rounded-lg" style={{ height }} />;
@@ -235,9 +174,6 @@ export default function Home() {
 
   // DMS Ad tracking for homepage
   useAdTracking('Homepage');
-
-  const { data: smartBlocksBundle } = useHomepageSmartBlocks();
-  const smartBlocksByPlacement = smartBlocksBundle?.byPlacement;
   
   const { data: user } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
@@ -579,9 +515,6 @@ export default function Home() {
               <AdSlot slotId="header-banner" className="w-full" />
             </>
           )}
-
-          {/* Smart Blocks Stage: below_featured */}
-          <SmartBlocksSlot blocks={smartBlocksByPlacement?.below_featured} />
         </div>
 
         {/* AI Section with soft gradient background - Lazy loaded */}
@@ -599,9 +532,6 @@ export default function Home() {
         </LazySection>
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks Stage: above_all_news */}
-          <SmartBlocksSlot blocks={smartBlocksByPlacement?.above_all_news} />
-
           {/* All News Section */}
           {homepage.forYou && homepage.forYou.length > 0 && (
             <div className="scroll-fade-in">
@@ -626,11 +556,6 @@ export default function Home() {
         <LazySection>
           <TrendingWeekSection />
         </LazySection>
-
-        {/* Smart Blocks Stage: between_all_and_murqap */}
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-4">
-          <SmartBlocksSlot blocks={smartBlocksByPlacement?.between_all_and_murqap} />
-        </div>
 
         {/* Muqtarab Topics Showcase - Featured topics from angles */}
         <LazySection>
@@ -683,11 +608,6 @@ export default function Home() {
             </div>
           </LazySection>
         )}
-
-        {/* Smart Blocks Stage: above_footer */}
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-6">
-          <SmartBlocksSlot blocks={smartBlocksByPlacement?.above_footer} />
-        </div>
       </main>
       
       <Footer />

@@ -8,13 +8,11 @@ import { ArrowRight, Clock, Eye, TrendingUp, Flame, Zap } from "lucide-react";
 import { UrduLayout } from "@/components/ur/UrduLayout";
 import { UrduHeroCarousel } from "@/components/ur/UrduHeroCarousel";
 import { UrduQuadCategoriesBlock } from "@/components/ur/UrduQuadCategoriesBlock";
-import { UrduSmartNewsBlock } from "@/components/ur/UrduSmartNewsBlock";
 import { UrduSmartSummaryBlock } from "@/components/ur/UrduSmartSummaryBlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
-import type { UrArticleWithDetails, UrSmartBlock } from "@shared/schema";
+import type { UrArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -24,8 +22,6 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   const diffInHours = (now.getTime() - published.getTime()) / (1000 * 60 * 60);
   return diffInHours <= 3;
 };
-
-type UrHomepageBlock = UrSmartBlock & { articles?: any[] };
 
 export default function UrduHome() {
   const { user } = useAuth();
@@ -37,19 +33,7 @@ export default function UrduHome() {
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 
-  const { data: smartBundle } = useQuery<{ byPlacement: Record<string, UrHomepageBlock[]> }>({
-    queryKey: ["/api/ur/smart-blocks/homepage"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/ur/smart-blocks/homepage"), { credentials: "include" });
-      if (!res.ok) return { byPlacement: {} };
-      return res.json();
-    },
-    staleTime: 60 * 1000,
-  });
-  const blocksBelowFeatured = smartBundle?.byPlacement?.below_featured;
-  const blocksAboveAllNews = smartBundle?.byPlacement?.above_all_news;
-  const blocksBetweenAllAndMurqap = smartBundle?.byPlacement?.between_all_and_murqap;
-  const blocksAboveFooter = smartBundle?.byPlacement?.above_footer;
+  // Smart blocks: disabled on public homepage (dashboard only).
 
   // Separate featured and regular articles
   const featuredArticles = articles.filter(article => article.isFeatured && article.status === "published");
@@ -81,10 +65,6 @@ export default function UrduHome() {
             </div>
           )}
 
-          {/* Smart Blocks: below_featured */}
-          {blocksBelowFeatured && blocksBelowFeatured.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
-          ))}
         </div>
 
         {/* Smart Summary Block - Only for authenticated users */}
@@ -99,11 +79,6 @@ export default function UrduHome() {
         )}
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: above_all_news */}
-          {blocksAboveAllNews && blocksAboveAllNews.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
-          ))}
-
           {/* Latest Articles Section */}
           {regularArticles.length > 0 && (
             <div className="scroll-fade-in">
@@ -302,11 +277,6 @@ export default function UrduHome() {
         </div>
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: between_all_and_murqap */}
-          {blocksBetweenAllAndMurqap && blocksBetweenAllAndMurqap.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
-          ))}
-
           {/* Empty State */}
           {articles.length === 0 && (
             <Card className="p-12 text-center">
@@ -318,11 +288,6 @@ export default function UrduHome() {
               </Link>
             </Card>
           )}
-
-          {/* Smart Blocks: above_footer */}
-          {blocksAboveFooter && blocksAboveFooter.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
-          ))}
         </div>
       </main>
 

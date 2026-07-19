@@ -8,14 +8,12 @@ import { ArrowRight, Clock, Eye, Star, TrendingUp, User, Flame, Zap } from "luci
 import { EnglishLayout } from "@/components/en/EnglishLayout";
 import { EnglishHeroCarousel } from "@/components/en/EnglishHeroCarousel";
 import { EnglishQuadCategoriesBlock } from "@/components/en/EnglishQuadCategoriesBlock";
-import { EnglishSmartNewsBlock } from "@/components/en/EnglishSmartNewsBlock";
 import { EnglishSmartSummaryBlock } from "@/components/en/EnglishSmartSummaryBlock";
 import { EnglishFooter } from "@/components/en/EnglishFooter";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
-import type { EnArticleWithDetails, EnSmartBlock } from "@shared/schema";
+import type { EnArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -25,8 +23,6 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   const diffInHours = (now.getTime() - published.getTime()) / (1000 * 60 * 60);
   return diffInHours <= 3;
 };
-
-type EnHomepageBlock = EnSmartBlock & { articles?: any[] };
 
 export default function EnglishHome() {
   const { user } = useAuth();
@@ -38,20 +34,7 @@ export default function EnglishHome() {
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 
-  // طلب واحد بدل 4 قوائم + N مقالات
-  const { data: smartBundle } = useQuery<{ byPlacement: Record<string, EnHomepageBlock[]> }>({
-    queryKey: ["/api/en/smart-blocks/homepage"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/en/smart-blocks/homepage"), { credentials: "include" });
-      if (!res.ok) return { byPlacement: {} };
-      return res.json();
-    },
-    staleTime: 60 * 1000,
-  });
-  const blocksBelowFeatured = smartBundle?.byPlacement?.below_featured;
-  const blocksAboveAllNews = smartBundle?.byPlacement?.above_all_news;
-  const blocksBetweenAllAndMurqap = smartBundle?.byPlacement?.between_all_and_murqap;
-  const blocksAboveFooter = smartBundle?.byPlacement?.above_footer;
+  // Smart blocks: disabled on public homepage (dashboard only).
 
   // Separate featured and regular articles
   const featuredArticles = articles.filter(article => article.isFeatured && article.status === "published");
@@ -82,15 +65,6 @@ export default function EnglishHome() {
               <EnglishHeroCarousel articles={featuredArticles} />
             </div>
           )}
-
-          {/* Smart Blocks: below_featured */}
-          {blocksBelowFeatured && blocksBelowFeatured.map((block) => (
-            <EnglishSmartNewsBlock
-              key={block.id}
-              config={block}
-              initialArticles={Array.isArray(block.articles) ? block.articles : []}
-            />
-          ))}
         </div>
 
         {/* Smart Summary Block - Only for authenticated users */}
@@ -105,15 +79,6 @@ export default function EnglishHome() {
         )}
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: above_all_news */}
-          {blocksAboveAllNews && blocksAboveAllNews.map((block) => (
-            <EnglishSmartNewsBlock
-              key={block.id}
-              config={block}
-              initialArticles={Array.isArray(block.articles) ? block.articles : []}
-            />
-          ))}
-
           {/* Latest Articles Section */}
           {regularArticles.length > 0 && (
             <div className="scroll-fade-in">
@@ -290,15 +255,6 @@ export default function EnglishHome() {
         </div>
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: between_all_and_murqap */}
-          {blocksBetweenAllAndMurqap && blocksBetweenAllAndMurqap.map((block) => (
-            <EnglishSmartNewsBlock
-              key={block.id}
-              config={block}
-              initialArticles={Array.isArray(block.articles) ? block.articles : []}
-            />
-          ))}
-
           {/* Empty State */}
           {articles.length === 0 && (
             <Card className="p-12 text-center">
@@ -310,15 +266,6 @@ export default function EnglishHome() {
               </Link>
             </Card>
           )}
-
-          {/* Smart Blocks: above_footer */}
-          {blocksAboveFooter && blocksAboveFooter.map((block) => (
-            <EnglishSmartNewsBlock
-              key={block.id}
-              config={block}
-              initialArticles={Array.isArray(block.articles) ? block.articles : []}
-            />
-          ))}
         </div>
       </main>
 

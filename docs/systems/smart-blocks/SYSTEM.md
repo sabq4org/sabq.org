@@ -11,13 +11,12 @@
 - داخل النطاق:
   - جداول `smart_blocks` / `en_smart_blocks` / `ur_smart_blocks`
   - API تحت `/api/smart-blocks` و`/api/en|ur/smart-blocks`
-  - مكوّنات العرض `SmartNewsBlock` (+ EN/UR)
+  - مكوّنات العرض `SmartNewsBlock` (+ EN/UR) — جاهزة لكن **غير موصولة** بالصفحة العامة
   - لوحة `/dashboard/smart-blocks` (مسرح الصفحة)
-  - ربط الصفحة الرئيسية العربية `Home.tsx`
-- خارج النطاق:
+- خارج النطاق / معطّل حالياً:
+  - **عرض البلوكات على واجهة الزائر** (Home عربي/EN/UR) — معطّل عمداً حتى إعادة التفعيل
   - بلوك الحج `hajj_block_config` (نظام موسمي منفصل)
-  - Quad Categories / PersonalizedFeed
-  - تطبيقات الموبايل (لا تستهلك البلوكات حالياً)
+  - تطبيقات الموبايل
 
 ## نقاط الدخول
 
