@@ -6980,6 +6980,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const userId = req.user?.id;
 
       const reporterAlias = aliasedTable(users, 'reporter');
+      const submitterAlias = aliasedTable(users, 'submitter');
 
       const [result] = await db
         .select({
@@ -7001,11 +7002,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             lastNameEn: reporterAlias.lastNameEn,
             email: reporterAlias.email,
           },
+          submitter: {
+            id: submitterAlias.id,
+            firstName: submitterAlias.firstName,
+            lastName: submitterAlias.lastName,
+            firstNameEn: submitterAlias.firstNameEn,
+            lastNameEn: submitterAlias.lastNameEn,
+            email: submitterAlias.email,
+          },
         })
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
         .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
+        .leftJoin(submitterAlias, eq(articles.submitterId, submitterAlias.id))
         .leftJoin(publishers, eq(articles.publisherId, publishers.id))
         .where(eq(articles.id, articleId))
         .limit(1);
@@ -7034,13 +7044,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      // لمقالات الرأي: authorId = كاتب الرأي الظاهر للقارئ، وsubmitterId = من أدخل المادة.
+      // لا نُرجع author كـ enteredBy حتى لا يُعرض الكاتب على أنه «المحرر».
+      const isOpinion = result.article.articleType === "opinion";
+      const enteredBy = result.submitter?.id
+        ? result.submitter
+        : isOpinion
+          ? null
+          : result.author;
+
       res.json({
         ...result.article,
         category: result.category,
         author: result.reporter || result.author,
         reporter: result.reporter,
-        // Editor who entered the article (authorId) — used by the editor banner
-        enteredBy: result.author,
+        opinionAuthor: isOpinion ? result.author : null,
+        enteredBy,
       });
     } catch (error) {
       console.error("Error fetching article:", error);
@@ -7133,7 +7152,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
 
-        // Use the selected opinion author as the authorId
+        // Use the selected opinion author as the authorId (public byline).
+        // Preserve the logged-in editor as submitterId so the editor banner
+        // can distinguish «من أدخل المادة» عن «كاتب الرأي».
         authorId = opinionAuthorId;
       }
 
@@ -7195,6 +7216,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...parsed.data,
         authorId,
       };
+
+      // Opinion: authorId may be the writer; track the entering editor separately.
+      if (
+        parsed.data.articleType === "opinion" &&
+        authorId !== req.user.id &&
+        !articleData.submitterId
+      ) {
+        articleData.submitterId = req.user.id;
+      }
 
       // Contributor creation can save and submit in one request. Without
       // this, the client navigates away believing the new article is pending
@@ -7749,8 +7779,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
 
-        // Update authorId for opinion articles
+        // Update authorId for opinion articles (public byline = writer).
+        // If no submitter yet, keep the entering editor (current user or previous authorId).
         updateData.authorId = opinionAuthorId;
+        if (!existingArticle.submitterId) {
+          if (req.user.id !== opinionAuthorId) {
+            updateData.submitterId = req.user.id;
+          } else if (
+            existingArticle.authorId &&
+            existingArticle.authorId !== opinionAuthorId
+          ) {
+            updateData.submitterId = existingArticle.authorId;
+          }
+        }
         console.log('[UPDATE ARTICLE] Updated authorId for opinion article:', opinionAuthorId);
       }
 
@@ -15798,9 +15839,13 @@ Respond in valid JSON format only:
         reporter = reporterData || null;
       }
 
-      // Fetch author info (the editor who entered the article)
+      // من أدخل المادة: submitter أولاً. لمقالات الرأي لا نستخدم authorId هنا
+      // لأن authorId = كاتب الرأي الظاهر للقارئ.
       let enteredBy = null;
-      if (article.authorId) {
+      const enteredById =
+        article.submitterId ||
+        (article.articleType === "opinion" ? null : article.authorId);
+      if (enteredById) {
         const [authorData] = await db
           .select({
             id: users.id,
@@ -15809,7 +15854,7 @@ Respond in valid JSON format only:
             email: users.email,
           })
           .from(users)
-          .where(eq(users.id, article.authorId))
+          .where(eq(users.id, enteredById))
           .limit(1);
         enteredBy = authorData || null;
       }

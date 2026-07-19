@@ -2679,50 +2679,73 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               const sourceMetadata = (article as any)?.sourceMetadata;
               const reporter = (article as any)?.reporter;
               const enteredBy = (article as any)?.enteredBy;
-              
-              // Priority: 1. sourceMetadata.senderName (email/WhatsApp) 
-              //           2. reporter from users table (if not generic)
-              //           3. author from users table (the person who entered via editor)
-              let enteredByName = null;
-              let sourceType = null;
-              
-              // Helper to check if name is generic (should be skipped)
+              const isOpinionArticle = articleType === "opinion";
+
+              // Priority: 1. sourceMetadata.senderName (email/WhatsApp)
+              //           2. for news: reporter (byline field) — skip for opinion
+              //           3. enteredBy = submitter / editor who entered (never opinion author)
+              let enteredByName: string | null = null;
+              let sourceType: string | null = null;
+
               const isGenericName = (name: string) => {
-                const genericNames = ['صحيفة سبق', 'سبق', 'صحيفة'];
+                const genericNames = ["صحيفة سبق", "سبق", "صحيفة"];
                 return genericNames.includes(name?.trim());
               };
-              
+
               if (sourceMetadata?.senderName) {
                 enteredByName = sourceMetadata.senderName;
-                // Check both 'type' and 'source' fields for compatibility
                 const entryMethod = sourceMetadata.type || sourceMetadata.source;
-                sourceType = entryMethod === 'whatsapp' ? 'عبر الواتساب' : 
-                             entryMethod === 'email' ? 'عبر البريد الذكي' : null;
-              } else if (reporter?.firstName || reporter?.lastName) {
-                const fullName = [reporter.firstName, reporter.lastName].filter(Boolean).join(' ');
+                sourceType =
+                  entryMethod === "whatsapp"
+                    ? "عبر الواتساب"
+                    : entryMethod === "email"
+                      ? "عبر البريد الذكي"
+                      : null;
+              } else if (
+                !isOpinionArticle &&
+                (reporter?.firstName || reporter?.lastName)
+              ) {
+                const fullName = [reporter.firstName, reporter.lastName]
+                  .filter(Boolean)
+                  .join(" ");
                 if (fullName && !isGenericName(fullName)) {
                   enteredByName = fullName;
+                  sourceType = "المراسل";
                 }
               }
-              
-              // Fallback to enteredBy (author) if no reporter name found
+
               if (!enteredByName && (enteredBy?.firstName || enteredBy?.lastName)) {
-                const authorName = [enteredBy.firstName, enteredBy.lastName].filter(Boolean).join(' ');
-                if (authorName && !isGenericName(authorName)) {
-                  enteredByName = authorName;
-                  sourceType = 'المحرر';
+                const editorName = [enteredBy.firstName, enteredBy.lastName]
+                  .filter(Boolean)
+                  .join(" ");
+                if (editorName && !isGenericName(editorName)) {
+                  enteredByName = editorName;
+                  sourceType = "المحرر";
                 }
               }
-              
+
               if (!enteredByName) return null;
-              
+
               return (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-card border border-blue-200 dark:border-border rounded-lg text-sm">
-                  <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-blue-700 dark:text-blue-300">
-                    تم إدخال الخبر بواسطة: <strong>{enteredByName}</strong>
-                    {sourceType && <span className="text-blue-500 dark:text-blue-400 mr-2">({sourceType})</span>}
-                  </span>
+                <div className="flex flex-col gap-1 p-3 bg-blue-50 dark:bg-card border border-blue-200 dark:border-border rounded-lg text-sm">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="text-blue-700 dark:text-blue-300">
+                      أُدخلت المادة في النظام بواسطة:{" "}
+                      <strong>{enteredByName}</strong>
+                      {sourceType && (
+                        <span className="text-blue-500 dark:text-blue-400 mr-2">
+                          ({sourceType})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {isOpinionArticle && (
+                    <p className="text-xs text-blue-600/80 dark:text-blue-400/80 pr-6">
+                      هذا المحرّر الذي أدخل المادة — كاتب الرأي الظاهر للقارئ يُختار من
+                      «كاتب المقال» في الشريط الجانبي.
+                    </p>
+                  )}
                 </div>
               );
             })()}
@@ -4327,7 +4350,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             {articleType === "opinion" && (
               <Card className="order-[62] lg:order-none">
                 <CardHeader>
-                  <CardTitle>كاتب المقال</CardTitle>
+                  <CardTitle>كاتب المقال (يظهر للقارئ)</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isOpinionAuthor ? (
