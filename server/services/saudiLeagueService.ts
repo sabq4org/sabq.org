@@ -67,6 +67,8 @@ import {
   localizeSplRound,
   localizeSplTeamName,
   localizeSplTransferType,
+  looksLikeSaudiClubTeamName,
+  teamNamesLooselyMatch,
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 
@@ -594,8 +596,80 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
     } catch {
       // تعثّر كأس آسيا لا يُسقط اللوحة الحية.
     }
+    // ودّيات سعودية على TheSports قد لا تدخل AF live=all (يبقى NS) — نُلحقها هنا.
+    try {
+      items = await mergeTsSaudiClubFriendliesIntoLive(items);
+    } catch {
+      // أفضل جهد
+    }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
   });
+}
+
+/** ألحق/حدّث ودّيات أندية سعودية من لوحة TheSports على لوحة المباشر. */
+async function mergeTsSaudiClubFriendliesIntoLive(
+  items: SplLiveBoardItem[],
+): Promise<SplLiveBoardItem[]> {
+  const board = await getTheSportsLiveBoard();
+  if (!board.length) return items;
+  const friendlyRe = /friendl|ودّي|ودي/i;
+  const out = [...items];
+  const friendlyComp = getCompetition(CLUB_FRIENDLIES_SLUG);
+  const compName = friendlyComp
+    ? compDisplayName(friendlyComp)
+    : isEnglishSports()
+      ? "Club Friendlies"
+      : "مباريات ودّية";
+
+  for (const m of board) {
+    if (!friendlyRe.test(m.competitionName)) continue;
+    if (!(looksLikeSaudiClubTeamName(m.homeName) || looksLikeSaudiClubTeamName(m.awayName))) continue;
+    const idx = out.findIndex((i) => fixtureMatchesTsBoard(i, m));
+    if (idx >= 0) {
+      out[idx] = {
+        ...applyTsBoardScore(out[idx], m),
+        competition: compName,
+        competitionSlug: CLUB_FRIENDLIES_SLUG,
+      };
+      continue;
+    }
+    const ts = m.matchTime > 0 ? m.matchTime : Math.floor(Date.now() / 1000);
+    out.push({
+      id: tsUuidToNegativeId(m.matchId),
+      date: new Date(ts * 1000).toISOString(),
+      timestamp: ts,
+      status: {
+        code: m.statusCode,
+        label: m.statusLabel,
+        elapsed: m.elapsed,
+        extra: m.extra,
+        live: m.live,
+        finished: m.finished,
+      },
+      round: "",
+      venue: { name: "", city: "" },
+      home: {
+        id: tsUuidToNegativeId(m.homeTeamId),
+        name: m.homeName,
+        logo: m.homeLogo || "",
+        winner: null,
+      },
+      away: {
+        id: tsUuidToNegativeId(m.awayTeamId),
+        name: m.awayName,
+        logo: m.awayLogo || "",
+        winner: null,
+      },
+      goals: { home: m.goalsHome, away: m.goalsAway },
+      penalties:
+        m.penHome != null || m.penAway != null
+          ? { home: m.penHome, away: m.penAway }
+          : null,
+      competition: compName,
+      competitionSlug: CLUB_FRIENDLIES_SLUG,
+    });
+  }
+  return out;
 }
 
 /** تحويل مباراة خليجي (جدول محلي مركّب) إلى عنصر لوحة موحّد. */
@@ -1798,11 +1872,90 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
   }
 }
 
+/** AF يقول NS/TBD بعد صافرة البداية — شائع في Club Friendlies. */
+function isStuckPastKickoff(fx: Pick<SplFixture, "timestamp" | "status">): boolean {
+  if (fx.status.live || fx.status.finished) return false;
+  if (fx.status.code !== "NS" && fx.status.code !== "TBD") return false;
+  const mins = (Date.now() / 1000 - fx.timestamp) / 60;
+  return mins >= 2 && mins <= 130;
+}
+
+function annotateStuckKickoff<T extends SplFixture>(fx: T): T {
+  if (!isStuckPastKickoff(fx)) return fx;
+  return {
+    ...fx,
+    status: {
+      ...fx.status,
+      label: isEnglishSports()
+        ? "Kick-off passed — awaiting live feed"
+        : "موعد الانطلاق مرّ — بانتظار التغطية المباشرة",
+    },
+  };
+}
+
+function fixtureMatchesTsBoard(fx: Pick<SplFixture, "home" | "away" | "timestamp">, m: TsLiveBoardItem): boolean {
+  if (m.matchTime > 0 && Math.abs(m.matchTime - fx.timestamp) > 20 * 60) return false;
+  return (
+    (teamNamesLooselyMatch(fx.home.name, m.homeName) && teamNamesLooselyMatch(fx.away.name, m.awayName)) ||
+    (teamNamesLooselyMatch(fx.home.name, m.awayName) && teamNamesLooselyMatch(fx.away.name, m.homeName))
+  );
+}
+
+function applyTsBoardScore<T extends SplFixture>(fx: T, m: TsLiveBoardItem): T {
+  const swapped =
+    teamNamesLooselyMatch(fx.home.name, m.awayName) &&
+    teamNamesLooselyMatch(fx.away.name, m.homeName);
+  return {
+    ...fx,
+    goals: {
+      home: swapped ? m.goalsAway : m.goalsHome,
+      away: swapped ? m.goalsHome : m.goalsAway,
+    },
+    penalties:
+      m.penHome != null || m.penAway != null
+        ? {
+            home: swapped ? m.penAway : m.penHome,
+            away: swapped ? m.penHome : m.penAway,
+          }
+        : fx.penalties,
+    status: {
+      ...fx.status,
+      code: m.statusCode,
+      label: m.statusLabel,
+      elapsed: m.elapsed,
+      extra: m.extra,
+      live: m.live,
+      finished: m.finished,
+    },
+  };
+}
+
+/**
+ * ودّيات الأندية: API-Football كثيرًا ما يبقى على NS بعد الانطلاق.
+ * نطابق لوحة TheSports بالأسماء/وقت البداية (الودّيات مُستثناة من ضجيج اللوحة
+ * إن كان فيها نادٍ سعودي).
+ */
+async function overlaySaudiClubFriendlyFixture<T extends SplFixture>(fx: T): Promise<T> {
+  if (fx.status.finished) return fx;
+  if (!fx.status.live && !isStuckPastKickoff(fx)) return fx;
+  try {
+    const board = await getTheSportsLiveBoard();
+    const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
+    if (!hit) return annotateStuckKickoff(fx);
+    return applyTsBoardScore(fx, hit);
+  } catch {
+    return annotateStuckKickoff(fx);
+  }
+}
+
 /**
  * تركيب نتيجة TheSports اللحظية على عنصر لوحة (today/live) — أفضل جهد.
  * يعمل فقط للمباريات الجارية في بطولة مُدرَجة؛ غير ذلك يُعيد العنصر كما هو.
  */
 export async function overlayLiveBoardScore<T extends SplLiveBoardItem>(item: T): Promise<T> {
+  if (item.competitionSlug === CLUB_FRIENDLIES_SLUG) {
+    return overlaySaudiClubFriendlyFixture(item);
+  }
   const tsCompId = getTsCompetitionId(item.competitionSlug);
   if (!tsCompId) return item;
   return overlayFastScoreOnFixture(item, tsCompId);
@@ -1828,11 +1981,59 @@ export async function overlayLiveFixturesForComp<T extends SplFixture>(
 /**
  * تركيب لقطة TheSports الحيّة الكاملة (نتيجة + أحداث + إحصاءات) على تفاصيل
  * مباراة البوابة — أثناء اللعب فقط وللبطولات المُدرَجة. أفضل جهد.
+ * ودّيات الأندية: نحاول حتى لو بقي AF على NS بعد الانطلاق.
  */
 export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<SplMatchDetail> {
   const fx = detail.fixture;
-  if (!fx.status.live) return detail;
   const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
+  const isClubFriendly =
+    comp?.slug === CLUB_FRIENDLIES_SLUG || detail.leagueId === CLUB_FRIENDLIES_LEAGUE_ID;
+
+  if (isClubFriendly) {
+    if (fx.status.finished) return detail;
+    if (!fx.status.live && !isStuckPastKickoff(fx)) return detail;
+    try {
+      const board = await getTheSportsLiveBoard();
+      const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
+      if (!hit) return { ...detail, fixture: annotateStuckKickoff(fx) };
+      const ts = await getTheSportsMatchLiveByUuid(hit.matchId).catch(() => null);
+      if (!ts || (!ts.live && !ts.finished)) {
+        return { ...detail, fixture: applyTsBoardScore(fx, hit) };
+      }
+      const swapped =
+        teamNamesLooselyMatch(fx.home.name, hit.awayName) &&
+        teamNamesLooselyMatch(fx.away.name, hit.homeName);
+      const home = swapped ? ts.away : ts.home;
+      const away = swapped ? ts.home : ts.away;
+      const penHome = swapped ? ts.penAway : ts.penHome;
+      const penAway = swapped ? ts.penHome : ts.penAway;
+      const fixture: SplFixture = {
+        ...fx,
+        goals: { home, away },
+        penalties:
+          penHome != null || penAway != null ? { home: penHome ?? null, away: penAway ?? null } : fx.penalties,
+        status: {
+          ...fx.status,
+          code: hit.statusCode,
+          label: hit.statusLabel,
+          elapsed: ts.elapsed ?? hit.elapsed ?? fx.status.elapsed,
+          extra: ts.extra ?? hit.extra ?? fx.status.extra,
+          live: ts.live,
+          finished: ts.finished || fx.status.finished,
+          clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
+        },
+      };
+      const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : detail.events;
+      const statistics = ts.stats
+        ? mapTsStatsToSpl(ts.stats, { ...detail, fixture })
+        : detail.statistics;
+      return { ...detail, fixture, events, statistics };
+    } catch {
+      return { ...detail, fixture: annotateStuckKickoff(fx) };
+    }
+  }
+
+  if (!fx.status.live) return detail;
   const tsCompId = getTsCompetitionId(comp?.slug);
   if (!tsCompId) return detail;
   try {
