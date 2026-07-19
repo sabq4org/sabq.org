@@ -43,8 +43,6 @@ type Report = {
     editorial: number;
     previews: number;
     matchReports: number;
-    infographics: number;
-    analyses: number;
     opinions: number;
     totalViews: number;
     avgViews: number;
@@ -61,6 +59,13 @@ type Report = {
       imageUrl: string | null;
     }>;
     dailyPulse: Array<{ day: string; count: number; views: number }>;
+  };
+  predictions: {
+    totalPredictions: number;
+    pendingPredictions: number;
+    settledPredictions: number;
+    pointsAwarded: number;
+    note: string;
   };
   tournament: {
     configured: boolean;
@@ -688,11 +693,31 @@ export default function Wc2026NumbersReportPage() {
                         hint={`متوسط ${data.sabq.avgViews.toLocaleString("en-US")}`}
                         accent="#ef4444"
                       />
-                      <StatOrb label="إنفوجرافيك" value={data.sabq.infographics} accent="#a78bfa" />
-                      <StatOrb label="تحليلات" value={data.sabq.analyses} accent="#fb7185" />
+                      <StatOrb
+                        label="توقعات المباريات"
+                        value={data.predictions?.totalPredictions ?? 0}
+                        hint={
+                          (data.predictions?.pendingPredictions ?? 0) > 0
+                            ? `${(data.predictions?.pendingPredictions ?? 0).toLocaleString("en-US")} بانتظار التسوية`
+                            : "كل التوقعات محسومة"
+                        }
+                        accent="#a78bfa"
+                      />
+                      <StatOrb
+                        label="نقاط صُرفت للفائزين"
+                        value={data.predictions?.pointsAwarded ?? 0}
+                        hint="ولاء — بعد تسوية النتيجة الصحيحة"
+                        accent="#fb7185"
+                      />
                       <StatOrb label="رأي" value={data.sabq.opinions} accent="#fbbf24" />
                       <StatOrb label="AI مولَّد" value={data.sabq.aiGenerated} accent="#34d399" />
                     </div>
+
+                    {data.predictions?.note ? (
+                      <p className="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-100/85 sm:text-xs">
+                        {data.predictions.note}
+                      </p>
+                    ) : null}
 
                     <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
                       <div className="mb-4 flex items-center gap-2">
