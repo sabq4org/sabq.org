@@ -5,7 +5,8 @@
  * للواجهة، وكل نقطة بيانات خلف كاش SWR بحيث يخدم آلاف الزوار من طلب واحد
  * للمزود. التوقيت يُطلب من المزود مباشرة بتوقيت الرياض.
  */
-import { withSWR, CACHE_TTL } from "../memoryCache";
+import { CACHE_TTL } from "../memoryCache";
+import { withSportsSWR as withSWR } from "./sportsCache";
 import {
   SAUDI_TEAM_ID,
   WC_FINISHED_STATUSES,

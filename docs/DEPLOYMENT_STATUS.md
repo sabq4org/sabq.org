@@ -67,7 +67,7 @@
 | **الجلسات** | Redis → failover إلى Neon | Neon `sessions` | Neon `sessions` |
 | SSE / إشعارات بين النسخ | pub/sub عبر Redis | ذاكرة العملية الواحدة | ذاكرة العملية |
 | Editor presence | متزامن بين pods | نسخة واحدة | نسخة واحدة |
-| الكاش الساخن | `memoryCache.ts` | نفس السلوك | نفس السلوك |
+| الكاش الساخن | `memoryCache.ts` + كاش الرياضة الموزّع في Redis | الرياضة تتراجع للذاكرة/المزوّد | ذاكرة العملية فقط |
 
 **تشغيل مُستحسن مع Static IP:** Redis على Railway (شبكة داخلية) بدل Upstash العام، أو allowlist عناوين Static IP في Upstash.
 

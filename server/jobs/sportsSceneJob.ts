@@ -16,6 +16,7 @@ import {
   refreshScene,
   refreshCompetitionTrends,
 } from "../services/sportsIntelligence";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isRunning = false;
 let lastTrendsAt = 0;
@@ -69,8 +70,8 @@ export function startSportsSceneJob(): void {
     return;
   }
 
-  cron.schedule("*/2 * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
+  cron.schedule("*/2 * * * *", () => void runWithSportsPriority("background", () => tick("cron")), { timezone: "Asia/Riyadh" });
   console.log("[Sports Intel Job] 🧠 scheduled — every 2 minutes (scene + trends)");
 
-  setTimeout(() => void tick("startup"), 30 * 1000);
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 30 * 1000);
 }

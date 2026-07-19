@@ -14,6 +14,7 @@ import { isLeader } from "../leaderElection";
 import { isWorldCupConfigured } from "../services/worldCupService";
 import { settleFinishedMatches } from "../services/wcPredictionsService";
 import { settleWcLong } from "../services/wcLongPredictionsService";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isRunning = false;
 
@@ -58,9 +59,9 @@ export function startWcPredictionsJob(): void {
     return;
   }
 
-  cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
+  cron.schedule("* * * * *", () => void runWithSportsPriority("background", () => tick("cron")), { timezone: "Asia/Riyadh" });
   console.log("[WC Predictions Job] 🏆 scheduled — every minute (instant winner settlement)");
 
   // دورة أولى بعد دقيقة من الإقلاع لتغطية ما فات أثناء التوقف
-  setTimeout(() => void tick("startup"), 60 * 1000);
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 60 * 1000);
 }

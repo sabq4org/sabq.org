@@ -14,6 +14,7 @@
  */
 import { isLeader } from "../leaderElection";
 import { runSportsAlertsCycle } from "../services/sportsAlertsService";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 const INTERVAL_MS = 3_000;
 
@@ -48,9 +49,9 @@ export function startSportsAlertsJob(): void {
   }
   if (timer) return;
 
-  timer = setInterval(() => void tick("interval"), INTERVAL_MS);
+  timer = setInterval(() => void runWithSportsPriority("background", () => tick("interval")), INTERVAL_MS);
   console.log("[SportsAlerts Job] ⚽ scheduled — every 3s (followers' teams only)");
 
   // دورة أولى بعد 3 ثوانٍ لتأسيس خطّ الأساس مبكرًا.
-  setTimeout(() => void tick("startup"), INTERVAL_MS);
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), INTERVAL_MS);
 }

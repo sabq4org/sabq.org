@@ -29,6 +29,7 @@ import {
   isSportmonksConfigured,
   resolveSmIdByNames,
 } from "../services/sportmonksService";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isRunning = false;
 
@@ -102,7 +103,7 @@ export function startSportsMatchWarmupJob(): void {
     console.log("[Match Warmup] disabled (saudi league not configured)");
     return;
   }
-  cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
-  setTimeout(() => void tick("startup"), 90 * 1000);
+  cron.schedule("* * * * *", () => void runWithSportsPriority("background", () => tick("cron")), { timezone: "Asia/Riyadh" });
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 90 * 1000);
   console.log("[Match Warmup] scheduled (every minute)");
 }
