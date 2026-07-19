@@ -7,7 +7,7 @@
 import { and, eq, gte, ilike, like, notIlike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { articles, categories } from "@shared/schema";
-import { CACHE_TTL, withSWR } from "../memoryCache";
+import { CACHE_TTL, swrCache, withSWR } from "../memoryCache";
 import {
   detectChampion,
   getFixtures,
@@ -98,6 +98,15 @@ export type StoryBeat = {
   detail: string;
 };
 
+export type WcNumbersReportCacheMeta = {
+  /** cache = من ذاكرة الخادم بلا إعادة حساب · computed = حُسب الآن من DB/المزوّد */
+  source: "cache" | "computed";
+  /** مدة الطزاجة بالثواني قبل أن يُعتبر الكاش قديماً */
+  ttlSeconds: number;
+  /** هل أُجبر إعادة الحساب عبر ?fresh=1 */
+  forced: boolean;
+};
+
 export type WcNumbersReport = {
   status: WcNumbersReportStatus;
   generatedAt: string;
@@ -107,7 +116,13 @@ export type WcNumbersReport = {
   tournament: TournamentStats;
   platform: PlatformHighlight[];
   storyBeats: StoryBeat[];
+  cache: WcNumbersReportCacheMeta;
 };
+
+/** كاش تقرير الأرقام — طويل لأن التقرير تلخيصي وليس لحظياً. */
+const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v4";
+const REPORT_TTL_MS = CACHE_TTL.LONG; // 15 دقيقة طازج
+const REPORT_SWR_MS = CACHE_TTL.LONG * 2; // +15 دقيقة stale-while-revalidate
 
 function matchDeskSlugPredicate() {
   return or(
@@ -183,10 +198,9 @@ async function wcArticlesWhere(opts?: { matchDeskOnly?: boolean }): Promise<SQL 
 }
 
 const COVERAGE_METHODOLOGY = [
-  "المؤكّد: مواد slug تبدأ بـ wc26- (معاينات/تقارير غرفة مباريات المونديال).",
-  "التحريري: قسم الرياضة + عنوان فيه (مونديال أو كأس العالم) ونُشر منذ 2026-01-01.",
-  "مستبعد: كأس العالم للأندية، وعناوين تشير لـ 2010/2014/2018/2022 بلا ذكر 2026.",
-  "لا يُحسب أرشيف المونديالات السابقة ولا المواد خارج قسم الرياضة.",
+  "مواد غرفة المباريات المرتبطة مباشرة بمباريات المونديال.",
+  "مواد القسم الرياضي التي يحمل عنوانها «مونديال» أو «كأس العالم» ونُشرت منذ مطلع 2026.",
+  "لا تُحسب تغطيات كأس العالم للأندية ولا مونديالات السنوات السابقة.",
 ] as const;
 
 async function queryCoverage(where: SQL | undefined): Promise<{
@@ -502,33 +516,59 @@ function buildStoryBeats(sabq: SabqCoverageStats, tournament: TournamentStats): 
   ];
 }
 
-export async function getWcNumbersReport(): Promise<WcNumbersReport> {
-  return withSWR(
-    "blocks:wc:numbers-report:v3",
-    CACHE_TTL.MEDIUM,
-    CACHE_TTL.MEDIUM * 2,
-    async () => {
-      const [sabq, tournament] = await Promise.all([
-        buildSabqCoverage(),
-        buildTournamentStats(),
-      ]);
+type ReportPayload = Omit<WcNumbersReport, "cache">;
 
-      const champName = tournament.champion?.team?.name;
-      const headline = champName
-        ? `كأس العالم 2026 بالأرقام — وتهنئة ${champName}`
-        : "كأس العالم 2026 بالأرقام — تغطية سبق والبطولة";
+async function buildReportPayload(): Promise<ReportPayload> {
+  const [sabq, tournament] = await Promise.all([
+    buildSabqCoverage(),
+    buildTournamentStats(),
+  ]);
 
-      return {
-        status: "draft" as const,
-        generatedAt: new Date().toISOString(),
-        headline,
-        subtitle:
-          "مسودة داخلية: عدّاد المواد مضيّق على مونديال 2026 فقط (wc26-* + تحريري رياضة منذ 2026) — راجع المنهجية قبل النشر.",
-        sabq,
-        tournament,
-        platform: platformHighlights(),
-        storyBeats: buildStoryBeats(sabq, tournament),
-      };
-    },
+  const champName = tournament.champion?.team?.name;
+  const headline = champName
+    ? `كأس العالم 2026 بالأرقام — وتهنئة ${champName}`
+    : "كأس العالم 2026 بالأرقام — تغطية سبق والبطولة";
+
+  return {
+    status: "draft" as const,
+    generatedAt: new Date().toISOString(),
+    headline,
+    subtitle:
+      "أرقام تغطية سبق لحظة بلحظة مع نبض البطولة: المواد، المشاهدات، الأهداف، والبطل.",
+    sabq,
+    tournament,
+    platform: platformHighlights(),
+    storyBeats: buildStoryBeats(sabq, tournament),
+  };
+}
+
+/**
+ * يجلب التقرير مع SWR:
+ * - أول طلب (أو بعد انتهاء الـ TTL): يحسب من DB + مزوّد المونديال.
+ * - الطلبات التالية خلال 15 دقيقة: من ذاكرة العملية بلا إعادة حساب.
+ * - ?fresh=1: يعيد الحساب فوراً (زر «إعادة الحساب»).
+ */
+export async function getWcNumbersReport(opts?: {
+  forceFresh?: boolean;
+}): Promise<WcNumbersReport> {
+  const forceFresh = Boolean(opts?.forceFresh);
+  const peek = swrCache.get<ReportPayload>(REPORT_CACHE_KEY);
+  const servedFromMemory = !forceFresh && peek.data !== null;
+
+  const payload = await withSWR(
+    REPORT_CACHE_KEY,
+    REPORT_TTL_MS,
+    REPORT_SWR_MS,
+    buildReportPayload,
+    forceFresh,
   );
+
+  return {
+    ...payload,
+    cache: {
+      source: servedFromMemory ? "cache" : "computed",
+      ttlSeconds: Math.round(REPORT_TTL_MS / 1000),
+      forced: forceFresh,
+    },
+  };
 }
