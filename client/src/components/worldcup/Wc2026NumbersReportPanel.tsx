@@ -102,6 +102,13 @@ type Report = {
 
 type TabId = "pulse" | "sabq" | "pitch" | "platform";
 
+/** عربي + تقويم ميلادي + أرقام لاتينية (4345) — معيار المشروع. */
+const AR_GREG_LATN = "ar-SA-u-ca-gregory-nu-latn";
+
+function fmtLatn(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
 function useCountUp(target: number, duration = 900) {
   const [value, setValue] = useState(0);
   useEffect(() => {
@@ -143,8 +150,7 @@ function StatOrb({
         ? value
         : null;
   const animated = useCountUp(numeric ?? 0);
-  const display =
-    numeric != null ? animated.toLocaleString("en-US") : String(value);
+  const display = numeric != null ? fmtLatn(animated) : String(value);
 
   const inner = (
     <>
@@ -211,12 +217,12 @@ function MixMeter({ ai, editorial }: { ai: number; editorial: number }) {
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-white/65 sm:text-xs">
         <span className="min-w-0 truncate">
-          AI · <strong className="text-emerald-300">{ai.toLocaleString("en-US")}</strong>
-          <span className="text-white/40"> ({aiPct}%)</span>
+          AI · <strong className="text-emerald-300">{fmtLatn(ai)}</strong>
+          <span className="text-white/40"> ({fmtLatn(aiPct)}%)</span>
         </span>
         <span className="min-w-0 truncate text-end">
-          تحريري · <strong className="text-amber-300">{editorial.toLocaleString("en-US")}</strong>
-          <span className="text-white/40"> ({edPct}%)</span>
+          تحريري · <strong className="text-amber-300">{fmtLatn(editorial)}</strong>
+          <span className="text-white/40"> ({fmtLatn(edPct)}%)</span>
         </span>
       </div>
     </div>
@@ -226,7 +232,7 @@ function MixMeter({ ai, editorial }: { ai: number; editorial: number }) {
 function formatPulseDay(day: string): string {
   const d = new Date(`${day}T12:00:00`);
   if (Number.isNaN(d.getTime())) return day;
-  return d.toLocaleDateString("ar-SA", {
+  return d.toLocaleDateString(AR_GREG_LATN, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -251,9 +257,9 @@ function DailyPulseList({ days }: { days: Report["sabq"]["dailyPulse"] }) {
         <p className="mt-0.5 text-sm font-bold text-white sm:text-base">
           {formatPulseDay(peak.day)}
           <span className="mx-1.5 font-normal text-white/40">·</span>
-          {peak.count.toLocaleString("en-US")} مادة
+          {fmtLatn(peak.count)} مادة
           <span className="mx-1.5 font-normal text-white/40">·</span>
-          {peak.views.toLocaleString("en-US")} مشاهدة
+          {fmtLatn(peak.views)} مشاهدة
         </p>
       </div>
 
@@ -276,10 +282,10 @@ function DailyPulseList({ days }: { days: Report["sabq"]["dailyPulse"] }) {
               >
                 <span className="min-w-0 truncate font-medium">{formatPulseDay(d.day)}</span>
                 <span className="min-w-[3.5rem] text-end tabular-nums font-semibold text-white">
-                  {d.count.toLocaleString("en-US")}
+                  {fmtLatn(d.count)}
                 </span>
                 <span className="min-w-[4.5rem] text-end tabular-nums text-white/60">
-                  {d.views.toLocaleString("en-US")}
+                  {fmtLatn(d.views)}
                 </span>
               </li>
             );
@@ -289,7 +295,7 @@ function DailyPulseList({ days }: { days: Report["sabq"]["dailyPulse"] }) {
 
       <p className="text-[10px] text-white/45 sm:text-xs">
         متوسط آخر {recent.length} أيام:{" "}
-        <strong className="text-white/70">{avg.toLocaleString("en-US")}</strong> مادة/يوم
+        <strong className="text-white/70">{fmtLatn(avg)}</strong> مادة/يوم
       </p>
     </div>
   );
@@ -310,7 +316,9 @@ function StoryRail({
     <div className="rounded-2xl border border-white/10 bg-gradient-to-l from-red-950/40 via-black/20 to-amber-950/30 p-3 sm:rounded-3xl sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
         <div>
-          <p className="text-[10px] text-amber-200/70 sm:text-xs">حكاية الأرقام · فصل {index + 1}/{beats.length}</p>
+          <p className="text-[10px] text-amber-200/70 sm:text-xs">
+            حكاية الأرقام · فصل {fmtLatn(index + 1)}/{fmtLatn(beats.length)}
+          </p>
           <h2 className="text-base font-black text-white sm:text-xl">{beat.label}</h2>
         </div>
         <div className="flex gap-1">
@@ -332,7 +340,9 @@ function StoryRail({
           </Button>
         </div>
       </div>
-      <p className="text-3xl font-black text-amber-200 sm:text-4xl md:text-5xl">{beat.value}</p>
+      <p className="text-3xl font-black text-amber-200 sm:text-4xl md:text-5xl tabular-nums">
+        {beat.numericValue != null ? fmtLatn(beat.numericValue) : beat.value}
+      </p>
       <p className="mt-2 text-xs text-white/65 sm:text-sm">{beat.detail}</p>
       <div className="mt-3 flex items-center justify-center gap-1.5 sm:mt-4 sm:gap-2">
         {beats.map((_, i) => (
@@ -622,13 +632,13 @@ export function Wc2026NumbersReportPanel({
                         <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
                           <p className="text-[10px] text-white/50 sm:text-xs">غرفة المباريات</p>
                           <p className="text-xl font-black text-amber-200 sm:text-2xl">
-                            {(data.sabq.breakdown?.matchDesk ?? 0).toLocaleString("en-US")}
+                            {fmtLatn(data.sabq.breakdown?.matchDesk ?? 0)}
                           </p>
                         </div>
                         <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
                           <p className="text-[10px] text-white/50 sm:text-xs">مواد تحريرية 2026</p>
                           <p className="text-xl font-black text-sky-200 sm:text-2xl">
-                            {(data.sabq.breakdown?.editorialWindow ?? 0).toLocaleString("en-US")}
+                            {fmtLatn(data.sabq.breakdown?.editorialWindow ?? 0)}
                           </p>
                         </div>
                       </div>
@@ -646,7 +656,7 @@ export function Wc2026NumbersReportPanel({
                       <StatOrb
                         label="مشاهدات"
                         value={data.sabq.totalViews}
-                        hint={`متوسط ${data.sabq.avgViews.toLocaleString("en-US")}`}
+                        hint={`متوسط ${fmtLatn(data.sabq.avgViews)}`}
                         accent="#ef4444"
                       />
                       <StatOrb
@@ -654,7 +664,7 @@ export function Wc2026NumbersReportPanel({
                         value={data.predictions?.totalPredictions ?? 0}
                         hint={
                           (data.predictions?.pendingPredictions ?? 0) > 0
-                            ? `${(data.predictions?.pendingPredictions ?? 0).toLocaleString("en-US")} بانتظار التسوية`
+                            ? `${fmtLatn(data.predictions?.pendingPredictions ?? 0)} بانتظار التسوية`
                             : "كل التوقعات محسومة"
                         }
                         accent="#a78bfa"
@@ -707,7 +717,7 @@ export function Wc2026NumbersReportPanel({
                                   {a.title}
                                 </p>
                                 <p className="mt-1 text-xs text-white/45">
-                                  {(a.views || 0).toLocaleString("en-US")} مشاهدة
+                                  {fmtLatn(a.views || 0)} مشاهدة
                                   {a.aiGenerated ? " · AI" : ""}
                                   {a.articleType ? ` · ${a.articleType}` : ""}
                                 </p>
