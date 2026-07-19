@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { aiGateway } from "../ai/gateway";
-import { articles, comments, editorialNotifications, worldDays } from "@shared/schema";
+import { articles, comments, editorialNotifications, users, worldDays } from "@shared/schema";
 
 type WriterArticle = {
   id: string;
@@ -385,4 +385,60 @@ export async function getWriterStyleProfile(userId: string) {
       guidance: ["حافظ على وضوح موقفك في المقدمة", "امنح الرأي المضاد مساحة عادلة"],
     };
   }
+}
+
+/** مهلة تقديم الترخيص المهني لكتّاب الرأي (نهاية يوليو 2026). */
+export const WRITER_MEDIA_LICENSE_DEADLINE = "2026-07-31";
+
+export type WriterMediaLicenseStatus = {
+  submitted: boolean;
+  licenseNumber: string | null;
+  submittedAt: string | null;
+  deadline: string;
+  gmediaRegisterUrl: string;
+};
+
+export async function getWriterMediaLicense(userId: string): Promise<WriterMediaLicenseStatus> {
+  const [row] = await db
+    .select({
+      mediaLicenseNumber: users.mediaLicenseNumber,
+      mediaLicenseFileKey: users.mediaLicenseFileKey,
+      mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const submitted = Boolean(row?.mediaLicenseNumber && row?.mediaLicenseFileKey && row?.mediaLicenseSubmittedAt);
+
+  return {
+    submitted,
+    licenseNumber: submitted ? (row?.mediaLicenseNumber ?? null) : null,
+    submittedAt: row?.mediaLicenseSubmittedAt?.toISOString() ?? null,
+    deadline: WRITER_MEDIA_LICENSE_DEADLINE,
+    gmediaRegisterUrl: "https://gmedia.gov.sa/services/registering-media-professionals",
+  };
+}
+
+export async function saveWriterMediaLicense(
+  userId: string,
+  data: { licenseNumber: string; licenseFileKey: string },
+): Promise<WriterMediaLicenseStatus> {
+  const submittedAt = new Date();
+  await db
+    .update(users)
+    .set({
+      mediaLicenseNumber: data.licenseNumber,
+      mediaLicenseFileKey: data.licenseFileKey,
+      mediaLicenseSubmittedAt: submittedAt,
+    })
+    .where(eq(users.id, userId));
+
+  return {
+    submitted: true,
+    licenseNumber: data.licenseNumber,
+    submittedAt: submittedAt.toISOString(),
+    deadline: WRITER_MEDIA_LICENSE_DEADLINE,
+    gmediaRegisterUrl: "https://gmedia.gov.sa/services/registering-media-professionals",
+  };
 }

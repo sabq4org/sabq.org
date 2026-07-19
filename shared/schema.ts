@@ -637,6 +637,11 @@ export const users = pgTable("users", {
   department: text("department"),
   pressIdNumber: text("press_id_number"),
   cardValidUntil: timestamp("card_valid_until"),
+
+  // الترخيص المهني (هيئة تنظيم الإعلام) — كتّاب الرأي والمراسلون
+  mediaLicenseNumber: text("media_license_number"),
+  mediaLicenseFileKey: text("media_license_file_key"), // مفتاح خاص في R2/S3
+  mediaLicenseSubmittedAt: timestamp("media_license_submitted_at"),
   
   // Reporter notification preferences
   notifyOnPublish: boolean("notify_on_publish").default(true).notNull(),

@@ -1,16 +1,21 @@
 import { Router, type Request } from "express";
 import rateLimit from "express-rate-limit";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, userHasAnyRole } from "../rbac";
+import { upload } from "../utils/uploadMiddleware";
+import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 import {
   coachWriterIdea,
   generateWriterIdeas,
   getOpinionAuthorWorkspace,
   getWriterEditorialNotifications,
+  getWriterMediaLicense,
   getWriterStyleProfile,
   markAllWriterEditorialNotificationsRead,
   markWriterEditorialNotificationRead,
   reviewWriterArticle,
+  saveWriterMediaLicense,
 } from "../services/opinionAuthorWorkspaceService";
 
 const router = Router();
@@ -122,5 +127,63 @@ router.get("/api/opinion-author/style-profile", writerAiLimiter, async (req, res
     res.status(502).json({ message: "تعذر بناء ملف الأسلوب الآن" });
   }
 });
+
+router.get("/api/opinion-author/media-license", async (req, res) => {
+  try {
+    res.json(await getWriterMediaLicense(requestUserId(req)));
+  } catch (error) {
+    console.error("[Writer Workspace] media license status failed:", error);
+    res.status(500).json({ message: "تعذر جلب حالة الترخيص" });
+  }
+});
+
+// رفع الترخيص: رقم + ملف عبر تخزين خاص S3/R2 فقط (نفس آلية طلبات المراسلين).
+router.post(
+  "/api/opinion-author/media-license",
+  upload.single("licenseFile"),
+  async (req, res) => {
+    try {
+      const licenseNumber = String(req.body?.licenseNumber || "").trim();
+      if (licenseNumber.length < 3) {
+        return res.status(400).json({ message: "رقم الترخيص المهني مطلوب" });
+      }
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "يرجى إرفاق صورة الترخيص أو ملف PDF" });
+      }
+      if (!file.mimetype.startsWith("image/") && file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "الترخيص يجب أن يكون صورة أو ملف PDF" });
+      }
+
+      if (!isPrivateObjectStorageConfigured()) {
+        console.error("[Writer Workspace] Private object storage not configured for media license");
+        return res.status(502).json({ message: "خدمة رفع المستندات غير متاحة حالياً. حاول لاحقاً." });
+      }
+
+      const ext = file.mimetype === "application/pdf" ? "pdf" : (file.mimetype.split("/")[1] || "jpg");
+      const key = `writer-media-licenses/${requestUserId(req)}/${randomUUID()}.${ext}`;
+      const uploaded = await new ObjectStorageService().uploadFile(
+        key,
+        file.buffer,
+        file.mimetype,
+        "private",
+      );
+
+      const status = await saveWriterMediaLicense(requestUserId(req), {
+        licenseNumber,
+        licenseFileKey: uploaded.path,
+      });
+
+      res.json({
+        message: "شكراً لك — تم استلام بيانات الترخيص بنجاح.",
+        ...status,
+      });
+    } catch (error) {
+      console.error("[Writer Workspace] media license upload failed:", error);
+      res.status(500).json({ message: "تعذر حفظ الترخيص. حاول مرة أخرى لاحقاً." });
+    }
+  },
+);
 
 export default router;
