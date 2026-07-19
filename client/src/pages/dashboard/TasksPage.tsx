@@ -130,30 +130,30 @@ function getStatusVariant(status: string): "default" | "secondary" | "outline" {
 function getPriorityColor(priority: string): string {
   switch (priority) {
     case 'low':
-      return 'text-muted-foreground';
+      return 'text-gray-600 dark:text-gray-400';
     case 'medium':
-      return 'text-sky-600 dark:text-sky-400';
+      return 'text-blue-600 dark:text-blue-400';
     case 'high':
       return 'text-orange-600 dark:text-orange-400';
     case 'critical':
       return 'text-red-600 dark:text-red-400';
     default:
-      return 'text-muted-foreground';
+      return 'text-gray-600 dark:text-gray-400';
   }
 }
 
 function getPriorityBackground(priority: string): string {
   switch (priority) {
     case 'critical':
-      return 'bg-card border-r-2 border-r-red-400 dark:border-r-red-500';
+      return 'bg-red-50 dark:bg-card border-red-200 dark:border-border';
     case 'high':
-      return 'bg-card border-r-2 border-r-orange-400 dark:border-r-orange-500';
+      return 'bg-blue-50 dark:bg-card border-blue-200 dark:border-border';
     case 'medium':
-      return 'bg-card border-r-2 border-r-sky-400 dark:border-r-sky-500';
+      return 'bg-yellow-50 dark:bg-card border-yellow-200 dark:border-border';
     case 'low':
-      return 'bg-card border-r-2 border-r-emerald-400 dark:border-r-emerald-500';
+      return 'bg-green-50 dark:bg-card border-green-200 dark:border-border';
     default:
-      return 'bg-card border-r-2 border-r-muted-foreground/30';
+      return 'bg-gray-50 dark:bg-card border-gray-200 dark:border-border';
   }
 }
 
@@ -769,13 +769,13 @@ export default function TasksPage() {
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Card
-            className="rounded-2xl shadow-sm"
+            className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15"
             data-testid="card-stat-total"
           >
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <span className="rounded-lg bg-muted p-1.5">
-                  <ListTodo className="h-4 w-4 text-foreground" />
+                <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                  <ListTodo className="h-4 w-4 text-sky-700 dark:text-sky-300" />
                 </span>
                 إجمالي المهام
               </CardTitle>
@@ -788,57 +788,57 @@ export default function TasksPage() {
           </Card>
 
           <Card
-            className="rounded-2xl shadow-sm"
+            className="rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm dark:border-cyan-900/35 dark:from-cyan-950/15"
             data-testid="card-stat-in-progress"
           >
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <span className="rounded-lg bg-muted p-1.5">
-                  <Clock className="h-4 w-4 text-foreground" />
+                <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
+                  <Clock className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
                 </span>
                 قيد العمل
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold tabular-nums" data-testid="text-stat-in-progress">
+              <div className="text-xl font-bold tabular-nums text-cyan-700 dark:text-cyan-300" data-testid="text-stat-in-progress">
                 {(statistics?.in_progress ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
 
           <Card
-            className="rounded-2xl shadow-sm"
+            className="rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm dark:border-rose-900/35 dark:from-rose-950/15"
             data-testid="card-stat-overdue"
           >
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <span className="rounded-lg bg-muted p-1.5">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
+                <span className="rounded-lg bg-rose-100/80 p-1.5 dark:bg-rose-950/40">
+                  <AlertCircle className="h-4 w-4 text-rose-700 dark:text-rose-300" />
                 </span>
                 متأخرة
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold tabular-nums text-destructive" data-testid="text-stat-overdue">
+              <div className="text-xl font-bold tabular-nums text-rose-700 dark:text-rose-300" data-testid="text-stat-overdue">
                 {(statistics?.overdue ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
           </Card>
 
           <Card
-            className="rounded-2xl shadow-sm"
+            className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15"
             data-testid="card-stat-completed"
           >
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <span className="rounded-lg bg-muted p-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-foreground" />
+                <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
                 </span>
                 مكتملة
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold tabular-nums" data-testid="text-stat-completed">
+              <div className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300" data-testid="text-stat-completed">
                 {(statistics?.completed ?? 0).toLocaleString("en-US")}
               </div>
             </CardContent>
@@ -855,7 +855,7 @@ export default function TasksPage() {
 
         {/* Filters Section */}
         <Card
-          className="rounded-2xl shadow-sm"
+          className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15"
           data-testid="card-filters"
         >
           <CardHeader>
@@ -959,7 +959,7 @@ export default function TasksPage() {
 
         {/* Tasks Table */}
         {!isError && (
-          <Card className="rounded-2xl shadow-sm">
+          <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
             <CardHeader>
               <CardTitle>جميع المهام</CardTitle>
               <CardDescription className="tabular-nums">
