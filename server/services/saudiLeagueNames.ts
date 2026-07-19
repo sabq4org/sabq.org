@@ -164,6 +164,10 @@ function compactTeamKey(name: string): string {
     .replace(/[أإآا]/g, "ا")
     .replace(/ة/g, "ه")
     .replace(/ى/g, "ي")
+    // لاحقات شائعة تمنع تطابق «الأهلي» ↔ «الأهلي السعودي» / Al-Ahli SFC
+    .replace(/السعودي(ه)?/g, "")
+    .replace(/saudi/g, "")
+    .replace(/(sfc|sc|fc)$/g, "")
     .replace(/[^a-z0-9\u0600-\u06ff]+/g, "");
 }
 
