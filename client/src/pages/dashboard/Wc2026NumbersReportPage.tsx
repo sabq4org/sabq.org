@@ -139,19 +139,23 @@ function StatOrb({
   const inner = (
     <>
       <div
-        className="pointer-events-none absolute -left-8 -top-8 h-28 w-28 rounded-full opacity-30 blur-2xl transition group-hover:opacity-50"
+        className="pointer-events-none absolute -left-6 -top-6 h-16 w-16 rounded-full opacity-25 blur-xl transition group-hover:opacity-45 sm:-left-8 sm:-top-8 sm:h-28 sm:w-28 sm:opacity-30 sm:blur-2xl"
         style={{ background: accent }}
       />
-      <p className="text-xs text-white/60">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-tight text-white md:text-4xl">
+      <p className="line-clamp-2 text-[10px] leading-snug text-white/60 sm:text-xs">{label}</p>
+      <p className="mt-1.5 text-xl font-black tracking-tight text-white sm:mt-2 sm:text-3xl md:text-4xl">
         {display}
       </p>
-      {hint ? <p className="mt-2 text-xs text-white/50">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-white/50 sm:mt-2 sm:text-xs">
+          {hint}
+        </p>
+      ) : null}
     </>
   );
 
   const className = cn(
-    "group relative overflow-hidden rounded-3xl border bg-white/5 p-5 backdrop-blur-md transition",
+    "group relative min-w-0 overflow-hidden rounded-2xl border bg-white/5 p-3 backdrop-blur-md transition sm:rounded-3xl sm:p-5",
     active
       ? "border-amber-300/50 bg-white/10 ring-1 ring-amber-300/30"
       : "border-white/10 hover:border-white/25 hover:bg-white/10",
@@ -285,11 +289,11 @@ function StoryRail({
   if (beats.length === 0) return null;
   const beat = beats[Math.min(index, beats.length - 1)]!;
   return (
-    <div className="rounded-3xl border border-white/10 bg-gradient-to-l from-red-950/40 via-black/20 to-amber-950/30 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="rounded-2xl border border-white/10 bg-gradient-to-l from-red-950/40 via-black/20 to-amber-950/30 p-3 sm:rounded-3xl sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
         <div>
-          <p className="text-xs text-amber-200/70">حكاية الأرقام · فصل {index + 1}/{beats.length}</p>
-          <h2 className="text-xl font-black text-white">{beat.label}</h2>
+          <p className="text-[10px] text-amber-200/70 sm:text-xs">حكاية الأرقام · فصل {index + 1}/{beats.length}</p>
+          <h2 className="text-base font-black text-white sm:text-xl">{beat.label}</h2>
         </div>
         <div className="flex gap-1">
           <Button
@@ -310,8 +314,8 @@ function StoryRail({
           </Button>
         </div>
       </div>
-      <p className="text-4xl font-black text-amber-200 md:text-5xl">{beat.value}</p>
-      <p className="mt-2 text-sm text-white/65">{beat.detail}</p>
+      <p className="text-3xl font-black text-amber-200 sm:text-4xl md:text-5xl">{beat.value}</p>
+      <p className="mt-2 text-xs text-white/65 sm:text-sm">{beat.detail}</p>
       <div className="mt-4 flex gap-1.5">
         {beats.map((_, i) => (
           <button
@@ -383,9 +387,9 @@ export default function Wc2026NumbersReportPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-[1600px] px-4 pb-12 sm:px-6" dir="rtl">
+      <div className="mx-auto w-full max-w-[1600px] px-3 pb-10 sm:px-6 sm:pb-12" dir="rtl">
         <div
-          className="relative overflow-hidden rounded-[2rem] border border-amber-400/20 shadow-2xl"
+          className="relative overflow-hidden rounded-[1.25rem] border border-amber-400/20 shadow-2xl sm:rounded-[2rem]"
           style={{
             background:
               "radial-gradient(ellipse at 20% 0%, #3b1d0f 0%, #0a0f1c 45%, #05070d 100%)",
@@ -405,24 +409,24 @@ export default function Wc2026NumbersReportPage() {
             DRAFT
           </div>
 
-          <div className="relative space-y-6 p-5 sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-3xl space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="bg-amber-400 text-amber-950 hover:bg-amber-400">
+          <div className="relative space-y-4 p-3 sm:space-y-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+              <div className="max-w-3xl space-y-2 sm:space-y-3">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <Badge className="bg-amber-400 text-[10px] text-amber-950 hover:bg-amber-400 sm:text-xs">
                     مسودة — غير منشورة للعامة
                   </Badge>
-                  <Badge variant="outline" className="border-white/20 text-white/70">
+                  <Badge variant="outline" className="border-white/20 text-[10px] text-white/70 sm:text-xs">
                     WC 2026 Numbers
                   </Badge>
-                  <Badge variant="outline" className="border-emerald-400/30 text-emerald-200/80">
+                  <Badge variant="outline" className="hidden border-emerald-400/30 text-emerald-200/80 sm:inline-flex">
                     داخل لوحة التحكم فقط
                   </Badge>
                 </div>
-                <h1 className="text-3xl font-black leading-tight text-white md:text-5xl">
+                <h1 className="text-2xl font-black leading-tight text-white sm:text-3xl md:text-5xl">
                   {data?.headline || "كأس العالم 2026 بالأرقام"}
                 </h1>
-                <p className="text-sm text-white/65 md:text-base">
+                <p className="text-xs text-white/65 sm:text-sm md:text-base">
                   {data?.subtitle ||
                     "راجع الأرقام هنا قبل أي نشر. الصفحة العامة لن تُفعَّل إلا بأمرك."}
                 </p>
@@ -493,9 +497,9 @@ export default function Wc2026NumbersReportPage() {
             </div>
 
             {isLoading ? (
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-28 rounded-3xl bg-white/10" />
+                  <Skeleton key={i} className="h-20 rounded-2xl bg-white/10 sm:h-28 sm:rounded-3xl" />
                 ))}
               </div>
             ) : error || !data ? (
@@ -516,7 +520,7 @@ export default function Wc2026NumbersReportPage() {
                       onChange={setStoryIndex}
                     />
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                       {data.storyBeats.map((b, i) => (
                         <StatOrb
                           key={b.label}
@@ -584,16 +588,16 @@ export default function Wc2026NumbersReportPage() {
                         الرقم السابق (~آلاف) كان يلتقط أي ذكر لـ«مونديال/كأس العالم» عبر السنين.
                         العدّاد الآن مضيّق على مونديال 2026 (عنوان + نافذة زمنية):
                       </p>
-                      <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-black/20 px-4 py-3">
-                          <p className="text-xs text-white/50">غرفة المباريات (wc26-*)</p>
-                          <p className="text-2xl font-black text-amber-200">
+                      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3">
+                        <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
+                          <p className="text-[10px] text-white/50 sm:text-xs">غرفة المباريات (wc26-*)</p>
+                          <p className="text-xl font-black text-amber-200 sm:text-2xl">
                             {(data.sabq.breakdown?.matchDesk ?? 0).toLocaleString("en-US")}
                           </p>
                         </div>
-                        <div className="rounded-2xl bg-black/20 px-4 py-3">
-                          <p className="text-xs text-white/50">تحريري رياضة منذ 2026-01-01</p>
-                          <p className="text-2xl font-black text-sky-200">
+                        <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
+                          <p className="text-[10px] text-white/50 sm:text-xs">تحريري رياضة منذ 2026-01-01</p>
+                          <p className="text-xl font-black text-sky-200 sm:text-2xl">
                             {(data.sabq.breakdown?.editorialWindow ?? 0).toLocaleString("en-US")}
                           </p>
                         </div>
@@ -605,7 +609,7 @@ export default function Wc2026NumbersReportPage() {
                       </ul>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                       <StatOrb label="إجمالي مونديال 2026" value={data.sabq.totalArticles} accent="#f59e0b" />
                       <StatOrb label="معاينات مباريات" value={data.sabq.previews} accent="#38bdf8" />
                       <StatOrb label="تقارير مباريات" value={data.sabq.matchReports} accent="#22c55e" />
@@ -674,7 +678,7 @@ export default function Wc2026NumbersReportPage() {
                       </div>
                     ) : null}
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                       <StatOrb label="مباريات" value={data.tournament.totalFixtures} accent="#38bdf8" />
                       <StatOrb label="منتهية" value={data.tournament.finished} accent="#22c55e" />
                       <StatOrb
@@ -694,7 +698,7 @@ export default function Wc2026NumbersReportPage() {
                       />
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
                       <LeaderCard
                         title="الهدّافون"
                         icon={<Goal className="h-4 w-4 text-amber-300" />}
@@ -727,22 +731,22 @@ export default function Wc2026NumbersReportPage() {
                 )}
 
                 {tab === "platform" && (
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {data.platform.map((p) => (
                       <div
                         key={p.id}
-                        className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 transition hover:border-amber-300/30 hover:bg-white/[0.07]"
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 transition hover:border-amber-300/30 hover:bg-white/[0.07] sm:rounded-3xl sm:p-5"
                       >
-                        <div className="mb-3 flex items-center justify-between">
-                          <Sparkles className="h-5 w-5 text-amber-300" />
+                        <div className="mb-2 flex items-center justify-between sm:mb-3">
+                          <Sparkles className="h-4 w-4 text-amber-300 sm:h-5 sm:w-5" />
                           {p.href ? (
                             <Link href={p.href} className="text-white/50 hover:text-amber-200">
-                              <ExternalLink className="h-4 w-4" />
+                              <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                             </Link>
                           ) : null}
                         </div>
-                        <h3 className="text-lg font-bold text-white">{p.title}</h3>
-                        <p className="mt-2 text-sm leading-relaxed text-white/60">
+                        <h3 className="text-sm font-bold text-white sm:text-lg">{p.title}</h3>
+                        <p className="mt-1.5 line-clamp-3 text-[11px] leading-relaxed text-white/60 sm:mt-2 sm:line-clamp-none sm:text-sm">
                           {p.description}
                         </p>
                       </div>
