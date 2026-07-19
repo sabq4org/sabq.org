@@ -26,6 +26,7 @@ import {
   PenTool,
   ExternalLink,
   Mail,
+  BadgeCheck,
 } from "lucide-react";
 import {
   Table,
@@ -484,7 +485,41 @@ export default function OpinionAuthorApplications() {
                   <p className="text-sm text-muted-foreground">المسمى الوظيفي</p>
                   <p className="font-medium" data-testid="text-detail-job">{selectedApplication.jobTitle}</p>
                 </div>
+                {selectedApplication.licenseNumber && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">رقم الترخيص المهني</p>
+                    <p className="font-medium" data-testid="text-detail-license-number">
+                      {selectedApplication.licenseNumber}
+                      {selectedApplication.licenseExpiresAt && (
+                        <span className="text-sm text-muted-foreground tabular-nums">
+                          {" "}(ينتهي {new Date(selectedApplication.licenseExpiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {selectedApplication.licenseFileKey && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() =>
+                      window.open(
+                        apiUrl(`/api/admin/opinion-author-applications/${selectedApplication.id}/file/license`),
+                        "_blank",
+                        "noopener",
+                      )
+                    }
+                    data-testid="button-download-license"
+                  >
+                    <BadgeCheck className="w-4 h-4" />
+                    عرض الترخيص المهني
+                  </Button>
+                </div>
+              )}
 
               {selectedApplication.specializations && (
                 <div>
