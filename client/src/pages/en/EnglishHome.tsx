@@ -8,12 +8,11 @@ import { ArrowRight, Clock, Eye, Star, TrendingUp, User, Flame, Zap } from "luci
 import { EnglishLayout } from "@/components/en/EnglishLayout";
 import { EnglishHeroCarousel } from "@/components/en/EnglishHeroCarousel";
 import { EnglishQuadCategoriesBlock } from "@/components/en/EnglishQuadCategoriesBlock";
-import { EnglishSmartNewsBlock } from "@/components/en/EnglishSmartNewsBlock";
 import { EnglishSmartSummaryBlock } from "@/components/en/EnglishSmartSummaryBlock";
 import { EnglishFooter } from "@/components/en/EnglishFooter";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
-import type { EnArticleWithDetails, EnSmartBlock } from "@shared/schema";
+import type { EnArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to check if article is new (published within last 3 hours)
@@ -35,46 +34,7 @@ export default function EnglishHome() {
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 
-  // Fetch smart blocks for different placements
-  const { data: blocksBelowFeatured } = useQuery<EnSmartBlock[]>({
-    queryKey: ['/api/en/smart-blocks', 'below_featured'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'below_featured' });
-      const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksAboveAllNews } = useQuery<EnSmartBlock[]>({
-    queryKey: ['/api/en/smart-blocks', 'above_all_news'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_all_news' });
-      const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksBetweenAllAndMurqap } = useQuery<EnSmartBlock[]>({
-    queryKey: ['/api/en/smart-blocks', 'between_all_and_murqap'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'between_all_and_murqap' });
-      const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksAboveFooter } = useQuery<EnSmartBlock[]>({
-    queryKey: ['/api/en/smart-blocks', 'above_footer'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_footer' });
-      const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
+  // Smart blocks: disabled on public homepage (dashboard only).
 
   // Separate featured and regular articles
   const featuredArticles = articles.filter(article => article.isFeatured && article.status === "published");
@@ -105,11 +65,6 @@ export default function EnglishHome() {
               <EnglishHeroCarousel articles={featuredArticles} />
             </div>
           )}
-
-          {/* Smart Blocks: below_featured */}
-          {blocksBelowFeatured && blocksBelowFeatured.map((block) => (
-            <EnglishSmartNewsBlock key={block.id} config={block} />
-          ))}
         </div>
 
         {/* Smart Summary Block - Only for authenticated users */}
@@ -124,11 +79,6 @@ export default function EnglishHome() {
         )}
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: above_all_news */}
-          {blocksAboveAllNews && blocksAboveAllNews.map((block) => (
-            <EnglishSmartNewsBlock key={block.id} config={block} />
-          ))}
-
           {/* Latest Articles Section */}
           {regularArticles.length > 0 && (
             <div className="scroll-fade-in">
@@ -305,11 +255,6 @@ export default function EnglishHome() {
         </div>
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: between_all_and_murqap */}
-          {blocksBetweenAllAndMurqap && blocksBetweenAllAndMurqap.map((block) => (
-            <EnglishSmartNewsBlock key={block.id} config={block} />
-          ))}
-
           {/* Empty State */}
           {articles.length === 0 && (
             <Card className="p-12 text-center">
@@ -321,11 +266,6 @@ export default function EnglishHome() {
               </Link>
             </Card>
           )}
-
-          {/* Smart Blocks: above_footer */}
-          {blocksAboveFooter && blocksAboveFooter.map((block) => (
-            <EnglishSmartNewsBlock key={block.id} config={block} />
-          ))}
         </div>
       </main>
 

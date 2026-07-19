@@ -47,6 +47,9 @@ const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/Asia
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
+// Smart Blocks: معطّلة على واجهة الزائر حالياً (لوحة التحكم فقط).
+// لا تستدعِ /api/smart-blocks/homepage من الصفحة الرئيسية حتى إعادة التفعيل.
+
 function SectionSkeleton({ height = 200 }: { height?: number }) {
   return <div className="animate-pulse bg-muted/30 rounded-lg" style={{ height }} />;
 }

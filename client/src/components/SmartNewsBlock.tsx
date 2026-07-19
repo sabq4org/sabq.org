@@ -10,6 +10,7 @@ import { formatArticleTimestamp } from "@/lib/formatTime";
 import type { SmartBlock } from "@shared/schema";
 import { OptimizedImage } from "./OptimizedImage";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -61,29 +62,45 @@ const getArticleDisplayImageUrl = (article: ArticleResult): string | null => {
   return article.imageUrl || article.thumbnailUrl || null;
 };
 
+type SmartBlockView = Pick<SmartBlock, "id" | "title" | "color"> &
+  Partial<SmartBlock> & {
+    layoutStyle?: string | null;
+    backgroundColor?: string | null;
+    subtitle?: string | null;
+  };
+
 interface SmartNewsBlockProps {
-  config: SmartBlock;
+  config: SmartBlockView;
+  /** مقالات جاهزة من حزمة /homepage — يمنع N+1 على الصفحة الرئيسية */
+  initialArticles?: ArticleResult[] | null;
 }
 
-export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
-  const { data: articles, isLoading } = useQuery<ArticleResult[]>({
-    queryKey: ['/api/smart-blocks/query/articles', config.keyword, config.limitCount],
+export function SmartNewsBlock({ config, initialArticles }: SmartNewsBlockProps) {
+  const hasInitial = Array.isArray(initialArticles);
+  const { data: fetchedArticles, isLoading } = useQuery<ArticleResult[]>({
+    queryKey: [
+      '/api/smart-blocks',
+      config.id,
+      'articles',
+      config.sourceType,
+      config.keyword,
+      config.limitCount,
+      config.updatedAt,
+    ],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        keyword: config.keyword,
-        limit: config.limitCount.toString(),
-      });
-      const res = await fetch(`/api/smart-blocks/query/articles?${params}`, {
+      const res = await fetch(apiUrl(`/api/smart-blocks/${config.id}/articles`), {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch articles');
       const data = await res.json();
       return data.items || [];
     },
+    enabled: !hasInitial,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     placeholderData: [],
   });
+  const articles = hasInitial ? initialArticles! : fetchedArticles;
   
   const processedArticles = useMemo(() => {
     if (!articles) return [];
@@ -113,17 +130,9 @@ export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
     );
   }
 
+  // إخفاء المشهد بالكامل إن لم تتوفر مقالات (جدولة / حد أدنى / مصدر فارغ)
   if (!articles || articles.length === 0) {
-    return (
-      <div 
-        className="text-center py-8 text-muted-foreground" 
-        dir="rtl"
-        data-testid={`smart-block-empty-${config.id}`}
-      >
-        <Tag className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p>لا توجد مقالات متاحة لـ "{config.title}"</p>
-      </div>
-    );
+    return null;
   }
 
   const sectionContent = (
@@ -144,12 +153,14 @@ export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
           {config.title}
         </h2>
         
-        <div className="col-start-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Tag className="h-3.5 w-3.5" />
-          <span data-testid={`text-smart-block-keyword-${config.id}`}>
-            الكلمة المفتاحية: {config.keyword}
-          </span>
-        </div>
+        {config.subtitle ? (
+          <p
+            className="col-start-2 text-sm text-muted-foreground"
+            data-testid={`text-smart-block-subtitle-${config.id}`}
+          >
+            {config.subtitle}
+          </p>
+        ) : null}
       </div>
 
       {config.layoutStyle === 'grid' && <GridLayout articles={processedArticles} blockId={config.id} />}
@@ -718,7 +729,7 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
   );
 }
 
-function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArticle[]; blockId: string; config: SmartBlock }) {
+function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArticle[]; blockId: string; config: SmartBlockView }) {
   return (
     <section className="py-2" data-testid={`smart-block-carousel-${blockId}`}>
       <div>

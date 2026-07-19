@@ -8,11 +8,10 @@ import { ArrowRight, Clock, Eye, TrendingUp, Flame, Zap } from "lucide-react";
 import { UrduLayout } from "@/components/ur/UrduLayout";
 import { UrduHeroCarousel } from "@/components/ur/UrduHeroCarousel";
 import { UrduQuadCategoriesBlock } from "@/components/ur/UrduQuadCategoriesBlock";
-import { UrduSmartNewsBlock } from "@/components/ur/UrduSmartNewsBlock";
 import { UrduSmartSummaryBlock } from "@/components/ur/UrduSmartSummaryBlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
-import type { UrArticleWithDetails, UrSmartBlock } from "@shared/schema";
+import type { UrArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
 // Helper function to check if article is new (published within last 3 hours)
@@ -34,46 +33,7 @@ export default function UrduHome() {
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 
-  // Fetch smart blocks for different placements
-  const { data: blocksBelowFeatured } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'below_featured'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'below_featured' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksAboveAllNews } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'above_all_news'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_all_news' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksBetweenAllAndMurqap } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'between_all_and_murqap'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'between_all_and_murqap' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksAboveFooter } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'above_footer'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_footer' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
+  // Smart blocks: disabled on public homepage (dashboard only).
 
   // Separate featured and regular articles
   const featuredArticles = articles.filter(article => article.isFeatured && article.status === "published");
@@ -105,10 +65,6 @@ export default function UrduHome() {
             </div>
           )}
 
-          {/* Smart Blocks: below_featured */}
-          {blocksBelowFeatured && blocksBelowFeatured.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
-          ))}
         </div>
 
         {/* Smart Summary Block - Only for authenticated users */}
@@ -123,11 +79,6 @@ export default function UrduHome() {
         )}
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: above_all_news */}
-          {blocksAboveAllNews && blocksAboveAllNews.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
-          ))}
-
           {/* Latest Articles Section */}
           {regularArticles.length > 0 && (
             <div className="scroll-fade-in">
@@ -326,11 +277,6 @@ export default function UrduHome() {
         </div>
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-          {/* Smart Blocks: between_all_and_murqap */}
-          {blocksBetweenAllAndMurqap && blocksBetweenAllAndMurqap.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
-          ))}
-
           {/* Empty State */}
           {articles.length === 0 && (
             <Card className="p-12 text-center">
@@ -342,11 +288,6 @@ export default function UrduHome() {
               </Link>
             </Card>
           )}
-
-          {/* Smart Blocks: above_footer */}
-          {blocksAboveFooter && blocksAboveFooter.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
-          ))}
         </div>
       </main>
 

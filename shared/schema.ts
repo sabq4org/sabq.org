@@ -5085,19 +5085,41 @@ export const insertExperimentConversionSchema = createInsertSchema(experimentCon
 export const updateExperimentVariantSchema = insertExperimentVariantSchema.partial();
 
 // Smart Blocks (البلوكات الذكية)
+// مصدر محتوى المشهد التحريري (البلوك الذكي)
+export const smartBlockSourceTypes = [
+  "keyword",
+  "topic_cluster",
+  "category_feed",
+  "curated",
+  "trending",
+  "event_window",
+] as const;
+export type SmartBlockSourceType = (typeof smartBlockSourceTypes)[number];
+
 export const smartBlocks = pgTable("smart_blocks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: varchar("title", { length: 60 }).notNull(),
-  keyword: varchar("keyword", { length: 100 }).notNull(),
+  keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
   backgroundColor: varchar("background_color", { length: 20 }),
   placement: varchar("placement", { length: 30 }).notNull(), // below_featured, above_all_news, between_all_and_murqap, above_footer
-  layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'), // grid, list, featured
+  layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'), // grid, list, featured, carousel
   limitCount: integer("limit_count").notNull().default(6),
   filters: jsonb("filters").$type<{
     categories?: string[];
     dateRange?: { from: string; to: string };
   }>(),
+  // Homepage Stage fields (additive — 2026-07-19)
+  sortOrder: integer("sort_order").notNull().default(0),
+  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
+  subtitle: varchar("subtitle", { length: 160 }),
+  keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  scheduleStartAt: timestamp("schedule_start_at"),
+  scheduleEndAt: timestamp("schedule_end_at"),
+  lookbackHours: integer("lookback_hours"),
+  minArticles: integer("min_articles").notNull().default(1),
+  playbook: varchar("playbook", { length: 60 }),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -5106,6 +5128,8 @@ export const smartBlocks = pgTable("smart_blocks", {
   index("idx_smart_blocks_keyword").on(table.keyword),
   index("idx_smart_blocks_placement").on(table.placement),
   index("idx_smart_blocks_active").on(table.isActive),
+  index("idx_smart_blocks_placement_sort").on(table.placement, table.sortOrder),
+  index("idx_smart_blocks_playbook").on(table.playbook),
 ]);
 
 // Smart Blocks Relations
@@ -5176,8 +5200,9 @@ export type HajjBlockConfig = typeof hajjBlockConfig.$inferSelect;
 export const enSmartBlocks = pgTable("en_smart_blocks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: varchar("title", { length: 60 }).notNull(),
-  keyword: varchar("keyword", { length: 100 }).notNull(),
+  keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
+  backgroundColor: varchar("background_color", { length: 20 }),
   placement: varchar("placement", { length: 30 }).notNull(),
   layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'),
   limitCount: integer("limit_count").notNull().default(6),
@@ -5185,6 +5210,16 @@ export const enSmartBlocks = pgTable("en_smart_blocks", {
     categories?: string[];
     dateRange?: { from: string; to: string };
   }>(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
+  subtitle: varchar("subtitle", { length: 160 }),
+  keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  scheduleStartAt: timestamp("schedule_start_at"),
+  scheduleEndAt: timestamp("schedule_end_at"),
+  lookbackHours: integer("lookback_hours"),
+  minArticles: integer("min_articles").notNull().default(1),
+  playbook: varchar("playbook", { length: 60 }),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -5193,6 +5228,7 @@ export const enSmartBlocks = pgTable("en_smart_blocks", {
   index("idx_en_smart_blocks_keyword").on(table.keyword),
   index("idx_en_smart_blocks_placement").on(table.placement),
   index("idx_en_smart_blocks_active").on(table.isActive),
+  index("idx_en_smart_blocks_placement_sort").on(table.placement, table.sortOrder),
 ]);
 
 export const enSmartBlocksRelations = relations(enSmartBlocks, ({ one }) => ({
@@ -6871,8 +6907,9 @@ export type UrCommentWithUser = UrComment & {
 export const urSmartBlocks = pgTable("ur_smart_blocks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: varchar("title", { length: 60 }).notNull(),
-  keyword: varchar("keyword", { length: 100 }).notNull(),
+  keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
+  backgroundColor: varchar("background_color", { length: 20 }),
   placement: varchar("placement", { length: 30 }).notNull(),
   layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'),
   limitCount: integer("limit_count").notNull().default(6),
@@ -6880,6 +6917,16 @@ export const urSmartBlocks = pgTable("ur_smart_blocks", {
     categories?: string[];
     dateRange?: { from: string; to: string };
   }>(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
+  subtitle: varchar("subtitle", { length: 160 }),
+  keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  scheduleStartAt: timestamp("schedule_start_at"),
+  scheduleEndAt: timestamp("schedule_end_at"),
+  lookbackHours: integer("lookback_hours"),
+  minArticles: integer("min_articles").notNull().default(1),
+  playbook: varchar("playbook", { length: 60 }),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -6888,6 +6935,7 @@ export const urSmartBlocks = pgTable("ur_smart_blocks", {
   index("idx_ur_smart_blocks_keyword").on(table.keyword),
   index("idx_ur_smart_blocks_placement").on(table.placement),
   index("idx_ur_smart_blocks_active").on(table.isActive),
+  index("idx_ur_smart_blocks_placement_sort").on(table.placement, table.sortOrder),
 ]);
 
 export const urSmartBlocksRelations = relations(urSmartBlocks, ({ one }) => ({

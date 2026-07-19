@@ -22269,6 +22269,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Smart Blocks Routes - البلوكات الذكية
   // ==========================================
 
+  // NOTE (2026-07-19): Arabic/EN/UR smart-blocks handlers below are superseded by
+  // server/routes/smartBlocks.ts (registerSplitRoutes mounts first). Keep temporarily
+  // for reference; do not add new logic here — edit smartBlocksService instead.
   // GET /api/smart-blocks - List all smart blocks
   app.get("/api/smart-blocks", noCache(), async (req: any, res) => {
     try {
