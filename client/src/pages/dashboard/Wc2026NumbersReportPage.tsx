@@ -139,19 +139,23 @@ function StatOrb({
   const inner = (
     <>
       <div
-        className="pointer-events-none absolute -left-8 -top-8 h-28 w-28 rounded-full opacity-30 blur-2xl transition group-hover:opacity-50"
+        className="pointer-events-none absolute -left-6 -top-6 h-16 w-16 rounded-full opacity-25 blur-xl transition group-hover:opacity-45 sm:-left-8 sm:-top-8 sm:h-28 sm:w-28 sm:opacity-30 sm:blur-2xl"
         style={{ background: accent }}
       />
-      <p className="text-xs text-white/60">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-tight text-white md:text-4xl">
+      <p className="line-clamp-2 text-[10px] leading-snug text-white/60 sm:text-xs">{label}</p>
+      <p className="mt-1.5 text-xl font-black tracking-tight text-white sm:mt-2 sm:text-3xl md:text-4xl">
         {display}
       </p>
-      {hint ? <p className="mt-2 text-xs text-white/50">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-white/50 sm:mt-2 sm:text-xs">
+          {hint}
+        </p>
+      ) : null}
     </>
   );
 
   const className = cn(
-    "group relative overflow-hidden rounded-3xl border bg-white/5 p-5 backdrop-blur-md transition",
+    "group relative min-w-0 overflow-hidden rounded-2xl border bg-white/5 p-3 backdrop-blur-md transition sm:rounded-3xl sm:p-5",
     active
       ? "border-amber-300/50 bg-white/10 ring-1 ring-amber-300/30"
       : "border-white/10 hover:border-white/25 hover:bg-white/10",
@@ -493,9 +497,9 @@ export default function Wc2026NumbersReportPage() {
             </div>
 
             {isLoading ? (
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-28 rounded-3xl bg-white/10" />
+                  <Skeleton key={i} className="h-20 rounded-2xl bg-white/10 sm:h-28 sm:rounded-3xl" />
                 ))}
               </div>
             ) : error || !data ? (
@@ -516,7 +520,7 @@ export default function Wc2026NumbersReportPage() {
                       onChange={setStoryIndex}
                     />
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                       {data.storyBeats.map((b, i) => (
                         <StatOrb
                           key={b.label}
@@ -584,16 +588,16 @@ export default function Wc2026NumbersReportPage() {
                         الرقم السابق (~آلاف) كان يلتقط أي ذكر لـ«مونديال/كأس العالم» عبر السنين.
                         العدّاد الآن مضيّق على مونديال 2026 (عنوان + نافذة زمنية):
                       </p>
-                      <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-black/20 px-4 py-3">
-                          <p className="text-xs text-white/50">غرفة المباريات (wc26-*)</p>
-                          <p className="text-2xl font-black text-amber-200">
+                      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3">
+                        <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
+                          <p className="text-[10px] text-white/50 sm:text-xs">غرفة المباريات (wc26-*)</p>
+                          <p className="text-xl font-black text-amber-200 sm:text-2xl">
                             {(data.sabq.breakdown?.matchDesk ?? 0).toLocaleString("en-US")}
                           </p>
                         </div>
-                        <div className="rounded-2xl bg-black/20 px-4 py-3">
-                          <p className="text-xs text-white/50">تحريري رياضة منذ 2026-01-01</p>
-                          <p className="text-2xl font-black text-sky-200">
+                        <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
+                          <p className="text-[10px] text-white/50 sm:text-xs">تحريري رياضة منذ 2026-01-01</p>
+                          <p className="text-xl font-black text-sky-200 sm:text-2xl">
                             {(data.sabq.breakdown?.editorialWindow ?? 0).toLocaleString("en-US")}
                           </p>
                         </div>
@@ -605,7 +609,7 @@ export default function Wc2026NumbersReportPage() {
                       </ul>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                       <StatOrb label="إجمالي مونديال 2026" value={data.sabq.totalArticles} accent="#f59e0b" />
                       <StatOrb label="معاينات مباريات" value={data.sabq.previews} accent="#38bdf8" />
                       <StatOrb label="تقارير مباريات" value={data.sabq.matchReports} accent="#22c55e" />
@@ -674,7 +678,7 @@ export default function Wc2026NumbersReportPage() {
                       </div>
                     ) : null}
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                       <StatOrb label="مباريات" value={data.tournament.totalFixtures} accent="#38bdf8" />
                       <StatOrb label="منتهية" value={data.tournament.finished} accent="#22c55e" />
                       <StatOrb
@@ -694,7 +698,7 @@ export default function Wc2026NumbersReportPage() {
                       />
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
                       <LeaderCard
                         title="الهدّافون"
                         icon={<Goal className="h-4 w-4 text-amber-300" />}
@@ -727,22 +731,22 @@ export default function Wc2026NumbersReportPage() {
                 )}
 
                 {tab === "platform" && (
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {data.platform.map((p) => (
                       <div
                         key={p.id}
-                        className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 transition hover:border-amber-300/30 hover:bg-white/[0.07]"
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 transition hover:border-amber-300/30 hover:bg-white/[0.07] sm:rounded-3xl sm:p-5"
                       >
-                        <div className="mb-3 flex items-center justify-between">
-                          <Sparkles className="h-5 w-5 text-amber-300" />
+                        <div className="mb-2 flex items-center justify-between sm:mb-3">
+                          <Sparkles className="h-4 w-4 text-amber-300 sm:h-5 sm:w-5" />
                           {p.href ? (
                             <Link href={p.href} className="text-white/50 hover:text-amber-200">
-                              <ExternalLink className="h-4 w-4" />
+                              <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                             </Link>
                           ) : null}
                         </div>
-                        <h3 className="text-lg font-bold text-white">{p.title}</h3>
-                        <p className="mt-2 text-sm leading-relaxed text-white/60">
+                        <h3 className="text-sm font-bold text-white sm:text-lg">{p.title}</h3>
+                        <p className="mt-1.5 line-clamp-3 text-[11px] leading-relaxed text-white/60 sm:mt-2 sm:line-clamp-none sm:text-sm">
                           {p.description}
                         </p>
                       </div>
