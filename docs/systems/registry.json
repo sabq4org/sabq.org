@@ -621,7 +621,8 @@
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/smart-blocks",
       "owners": ["editorial", "platform"],
-      "lastReviewed": "2026-07-19"
+      "lastReviewed": "2026-07-19",
+      "notes": "Homepage bundle + SWR cache under blocks:smart:* to avoid DB pressure"
     }
   ]
 }

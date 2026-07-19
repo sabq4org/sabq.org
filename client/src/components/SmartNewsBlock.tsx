@@ -62,12 +62,22 @@ const getArticleDisplayImageUrl = (article: ArticleResult): string | null => {
   return article.imageUrl || article.thumbnailUrl || null;
 };
 
+type SmartBlockView = Pick<SmartBlock, "id" | "title" | "color"> &
+  Partial<SmartBlock> & {
+    layoutStyle?: string | null;
+    backgroundColor?: string | null;
+    subtitle?: string | null;
+  };
+
 interface SmartNewsBlockProps {
-  config: SmartBlock;
+  config: SmartBlockView;
+  /** مقالات جاهزة من حزمة /homepage — يمنع N+1 على الصفحة الرئيسية */
+  initialArticles?: ArticleResult[] | null;
 }
 
-export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
-  const { data: articles, isLoading } = useQuery<ArticleResult[]>({
+export function SmartNewsBlock({ config, initialArticles }: SmartNewsBlockProps) {
+  const hasInitial = Array.isArray(initialArticles);
+  const { data: fetchedArticles, isLoading } = useQuery<ArticleResult[]>({
     queryKey: [
       '/api/smart-blocks',
       config.id,
@@ -78,7 +88,6 @@ export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
       config.updatedAt,
     ],
     queryFn: async () => {
-      // المسار الجديد يطبّق المصدر + المثبتات + الجدولة + الفلاتر
       const res = await fetch(apiUrl(`/api/smart-blocks/${config.id}/articles`), {
         credentials: 'include',
       });
@@ -86,10 +95,12 @@ export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
       const data = await res.json();
       return data.items || [];
     },
+    enabled: !hasInitial,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     placeholderData: [],
   });
+  const articles = hasInitial ? initialArticles! : fetchedArticles;
   
   const processedArticles = useMemo(() => {
     if (!articles) return [];
@@ -718,7 +729,7 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
   );
 }
 
-function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArticle[]; blockId: string; config: SmartBlock }) {
+function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArticle[]; blockId: string; config: SmartBlockView }) {
   return (
     <section className="py-2" data-testid={`smart-block-carousel-${blockId}`}>
       <div>

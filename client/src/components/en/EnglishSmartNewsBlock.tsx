@@ -47,11 +47,13 @@ interface ArticleResult {
 }
 
 interface EnglishSmartNewsBlockProps {
-  config: EnSmartBlock;
+  config: EnSmartBlock | (Partial<EnSmartBlock> & { id: string; title: string; color: string; layoutStyle?: string | null });
+  initialArticles?: ArticleResult[] | null;
 }
 
-export function EnglishSmartNewsBlock({ config }: EnglishSmartNewsBlockProps) {
-  const { data: articles, isLoading } = useQuery<ArticleResult[]>({
+export function EnglishSmartNewsBlock({ config, initialArticles }: EnglishSmartNewsBlockProps) {
+  const hasInitial = Array.isArray(initialArticles);
+  const { data: fetchedArticles, isLoading } = useQuery<ArticleResult[]>({
     queryKey: ['/api/en/smart-blocks', config.id, 'articles', config.updatedAt],
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/en/smart-blocks/${config.id}/articles`), {
@@ -61,7 +63,9 @@ export function EnglishSmartNewsBlock({ config }: EnglishSmartNewsBlockProps) {
       const data = await res.json();
       return data.items || [];
     },
+    enabled: !hasInitial,
   });
+  const articles = hasInitial ? initialArticles! : fetchedArticles;
 
   if (isLoading) {
     return (

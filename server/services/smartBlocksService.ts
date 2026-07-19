@@ -7,6 +7,7 @@
  */
 
 import { db } from "../db";
+import { CACHE_TTL, memoryCache, withSWR } from "../memoryCache";
 import {
   articles,
   categories,
@@ -15,8 +16,6 @@ import {
   urSmartBlocks,
   enArticles,
   urArticles,
-  articleTags,
-  tags,
   type SmartBlock,
   type InsertSmartBlock,
   type UpdateSmartBlock,
@@ -49,6 +48,29 @@ export const SMART_BLOCK_PLACEMENTS = [
   "between_all_and_murqap",
   "above_footer",
 ] as const;
+
+/** سقف حماية من ضغط DB على الصفحة الرئيسية */
+export const HOMEPAGE_MAX_ACTIVE_BLOCKS = 8;
+export const HOMEPAGE_MAX_PER_PLACEMENT = 3;
+export const MAX_SEARCH_TERMS = 5;
+
+/**
+ * افتراضي حداثة المقالات — يمنع full-table scan على articles.
+ * المفتاح `blocks:` يتوافق مع invalidatePattern('^blocks:') عند النشر.
+ */
+const DEFAULT_LOOKBACK_HOURS: Record<string, number | null> = {
+  keyword: 14 * 24,
+  topic_cluster: 14 * 24,
+  event_window: 72,
+  trending: 48,
+  category_feed: 30 * 24,
+  curated: null,
+};
+
+/** إبطال كاش البلوكات (SWR + memory) — يُستدعى عند CRUD ويفعّله النشر أيضاً عبر ^blocks: */
+export function invalidateSmartBlocksCache(): void {
+  memoryCache.invalidatePattern("^blocks:smart:");
+}
 
 export type SmartBlockLocale = "ar" | "en" | "ur";
 
@@ -120,23 +142,28 @@ function collectSearchTerms(block: {
   for (const k of block.keywords || []) {
     if (k?.trim()) terms.add(k.trim());
   }
-  return Array.from(terms);
+  return Array.from(terms).slice(0, MAX_SEARCH_TERMS);
 }
 
+/**
+ * مسار بحث رخيص نسبياً (تجنّب excerpt ILIKE + EXISTS على الوسوم لكل صف —
+ * كان مصدر ضغط DB التاريخي مع N بلوكات × زوار).
+ * الأولوية: تطابق seo.keywords الدقيق ثم عنوان يحتوي الكلمة.
+ */
 function keywordMatchSql(term: string): SQL {
   const pat = `%${term}%`;
   return or(
-    ilike(articles.title, pat),
-    sql`coalesce(${articles.excerpt}, '') ILIKE ${pat}`,
-    sql`(${articles.seo} -> 'keywords')::text ILIKE ${pat}`,
     sql`${articles.seo}::jsonb -> 'keywords' @> ${JSON.stringify([term])}::jsonb`,
-    sql`EXISTS (
-      SELECT 1 FROM ${articleTags} AS atg
-      JOIN ${tags} AS tg ON tg.id = atg.tag_id
-      WHERE atg.article_id = ${articles.id}
-        AND (tg.name_ar ILIKE ${pat} OR tg.name_en ILIKE ${pat} OR tg.slug ILIKE ${pat})
-    )`,
+    ilike(articles.title, pat),
   )!;
+}
+
+function effectiveLookbackHours(
+  sourceType: string | null | undefined,
+  explicit?: number | null,
+): number | null {
+  if (explicit != null && explicit > 0) return explicit;
+  return DEFAULT_LOOKBACK_HOURS[sourceType || "keyword"] ?? DEFAULT_LOOKBACK_HOURS.keyword;
 }
 
 const articleSelect = {
@@ -248,15 +275,10 @@ async function searchEnArticles(opts: {
     );
   }
   if (opts.terms.length) {
+    // عنوان فقط — تجنّب ILIKE على excerpt (full scan مكلف)
     conditions.push(
       or(
-        ...opts.terms.map((term) => {
-          const pat = `%${term}%`;
-          return or(
-            ilike(enArticles.title, pat),
-            sql`coalesce(${enArticles.excerpt}, '') ILIKE ${pat}`,
-          )!;
-        }),
+        ...opts.terms.map((term) => ilike(enArticles.title, `%${term}%`)),
       )!,
     );
   }
@@ -307,13 +329,7 @@ async function searchUrArticles(opts: {
   if (opts.terms.length) {
     conditions.push(
       or(
-        ...opts.terms.map((term) => {
-          const pat = `%${term}%`;
-          return or(
-            ilike(urArticles.title, pat),
-            sql`coalesce(${urArticles.excerpt}, '') ILIKE ${pat}`,
-          )!;
-        }),
+        ...opts.terms.map((term) => ilike(urArticles.title, `%${term}%`)),
       )!,
     );
   }
@@ -408,6 +424,7 @@ export async function createSmartBlockRecord(
     minArticles: (data as any).minArticles ?? 1,
   };
   const [row] = await db.insert(table).values(payload as any).returning();
+  invalidateSmartBlocksCache();
   return row as any;
 }
 
@@ -422,6 +439,7 @@ export async function updateSmartBlockRecord(
     .set({ ...updates, updatedAt: new Date() } as any)
     .where(eq(table.id, id))
     .returning();
+  if (row) invalidateSmartBlocksCache();
   return (row as any) || null;
 }
 
@@ -431,6 +449,7 @@ export async function deleteSmartBlockRecord(
 ): Promise<boolean> {
   const table = tableFor(locale);
   const deleted = await db.delete(table).where(eq(table.id, id)).returning({ id: table.id });
+  if (deleted.length > 0) invalidateSmartBlocksCache();
   return deleted.length > 0;
 }
 
@@ -448,6 +467,7 @@ export async function reorderSmartBlocks(
         .where(and(eq(table.id, orderedIds[i]), eq(table.placement, placement)));
     }
   });
+  invalidateSmartBlocksCache();
 }
 
 export async function activatePlaybook(
@@ -471,6 +491,7 @@ export async function activatePlaybook(
       else deactivated++;
     }
   }
+  if (activated + deactivated > 0) invalidateSmartBlocksCache();
   return { activated, deactivated };
 }
 
@@ -524,10 +545,11 @@ export async function resolveBlockArticles(
   const dateFrom = block.filters?.dateRange?.from;
   const dateTo = block.filters?.dateRange?.to;
   const terms = collectSearchTerms(block);
+  const lookbackHours = effectiveLookbackHours(sourceType, block.lookbackHours);
 
   let pinned: SmartBlockArticle[] = [];
   if (locale === "ar" && pinnedIds.length) {
-    pinned = await fetchArticlesByIds(pinnedIds);
+    pinned = await fetchArticlesByIds(pinnedIds.slice(0, limit));
   }
 
   const remaining = Math.max(limit - pinned.length, 0);
@@ -547,10 +569,7 @@ export async function resolveBlockArticles(
       categories: categoriesFilter,
       dateFrom,
       dateTo,
-      lookbackHours:
-        sourceType === "event_window" || sourceType === "trending"
-          ? block.lookbackHours ?? (sourceType === "trending" ? 48 : block.lookbackHours)
-          : block.lookbackHours,
+      lookbackHours,
       excludeIds: pinned.map((p) => p.id),
       orderByViews: sourceType === "trending",
     };
@@ -611,6 +630,111 @@ export async function queryArticlesPreview(
     limit: params.limit,
     preview: true,
   });
+}
+
+/** حل مقالات بلوك محفوظ مع SWR — مفتاح تحت blocks: ليُبطَل عند النشر */
+export async function resolveSavedBlockArticlesCached(
+  locale: SmartBlockLocale,
+  blockId: string,
+  options: ResolveOptions = {},
+): Promise<{ items: SmartBlockArticle[]; total: number; hiddenReason?: string }> {
+  if (options.preview) {
+    const block = await getSmartBlockById(locale, blockId);
+    if (!block) return { items: [], total: 0, hiddenReason: "missing" };
+    return resolveBlockArticles(locale, block as any, { ...options, preview: true });
+  }
+
+  return withSWR(
+    `blocks:smart:articles:${locale}:${blockId}`,
+    CACHE_TTL.SMART_BLOCKS,
+    CACHE_TTL.SMART_BLOCKS * 3,
+    async () => {
+      const block = await getSmartBlockById(locale, blockId);
+      if (!block) return { items: [], total: 0, hiddenReason: "missing" };
+      return resolveBlockArticles(locale, block as any, options);
+    },
+  );
+}
+
+export type HomepageBlockPayload = {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  color: string;
+  backgroundColor?: string | null;
+  placement: string;
+  layoutStyle: string;
+  limitCount: number;
+  sourceType?: string | null;
+  isActive: boolean;
+  articles: SmartBlockArticle[];
+};
+
+export type HomepageSmartBlocksBundle = {
+  byPlacement: Record<string, HomepageBlockPayload[]>;
+  blockCount: number;
+  generatedAt: string;
+};
+
+/**
+ * حزمة الصفحة الرئيسية: طلب واحد + كاش SWR.
+ * يحدّ عدد البلوكات ويحل المقالات بالتتابع لتجنّب عاصفة استعلامات.
+ */
+export async function getHomepageSmartBlocksBundle(
+  locale: SmartBlockLocale,
+): Promise<HomepageSmartBlocksBundle> {
+  return withSWR(
+    `blocks:smart:homepage:${locale}`,
+    CACHE_TTL.SMART_BLOCKS,
+    CACHE_TTL.SMART_BLOCKS * 3,
+    async () => {
+      const active = (await listSmartBlocks(locale, {
+        isActive: true,
+        respectSchedule: true,
+      })) as any[];
+
+      const byPlacement: Record<string, HomepageBlockPayload[]> = {};
+      for (const p of SMART_BLOCK_PLACEMENTS) byPlacement[p] = [];
+
+      // سقف لكل موضع ثم إجمالي
+      const selected: any[] = [];
+      for (const p of SMART_BLOCK_PLACEMENTS) {
+        const shelf = active
+          .filter((b) => b.placement === p)
+          .slice(0, HOMEPAGE_MAX_PER_PLACEMENT);
+        selected.push(...shelf);
+      }
+      const capped = selected.slice(0, HOMEPAGE_MAX_ACTIVE_BLOCKS);
+
+      let blockCount = 0;
+      for (const block of capped) {
+        const resolved = await resolveBlockArticles(locale, block);
+        if (!resolved.items.length) continue;
+        const payload: HomepageBlockPayload = {
+          id: block.id,
+          title: block.title,
+          subtitle: block.subtitle ?? null,
+          color: block.color,
+          backgroundColor: block.backgroundColor ?? null,
+          placement: block.placement,
+          layoutStyle: block.layoutStyle || "grid",
+          limitCount: block.limitCount,
+          sourceType: block.sourceType,
+          isActive: block.isActive,
+          articles: resolved.items,
+        };
+        if (!byPlacement[block.placement]) byPlacement[block.placement] = [];
+        byPlacement[block.placement].push(payload);
+        blockCount++;
+      }
+
+      return {
+        byPlacement,
+        blockCount,
+        generatedAt: new Date().toISOString(),
+      };
+    },
+  );
 }
 
 export type DirectorSuggestion = {

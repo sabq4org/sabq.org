@@ -48,33 +48,37 @@ const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock")
 const SmartNewsBlock = lazyNamed(() => import("@/components/SmartNewsBlock"), "SmartNewsBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
-const SMART_BLOCK_PLACEMENTS = [
-  "below_featured",
-  "above_all_news",
-  "between_all_and_murqap",
-  "above_footer",
-] as const;
+type HomepageSmartBlock = SmartBlock & {
+  articles?: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    englishSlug?: string | null;
+    publishedAt?: string | null;
+    imageUrl?: string | null;
+    thumbnailUrl?: string | null;
+    infographicBannerUrl?: string | null;
+    excerpt?: string | null;
+    views?: number;
+    category?: { nameAr?: string; slug: string; color: string | null } | null;
+  }>;
+};
 
-function useSmartBlocksByPlacement() {
-  return useQuery<Record<string, SmartBlock[]>>({
-    queryKey: ["/api/smart-blocks", "homepage-stage"],
+type HomepageSmartBlocksBundle = {
+  byPlacement: Record<string, HomepageSmartBlock[]>;
+  blockCount: number;
+};
+
+/** طلب واحد + مقالات مضمّنة — بدل 4 قوائم + N استعلامات مقالات */
+function useHomepageSmartBlocks() {
+  return useQuery<HomepageSmartBlocksBundle>({
+    queryKey: ["/api/smart-blocks/homepage"],
     queryFn: async () => {
-      const entries = await Promise.all(
-        SMART_BLOCK_PLACEMENTS.map(async (placement) => {
-          const params = new URLSearchParams({
-            isActive: "true",
-            placement,
-            respectSchedule: "true",
-          });
-          const res = await fetch(apiUrl(`/api/smart-blocks?${params}`), {
-            credentials: "include",
-          });
-          if (!res.ok) return [placement, []] as const;
-          const data = await res.json();
-          return [placement, Array.isArray(data) ? data : []] as const;
-        }),
-      );
-      return Object.fromEntries(entries);
+      const res = await fetch(apiUrl("/api/smart-blocks/homepage"), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch smart blocks homepage bundle");
+      return res.json();
     },
     staleTime: 60 * 1000,
   });
@@ -83,7 +87,7 @@ function useSmartBlocksByPlacement() {
 function SmartBlocksSlot({
   blocks,
 }: {
-  blocks: SmartBlock[] | undefined;
+  blocks: HomepageSmartBlock[] | undefined;
 }) {
   const list = Array.isArray(blocks) ? blocks : [];
   if (list.length === 0) return null;
@@ -92,7 +96,14 @@ function SmartBlocksSlot({
       {list.map((block) => (
         <ErrorBoundary key={block.id} fallback={null}>
           <Suspense fallback={null}>
-            <SmartNewsBlock config={block} />
+            <SmartNewsBlock
+              config={block}
+              initialArticles={
+                Array.isArray(block.articles)
+                  ? (block.articles as any[])
+                  : []
+              }
+            />
           </Suspense>
         </ErrorBoundary>
       ))}
@@ -225,7 +236,8 @@ export default function Home() {
   // DMS Ad tracking for homepage
   useAdTracking('Homepage');
 
-  const { data: smartBlocksByPlacement } = useSmartBlocksByPlacement();
+  const { data: smartBlocksBundle } = useHomepageSmartBlocks();
+  const smartBlocksByPlacement = smartBlocksBundle?.byPlacement;
   
   const { data: user } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],

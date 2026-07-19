@@ -19,13 +19,14 @@ import {
   activatePlaybook,
   createSmartBlockRecord,
   deleteSmartBlockRecord,
+  getHomepageSmartBlocksBundle,
   getSmartBlockById,
   getStageSummary,
   listPlaybooks,
   listSmartBlocks,
   queryArticlesPreview,
   reorderSmartBlocks,
-  resolveBlockArticles,
+  resolveSavedBlockArticlesCached,
   suggestDirectorScenes,
   updateSmartBlockRecord,
   type SmartBlockLocale,
@@ -73,6 +74,19 @@ const previewSchema = z.object({
 });
 
 function mountLocale(base: string) {
+  // GET homepage bundle — طلب واحد + SWR (بديل N+1 على الصفحة الرئيسية)
+  router.get(`${base}/homepage`, async (req, res) => {
+    try {
+      const locale = localeFromPath(base);
+      const bundle = await getHomepageSmartBlocksBundle(locale);
+      res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+      res.json(bundle);
+    } catch (error) {
+      console.error("[SmartBlocks] homepage bundle failed:", error);
+      res.status(500).json({ message: "فشل في جلب حزمة البلوكات" });
+    }
+  });
+
   // GET list
   router.get(base, async (req: any, res) => {
     try {
@@ -87,6 +101,12 @@ function mountLocale(base: string) {
         filters.respectSchedule = true;
       }
       const blocks = await listSmartBlocks(locale, filters);
+      // قائمة الأدمن لا تُكاش؛ الصفحة العامة تستخدم /homepage
+      if (req.query.isActive === "true") {
+        res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
+      } else {
+        res.setHeader("Cache-Control", "private, no-store");
+      }
       res.json(blocks);
     } catch (error) {
       console.error("[SmartBlocks] list failed:", error);
@@ -275,17 +295,23 @@ function mountLocale(base: string) {
     }
   });
 
-  // GET articles for a saved block
+  // GET articles for a saved block (SWR-cached unless preview=true)
   router.get(`${base}/:id/articles`, async (req, res) => {
     try {
       const locale = localeFromPath(base);
-      const block = await getSmartBlockById(locale, req.params.id);
-      if (!block) return res.status(404).json({ message: "البلوك الذكي غير موجود" });
       const preview = req.query.preview === "true";
-      const result = await resolveBlockArticles(locale, block as any, {
+      const result = await resolveSavedBlockArticlesCached(locale, req.params.id, {
         limit: req.query.limit ? parseInt(String(req.query.limit), 10) : undefined,
         preview,
       });
+      if (result.hiddenReason === "missing") {
+        return res.status(404).json({ message: "البلوك الذكي غير موجود" });
+      }
+      if (!preview) {
+        res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+      } else {
+        res.setHeader("Cache-Control", "private, no-store");
+      }
       res.json(result);
     } catch (error) {
       console.error("[SmartBlocks] block articles failed:", error);

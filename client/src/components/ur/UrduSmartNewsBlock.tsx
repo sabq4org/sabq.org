@@ -48,11 +48,13 @@ interface ArticleResult {
 }
 
 interface UrduSmartNewsBlockProps {
-  config: UrSmartBlock;
+  config: UrSmartBlock | (Partial<UrSmartBlock> & { id: string; title: string; color: string; layoutStyle?: string | null });
+  initialArticles?: ArticleResult[] | null;
 }
 
-export function UrduSmartNewsBlock({ config }: UrduSmartNewsBlockProps) {
-  const { data: articles, isLoading } = useQuery<ArticleResult[]>({
+export function UrduSmartNewsBlock({ config, initialArticles }: UrduSmartNewsBlockProps) {
+  const hasInitial = Array.isArray(initialArticles);
+  const { data: fetchedArticles, isLoading } = useQuery<ArticleResult[]>({
     queryKey: ['/api/ur/smart-blocks', config.id, 'articles', config.updatedAt],
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/ur/smart-blocks/${config.id}/articles`), {
@@ -62,7 +64,9 @@ export function UrduSmartNewsBlock({ config }: UrduSmartNewsBlockProps) {
       const data = await res.json();
       return data.items || [];
     },
+    enabled: !hasInitial,
   });
+  const articles = hasInitial ? initialArticles! : fetchedArticles;
 
   if (isLoading) {
     return (

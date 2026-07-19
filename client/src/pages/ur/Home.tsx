@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import type { UrArticleWithDetails, UrSmartBlock } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -23,6 +24,8 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   const diffInHours = (now.getTime() - published.getTime()) / (1000 * 60 * 60);
   return diffInHours <= 3;
 };
+
+type UrHomepageBlock = UrSmartBlock & { articles?: any[] };
 
 export default function UrduHome() {
   const { user } = useAuth();
@@ -34,46 +37,19 @@ export default function UrduHome() {
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 
-  // Fetch smart blocks for different placements
-  const { data: blocksBelowFeatured } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'below_featured'],
+  const { data: smartBundle } = useQuery<{ byPlacement: Record<string, UrHomepageBlock[]> }>({
+    queryKey: ["/api/ur/smart-blocks/homepage"],
     queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'below_featured', respectSchedule: 'true' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
+      const res = await fetch(apiUrl("/api/ur/smart-blocks/homepage"), { credentials: "include" });
+      if (!res.ok) return { byPlacement: {} };
+      return res.json();
     },
+    staleTime: 60 * 1000,
   });
-
-  const { data: blocksAboveAllNews } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'above_all_news'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_all_news', respectSchedule: 'true' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksBetweenAllAndMurqap } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'between_all_and_murqap'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'between_all_and_murqap', respectSchedule: 'true' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
-
-  const { data: blocksAboveFooter } = useQuery<UrSmartBlock[]>({
-    queryKey: ['/api/ur/smart-blocks', 'above_footer'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_footer', respectSchedule: 'true' });
-      const res = await fetch(`/api/ur/smart-blocks?${params}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return await res.json();
-    },
-  });
+  const blocksBelowFeatured = smartBundle?.byPlacement?.below_featured;
+  const blocksAboveAllNews = smartBundle?.byPlacement?.above_all_news;
+  const blocksBetweenAllAndMurqap = smartBundle?.byPlacement?.between_all_and_murqap;
+  const blocksAboveFooter = smartBundle?.byPlacement?.above_footer;
 
   // Separate featured and regular articles
   const featuredArticles = articles.filter(article => article.isFeatured && article.status === "published");
@@ -107,7 +83,7 @@ export default function UrduHome() {
 
           {/* Smart Blocks: below_featured */}
           {blocksBelowFeatured && blocksBelowFeatured.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
+            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
           ))}
         </div>
 
@@ -125,7 +101,7 @@ export default function UrduHome() {
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
           {/* Smart Blocks: above_all_news */}
           {blocksAboveAllNews && blocksAboveAllNews.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
+            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
           ))}
 
           {/* Latest Articles Section */}
@@ -328,7 +304,7 @@ export default function UrduHome() {
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
           {/* Smart Blocks: between_all_and_murqap */}
           {blocksBetweenAllAndMurqap && blocksBetweenAllAndMurqap.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
+            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
           ))}
 
           {/* Empty State */}
@@ -345,7 +321,7 @@ export default function UrduHome() {
 
           {/* Smart Blocks: above_footer */}
           {blocksAboveFooter && blocksAboveFooter.map((block) => (
-            <UrduSmartNewsBlock key={block.id} config={block} />
+            <UrduSmartNewsBlock key={block.id} config={block} initialArticles={Array.isArray(block.articles) ? block.articles : []} />
           ))}
         </div>
       </main>
