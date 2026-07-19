@@ -1103,7 +1103,7 @@ export default function SportsDashboard() {
     return all[0] ?? null;
   }, [matches]);
 
-  const { data: todayData } = useQuery<{ today: SpLiveItem[] }>({
+  const { data: todayData, isFetched: todayFetched } = useQuery<{ today: SpLiveItem[] }>({
     queryKey: ["/api/sports/today"],
     // النتيجة اللحظية يغذّيها /api/sports/live — هنا 30ث ثابتة لتفادي الاستطلاع
     // المتزامن السريع على الجوال أثناء المباشر.
@@ -1116,15 +1116,15 @@ export default function SportsDashboard() {
 
   // نبض المباشر: نداء مخصّص أسرع (7ث) لكل المباريات الجارية عبر بطولاتنا —
   // هنا تظهر النتيجة/الدقيقة اللحظية من TheSports فور توفّرها في الإنتاج.
-  const { data: liveData } = useQuery<{ live: SpLiveItem[] }>({
+  const { data: liveData, isFetched: liveFetched } = useQuery<{ live: SpLiveItem[] }>({
     queryKey: ["/api/sports/live"], refetchInterval: 7_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true,
   });
   const liveMatches = (Array.isArray(liveData?.live) ? liveData!.live : []).filter((f) => f.status.live);
 
-  // موجز البطولات: لقطة موحّدة لكل بطولة تغذّي رفّ «موجز البطولات». تُحدَّث كل
-  // 30ث فقط عند وجود مباراة جارية في أي بطولة (وإلا تبقى على كاش SWR الطويل).
+  // موجز البطولات بعد today/live — لا يزاحم حدّ المزوّد أثناء جلب المباريات.
   const { data: summaryData } = useQuery<{ configured: boolean; competitions: SpSummary[] }>({
     queryKey: ["/api/sports/summary"],
+    enabled: todayFetched && liveFetched,
     staleTime: 2 * 60_000,
     refetchInterval: (query) =>
       (query.state.data?.competitions ?? []).some((c) => c.liveCount > 0) ? 30_000 : false,
