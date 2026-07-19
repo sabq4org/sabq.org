@@ -19,8 +19,12 @@ router.get(
       res.setHeader("Cache-Control", "private, no-store");
       res.json(report);
     } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       console.error("[WcNumbersReport] failed:", err);
-      res.status(500).json({ message: "تعذر بناء تقرير أرقام كأس العالم" });
+      res.status(500).json({
+        message: "تعذر بناء تقرير أرقام كأس العالم",
+        detail: detail.slice(0, 300),
+      });
     }
   },
 );

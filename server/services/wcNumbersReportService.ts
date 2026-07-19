@@ -4,9 +4,9 @@
  * لا يُنشر للعامة حتى تفعيل صريح لاحقاً.
  */
 
-import { and, eq, ilike, like, notIlike, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, ilike, like, notIlike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { articles, articleTags, categories, tags } from "@shared/schema";
+import { articles, categories } from "@shared/schema";
 import { CACHE_TTL, withSWR } from "../memoryCache";
 import {
   detectChampion,
@@ -21,9 +21,8 @@ import {
 import { isArabTeam } from "./worldCupNames";
 
 const SLUG_PREFIX = "wc26";
-const WORLD_CUP_NEWS_TERMS = ["مونديال", "كأس العالم"] as const;
 /** بداية نافذة تغطية مونديال 2026 (يستبعد أرشيف 2018/2022 وبطولات أخرى). */
-const WC2026_COVERAGE_START = "2026-01-01T00:00:00+03:00";
+const WC2026_COVERAGE_START = new Date("2026-01-01T00:00:00+03:00");
 
 export type WcNumbersReportStatus = "draft" | "published";
 
@@ -110,29 +109,16 @@ export type WcNumbersReport = {
   storyBeats: StoryBeat[];
 };
 
-function worldCupKeywordPredicate() {
-  return or(
-    ...WORLD_CUP_NEWS_TERMS.map((term) => {
-      const pat = `%${term}%`;
-      return or(
-        ilike(articles.title, pat),
-        sql`(${articles.seo} -> 'keywords')::text ILIKE ${pat}`,
-        sql`EXISTS (
-          SELECT 1 FROM ${articleTags} AS atg
-          JOIN ${tags} AS tg ON tg.id = atg.tag_id
-          WHERE atg.article_id = ${articles.id}
-            AND (tg.name_ar ILIKE ${pat} OR tg.name_en ILIKE ${pat} OR tg.slug ILIKE ${pat})
-        )`,
-      );
-    }),
-  )!;
-}
-
 function matchDeskSlugPredicate() {
   return or(
     like(articles.slug, `${SLUG_PREFIX}-%`),
     like(articles.legacySlug, `${SLUG_PREFIX}-%`),
   )!;
+}
+
+/** عنوان تحريري يشير لمونديال/كأس العالم (بدون EXISTS ثقيل على الوسوم). */
+function worldCupTitlePredicate() {
+  return or(ilike(articles.title, "%مونديال%"), ilike(articles.title, "%كأس العالم%"))!;
 }
 
 /** استبعاد كأس العالم للأندية وأي صيغة شائعة لها. */
@@ -146,14 +132,19 @@ function excludeClubWorldCupNoise() {
 }
 
 /**
- * يستبعد عناوين تشير لمونديالات سابقة (2010/2014/2018/2022)
- * ما لم تذكر 2026 صراحةً.
+ * يستبعد عناوين تشير لمونديالات سابقة ما لم تذكر 2026.
+ * (بدون ~* — تجنّباً لاختلافات/أخطاء بعض مسارات الـ SQL)
  */
 function excludeLegacyWorldCupYears() {
-  return sql`(
-    ${articles.title} NOT ~* '(^|[^0-9])(2010|2014|2018|2022)([^0-9]|$)'
-    OR ${articles.title} ILIKE '%2026%'
-  )`;
+  return or(
+    ilike(articles.title, "%2026%"),
+    and(
+      notIlike(articles.title, "%2010%"),
+      notIlike(articles.title, "%2014%"),
+      notIlike(articles.title, "%2018%"),
+      notIlike(articles.title, "%2022%"),
+    )!,
+  )!;
 }
 
 async function getSportsCategoryId(): Promise<string | null> {
@@ -168,45 +159,65 @@ async function getSportsCategoryId(): Promise<string | null> {
 /**
  * مواد مونديال 2026 فقط:
  * 1) slug حتمي wc26-* (غرفة المباريات)
- * 2) تحريري: قسم الرياضة + كلمة مونديال/كأس العالم + نُشر منذ 2026-01-01
- *    مع استبعاد أندية + سنوات مونديالات سابقة
+ * 2) تحريري: قسم الرياضة + عنوان فيه مونديال/كأس العالم + نُشر منذ 2026-01-01
  */
-async function wcArticlesWhere(): Promise<SQL | undefined> {
+async function wcArticlesWhere(opts?: { matchDeskOnly?: boolean }): Promise<SQL | undefined> {
+  const matchDesk = and(eq(articles.status, "published"), matchDeskSlugPredicate());
+  if (opts?.matchDeskOnly) return matchDesk;
+
   const sportsId = await getSportsCategoryId().catch(() => null);
   const editorial2026 =
     sportsId != null
       ? and(
+          eq(articles.status, "published"),
           eq(articles.categoryId, sportsId),
-          worldCupKeywordPredicate(),
-          sql`${articles.publishedAt} >= ${WC2026_COVERAGE_START}::timestamptz`,
+          worldCupTitlePredicate(),
+          gte(articles.publishedAt, WC2026_COVERAGE_START),
           excludeClubWorldCupNoise(),
           excludeLegacyWorldCupYears(),
         )
       : undefined;
 
-  return and(
-    eq(articles.status, "published"),
-    editorial2026
-      ? or(matchDeskSlugPredicate(), editorial2026)!
-      : matchDeskSlugPredicate(),
-  );
+  if (!editorial2026) return matchDesk;
+  return or(matchDesk, editorial2026);
 }
 
 const COVERAGE_METHODOLOGY = [
   "المؤكّد: مواد slug تبدأ بـ wc26- (معاينات/تقارير غرفة مباريات المونديال).",
-  "التحريري: قسم الرياضة + (مونديال أو كأس العالم) في العنوان/SEO/وسم، ونُشرت منذ 2026-01-01.",
+  "التحريري: قسم الرياضة + عنوان فيه (مونديال أو كأس العالم) ونُشر منذ 2026-01-01.",
   "مستبعد: كأس العالم للأندية، وعناوين تشير لـ 2010/2014/2018/2022 بلا ذكر 2026.",
   "لا يُحسب أرشيف المونديالات السابقة ولا المواد خارج قسم الرياضة.",
 ] as const;
 
-async function buildSabqCoverage(): Promise<SabqCoverageStats> {
-  const where = await wcArticlesWhere();
-  const slugPred = matchDeskSlugPredicate();
-
+async function queryCoverage(where: SQL | undefined): Promise<{
+  agg: {
+    total: number;
+    matchDesk: number;
+    aiGenerated: number;
+    previews: number;
+    matchReports: number;
+    infographics: number;
+    analyses: number;
+    opinions: number;
+    totalViews: number;
+  };
+  top: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    englishSlug: string | null;
+    views: number | null;
+    articleType: string | null;
+    aiGenerated: boolean | null;
+    publishedAt: Date | null;
+    imageUrl: string | null;
+  }>;
+  daily: Array<{ day: string; count: number; views: number }>;
+}> {
   const [agg] = await db
     .select({
       total: sql<number>`count(*)::int`,
-      matchDesk: sql<number>`count(*) filter (where ${slugPred})::int`,
+      matchDesk: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-%`})::int`,
       aiGenerated: sql<number>`count(*) filter (where ${articles.aiGenerated} = true)::int`,
       previews: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-preview-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-preview-%`})::int`,
       matchReports: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-report-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-report-%`})::int`,
@@ -246,27 +257,52 @@ async function buildSabqCoverage(): Promise<SabqCoverageStats> {
     .groupBy(sql`to_char(timezone('Asia/Riyadh', ${articles.publishedAt}), 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(timezone('Asia/Riyadh', ${articles.publishedAt}), 'YYYY-MM-DD')`);
 
-  const total = Number(agg?.total ?? 0);
-  const matchDesk = Number(agg?.matchDesk ?? 0);
-  const totalViews = Number(agg?.totalViews ?? 0);
-  const aiGenerated = Number(agg?.aiGenerated ?? 0);
+  return {
+    agg: {
+      total: Number(agg?.total ?? 0),
+      matchDesk: Number(agg?.matchDesk ?? 0),
+      aiGenerated: Number(agg?.aiGenerated ?? 0),
+      previews: Number(agg?.previews ?? 0),
+      matchReports: Number(agg?.matchReports ?? 0),
+      infographics: Number(agg?.infographics ?? 0),
+      analyses: Number(agg?.analyses ?? 0),
+      opinions: Number(agg?.opinions ?? 0),
+      totalViews: Number(agg?.totalViews ?? 0),
+    },
+    top,
+    daily: daily
+      .filter((d) => d.day)
+      .map((d) => ({
+        day: d.day,
+        count: Number(d.count),
+        views: Number(d.views),
+      })),
+  };
+}
 
+function toSabqStats(
+  result: Awaited<ReturnType<typeof queryCoverage>>,
+  methodology: string[],
+): SabqCoverageStats {
+  const { agg, top, daily } = result;
+  const total = agg.total;
+  const totalViews = agg.totalViews;
   return {
     totalArticles: total,
-    aiGenerated,
-    editorial: Math.max(total - aiGenerated, 0),
-    previews: Number(agg?.previews ?? 0),
-    matchReports: Number(agg?.matchReports ?? 0),
-    infographics: Number(agg?.infographics ?? 0),
-    analyses: Number(agg?.analyses ?? 0),
-    opinions: Number(agg?.opinions ?? 0),
+    aiGenerated: agg.aiGenerated,
+    editorial: Math.max(total - agg.aiGenerated, 0),
+    previews: agg.previews,
+    matchReports: agg.matchReports,
+    infographics: agg.infographics,
+    analyses: agg.analyses,
+    opinions: agg.opinions,
     totalViews,
     avgViews: total > 0 ? Math.round(totalViews / total) : 0,
     breakdown: {
-      matchDesk,
-      editorialWindow: Math.max(total - matchDesk, 0),
+      matchDesk: agg.matchDesk,
+      editorialWindow: Math.max(total - agg.matchDesk, 0),
     },
-    methodology: [...COVERAGE_METHODOLOGY],
+    methodology,
     topArticles: top.map((a) => ({
       id: a.id,
       title: a.title,
@@ -278,14 +314,22 @@ async function buildSabqCoverage(): Promise<SabqCoverageStats> {
       publishedAt: a.publishedAt ? new Date(a.publishedAt).toISOString() : null,
       imageUrl: a.imageUrl,
     })),
-    dailyPulse: daily
-      .filter((d) => d.day)
-      .map((d) => ({
-        day: d.day,
-        count: Number(d.count),
-        views: Number(d.views),
-      })),
+    dailyPulse: daily,
   };
+}
+
+async function buildSabqCoverage(): Promise<SabqCoverageStats> {
+  try {
+    const where = await wcArticlesWhere();
+    return toSabqStats(await queryCoverage(where), [...COVERAGE_METHODOLOGY]);
+  } catch (err) {
+    console.error("[WcNumbersReport] full coverage query failed, falling back to wc26-* only:", err);
+    const where = await wcArticlesWhere({ matchDeskOnly: true });
+    return toSabqStats(await queryCoverage(where), [
+      ...COVERAGE_METHODOLOGY,
+      "تنبيه: فشل مسار التحريري — عُرضت مواد wc26-* فقط. راجع سجلات الخادم.",
+    ]);
+  }
 }
 
 function computeArabStats(fixtures: WcFixture[]) {
@@ -460,7 +504,7 @@ function buildStoryBeats(sabq: SabqCoverageStats, tournament: TournamentStats): 
 
 export async function getWcNumbersReport(): Promise<WcNumbersReport> {
   return withSWR(
-    "blocks:wc:numbers-report:v2",
+    "blocks:wc:numbers-report:v3",
     CACHE_TTL.MEDIUM,
     CACHE_TTL.MEDIUM * 2,
     async () => {

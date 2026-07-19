@@ -342,10 +342,22 @@ export default function Wc2026NumbersReportPage() {
       const res = await fetch(apiUrl("/api/admin/wc-2026-numbers-report"), {
         credentials: "include",
       });
-      if (!res.ok) throw new Error("فشل تحميل التقرير");
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const body = (await res.json()) as { message?: string; detail?: string; required?: string };
+          detail = [body.message, body.detail, body.required ? `مطلوب: ${body.required}` : ""]
+            .filter(Boolean)
+            .join(" — ");
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail || `فشل تحميل التقرير (HTTP ${res.status})`);
+      }
       return res.json();
     },
     staleTime: 60_000,
+    retry: 1,
   });
 
   const tabs = useMemo(
@@ -488,7 +500,11 @@ export default function Wc2026NumbersReportPage() {
               </div>
             ) : error || !data ? (
               <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-6 text-rose-100">
-                تعذر تحميل المسودة. تأكد من صلاحياتك واتصال قاعدة البيانات/مزوّد المونديال.
+                <p className="font-bold">تعذر تحميل المسودة</p>
+                <p className="mt-2 text-sm text-rose-100/80">
+                  {(error as Error)?.message ||
+                    "خطأ غير معروف — جرّب تحديث الأرقام أو راجع سجلات API."}
+                </p>
               </div>
             ) : (
               <>
