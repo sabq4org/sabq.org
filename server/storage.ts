@@ -17591,10 +17591,8 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Publisher not found');
     }
 
-    const conditions: any[] = [
-      eq(articles.authorId, publisher.userId),
-      eq(articles.isPublisherNews, true),
-    ];
+    // مواد الوكالة = المختومة بـ publisher_id فقط (لا أرشيف المراسل عبر authorId)
+    const conditions: any[] = [eq(articles.publisherId, publisherId)];
 
     if (filters?.status) {
       conditions.push(eq(articles.status, filters.status));
