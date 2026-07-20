@@ -19,17 +19,22 @@
       "pathGlobs": [
         "server/services/loyalty.ts",
         "server/routes/loyaltyAdmin.ts",
+        "server/routes/sabqPlusPreview.ts",
+        "server/services/sabqPlusPreviewService.ts",
+        "server/lib/passkit/CouponPassBuilder.ts",
+        "server/lib/passkit/coupon-pass-template.pass/**",
         "client/src/pages/dashboard/LoyaltyAdminDashboard.tsx",
         "client/src/pages/LoyaltyAccount.tsx",
         "client/src/pages/LoyaltyPreview.tsx",
         "client/src/pages/LoyaltyTermsPage.tsx",
+        "client/src/pages/SabqPlusPreview.tsx",
         "ios/**/*Loyalty*",
         "android-native/**/*Loyalty*"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/loyalty-admin",
       "owners": ["platform"],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-07-21"
     },
     {
       "id": "predictions-core",
