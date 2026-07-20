@@ -131,7 +131,13 @@ export default function OpinionWritersPage() {
   const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>("all");
   const [search, setSearch] = useState("");
 
-  const { data: writersData, isLoading } = useQuery<{ writers: WriterSummary[] }>({
+  const {
+    data: writersData,
+    isLoading,
+    isError: writersError,
+    error: writersErrorDetail,
+    refetch: refetchWriters,
+  } = useQuery<{ writers: WriterSummary[] }>({
     queryKey: ["/api/admin/opinion-writers"],
   });
   const writers = Array.isArray(writersData?.writers) ? writersData.writers : [];
@@ -288,6 +294,22 @@ export default function OpinionWritersPage() {
           description="الترخيص المهني، يوم النشر، الالتزام، والإحصائيات — من مكان واحد"
           titleTestId="text-opinion-writers-title"
         />
+
+        {writersError ? (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <p className="text-sm text-destructive">
+                تعذر جلب قائمة الكتّاب
+                {writersErrorDetail instanceof Error && writersErrorDetail.message
+                  ? `: ${writersErrorDetail.message}`
+                  : ""}
+              </p>
+              <Button size="sm" variant="outline" onClick={() => void refetchWriters()}>
+                إعادة المحاولة
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -563,6 +585,10 @@ export default function OpinionWritersPage() {
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : writersError ? (
+              <div className="py-12 text-center text-sm text-destructive">
+                فشل تحميل البيانات — استخدم «إعادة المحاولة» أعلاه
               </div>
             ) : filteredWriters.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-sm">
