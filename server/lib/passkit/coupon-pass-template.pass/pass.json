@@ -1,5 +1,6 @@
 {
   "formatVersion": 1,
+  "suppressStripShine": true,
   "coupon": {
     "headerFields": [],
     "primaryFields": [],

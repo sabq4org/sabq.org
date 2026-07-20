@@ -23,6 +23,7 @@
         "server/services/sabqPlusPreviewService.ts",
         "server/lib/passkit/CouponPassBuilder.ts",
         "server/lib/passkit/CouponPassAssets.ts",
+        "server/lib/passkit/CouponPassStripRenderer.ts",
         "server/lib/passkit/coupon-pass-template.pass/**",
         "client/src/pages/dashboard/LoyaltyAdminDashboard.tsx",
         "client/src/pages/LoyaltyAccount.tsx",
