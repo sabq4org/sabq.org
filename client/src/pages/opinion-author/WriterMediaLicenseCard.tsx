@@ -134,7 +134,14 @@ function toDateInputValue(iso: string | null | undefined): string {
   return y && m && day ? `${y}-${m}-${day}` : "";
 }
 
-export function WriterMediaLicenseCard() {
+type WriterMediaLicenseCardProps = {
+  /** مسار API للترخيص — افتراضي لكتّاب الرأي */
+  endpoint?: string;
+};
+
+export function WriterMediaLicenseCard({
+  endpoint = "/api/opinion-author/media-license",
+}: WriterMediaLicenseCardProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [licenseNumber, setLicenseNumber] = useState("");
@@ -144,7 +151,7 @@ export function WriterMediaLicenseCard() {
   const [forceShowForm, setForceShowForm] = useState(false);
 
   const { data, isLoading } = useQuery<MediaLicenseStatus>({
-    queryKey: ["/api/opinion-author/media-license"],
+    queryKey: [endpoint],
     staleTime: 60 * 1000,
   });
 
@@ -170,14 +177,14 @@ export function WriterMediaLicenseCard() {
       formData.append("licenseNumber", licenseNumber.trim());
       formData.append("licenseExpiresAt", licenseExpiresAt.trim());
       formData.append("licenseFile", licenseFile);
-      return apiRequest<MediaLicenseStatus & { message: string }>("/api/opinion-author/media-license", {
+      return apiRequest<MediaLicenseStatus & { message: string }>(endpoint, {
         method: "POST",
         body: formData,
         isFormData: true,
       });
     },
     onSuccess: (result) => {
-      queryClient.setQueryData(["/api/opinion-author/media-license"], {
+      queryClient.setQueryData([endpoint], {
         submitted: result.submitted,
         valid: result.valid,
         expired: result.expired,

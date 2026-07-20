@@ -15,7 +15,7 @@ import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
   isMediaLicenseExpired,
   isMediaLicenseExpiringSoon,
-} from "./opinionAuthorWorkspaceService";
+} from "./mediaLicenseService";
 
 export { OPINION_WRITERS_PER_DAY_CAP };
 

@@ -458,6 +458,17 @@ export const navConfig: NavItem[] = [
     permissions: ["opinion.review"],
   },
 
+  // ===== المراسلون / Reporters (ترخيص + نشاط) =====
+  {
+    id: "reporters",
+    labelKey: "nav.reporters",
+    labelAr: "المراسلون",
+    path: "/dashboard/reporters",
+    icon: Mic,
+    roles: ["admin", "editor", "system_admin"],
+    permissions: ["users.view", "articles.view"],
+  },
+
   // ===== استفسارات المساهمين (مراسلون + كتّاب رأي/زوايا — صندوق واحد) =====
   {
     id: "opinion_tickets",

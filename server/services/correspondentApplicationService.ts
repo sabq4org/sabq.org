@@ -194,6 +194,17 @@ export async function approveCorrespondentApplication(
   const temporaryPassword = nanoid(12);
   const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
 
+  // نسخ الترخيص من الطلب إلى الحساب عند توفر البيانات (لا نمسح إن كان الطلب بلا ترخيص)
+  const licenseFromApplication =
+    application.licenseNumber && application.licenseFileKey
+      ? {
+          mediaLicenseNumber: application.licenseNumber,
+          mediaLicenseFileKey: application.licenseFileKey,
+          mediaLicenseExpiresAt: application.licenseExpiresAt ?? null,
+          mediaLicenseSubmittedAt: new Date(),
+        }
+      : null;
+
   if (existingUser) {
     if (!UPGRADEABLE_ROLES.includes((existingUser.role || "reader").toLowerCase())) {
       throw new Error("Existing staff account");
@@ -215,6 +226,7 @@ export async function approveCorrespondentApplication(
         status: "active",
         passwordHash: hashedPassword,
         mustChangePassword: true,
+        ...(licenseFromApplication ?? {}),
       })
       .where(eq(users.id, existingUser.id))
       .returning();
@@ -234,8 +246,10 @@ export async function approveCorrespondentApplication(
         role: "reporter",
         jobTitle: application.jobTitle,
         bio: application.bio,
+        city: application.city,
         isProfileComplete: true,
         mustChangePassword: true,
+        ...(licenseFromApplication ?? {}),
       })
       .returning();
     finalUser = newUser;
