@@ -404,15 +404,17 @@ export default function SabqPlusPreview() {
             <h3>مبروك! تم الاستبدال</h3>
             <p>قسيمتك من {voucher.partnerName} جاهزة — أبرِزها عند الشريك أو أضفها لمحفظتك</p>
             <div className="spp-pass">
-              <div className="spp-p-brand">{voucher.partnerName}</div>
-              <div className="spp-p-offer">
-                {voucher.offer} · {voucher.valueLabel}
+              <div className="spp-p-top">
+                <span className="spp-p-tag">قسيمة سبق بلس</span>
+                <span className="spp-p-value">{voucher.valueLabel}</span>
               </div>
+              <div className="spp-p-brand">{voucher.partnerName}</div>
+              <div className="spp-p-offer">{voucher.offer}</div>
               <div className="spp-p-code">
                 {qrDataUrl ? (
-                  <img src={qrDataUrl} alt={`رمز QR للقسيمة ${voucher.code}`} width={150} height={150} />
+                  <img src={qrDataUrl} alt={`رمز QR للقسيمة ${voucher.code}`} width={168} height={168} />
                 ) : (
-                  <div style={{ height: 150 }} />
+                  <div style={{ height: 168 }} />
                 )}
                 <div className="spp-p-num">{voucher.code}</div>
               </div>
@@ -420,14 +422,14 @@ export default function SabqPlusPreview() {
                 <span>
                   صالحة حتى{" "}
                   <b>
-                    {new Date(voucher.expiresAt).toLocaleDateString("ar-SA-u-nu-latn", {
+                    {new Date(voucher.expiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
                     })}
                   </b>
                 </span>
-                <span>سبق بلس × ولاء ون</span>
+                <span className="spp-p-via">عبر ولاء ون</span>
               </div>
             </div>
             <a className="spp-apple-wallet" href={walletPassUrl(voucher.redemptionId)}>
@@ -665,20 +667,51 @@ const PAGE_CSS = `
 .spp-celebrate h3 { font-size: 24px; margin: 10px 0 4px; }
 .spp-celebrate > p { color: var(--ink-2); font-size: 14px; margin: 0 0 20px; }
 .spp-pass {
-  background: linear-gradient(150deg, var(--wala-deep), var(--wala) 70%);
-  border-radius: 20px; color: #fff; padding: 24px; text-align: right; margin-bottom: 18px;
+  background: var(--card-hero);
+  border-radius: 22px; color: #EAF3FB; padding: 22px 22px 18px; text-align: right; margin-bottom: 18px;
   position: relative; overflow: hidden;
+  box-shadow: var(--shadow);
 }
-.spp-pass::before {
-  content: "W"; position: absolute; left: -10px; top: -34px; font-size: 130px; font-weight: 900;
-  color: rgba(255, 201, 51, .18); font-style: italic;
+.spp-pass::after {
+  content: ""; position: absolute; inset: auto -100px -140px auto; width: 280px; height: 280px;
+  border-radius: 50%; background: radial-gradient(circle, rgba(23,147,232,.28), transparent 70%);
+  pointer-events: none;
 }
-.spp-p-brand { font-weight: 900; font-size: 18px; }
-.spp-p-offer { font-size: 13px; color: #E4DEFF; margin-bottom: 14px; }
-.spp-p-code { background: #fff; border-radius: 12px; padding: 14px 16px 10px; color: #1A1233; text-align: center; }
-.spp-p-code img { display: inline-block; }
-.spp-p-num { font-size: 13px; letter-spacing: 2.5px; font-weight: 800; margin-top: 7px; font-variant-numeric: tabular-nums; direction: ltr; }
-.spp-p-exp { font-size: 11.5px; color: #D9D2FA; margin-top: 12px; display: flex; justify-content: space-between; }
+.spp-p-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 14px; position: relative; z-index: 1;
+}
+.spp-p-tag {
+  font-size: 11px; font-weight: 800; letter-spacing: .02em;
+  color: #8FB8D8; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(143,184,216,.28); border-radius: 999px; padding: 4px 10px;
+}
+.spp-p-value {
+  font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums;
+  color: #fff; background: rgba(23,147,232,.22);
+  border: 1px solid rgba(23,147,232,.4); border-radius: 999px; padding: 4px 12px;
+}
+.spp-p-brand { font-weight: 900; font-size: 22px; line-height: 1.25; position: relative; z-index: 1; }
+.spp-p-offer {
+  font-size: 13.5px; color: #9DB6CC; margin: 6px 0 16px; line-height: 1.45;
+  position: relative; z-index: 1;
+}
+.spp-p-code {
+  background: #fff; border-radius: 16px; padding: 18px 18px 14px; color: #13202E;
+  text-align: center; position: relative; z-index: 1;
+}
+.spp-p-code img { display: inline-block; border-radius: 8px; }
+.spp-p-num {
+  font-size: 14px; letter-spacing: 2px; font-weight: 800; margin-top: 10px;
+  font-variant-numeric: tabular-nums; direction: ltr; color: #0D1B2A;
+}
+.spp-p-exp {
+  font-size: 12px; color: #9DB6CC; margin-top: 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  position: relative; z-index: 1;
+}
+.spp-p-exp b { color: #EAF3FB; font-weight: 800; }
+.spp-p-via { color: #7FA1BC; font-weight: 600; }
 .spp-apple-wallet {
   display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
   background: #000; color: #fff; border-radius: 12px; padding: 12px; font-size: 14.5px; font-weight: 700;
