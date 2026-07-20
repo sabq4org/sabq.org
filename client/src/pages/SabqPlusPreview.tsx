@@ -131,7 +131,7 @@ export default function SabqPlusPreview() {
     }
     let alive = true;
     import("qrcode").then((QR) =>
-      QR.toDataURL(voucher.code, { margin: 1, width: 180 }).then((url: string) => {
+      QR.toDataURL(voucher.code, { margin: 1, width: 148 }).then((url: string) => {
         if (alive) setQrDataUrl(url);
       }),
     );
@@ -404,32 +404,36 @@ export default function SabqPlusPreview() {
             <h3>مبروك! تم الاستبدال</h3>
             <p>قسيمتك من {voucher.partnerName} جاهزة — أبرِزها عند الشريك أو أضفها لمحفظتك</p>
             <div className="spp-pass">
-              <div className="spp-p-top">
+              <div className="spp-p-strip" aria-hidden="true" />
+              <div className="spp-p-hero">
                 <span className="spp-p-tag">قسيمة سبق بلس</span>
-                <span className="spp-p-value">{voucher.valueLabel}</span>
+                <div className="spp-p-value">{voucher.valueLabel}</div>
+                <div className="spp-p-brand">{voucher.partnerName}</div>
+                <div className="spp-p-offer">{voucher.offer}</div>
               </div>
-              <div className="spp-p-brand">{voucher.partnerName}</div>
-              <div className="spp-p-offer">{voucher.offer}</div>
               <div className="spp-p-code">
                 {qrDataUrl ? (
-                  <img src={qrDataUrl} alt={`رمز QR للقسيمة ${voucher.code}`} width={168} height={168} />
+                  <img src={qrDataUrl} alt={`رمز QR للقسيمة ${voucher.code}`} width={148} height={148} />
                 ) : (
-                  <div style={{ height: 168 }} />
+                  <div style={{ height: 148 }} />
                 )}
                 <div className="spp-p-num">{voucher.code}</div>
               </div>
-              <div className="spp-p-exp">
-                <span>
-                  صالحة حتى{" "}
+              <div className="spp-p-meta">
+                <div className="spp-p-meta-item">
+                  <span className="spp-p-meta-label">صالحة حتى</span>
                   <b>
                     {new Date(voucher.expiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
                       year: "numeric",
-                      month: "long",
+                      month: "short",
                       day: "numeric",
                     })}
                   </b>
-                </span>
-                <span className="spp-p-via">عبر ولاء ون</span>
+                </div>
+                <div className="spp-p-meta-item spp-p-meta-via">
+                  <span className="spp-p-meta-label">عبر</span>
+                  <b>ولاء ون</b>
+                </div>
               </div>
             </div>
             <a className="spp-apple-wallet" href={walletPassUrl(voucher.redemptionId)}>
@@ -667,51 +671,57 @@ const PAGE_CSS = `
 .spp-celebrate h3 { font-size: 24px; margin: 10px 0 4px; }
 .spp-celebrate > p { color: var(--ink-2); font-size: 14px; margin: 0 0 20px; }
 .spp-pass {
-  background: var(--card-hero);
-  border-radius: 22px; color: #EAF3FB; padding: 22px 22px 18px; text-align: right; margin-bottom: 18px;
+  background: linear-gradient(160deg, #12283C 0%, #0D1B2A 52%, #14344E 100%);
+  border-radius: 22px; color: #EAF3FB; padding: 0 0 16px; text-align: center; margin-bottom: 18px;
   position: relative; overflow: hidden;
   box-shadow: var(--shadow);
+  border-top: 3px solid #1793E8;
 }
-.spp-pass::after {
-  content: ""; position: absolute; inset: auto -100px -140px auto; width: 280px; height: 280px;
-  border-radius: 50%; background: radial-gradient(circle, rgba(23,147,232,.28), transparent 70%);
-  pointer-events: none;
+.spp-p-strip {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(23,147,232,.32), transparent 42%),
+    radial-gradient(circle at 12% 88%, rgba(23,147,232,.14), transparent 40%);
 }
-.spp-p-top {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  margin-bottom: 14px; position: relative; z-index: 1;
+.spp-p-hero {
+  position: relative; z-index: 1;
+  padding: 22px 22px 18px;
 }
 .spp-p-tag {
-  font-size: 11px; font-weight: 800; letter-spacing: .02em;
-  color: #8FB8D8; background: rgba(255,255,255,.06);
-  border: 1px solid rgba(143,184,216,.28); border-radius: 999px; padding: 4px 10px;
+  display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  color: #8FB8D8; margin-bottom: 12px;
 }
 .spp-p-value {
-  font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums;
-  color: #fff; background: rgba(23,147,232,.22);
-  border: 1px solid rgba(23,147,232,.4); border-radius: 999px; padding: 4px 12px;
+  font-size: clamp(40px, 11vw, 52px); font-weight: 900; line-height: 1.05;
+  font-variant-numeric: tabular-nums; color: #fff; letter-spacing: -0.02em;
+  margin: 0 0 10px;
 }
-.spp-p-brand { font-weight: 900; font-size: 22px; line-height: 1.25; position: relative; z-index: 1; }
+.spp-p-brand {
+  font-weight: 900; font-size: 20px; line-height: 1.3; color: #EAF3FB;
+}
 .spp-p-offer {
-  font-size: 13.5px; color: #9DB6CC; margin: 6px 0 16px; line-height: 1.45;
-  position: relative; z-index: 1;
+  font-size: 13.5px; color: #9DB6CC; margin: 8px auto 0; line-height: 1.45;
+  max-width: 28ch;
 }
 .spp-p-code {
-  background: #fff; border-radius: 16px; padding: 18px 18px 14px; color: #13202E;
+  background: #fff; border-radius: 14px; padding: 14px 16px 12px; color: #13202E;
   text-align: center; position: relative; z-index: 1;
+  margin: 0 18px;
 }
-.spp-p-code img { display: inline-block; border-radius: 8px; }
+.spp-p-code img { display: inline-block; border-radius: 6px; }
 .spp-p-num {
-  font-size: 14px; letter-spacing: 2px; font-weight: 800; margin-top: 10px;
+  font-size: 13.5px; letter-spacing: 1.5px; font-weight: 800; margin-top: 8px;
   font-variant-numeric: tabular-nums; direction: ltr; color: #0D1B2A;
 }
-.spp-p-exp {
-  font-size: 12px; color: #9DB6CC; margin-top: 14px;
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  position: relative; z-index: 1;
+.spp-p-meta {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 14px 22px 0; position: relative; z-index: 1;
+  text-align: right;
 }
-.spp-p-exp b { color: #EAF3FB; font-weight: 800; }
-.spp-p-via { color: #7FA1BC; font-weight: 600; }
+.spp-p-meta-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.spp-p-meta-via { text-align: left; }
+.spp-p-meta-label { font-size: 11px; font-weight: 600; color: #8FB8D8; }
+.spp-p-meta b { font-size: 13px; font-weight: 800; color: #EAF3FB; }
 .spp-apple-wallet {
   display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
   background: #000; color: #fff; border-radius: 12px; padding: 12px; font-size: 14.5px; font-weight: 700;

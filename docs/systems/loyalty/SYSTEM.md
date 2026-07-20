@@ -25,7 +25,7 @@
 ## عقود مهمة / Gotchas
 - معاينة `/loyalty-preview` **لا تُطبَّق على الإنتاج** حتى قرار صريح.
 - لا تخلط بين مصادقة الويب (Passport) وموبايل (Bearer `/api/v1`).
-- **بطاقة قسيمة Wallet:** الواجهة الأمامية = قيمة (header) + شريك (`secondary` يمين، لا `primary` الضخم) + انتهاء/رقم قسيمة (`auxiliary` بترتيب يعكس RTL بصرياً)؛ نص العرض في `backFields`. اللوقو يُحقَن من `CouponPassAssets` بحشوة علوية وعلامة على يمين الخانة (PassKit لا يدعم RTL حقيقي ولا تحريك الباركود). أي قالب `.pass` جديد يحتاج سطر `COPY` في `Dockerfile` وإلا يفشل الإنتاج.
+- **بطاقة قسيمة Wallet:** البطل البصري في `strip.png` (`CouponPassStripRenderer`: قيمة كبيرة + اسم الشريك على خلفية كحولية سبق بلس)؛ الرأس يعرض القيمة في وضع الطيّ؛ تحت الشريط `auxiliary` فقط (انتهاء ثم رقم قسيمة بترتيب يعكس RTL بصرياً)؛ لا `primaryFields` فوق الـ strip. نص العرض والشروط في `backFields`. اللوقو من `CouponPassAssets` بحشوة علوية وعلامة يمين الخانة. `suppressStripShine: true`. PassKit لا يدعم RTL حقيقي ولا تحريك الباركود. أي قالب `.pass` جديد يحتاج سطر `COPY` في `Dockerfile` وإلا يفشل الإنتاج.
 
 ## صحة وتشغيل
 - لوحة: `/dashboard/loyalty-admin`

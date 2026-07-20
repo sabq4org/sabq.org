@@ -2,15 +2,17 @@ import { PassBuilder, PassData } from './PassBuilder';
 import { PKPass } from 'passkit-generator';
 import path from 'path';
 import { buildCouponLogoBuffers } from './CouponPassAssets';
+import { renderCouponPassStrip } from './CouponPassStripRenderer';
 
 // بطاقة قسيمة «سبق بلس × ولاء ون» — نمط Coupon في Apple Wallet.
 // تُوقَّع بنفس شهادة الولاء (passTypeId واحد يصلح لأي نمط بطاقة)؛
 // رمز QR يحمل رقم القسيمة نفسه لأن هذا ما يُمسح عند الشريك.
 //
-// تخطيط الواجهة الأمامية مقصود أن يكون ضيقاً ويميني المحاذاة:
-// القيمة (header) + الشريك (secondary أصغر من primary) + الرمز + الانتهاء.
-// لا نستخدم primaryFields لاسم المتجر — Apple يكبّره جداً ويجعله يساراً.
-// نص العرض الطويل يذهب للخلف.
+// التخطيط (نفس درس البطاقة الصحفية):
+//   • strip.png يحمل القيمة الكبيرة + اسم الشريك (البطل البصري)
+//   • الحقول الأصلية تحت الشريط فقط: رقم القسيمة + الانتهاء
+//   • لا primaryFields فوق الـ strip (تتراكب نصاً أبيض وتفسّد التسلسل)
+//   • نص العرض الطويل في الخلف
 export interface CouponPassData extends PassData {
   partnerName: string;
   offer: string;
@@ -71,29 +73,50 @@ export class CouponPassBuilder extends PassBuilder {
       console.warn('[CouponPassBuilder] logo injection failed, using template logos:', e);
     }
 
+    // البطل البصري: القيمة + الشريك داخل الـ strip — لا يعتمد على primary الضخم.
+    try {
+      const strips = await renderCouponPassStrip({
+        valueLabel: data.valueLabel,
+        partnerName: data.partnerName,
+      });
+      pass.addBuffer('strip.png', strips.x1);
+      pass.addBuffer('strip@2x.png', strips.x2);
+      pass.addBuffer('strip@3x.png', strips.x3);
+    } catch (e) {
+      console.warn('[CouponPassBuilder] strip render failed, falling back to header value:', e);
+      // إن فشل الـ canvas نُبقي القيمة ظاهرة في الرأس حتى لا تُصدر بطاقة فارغة.
+      pass.headerFields.push({
+        key: 'value',
+        label: 'القيمة',
+        value: data.valueLabel,
+        ...RTL,
+      });
+      pass.secondaryFields.push({
+        key: 'partner',
+        label: 'قسيمة',
+        value: data.partnerName,
+        ...RTL,
+      });
+    }
+
+    // في وضع الطيّ (stack) يظهر الرأس بجانب اللوقو — نضع القيمة هناك
+    // فقط إن نجح الـ strip (وإلا دُفعت أعلاه كـ fallback).
+    if (pass.headerFields.length === 0) {
+      pass.headerFields.push({
+        key: 'value',
+        label: 'القيمة',
+        value: data.valueLabel,
+        ...RTL,
+      });
+    }
+
     const expiresLabel = data.voucherExpiresAt.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     });
 
-    pass.headerFields.push({
-      key: 'value',
-      label: 'القيمة',
-      value: data.valueLabel,
-      ...RTL,
-    });
-
-    // secondary أصغر من primary ويتراص عمودياً — يفتح مسافة قبل صف الانتهاء/الرمز
-    // ولا يلاصق تسمية «قسيمة» حقول auxiliary كما كان مع primary الضخم.
-    pass.secondaryFields.push({
-      key: 'partner',
-      label: 'قسيمة',
-      value: data.partnerName,
-      ...RTL,
-    });
-
-    // عمودان: نضع الانتهاء أولاً ثم الرمز حتى يظهر الرمز يميناً في تدفّق عربي
+    // صف واحد تحت الشريط: انتهاء ثم رقم — يظهر الرمز يميناً في تدفق عربي
     // (Apple يرصف auxiliary من اليسار لليمين حسب ترتيب الإدخال).
     pass.auxiliaryFields.push({
       key: 'expires',
@@ -110,6 +133,12 @@ export class CouponPassBuilder extends PassBuilder {
     });
 
     pass.backFields.push(
+      {
+        key: 'partner',
+        label: 'الجهة',
+        value: data.partnerName,
+        ...RTL,
+      },
       {
         key: 'offer',
         label: 'العرض',
