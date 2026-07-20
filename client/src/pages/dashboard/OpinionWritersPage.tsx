@@ -373,11 +373,11 @@ export default function OpinionWritersPage() {
                       <Badge
                         variant="secondary"
                         className={cn(
-                          "tabular-nums text-[11px] font-semibold",
+                          "text-[11px] font-semibold",
                           isFull && "bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200",
                         )}
                       >
-                        {writersForDay.length}/{OPINION_WRITERS_PER_DAY_CAP}
+                        {writersForDay.length} من {OPINION_WRITERS_PER_DAY_CAP} كتّاب
                       </Badge>
                     </div>
                     {isFull && (
@@ -439,11 +439,11 @@ export default function OpinionWritersPage() {
                   </div>
                   <div
                     className={cn(
-                      "mb-1.5 text-[10px] font-semibold tabular-nums",
+                      "mb-1.5 text-[10px] font-semibold leading-snug",
                       isFull ? "text-amber-800 dark:text-amber-300" : "text-muted-foreground",
                     )}
                   >
-                    {count}/{OPINION_WRITERS_PER_DAY_CAP}
+                    {count} من {OPINION_WRITERS_PER_DAY_CAP} كتّاب
                   </div>
                   {isFull && (
                     <p
@@ -632,8 +632,8 @@ export default function OpinionWritersPage() {
                                     count >= OPINION_WRITERS_PER_DAY_CAP && !isCurrent;
                                   return (
                                     <SelectItem key={i} value={String(i)} disabled={isFull}>
-                                      {day} ({count}/{OPINION_WRITERS_PER_DAY_CAP})
-                                      {isFull ? " — غير متاح" : ""}
+                                      {day} — {count} من {OPINION_WRITERS_PER_DAY_CAP} كتّاب
+                                      {isFull ? " (غير متاح)" : ""}
                                     </SelectItem>
                                   );
                                 })}

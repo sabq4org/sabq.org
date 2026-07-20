@@ -156,11 +156,11 @@ export function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
                 data-testid={`writer-day-pick-${i}`}
               >
                 <div className="text-xs sm:text-sm">{day}</div>
-                <div className="mt-0.5 text-[10px] sm:text-xs">
+                <div className="mt-0.5 text-[10px] leading-snug sm:text-xs">
                   {isFull
                     ? "غير متاح للنشر"
                     : load
-                      ? `${load}/${OPINION_WRITERS_PER_DAY_CAP}`
+                      ? `${load} من ${OPINION_WRITERS_PER_DAY_CAP} كتّاب`
                       : "شاغر"}
                 </div>
               </button>
