@@ -219,6 +219,7 @@ const MyKeywords = lazy(() => retryImport(() => import("@/pages/MyKeywords")));
 const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/LoyaltyAccount")));
 const LoyaltyAdminDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAdminDashboard")));
 const LoyaltyPreview = lazy(() => retryImport(() => import("@/pages/LoyaltyPreview")));
+const SabqPlusPreview = lazy(() => retryImport(() => import("@/pages/SabqPlusPreview")));
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
@@ -704,6 +705,7 @@ function Router() {
         {/* Static Pages - Lazy loaded */}
         <Route path="/about">{() => <LazyRoute component={AboutPage} />}</Route>
         <Route path="/loyalty-preview">{() => <LazyRoute component={LoyaltyPreview} />}</Route>
+        <Route path="/plus-preview">{() => <LazyRoute component={SabqPlusPreview} />}</Route>
         <Route path="/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/ar/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/contact">{() => <LazyRoute component={ContactPage} />}</Route>

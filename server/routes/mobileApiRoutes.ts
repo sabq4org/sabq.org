@@ -6832,6 +6832,7 @@ router.get("/loyalty/rewards", async (req: Request, res: Response) => {
       success: true,
       balance,
       rewards: rewards
+        .filter((r) => (r.rewardData as any)?.partnerApiData?.previewOnly !== true)
         .filter((r) => r.remainingStock === null || (r.remainingStock ?? 0) > 0)
         .map((r) => {
           const myRedeems = myCount.get(r.id) ?? 0;

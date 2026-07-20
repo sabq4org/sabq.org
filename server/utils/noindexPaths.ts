@@ -13,6 +13,7 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/login', '/register', '/logout',
   '/verify-email', '/forgot-password', '/reset-password', '/set-password', '/2fa-verify',
   '/select-interests',
+  '/plus-preview',
   '/profile', '/bookmarks', '/reading-history',
   '/my-follows', '/my-keywords', '/my-votes',
   '/notification-settings', '/recommendation-settings',

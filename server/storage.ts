@@ -9868,6 +9868,9 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(loyaltyRewards.isActive, true),
+          // سبق بلس preview-simulation rewards are admin-only surfaces —
+          // never expose them in the member-facing catalog.
+          sql`COALESCE(${loyaltyRewards.rewardData}->'partnerApiData'->>'previewOnly', '') <> 'true'`,
           or(
             sql`${loyaltyRewards.expiresAt} IS NULL`,
             gte(loyaltyRewards.expiresAt, now)
@@ -9888,6 +9891,9 @@ export class DatabaseStorage implements IStorage {
   async redeemReward(params: {
     userId: string;
     rewardId: string;
+    // سبق بلس preview rewards are redeemable only through the admin-gated
+    // /api/plus-preview surface, which passes allowPreview: true.
+    allowPreview?: boolean;
   }): Promise<{
     success: boolean;
     code?: "NOT_FOUND" | "INACTIVE" | "EXPIRED" | "INSUFFICIENT_POINTS" | "OUT_OF_STOCK" | "MAX_REDEMPTIONS";
@@ -9914,6 +9920,10 @@ export class DatabaseStorage implements IStorage {
 
         if (!reward.isActive) {
           return { success: false, code: "INACTIVE" as const, message: "الجائزة غير متاحة حالياً" };
+        }
+
+        if ((reward.rewardData as any)?.partnerApiData?.previewOnly === true && !params.allowPreview) {
+          return { success: false, code: "NOT_FOUND" as const, message: "الجائزة غير موجودة" };
         }
 
         if (reward.expiresAt && new Date(reward.expiresAt) < new Date()) {

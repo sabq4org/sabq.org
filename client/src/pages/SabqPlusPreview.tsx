@@ -1,0 +1,692 @@
+// ----------------------------------------------------------------------------
+// سبق بلس — صفحة المعاينة الداخلية /plus-preview (admin فقط)
+//
+// محاكاة تجربة «سبق بلس × ولاء ون» على المحفظة الحقيقية: الرصيد يُعرض
+// بالريال أولاً، الكتالوج قسائم تجريبية، والاستبدال يخصم نقاطاً فعلية
+// ويصدر قسيمة برمز QR حقيقي. التصميم منقول من النموذج المعتمد.
+// ----------------------------------------------------------------------------
+
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import NotFound from "@/pages/not-found";
+
+type PlusSummary = {
+  totalPoints: number;
+  lifetimePoints: number;
+  sarValue: number;
+  pointsPerSar: number;
+  monthPoints: number;
+  tier: { level: number; nameAr: string; color: string };
+  nextTier: { nameAr: string; minLifetimePoints: number } | null;
+  pointsToNext: number;
+  predictionMultiplier: number;
+};
+
+type PlusReward = {
+  id: string;
+  partnerName: string;
+  offer: string;
+  pointsCost: number;
+  sarValue: number;
+  category: string;
+  brandColor: string;
+  valueLabel: string;
+  remainingStock: number | null;
+};
+
+type PlusCatalog = { balance: number; pointsPerSar: number; rewards: PlusReward[] };
+
+type PlusRedemption = {
+  id: string;
+  partnerName: string;
+  offer: string;
+  pointsSpent: number;
+  status: string;
+  redeemedAt: string;
+  code: string | null;
+  voucherExpiresAt: string | null;
+  brandColor: string;
+  valueLabel: string;
+};
+
+type Voucher = {
+  code: string;
+  expiresAt: string;
+  partnerName: string;
+  offer: string;
+  valueLabel: string;
+  brandColor: string;
+  pointsSpent: number;
+};
+
+const fmt = (n: number) => n.toLocaleString("en-US");
+const sar = (pts: number) => (pts / 500).toFixed(2);
+
+export default function SabqPlusPreview() {
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+
+  const isAdmin =
+    !!user &&
+    ((user.permissions?.includes("*") ?? false) ||
+      (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role ?? ""));
+
+  const { data: summaryRaw } = useQuery({
+    queryKey: ["/api/plus-preview/summary"],
+    enabled: isAdmin,
+  });
+  const { data: catalogRaw } = useQuery({
+    queryKey: ["/api/plus-preview/catalog"],
+    enabled: isAdmin,
+  });
+  const { data: redemptionsRaw } = useQuery({
+    queryKey: ["/api/plus-preview/redemptions"],
+    enabled: isAdmin,
+  });
+
+  const summary = (summaryRaw ?? null) as PlusSummary | null;
+  const catalog = (catalogRaw ?? null) as PlusCatalog | null;
+  const redemptions = Array.isArray(redemptionsRaw) ? (redemptionsRaw as PlusRedemption[]) : [];
+
+  const [confirmFor, setConfirmFor] = useState<PlusReward | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [voucher, setVoucher] = useState<Voucher | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const confettiRef = useRef<HTMLCanvasElement>(null);
+
+  const redeem = useMutation({
+    mutationFn: async (rewardId: string) =>
+      apiRequest(`/api/plus-preview/redeem/${rewardId}`, {
+        method: "POST",
+        body: JSON.stringify({ termsAccepted: true }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: (data: { voucher: Voucher; remainingBalance: number }) => {
+      setConfirmFor(null);
+      setVoucher(data.voucher);
+      queryClient.invalidateQueries({ queryKey: ["/api/plus-preview/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plus-preview/catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plus-preview/redemptions"] });
+      burstConfetti(confettiRef.current);
+      toast({ title: `خُصمت ${fmt(data.voucher.pointsSpent)} نقطة من رصيدك` });
+    },
+    onError: (err: any) => {
+      setConfirmFor(null);
+      toast({ title: "تعذر الاستبدال", description: err?.message ?? "حاول مرة أخرى", variant: "destructive" });
+    },
+  });
+
+  // رمز QR حقيقي من رقم القسيمة
+  useEffect(() => {
+    if (!voucher) {
+      setQrDataUrl(null);
+      return;
+    }
+    let alive = true;
+    import("qrcode").then((QR) =>
+      QR.toDataURL(voucher.code, { margin: 1, width: 180 }).then((url: string) => {
+        if (alive) setQrDataUrl(url);
+      }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [voucher]);
+
+  if (authLoading) return null;
+  if (!isAdmin) return <NotFound />;
+
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name || "مسؤول النظام";
+
+  return (
+    <div className="spp" dir="rtl">
+      <style>{PAGE_CSS}</style>
+
+      <div className="spp-preview-note">
+        ⚠ معاينة داخلية — هذه الصفحة تجريبية وتظهر لمسؤول النظام فقط، ولا تمثل إطلاقاً رسمياً
+      </div>
+
+      <div className="spp-wrap">
+        <header className="spp-site">
+          <div className="spp-brand">
+            <div className="spp-mark">
+              سبق<span className="spp-plus"> بلس+</span>
+            </div>
+            <div className="spp-sub">برنامج عضوية صحيفة سبق</div>
+          </div>
+          <div className="spp-route-chip">sabq.org/plus-preview</div>
+        </header>
+
+        {/* بطاقة العضوية */}
+        <section className="spp-member-card" aria-label="بطاقة العضوية">
+          <div className="spp-mc-top">
+            <div>
+              <h1 className="spp-mc-name">{displayName}</h1>
+              <div className="spp-mc-role">مسؤول النظام · حساب التجربة</div>
+            </div>
+            {summary && (
+              <span className="spp-tier-pill">
+                <span className="spp-dot" style={{ background: summary.tier.color, boxShadow: `0 0 8px ${summary.tier.color}` }} />
+                {summary.tier.nameAr} · الفئة {["", "الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة"][summary.tier.level]}
+              </span>
+            )}
+          </div>
+          <div className="spp-mc-balance">
+            <div className="spp-sar">
+              {summary ? summary.sarValue.toFixed(2) : "…"} <small>ر.س</small>
+            </div>
+            <div className="spp-pts">{summary ? fmt(summary.totalPoints) : "…"} نقطة</div>
+          </div>
+          <div className="spp-mc-rate">كل 500 نقطة = 1 ريال سعودي · الاستبدال عبر شركاء ولاء ون</div>
+          <div className="spp-mc-meta">
+            <div>
+              نقاط مدى الحياة<b>{summary ? fmt(summary.lifetimePoints) : "…"}</b>
+            </div>
+            <div>
+              نقاط هذا الشهر<b>{summary ? `+${fmt(summary.monthPoints)}` : "…"}</b>
+            </div>
+            <div>
+              مضاعف التوقعات<b>×{summary?.predictionMultiplier ?? "…"}</b>
+            </div>
+          </div>
+          {summary &&
+            (summary.nextTier ? (
+              <div className="spp-tier-max">
+                يفصلك <b>{fmt(summary.pointsToNext)}</b> نقطة عن فئة «{summary.nextTier.nameAr}»
+              </div>
+            ) : (
+              <div className="spp-tier-max">وصلت لأعلى فئة — يُحتسب مضاعف السفير على كل مكافآت التوقعات</div>
+            ))}
+        </section>
+
+        {/* كيف تكسب */}
+        <h2 className="spp-sec">كيف تكسب النقاط</h2>
+        <p className="spp-sec-sub">تُمنح النقاط تلقائيًا أثناء استخدامك سبق — لا حاجة لأي خطوة إضافية.</p>
+        <div className="spp-earn-strip">
+          {[
+            ["📖", "قراءة مقال", "+2"],
+            ["📕", "قراءة عميقة", "+3"],
+            ["💬", "تعليق", "+1"],
+            ["↪", "دخول يومي", "+5 × السلسلة"],
+            ["🏆", "فوز توقّع رياضي", "حسب البركة"],
+          ].map(([ico, lbl, val]) => (
+            <div className="spp-earn" key={lbl}>
+              <span className="spp-ico">{ico}</span>
+              <div>
+                <div className="spp-lbl">{lbl}</div>
+                <div className="spp-val">{val}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="spp-earn-note">القيم الحالية للإنتاج — جدول الاكتساب الجديد (المكافئ للريال) قيد الاعتماد.</div>
+
+        {/* الكتالوج */}
+        <h2 className="spp-sec">
+          استبدل نقاطك{" "}
+          <span className="spp-wala-tag">
+            <span className="spp-w">W</span> بالتعاون مع ولاء ون
+          </span>
+        </h2>
+        <p className="spp-sec-sub">
+          قسائم وخصومات من شركاء ولاء ون. بعد تأكيد الاستبدال تصدر قسيمتك فورًا ببطاقة ورمز QR.{" "}
+          <b>أسماء الشركاء أدناه تجريبية للمحاكاة.</b>
+        </p>
+        <div className="spp-grid">
+          {(catalog?.rewards ?? []).map((v) => {
+            const can = (catalog?.balance ?? 0) >= v.pointsCost;
+            return (
+              <div className="spp-voucher" key={v.id}>
+                <div className="spp-v-head">
+                  <div className="spp-v-logo" style={{ background: v.brandColor }}>
+                    {v.partnerName.slice(0, 1)}
+                  </div>
+                  <div>
+                    <div className="spp-v-brand">{v.partnerName}</div>
+                    <div className="spp-v-cat">{v.category} · شريك ولاء ون</div>
+                  </div>
+                </div>
+                <div className="spp-v-offer">{v.offer}</div>
+                <div className="spp-v-foot">
+                  <div className="spp-v-cost">
+                    {fmt(v.pointsCost)} نقطة<small>≈ {v.sarValue.toFixed(2)} ر.س</small>
+                  </div>
+                  <button
+                    className="spp-btn spp-btn-redeem"
+                    disabled={!can || redeem.isPending}
+                    onClick={() => {
+                      setAgreed(false);
+                      setConfirmFor(v);
+                    }}
+                  >
+                    {can ? "استبدل" : "رصيدك لا يكفي"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* السجل */}
+        <h2 className="spp-sec">سجل استبدالاتي</h2>
+        <div className="spp-hist">
+          {redemptions.length === 0 ? (
+            <div className="spp-hist-empty">لا توجد استبدالات بعد — جرّب استبدال أول قسيمة ✨</div>
+          ) : (
+            redemptions.map((r) => (
+              <div className="spp-hist-row" key={r.id}>
+                <div>
+                  <div className="spp-h-brand">{r.partnerName}</div>
+                  <div className="spp-h-date">
+                    {new Date(r.redeemedAt).toLocaleDateString("ar-SA-u-nu-latn", { month: "long", day: "numeric" })}
+                    {" · "}
+                    {r.code ?? ""}
+                  </div>
+                </div>
+                <span className="spp-h-status spp-h-ok">{r.status === "delivered" ? "صادرة" : r.status}</span>
+                <div className="spp-h-pts">−{fmt(r.pointsSpent)} نقطة</div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* الشروط */}
+        <h2 className="spp-sec">الإرشادات وشروط الاستخدام</h2>
+        <p className="spp-sec-sub">ملخص توضيحي — الصياغة القانونية النهائية تُعتمد قبل الإطلاق الرسمي.</p>
+        <div className="spp-terms">
+          <details>
+            <summary>اكتساب النقاط وأسقفها</summary>
+            <p>
+              تُمنح النقاط من قراءة المحتوى والتفاعل والدخول اليومي والتوقعات الرياضية وفق الجدول المعلن، وبأسقف يومية
+              مضادة لإساءة الاستخدام. تحتفظ سبق بحق تعديل جدول الاكتساب مع إشعار مسبق، ولا يؤثر التعديل على النقاط
+              المكتسبة سابقًا.
+            </p>
+          </details>
+          <details>
+            <summary>الاستبدال عبر ولاء ون</summary>
+            <p>
+              عند تأكيد الاستبدال تُخصم النقاط فورًا من رصيدك وتصدر القسيمة.{" "}
+              <b>بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.</b> استخدام القسيمة لدى الشريك
+              يخضع لشروط الشريك المعلنة وقت الاستخدام.
+            </p>
+          </details>
+          <details>
+            <summary>صلاحية النقاط والقسائم</summary>
+            <ul>
+              <li>نقاط سبق بلس في محفظتك لا تنتهي ما دام حسابك نشطًا.</li>
+              <li>القسائم الصادرة عبر ولاء ون تنتهي بعد 12 شهرًا من الإصدار ما لم يُذكر خلاف ذلك على القسيمة.</li>
+              <li>العروض الترويجية قد تحمل مددًا أقصر تُوضّح قبل الاستبدال.</li>
+            </ul>
+          </details>
+          <details>
+            <summary>حدود المسؤولية</summary>
+            <p>
+              مسؤولية سبق تقتصر على صحة خصم النقاط وإصدار القسيمة. تأخر الشريك أو تغيير عروضه أو انتهاء مخزونه يخضع
+              لشروط ولاء ون والشريك، وفي حال تعذر إصدار القسيمة تُعاد النقاط كاملة إلى رصيدك ولا تُقدَّم تعويضات نقدية.
+            </p>
+          </details>
+          <details>
+            <summary>الدعم والنزاعات</summary>
+            <p>
+              لمشاكل النقاط والرصيد: تواصل مع دعم سبق من صفحة حسابك خلال 15 يومًا من العملية. لمشاكل استخدام القسيمة لدى
+              الشريك: تُحال للدعم المختص في ولاء ون مع تزويدك برقم المرجع.
+            </p>
+          </details>
+        </div>
+
+        <footer className="spp-note">
+          نموذج محاكاة داخلي لتجربة «سبق بلس × ولاء ون» — أسماء الشركاء تجريبية والخصم من رصيدك فعلي
+        </footer>
+      </div>
+
+      {/* نافذة التأكيد */}
+      {confirmFor && (
+        <div className="spp-overlay spp-show" role="dialog" aria-modal="true">
+          <div className="spp-modal">
+            <h3>تأكيد الاستبدال</h3>
+            <p className="spp-m-sub">
+              {confirmFor.partnerName} — {confirmFor.offer}
+            </p>
+            <div className="spp-m-line">
+              <span>قيمة القسيمة</span>
+              <b>{confirmFor.valueLabel}</b>
+            </div>
+            <div className="spp-m-line">
+              <span>التكلفة</span>
+              <b>{fmt(confirmFor.pointsCost)} نقطة</b>
+            </div>
+            <div className="spp-m-line">
+              <span>رصيدك بعد الاستبدال</span>
+              <b>
+                {fmt((catalog?.balance ?? 0) - confirmFor.pointsCost)} نقطة (≈{" "}
+                {sar((catalog?.balance ?? 0) - confirmFor.pointsCost)} ر.س)
+              </b>
+            </div>
+            <div className="spp-m-warn">⚠ بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.</div>
+            <label className="spp-m-agree">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} /> أوافق على{" "}
+              <u>شروط استخدام سبق بلس</u> و<u>شروط وأحكام ولاء ون</u>
+            </label>
+            <div className="spp-m-actions">
+              <button className="spp-btn spp-btn-ghost" onClick={() => setConfirmFor(null)}>
+                إلغاء
+              </button>
+              <button
+                className="spp-btn spp-btn-confirm"
+                disabled={!agreed || redeem.isPending}
+                onClick={() => redeem.mutate(confirmFor.id)}
+              >
+                {redeem.isPending ? "جارٍ الاستبدال…" : "تأكيد الاستبدال"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* التهنئة + القسيمة */}
+      {voucher && (
+        <div className="spp-overlay spp-show" role="dialog" aria-modal="true">
+          <div className="spp-modal spp-celebrate">
+            <div className="spp-big">🎉</div>
+            <h3>مبروك! تم الاستبدال</h3>
+            <p>قسيمتك من {voucher.partnerName} جاهزة — أبرِزها عند الشريك أو أضفها لمحفظتك</p>
+            <div className="spp-pass">
+              <div className="spp-p-brand">{voucher.partnerName}</div>
+              <div className="spp-p-offer">
+                {voucher.offer} · {voucher.valueLabel}
+              </div>
+              <div className="spp-p-code">
+                {qrDataUrl ? (
+                  <img src={qrDataUrl} alt={`رمز QR للقسيمة ${voucher.code}`} width={150} height={150} />
+                ) : (
+                  <div style={{ height: 150 }} />
+                )}
+                <div className="spp-p-num">{voucher.code}</div>
+              </div>
+              <div className="spp-p-exp">
+                <span>
+                  صالحة حتى{" "}
+                  <b>
+                    {new Date(voucher.expiresAt).toLocaleDateString("ar-SA-u-nu-latn", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </b>
+                </span>
+                <span>سبق بلس × ولاء ون</span>
+              </div>
+            </div>
+            <button
+              className="spp-apple-wallet"
+              onClick={() => toast({ title: "بطاقة Apple Wallet قادمة في المرحلة التالية" })}
+            >
+              <span className="spp-aw-icon">
+                <span className="spp-c1" />
+                <span className="spp-c2" />
+                <span className="spp-c3" />
+                <span className="spp-c4" />
+              </span>
+              أضفها إلى Apple Wallet
+            </button>
+            <p className="spp-d-left">
+              خُصمت <b>{fmt(voucher.pointsSpent)}</b> نقطة · رصيدك الجديد <b>{summary ? fmt(summary.totalPoints) : ""}</b>{" "}
+              نقطة
+            </p>
+            <div className="spp-m-actions">
+              <button className="spp-btn spp-btn-ghost" style={{ flex: 1 }} onClick={() => setVoucher(null)}>
+                تم
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <canvas ref={confettiRef} className="spp-confetti" />
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// قصاصات الاحتفال
+// ----------------------------------------------------------------------------
+function burstConfetti(cv: HTMLCanvasElement | null) {
+  if (!cv || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const ctx = cv.getContext("2d");
+  if (!ctx) return;
+  cv.width = window.innerWidth;
+  cv.height = window.innerHeight;
+  const colors = ["#FFC933", "#7B6CE0", "#1793E8", "#17A26B", "#EF4B4B"];
+  const parts = Array.from({ length: 120 }, (_, i) => ({
+    x: cv.width / 2 + (Math.random() - 0.5) * 200,
+    y: cv.height / 2 - 100,
+    vx: (Math.random() - 0.5) * 11,
+    vy: -Math.random() * 9 - 3,
+    s: 4 + Math.random() * 5,
+    c: colors[i % colors.length],
+    r: Math.random() * Math.PI,
+    vr: (Math.random() - 0.5) * 0.3,
+  }));
+  let frames = 0;
+  const tick = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (const p of parts) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.25;
+      p.r += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.r);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
+      ctx.restore();
+    }
+    if (++frames < 140) requestAnimationFrame(tick);
+    else ctx.clearRect(0, 0, cv.width, cv.height);
+  };
+  tick();
+}
+
+// ----------------------------------------------------------------------------
+// أنماط الصفحة — منقولة من النموذج المعتمد، مع دعم وضع الموقع الداكن (.dark)
+// ----------------------------------------------------------------------------
+const PAGE_CSS = `
+.spp {
+  --sabq: #1793E8; --wala: #7B6CE0; --wala-deep: #5F4FD1; --wala-y: #FFC933;
+  --ok: #17A26B; --danger: #D64545;
+  --paper: #F4F8FC; --card: #FFFFFF; --ink: #13202E; --ink-2: #4A5A6B; --ink-3: #7E8DA0;
+  --line: #DCE6F0; --chip-bg: #EAF4FD; --wala-bg: #F1EFFC;
+  --card-hero: linear-gradient(135deg, #12283C 0%, #0D1B2A 55%, #14344E 100%);
+  --shadow: 0 10px 30px rgba(19, 44, 70, .10);
+  background: var(--paper); color: var(--ink); min-height: 100vh; line-height: 1.65;
+  font-family: inherit;
+}
+.dark .spp {
+  --paper: #0C141D; --card: #14202D; --ink: #E8EFF6; --ink-2: #A9B8C8; --ink-3: #708096;
+  --line: #243446; --chip-bg: #16293C; --wala-bg: #241F3F;
+  --card-hero: linear-gradient(135deg, #16293D 0%, #0A1622 55%, #173853 100%);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.spp * { box-sizing: border-box; }
+.spp-wrap { max-width: 1060px; margin: 0 auto; padding: 0 20px 80px; }
+.spp-preview-note {
+  background: repeating-linear-gradient(45deg, #FFF3D6, #FFF3D6 12px, #FFEBB8 12px, #FFEBB8 24px);
+  color: #6B4E00; font-size: 13px; font-weight: 700; text-align: center; padding: 8px 16px;
+}
+.dark .spp-preview-note {
+  background: repeating-linear-gradient(45deg, #3A2F10, #3A2F10 12px, #453915 12px, #453915 24px);
+  color: #FFD976;
+}
+.spp-site { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 14px; }
+.spp-brand { display: flex; align-items: baseline; gap: 10px; }
+.spp-mark { font-size: 30px; font-weight: 900; letter-spacing: -.5px; }
+.spp-plus { color: var(--sabq); }
+.spp-sub { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.spp-route-chip {
+  font-size: 12px; font-weight: 700; color: var(--ink-2); border: 1px dashed var(--line);
+  border-radius: 999px; padding: 5px 14px; font-variant-numeric: tabular-nums; direction: ltr;
+}
+.spp-member-card {
+  background: var(--card-hero); color: #EAF3FB; border-radius: 22px; padding: 30px 34px;
+  box-shadow: var(--shadow); position: relative; overflow: hidden;
+}
+.spp-member-card::after {
+  content: ""; position: absolute; inset: auto -120px -160px auto; width: 340px; height: 340px;
+  border-radius: 50%; background: radial-gradient(circle, rgba(23,147,232,.35), transparent 70%);
+}
+.spp-mc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.spp-mc-name { font-size: 21px; font-weight: 800; margin: 0; }
+.spp-mc-role { font-size: 13px; color: #9DB6CC; margin-top: 2px; }
+.spp-tier-pill {
+  display: inline-flex; align-items: center; gap: 8px; background: rgba(124, 58, 237, .25);
+  border: 1px solid rgba(167, 122, 250, .6); color: #D9C7FF; font-weight: 800; font-size: 14px;
+  border-radius: 999px; padding: 7px 16px;
+}
+.spp-dot { width: 9px; height: 9px; border-radius: 50%; }
+.spp-mc-balance { margin: 26px 0 6px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.spp-sar { font-size: 52px; font-weight: 900; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1; }
+.spp-sar small { font-size: 22px; font-weight: 700; color: #8FB8D8; }
+.spp-pts { font-size: 15px; color: #A8C2D8; font-variant-numeric: tabular-nums; }
+.spp-mc-rate { font-size: 12.5px; color: #7FA1BC; }
+.spp-mc-meta { display: flex; gap: 26px; margin-top: 22px; flex-wrap: wrap; }
+.spp-mc-meta > div { font-size: 13px; color: #9DB6CC; }
+.spp-mc-meta b { display: block; color: #EAF3FB; font-size: 16px; font-variant-numeric: tabular-nums; }
+.spp-tier-max {
+  margin-top: 20px; font-size: 12.5px; color: #C9B8F5; background: rgba(124,58,237,.16);
+  border-radius: 10px; padding: 8px 14px; display: inline-block; position: relative; z-index: 1;
+}
+.spp-earn-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 18px; }
+.spp-earn {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.spp-ico { font-size: 20px; }
+.spp-lbl { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.spp-val { font-size: 13px; font-weight: 800; color: var(--sabq); font-variant-numeric: tabular-nums; }
+.spp-earn-note { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+.spp-sec { font-size: 22px; font-weight: 900; margin: 46px 0 6px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spp-sec-sub { color: var(--ink-2); font-size: 14px; margin: 0 0 20px; max-width: 65ch; }
+.spp-wala-tag {
+  display: inline-flex; align-items: center; gap: 7px; background: var(--wala-bg); color: var(--wala);
+  font-size: 12.5px; font-weight: 800; border-radius: 999px; padding: 5px 14px;
+  border: 1px solid color-mix(in srgb, var(--wala) 30%, transparent);
+}
+.spp-w { color: var(--wala-y); font-weight: 900; font-size: 15px; }
+.spp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.spp-voucher {
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px;
+  display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); transition: transform .15s ease;
+}
+.spp-voucher:hover { transform: translateY(-2px); }
+.spp-v-head { display: flex; align-items: center; gap: 12px; }
+.spp-v-logo {
+  width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+  color: #fff; font-weight: 900; font-size: 19px; flex-shrink: 0;
+}
+.spp-v-brand { font-weight: 800; font-size: 15.5px; }
+.spp-v-cat { font-size: 12px; color: var(--ink-3); }
+.spp-v-offer { font-size: 14px; color: var(--ink-2); min-height: 44px; }
+.spp-v-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; gap: 8px; }
+.spp-v-cost { font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
+.spp-v-cost small { display: block; font-weight: 600; color: var(--ink-3); font-size: 11.5px; }
+.spp-btn {
+  border: 0; cursor: pointer; font-family: inherit; font-weight: 800; border-radius: 12px;
+  padding: 10px 20px; font-size: 14px; transition: filter .15s ease;
+}
+.spp-btn:focus-visible { outline: 3px solid var(--sabq); outline-offset: 2px; }
+.spp-btn-redeem { background: var(--wala); color: #fff; }
+.spp-btn-redeem:hover:not(:disabled) { filter: brightness(1.08); }
+.spp-btn-redeem:disabled { background: var(--line); color: var(--ink-3); cursor: not-allowed; }
+.spp-hist { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.spp-hist-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 15px 22px; border-bottom: 1px solid var(--line); font-size: 14px;
+}
+.spp-hist-row:last-child { border-bottom: 0; }
+.spp-h-brand { font-weight: 700; }
+.spp-h-date { color: var(--ink-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.spp-h-pts { color: var(--danger); font-weight: 800; font-variant-numeric: tabular-nums; }
+.spp-h-status { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 12px; }
+.spp-h-ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.spp-hist-empty { padding: 26px; text-align: center; color: var(--ink-3); font-size: 14px; }
+.spp-terms { display: flex; flex-direction: column; gap: 10px; }
+.spp-terms details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 0 22px; }
+.spp-terms summary {
+  cursor: pointer; font-weight: 800; font-size: 15px; padding: 16px 0; list-style: none;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.spp-terms summary::after { content: "﹀"; color: var(--ink-3); font-size: 12px; transition: transform .2s; }
+.spp-terms details[open] summary::after { transform: rotate(180deg); }
+.spp-terms p, .spp-terms ul { color: var(--ink-2); font-size: 13.5px; margin: 0 0 16px; max-width: 70ch; }
+.spp-terms ul { padding-right: 20px; }
+.spp-overlay {
+  position: fixed; inset: 0; background: rgba(8, 16, 26, .62); display: none;
+  align-items: center; justify-content: center; padding: 20px; z-index: 50;
+}
+.spp-overlay.spp-show { display: flex; }
+.spp-modal {
+  background: var(--card); border-radius: 22px; max-width: 430px; width: 100%;
+  padding: 30px; box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  max-height: 92vh; overflow-y: auto;
+}
+.spp-modal h3 { margin: 0 0 6px; font-size: 19px; font-weight: 900; }
+.spp-m-sub { color: var(--ink-2); font-size: 13.5px; margin: 0 0 18px; }
+.spp-m-line { display: flex; justify-content: space-between; font-size: 14px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+.spp-m-line b { font-weight: 800; }
+.spp-m-warn {
+  background: color-mix(in srgb, var(--wala) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wala) 30%, transparent);
+  color: var(--ink-2); border-radius: 12px; font-size: 12.5px; padding: 11px 14px; margin: 16px 0;
+}
+.spp-m-agree { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; color: var(--ink-2); margin-bottom: 18px; cursor: pointer; }
+.spp-m-agree input { margin-top: 3px; accent-color: var(--wala); width: 16px; height: 16px; }
+.spp-m-actions { display: flex; gap: 10px; }
+.spp-btn-ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
+.spp-btn-confirm { background: var(--wala); color: #fff; flex: 1; }
+.spp-btn-confirm:disabled { background: var(--line); color: var(--ink-3); cursor: not-allowed; }
+.spp-celebrate { text-align: center; }
+.spp-big { font-size: 54px; line-height: 1; }
+.spp-celebrate h3 { font-size: 24px; margin: 10px 0 4px; }
+.spp-celebrate > p { color: var(--ink-2); font-size: 14px; margin: 0 0 20px; }
+.spp-pass {
+  background: linear-gradient(150deg, var(--wala-deep), var(--wala) 70%);
+  border-radius: 20px; color: #fff; padding: 24px; text-align: right; margin-bottom: 18px;
+  position: relative; overflow: hidden;
+}
+.spp-pass::before {
+  content: "W"; position: absolute; left: -10px; top: -34px; font-size: 130px; font-weight: 900;
+  color: rgba(255, 201, 51, .18); font-style: italic;
+}
+.spp-p-brand { font-weight: 900; font-size: 18px; }
+.spp-p-offer { font-size: 13px; color: #E4DEFF; margin-bottom: 14px; }
+.spp-p-code { background: #fff; border-radius: 12px; padding: 14px 16px 10px; color: #1A1233; text-align: center; }
+.spp-p-code img { display: inline-block; }
+.spp-p-num { font-size: 13px; letter-spacing: 2.5px; font-weight: 800; margin-top: 7px; font-variant-numeric: tabular-nums; direction: ltr; }
+.spp-p-exp { font-size: 11.5px; color: #D9D2FA; margin-top: 12px; display: flex; justify-content: space-between; }
+.spp-apple-wallet {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  background: #000; color: #fff; border-radius: 12px; padding: 12px; font-size: 14.5px; font-weight: 700;
+  border: 0; cursor: pointer; font-family: inherit;
+}
+.spp-apple-wallet:hover { filter: brightness(1.25); }
+.spp-aw-icon { width: 26px; height: 20px; border-radius: 4px; overflow: hidden; display: inline-block; position: relative; background: #3C3C43; }
+.spp-aw-icon span { position: absolute; left: 0; right: 0; height: 6px; border-radius: 3px 3px 0 0; }
+.spp-c1 { top: 0; background: #EF4B4B; }
+.spp-c2 { top: 5px; background: #FFC933; }
+.spp-c3 { top: 10px; background: #35C77B; }
+.spp-c4 { top: 15px; background: #1793E8; height: 5px; }
+.spp-d-left { font-size: 12px; color: var(--ink-3); margin: 14px 0 0; }
+.spp-confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+.spp-note { margin-top: 60px; color: var(--ink-3); font-size: 12.5px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .spp * { transition: none !important; } }
+@media (max-width: 560px) {
+  .spp-sar { font-size: 40px; }
+  .spp-member-card { padding: 24px 22px; }
+}
+`;
