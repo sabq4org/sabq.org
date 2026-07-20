@@ -365,6 +365,7 @@
         "server/services/sportsNamesService.ts",
         "server/services/worldCupNewsGenerator.ts",
         "server/services/kingsCupNewsGenerator.ts",
+        "server/services/newsPulseInsights.ts",
         "server/services/sportsIntelligence/**",
         "server/services/sportsSnaps/**",
         "server/routes/gulfCup.ts",
@@ -382,7 +383,8 @@
         "client/src/pages/dashboard/Sports*.tsx",
         "client/src/pages/dashboard/Wc2026NumbersReportPage.tsx",
         "client/src/components/worldcup/Wc2026NumbersReportPanel.tsx",
-        "client/src/components/worldcup/WorldCupHomeSection.tsx"
+        "client/src/components/worldcup/WorldCupHomeSection.tsx",
+        "client/src/components/SabqPulseSection.tsx"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -403,7 +405,7 @@
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
       "owners": ["sports"],
-      "lastReviewed": "2026-07-19"
+      "lastReviewed": "2026-07-20"
     },
     {
       "id": "push-notifications",
