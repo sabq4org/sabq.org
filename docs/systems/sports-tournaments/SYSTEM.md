@@ -1,6 +1,6 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-07-19 | المالك: sports
+> آخر مراجعة: 2026-07-20 | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
@@ -15,6 +15,7 @@
 - **عدّاد المواد (مضيّق على 2026):** `wc26-*` + تحريري رياضة منذ 2026-01-01 مع استبعاد أندية/مونديالات قديمة.
 - **التوقعات:** `wc_predictions` → `totalPredictions` + `pointsAwarded` (ولاء بعد التسوية).
 - **الهيدر:** لوقو المونديال أُزيل من `Header.tsx` بعد انتهاء البطولة.
+- **نبض /news بعد الختام:** بطاقة «ترشيحات المونديال» في `SabqPulseSection` تتحوّل تلقائياً عند حسم النهائي (`detectChampion`) إلى «ختام المونديال»: بطل + هدّاف فعلي، مع سطر «جمهور سبق رشّح …» من `wc_long_predictions`. المنطق في `newsPulseInsights.getNewsPulseExtras`.
 
 ## مفاتيح AI (حصرية)
 `world-cup-news`, `sportmonks-news`, `kings-cup-news`, `saudi-league-story`, `saudi-league-preview`, `sports-names`, `sports-snaps`, `sports-intel-trends`, `sports-intel-prediction`, `sports-intel-scene`, `sports-intel-digest`, `sports-intel-copilot`, `sports-intel-match-pre`, `sports-intel-match-live`, `sports-intel-match-post`
