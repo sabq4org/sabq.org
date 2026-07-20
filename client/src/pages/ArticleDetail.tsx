@@ -1289,12 +1289,6 @@ export default function ArticleDetail() {
                         {(article.staff as any).title}
                       </span>
                     )}
-                    {/* Publisher Attribution */}
-                    {(article as any).publisher?.agencyName && (
-                      <span className="text-sm text-blue-600 dark:text-blue-400 block font-medium" data-testid="text-publisher-name">
-                        أُرسل بواسطة: {(article as any).publisher.agencyName}
-                      </span>
-                    )}
                   </div>
 
                   {/* Separator */}
