@@ -90,11 +90,13 @@ export async function getPublishingGate(userId: string): Promise<PublishingGate>
   return { allowed: true, code: "OK", publisher };
 }
 
-/** مواد الناشر = ما كتبه المستخدم + ما نُسب لوكالته (يشمل الأرشيف المرحَّل). */
+/**
+ * مواد الناشر = ما خُتم بـ publisher_id فقط.
+ * لا نجمع عبر authorId: مالك الوكالة قد يكون له أرشيف مراسل قديم (مئات الأخبار)
+ * فيظهر كله داخل بوابة الناشر ويُحسب على الباقة بالخطأ.
+ */
 function publisherArticlesCondition(publisher: Publisher) {
-  const conditions = [eq(articles.publisherId, publisher.id)];
-  if (publisher.userId) conditions.push(eq(articles.authorId, publisher.userId));
-  return or(...conditions);
+  return eq(articles.publisherId, publisher.id);
 }
 
 const articleListSelection = {
@@ -1554,10 +1556,7 @@ export async function listAgencyReviewQueue(opts: { status?: string; page?: numb
   if (opts.status && opts.status !== "all") conditions.push(eq(articles.status, opts.status));
   const where = and(...conditions);
 
-  const joinCondition = or(
-    eq(articles.publisherId, publishers.id),
-    eq(articles.authorId, publishers.userId),
-  );
+  const joinCondition = eq(articles.publisherId, publishers.id);
 
   const [rows, [{ count }]] = await Promise.all([
     db
