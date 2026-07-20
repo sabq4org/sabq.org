@@ -19,6 +19,21 @@ export function parseMediaLicenseExpiry(raw: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** رسالة رفض عند محاولة حفظ ترخيص تاريخ انتهائه ماضٍ أو غير صالح. */
+export function mediaLicenseExpiryRejection(
+  raw: string,
+  now: Date = new Date(),
+): { expiresAt: Date } | { error: string } {
+  const expiresAt = parseMediaLicenseExpiry(raw);
+  if (!expiresAt) {
+    return { error: "تاريخ انتهاء الترخيص مطلوب (يوم/شهر/سنة)" };
+  }
+  if (isMediaLicenseExpired(expiresAt, now)) {
+    return { error: "لا يمكن إدخال ترخيص منتهٍ — اختر تاريخ انتهاء لاحق" };
+  }
+  return { expiresAt };
+}
+
 function resolveLicenseEnd(
   expiresAt: Date | string | null | undefined,
 ): Date | null {
@@ -108,6 +123,9 @@ export async function saveMediaLicense(
   userId: string,
   data: { licenseNumber: string; licenseFileKey: string; expiresAt: Date },
 ): Promise<MediaLicenseStatus> {
+  if (isMediaLicenseExpired(data.expiresAt)) {
+    throw new Error("لا يمكن إدخال ترخيص منتهٍ — اختر تاريخ انتهاء لاحق");
+  }
   const submittedAt = new Date();
   await db
     .update(users)

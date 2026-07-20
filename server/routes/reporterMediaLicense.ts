@@ -5,7 +5,7 @@ import { upload } from "../utils/uploadMiddleware";
 import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 import {
   getMediaLicense,
-  parseMediaLicenseExpiry,
+  mediaLicenseExpiryRejection,
   saveMediaLicense,
 } from "../services/mediaLicenseService";
 
@@ -39,10 +39,11 @@ router.post(
         return res.status(400).json({ message: "رقم الترخيص المهني مطلوب" });
       }
 
-      const expiresAt = parseMediaLicenseExpiry(String(req.body?.licenseExpiresAt || ""));
-      if (!expiresAt) {
-        return res.status(400).json({ message: "تاريخ انتهاء الترخيص مطلوب (يوم/شهر/سنة)" });
+      const expiry = mediaLicenseExpiryRejection(String(req.body?.licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
       }
+      const { expiresAt } = expiry;
 
       const file = req.file;
       if (!file) {
@@ -77,6 +78,10 @@ router.post(
         ...status,
       });
     } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.includes("ترخيص منتهٍ")) {
+        return res.status(400).json({ message: msg });
+      }
       console.error("[Reporter] media license upload failed:", error);
       res.status(500).json({ message: "تعذر حفظ الترخيص. حاول مرة أخرى لاحقاً." });
     }

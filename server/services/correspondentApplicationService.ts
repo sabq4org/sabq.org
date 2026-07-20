@@ -15,6 +15,7 @@ import {
   type InsertCorrespondentApplication,
   type User,
 } from "@shared/schema";
+import { isMediaLicenseExpired } from "./mediaLicenseService";
 
 // Only plain reader-type accounts may be auto-upgraded on approval. A
 // staff/admin account with the same email must be handled manually — silently
@@ -195,6 +196,14 @@ export async function approveCorrespondentApplication(
   const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
 
   // نسخ الترخيص من الطلب إلى الحساب عند توفر البيانات (لا نمسح إن كان الطلب بلا ترخيص)
+  if (
+    application.licenseNumber &&
+    application.licenseFileKey &&
+    application.licenseExpiresAt &&
+    isMediaLicenseExpired(application.licenseExpiresAt)
+  ) {
+    throw new Error("لا يمكن قبول طلب بترخيص منتهٍ — اطلب من المتقدم تجديد الترخيص أولاً");
+  }
   const licenseFromApplication =
     application.licenseNumber && application.licenseFileKey
       ? {

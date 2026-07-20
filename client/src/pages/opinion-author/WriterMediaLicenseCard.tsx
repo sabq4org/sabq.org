@@ -170,6 +170,13 @@ export function WriterMediaLicenseCard({
       if (!/^\d{4}-\d{2}-\d{2}$/.test(licenseExpiresAt.trim())) {
         throw new Error("يرجى إدخال تاريخ انتهاء الترخيص");
       }
+      const todayLocal = (() => {
+        const n = new Date();
+        return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+      })();
+      if (licenseExpiresAt.trim() < todayLocal) {
+        throw new Error("لا يمكن إدخال ترخيص منتهٍ — اختر تاريخ انتهاء لاحق");
+      }
       if (!licenseFile) {
         throw new Error("يرجى إرفاق صورة الترخيص أو ملف PDF");
       }
@@ -385,10 +392,14 @@ export function WriterMediaLicenseCard({
             type="date"
             value={licenseExpiresAt}
             onChange={(e) => setLicenseExpiresAt(e.target.value)}
+            min={(() => {
+              const n = new Date();
+              return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+            })()}
             required
             data-testid="input-writer-license-expires"
           />
-          <p className="text-xs text-muted-foreground">إلزامي — حتى نعرف متى ينتهي ترخيصك</p>
+          <p className="text-xs text-muted-foreground">إلزامي — تاريخ ساري (لا يقبل ترخيص منتهٍ)</p>
         </div>
 
         <div className="space-y-2">

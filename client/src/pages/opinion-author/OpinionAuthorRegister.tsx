@@ -23,7 +23,14 @@ const registrationSchema = z.object({
   city: z.string().min(2, "المدينة مطلوبة"),
   specializations: z.string().optional(),
   licenseNumber: z.string().min(3, "رقم الترخيص المهني مطلوب"),
-  licenseExpiresAt: z.string().optional(),
+  licenseExpiresAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ انتهاء الترخيص مطلوب")
+    .refine((v) => {
+      const n = new Date();
+      const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+      return v >= today;
+    }, "لا يمكن إدخال ترخيص منتهٍ — اختر تاريخ انتهاء لاحق"),
   consent: z.boolean().refine((v) => v === true, {
     message: "يجب الإقرار بصحة البيانات والموافقة على معالجتها",
   }),
@@ -117,7 +124,7 @@ export default function OpinionAuthorRegister() {
       formData.append("jobTitle", data.jobTitle || "كاتب رأي");
       formData.append("city", data.city);
       formData.append("licenseNumber", data.licenseNumber);
-      if (data.licenseExpiresAt) formData.append("licenseExpiresAt", data.licenseExpiresAt);
+      formData.append("licenseExpiresAt", data.licenseExpiresAt);
       if (data.bio) formData.append("bio", data.bio);
       if (data.specializations) formData.append("specializations", data.specializations);
       formData.append("consent", "true");
@@ -335,9 +342,17 @@ export default function OpinionAuthorRegister() {
                     name="licenseExpiresAt"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>تاريخ انتهاء الترخيص (اختياري)</FormLabel>
+                        <FormLabel>تاريخ انتهاء الترخيص *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} data-testid="input-license-expiry" />
+                          <Input
+                            type="date"
+                            min={(() => {
+                              const n = new Date();
+                              return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+                            })()}
+                            {...field}
+                            data-testid="input-license-expiry"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

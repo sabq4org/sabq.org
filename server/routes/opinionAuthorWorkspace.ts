@@ -14,10 +14,10 @@ import {
   getWriterStyleProfile,
   markAllWriterEditorialNotificationsRead,
   markWriterEditorialNotificationRead,
-  parseMediaLicenseExpiry,
   reviewWriterArticle,
   saveWriterMediaLicense,
 } from "../services/opinionAuthorWorkspaceService";
+import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
 
 const router = Router();
 const requestUserId = (req: Request) => (req.user as { id: string }).id;
@@ -149,10 +149,11 @@ router.post(
         return res.status(400).json({ message: "رقم الترخيص المهني مطلوب" });
       }
 
-      const expiresAt = parseMediaLicenseExpiry(String(req.body?.licenseExpiresAt || ""));
-      if (!expiresAt) {
-        return res.status(400).json({ message: "تاريخ انتهاء الترخيص مطلوب (يوم/شهر/سنة)" });
+      const expiry = mediaLicenseExpiryRejection(String(req.body?.licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
       }
+      const { expiresAt } = expiry;
 
       const file = req.file;
       if (!file) {
@@ -187,6 +188,10 @@ router.post(
         ...status,
       });
     } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.includes("ترخيص منتهٍ")) {
+        return res.status(400).json({ message: msg });
+      }
       console.error("[Writer Workspace] media license upload failed:", error);
       res.status(500).json({ message: "تعذر حفظ الترخيص. حاول مرة أخرى لاحقاً." });
     }
