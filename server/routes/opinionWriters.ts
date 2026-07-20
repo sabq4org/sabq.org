@@ -18,6 +18,8 @@ import {
   getNextSlotForWriter,
   getWriterArticlesWithStats,
   getWriterDayLoads,
+  isWriterDayFull,
+  OPINION_WRITERS_PER_DAY_CAP,
   getWriterMediaLicenseFileKey,
   getWriterScheduleBanner,
   listOpinionWriters,
@@ -61,6 +63,18 @@ router.put(
       const writerId = req.params.writerId;
       if (!(await userHasAnyRole(writerId, ["opinion_author"]))) {
         return res.status(400).json({ message: "المستخدم المحدد ليس كاتب رأي" });
+      }
+      // عند تفعيل يوم ممتلئ: ارفض إلا إن الكاتب أصلاً على نفس اليوم (تحديث وقت فقط)
+      if (parsed.data.active !== false && parsed.data.weekday !== undefined) {
+        const loads = await getWriterDayLoads();
+        const currentBanner = await getWriterScheduleBanner(writerId).catch(() => null);
+        // البانر يظهر فقط لجدول نشط — إن تطابق اليوم فالكاتب أصلاً عليه
+        const alreadyOnDay = currentBanner?.weekday === parsed.data.weekday;
+        if (!alreadyOnDay && isWriterDayFull(loads[parsed.data.weekday] ?? 0)) {
+          return res.status(409).json({
+            message: `يوم النشر ممتلئ (${OPINION_WRITERS_PER_DAY_CAP}/${OPINION_WRITERS_PER_DAY_CAP}) — غير متاح لنشر إضافي`,
+          });
+        }
       }
       const schedule = await upsertWriterSchedule(writerId, parsed.data, requestUserId(req));
       res.json({ schedule });
