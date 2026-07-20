@@ -5,22 +5,12 @@ import { ar } from "date-fns/locale";
 import { apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Loader2,
-  Mic,
-  Eye,
-  MessageSquare,
-  ThumbsUp,
-  X,
-  BadgeCheck,
-  Search,
-  FileText,
-} from "lucide-react";
+import { Loader2, Mic, BadgeCheck, Search, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ReporterSummary = {
@@ -30,10 +20,6 @@ type ReporterSummary = {
   profileImageUrl: string | null;
   jobTitle: string | null;
   city: string | null;
-  publishedCount: number;
-  pendingCount: number;
-  totalViews: number;
-  lastArticle: { id: string; title: string; slug: string | null; publishedAt: string } | null;
   lastLoginAt: string | null;
   mediaLicense: {
     hasLicense: boolean;
@@ -48,24 +34,6 @@ type ReporterSummary = {
 
 type LicenseFilter = "all" | "licensed" | "expired" | "missing";
 
-type ReporterArticlesResponse = {
-  reporter: { id: string; name: string; profileImageUrl: string | null } | null;
-  articles: Array<{
-    id: string;
-    title: string;
-    slug: string | null;
-    status: string;
-    reviewStatus: string | null;
-    publishedAt: string | null;
-    scheduledAt: string | null;
-    createdAt: string | null;
-    views: number;
-    likes: number;
-    comments: number;
-  }>;
-  totals: { totalArticles: number; totalViews: number; totalLikes: number; totalComments: number };
-};
-
 function formatDate(iso: string | null | undefined, withTime = true) {
   if (!iso) return "—";
   try {
@@ -77,22 +45,7 @@ function formatDate(iso: string | null | undefined, withTime = true) {
   }
 }
 
-function ArticleStatusBadge({ status, reviewStatus }: { status: string; reviewStatus: string | null }) {
-  if (status === "published")
-    return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">منشور</Badge>;
-  if (status === "scheduled")
-    return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">مجدول</Badge>;
-  if (reviewStatus === "pending_review")
-    return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">بانتظار المراجعة</Badge>;
-  if (reviewStatus === "needs_changes")
-    return <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">تحتاج تعديلات</Badge>;
-  if (reviewStatus === "rejected")
-    return <Badge className="bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">مرفوض</Badge>;
-  return <Badge variant="outline">مسودة</Badge>;
-}
-
 export default function ReportersPage() {
-  const [selectedReporterId, setSelectedReporterId] = useState<string | null>(null);
   const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>("all");
   const [search, setSearch] = useState("");
 
@@ -100,11 +53,6 @@ export default function ReportersPage() {
     queryKey: ["/api/admin/reporters"],
   });
   const reporters = Array.isArray(reportersData?.reporters) ? reportersData.reporters : [];
-
-  const { data: reporterArticles, isLoading: articlesLoading } = useQuery<ReporterArticlesResponse>({
-    queryKey: [`/api/admin/reporters/${selectedReporterId}/articles`],
-    enabled: Boolean(selectedReporterId),
-  });
 
   const kpis = useMemo(() => {
     const now = Date.now();
@@ -116,9 +64,8 @@ export default function ReportersPage() {
       (r) => !r.mediaLicense?.hasLicense && !r.mediaLicense?.expired,
     ).length;
     const activeWeek = reporters.filter((r) => {
-      const lastArt = r.lastArticle ? new Date(r.lastArticle.publishedAt).getTime() : 0;
       const lastLogin = r.lastLoginAt ? new Date(r.lastLoginAt).getTime() : 0;
-      return Math.max(lastArt, lastLogin) >= weekAgo;
+      return lastLogin >= weekAgo;
     }).length;
     return {
       total: reporters.length,
@@ -182,7 +129,7 @@ export default function ReportersPage() {
         <DashboardPageHeader
           icon={Mic}
           title="المراسلون"
-          description="الترخيص المهني، المدينة، نشاط النشر، والإحصائيات"
+          description="الترخيص المهني، المدينة، وآخر دخول"
           titleTestId="text-reporters-title"
         />
 
@@ -282,29 +229,20 @@ export default function ReportersPage() {
               <div className="py-12 text-center text-sm text-muted-foreground">لا يوجد مراسلون</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[960px] text-sm">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50 text-xs text-muted-foreground">
                       <th className="px-4 py-3 text-right font-bold">المراسل</th>
                       <th className="px-4 py-3 text-right font-bold">الترخيص المهني</th>
                       <th className="px-4 py-3 text-right font-bold">المدينة</th>
-                      <th className="px-4 py-3 text-right font-bold">منشورة</th>
-                      <th className="px-4 py-3 text-right font-bold">آخر خبر</th>
                       <th className="px-4 py-3 text-right font-bold">آخر دخول</th>
-                      <th className="px-4 py-3 text-right font-bold">المشاهدات</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredReporters.map((reporter) => {
                       const license = reporter.mediaLicense;
                       return (
-                        <tr
-                          key={reporter.id}
-                          className={cn(
-                            "border-b last:border-0",
-                            selectedReporterId === reporter.id && "bg-primary/5",
-                          )}
-                        >
+                        <tr key={reporter.id} className="border-b last:border-0">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
                               <Avatar className="h-9 w-9">
@@ -392,48 +330,10 @@ export default function ReportersPage() {
                           <td className="px-4 py-3 text-sm">
                             {reporter.city || <span className="text-muted-foreground">—</span>}
                           </td>
-                          <td className="px-4 py-3">
-                            <Button
-                              variant="ghost"
-                              className="px-0 font-extrabold tabular-nums text-primary underline underline-offset-4"
-                              onClick={() =>
-                                setSelectedReporterId(
-                                  selectedReporterId === reporter.id ? null : reporter.id,
-                                )
-                              }
-                            >
-                              {reporter.publishedCount} خبر
-                            </Button>
-                            {reporter.pendingCount > 0 && (
-                              <div className="text-xs text-amber-600 dark:text-amber-400">
-                                {reporter.pendingCount} بانتظار المراجعة
-                              </div>
-                            )}
-                          </td>
-                          <td className="max-w-[220px] px-4 py-3">
-                            {reporter.lastArticle ? (
-                              <>
-                                <div
-                                  className="truncate text-xs font-medium"
-                                  title={reporter.lastArticle.title}
-                                >
-                                  {reporter.lastArticle.title}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {formatDate(reporter.lastArticle.publishedAt, false)}
-                                </div>
-                              </>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">لا يوجد</span>
-                            )}
-                          </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                             {reporter.lastLoginAt
                               ? formatDate(reporter.lastLoginAt, false)
                               : "—"}
-                          </td>
-                          <td className="px-4 py-3 font-medium tabular-nums">
-                            {reporter.totalViews.toLocaleString("en-US")}
                           </td>
                         </tr>
                       );
@@ -444,112 +344,6 @@ export default function ReportersPage() {
             )}
           </CardContent>
         </Card>
-
-        {selectedReporterId && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-base">
-                أخبار {reporterArticles?.reporter?.name ?? "المراسل"}
-                {reporterArticles && (
-                  <span className="font-normal text-muted-foreground">
-                    {" "}
-                    ({reporterArticles.totals.totalArticles})
-                  </span>
-                )}
-              </CardTitle>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedReporterId(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0">
-              {articlesLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <>
-                  {reporterArticles && (
-                    <div className="flex flex-wrap gap-x-6 gap-y-2 border-b px-4 py-3 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Eye className="h-4 w-4" />
-                        <b className="tabular-nums text-foreground">
-                          {reporterArticles.totals.totalViews.toLocaleString("en-US")}
-                        </b>{" "}
-                        مشاهدة
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <ThumbsUp className="h-4 w-4" />
-                        <b className="tabular-nums text-foreground">
-                          {reporterArticles.totals.totalLikes.toLocaleString("en-US")}
-                        </b>{" "}
-                        إعجاباً
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MessageSquare className="h-4 w-4" />
-                        <b className="tabular-nums text-foreground">
-                          {reporterArticles.totals.totalComments.toLocaleString("en-US")}
-                        </b>{" "}
-                        تعليقاً
-                      </span>
-                    </div>
-                  )}
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[720px] text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/50 text-xs text-muted-foreground">
-                          <th className="px-4 py-3 text-right font-bold">العنوان</th>
-                          <th className="px-4 py-3 text-right font-bold">الحالة</th>
-                          <th className="px-4 py-3 text-right font-bold">التاريخ</th>
-                          <th className="px-4 py-3 text-right font-bold">المشاهدات</th>
-                          <th className="px-4 py-3 text-right font-bold">الإعجابات</th>
-                          <th className="px-4 py-3 text-right font-bold">التعليقات</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(reporterArticles?.articles ?? []).map((a) => (
-                          <tr key={a.id} className="border-b last:border-0">
-                            <td className="max-w-[300px] px-4 py-3">
-                              {a.status === "published" && a.slug ? (
-                                <a
-                                  href={`/article/${a.slug}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="block truncate font-medium hover:underline"
-                                  title={a.title}
-                                >
-                                  {a.title}
-                                </a>
-                              ) : (
-                                <span className="block truncate font-medium" title={a.title}>
-                                  {a.title}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <ArticleStatusBadge status={a.status} reviewStatus={a.reviewStatus} />
-                            </td>
-                            <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                              {formatDate(a.publishedAt ?? a.scheduledAt ?? a.createdAt)}
-                            </td>
-                            <td className="px-4 py-3 tabular-nums">
-                              {a.views.toLocaleString("en-US")}
-                            </td>
-                            <td className="px-4 py-3 tabular-nums">
-                              {a.likes.toLocaleString("en-US")}
-                            </td>
-                            <td className="px-4 py-3 tabular-nums">
-                              {a.comments.toLocaleString("en-US")}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </DashboardLayout>
   );

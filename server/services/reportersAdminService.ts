@@ -1,5 +1,5 @@
-// خدمة إدارة المراسلين: قائمة بحالة الترخيص والإحصاءات (بدون جدول نشر أسبوعي).
-import { and, asc, desc, eq, exists, inArray, or, sql } from "drizzle-orm";
+// خدمة إدارة المراسلين: قائمة بحالة الترخيص والمدينة (بدون إحصاءات نشر — لسرعة الجلب).
+import { and, asc, desc, eq, exists, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, roles, userRoles, users } from "@shared/schema";
 import {
@@ -17,10 +17,6 @@ export type ReporterSummary = {
   profileImageUrl: string | null;
   jobTitle: string | null;
   city: string | null;
-  publishedCount: number;
-  pendingCount: number;
-  totalViews: number;
-  lastArticle: { id: string; title: string; slug: string | null; publishedAt: string } | null;
   lastLoginAt: string | null;
   mediaLicense: {
     hasLicense: boolean;
@@ -64,119 +60,13 @@ async function fetchReporterUsers(reporterId?: string) {
     .orderBy(asc(users.firstName));
 }
 
-/**
- * مالك الخبر للمراسل: reporter_id ثم author_id ثم submitter_id (إن كان ضمن قائمة المراسلين).
- * يُحسب في SQL حتى لا نُحمّل كل صفوف articles إلى Node.
- */
-function reporterOwnerIdSql(ids: string[]) {
-  return sql<string>`CASE
-    WHEN ${inArray(articles.reporterId, ids)} THEN ${articles.reporterId}
-    WHEN ${inArray(articles.authorId, ids)} THEN ${articles.authorId}
-    WHEN ${inArray(articles.submitterId, ids)} THEN ${articles.submitterId}
-  END`;
-}
-
-const awaitingReporterEditorialSql = sql`(
-  ${articles.reviewStatus} = 'pending_review'
-  OR (
-    ${articles.status} = 'draft'
-    AND ${articles.source} IN ('ios-app', 'android-app')
-    AND ${articles.reviewStatus} IS NULL
-  )
-)`;
-
-function asRowArray<T>(result: unknown): T[] {
-  if (Array.isArray(result)) return result as T[];
-  const rows = (result as { rows?: T[] } | null)?.rows;
-  return Array.isArray(rows) ? rows : [];
-}
-
+/** قائمة المراسلين من جدول users فقط — بلا استعلام على articles. */
 export async function listReporters(): Promise<ReporterSummary[]> {
   const reporterRows = await fetchReporterUsers();
   if (reporterRows.length === 0) return [];
-  const ids = reporterRows.map((r) => r.id);
   const now = new Date();
-  const ownerIdSql = reporterOwnerIdSql(ids);
-  const ownedWhere = or(
-    inArray(articles.reporterId, ids),
-    inArray(articles.authorId, ids),
-    inArray(articles.submitterId, ids),
-  );
-
-  type StatsRow = {
-    owner_id: string;
-    published_count: number;
-    pending_count: number;
-    total_views: number;
-  };
-  type LastArticleRow = {
-    owner_id: string;
-    id: string;
-    title: string;
-    slug: string | null;
-    published_at: Date | string;
-  };
-
-  // تجميع في Postgres + DISTINCT ON لآخر خبر — بدل سحب كل المقالات إلى الذاكرة
-  const [statsRows, lastArticleRows] = await Promise.all([
-    db
-      .execute(sql`
-        SELECT
-          ${ownerIdSql} AS owner_id,
-          count(*) FILTER (WHERE ${articles.status} = 'published')::int AS published_count,
-          count(*) FILTER (WHERE ${awaitingReporterEditorialSql})::int AS pending_count,
-          coalesce(sum(${articles.views}) FILTER (WHERE ${articles.status} = 'published'), 0)::int AS total_views
-        FROM ${articles}
-        WHERE ${ownedWhere}
-          AND ${ownerIdSql} IS NOT NULL
-        GROUP BY 1
-      `)
-      .then((r) => asRowArray<StatsRow>(r)),
-    db
-      .execute(sql`
-        SELECT DISTINCT ON (owner_id)
-          owner_id,
-          id,
-          title,
-          slug,
-          published_at
-        FROM (
-          SELECT
-            ${ownerIdSql} AS owner_id,
-            ${articles.id} AS id,
-            ${articles.title} AS title,
-            ${articles.slug} AS slug,
-            ${articles.publishedAt} AS published_at
-          FROM ${articles}
-          WHERE ${ownedWhere}
-            AND ${articles.status} = 'published'
-            AND ${articles.publishedAt} IS NOT NULL
-            AND ${ownerIdSql} IS NOT NULL
-        ) owned
-        ORDER BY owner_id, published_at DESC
-      `)
-      .then((r) => asRowArray<LastArticleRow>(r)),
-  ]);
-
-  const statsByOwner = new Map(
-    statsRows.map((s) => [
-      s.owner_id,
-      {
-        publishedCount: Number(s.published_count) || 0,
-        pendingCount: Number(s.pending_count) || 0,
-        totalViews: Number(s.total_views) || 0,
-      },
-    ]),
-  );
-  const lastByOwner = new Map(lastArticleRows.map((a) => [a.owner_id, a]));
 
   return reporterRows.map((r) => {
-    const agg = statsByOwner.get(r.id) ?? {
-      publishedCount: 0,
-      pendingCount: 0,
-      totalViews: 0,
-    };
-    const last = lastByOwner.get(r.id);
     const submitted = Boolean(
       r.mediaLicenseNumber && r.mediaLicenseFileKey && r.mediaLicenseSubmittedAt,
     );
@@ -192,17 +82,6 @@ export async function listReporters(): Promise<ReporterSummary[]> {
       profileImageUrl: r.profileImageUrl,
       jobTitle: r.jobTitle,
       city: r.city,
-      publishedCount: agg.publishedCount,
-      pendingCount: agg.pendingCount,
-      totalViews: agg.totalViews,
-      lastArticle: last
-        ? {
-            id: last.id,
-            title: last.title,
-            slug: last.slug,
-            publishedAt: new Date(last.published_at).toISOString(),
-          }
-        : null,
       lastLoginAt: r.lastLoginAt ? r.lastLoginAt.toISOString() : null,
       mediaLicense: {
         hasLicense,
