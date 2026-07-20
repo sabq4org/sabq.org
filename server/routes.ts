@@ -1413,11 +1413,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // حساب الوكالة (مالك publishers أو linkedPublisherId) — للواجهة
       // (مثلاً قائمة المراسلين تقتصر على «صحيفة سبق»).
-      let publisherAccount: { id: string; agencyName: string } | null = null;
+      let publisherAccount: {
+        id: string;
+        agencyName: string;
+        autoPublish: boolean;
+      } | null = null;
       try {
         const pub = await resolvePublisherForUser(userId);
         if (pub) {
-          publisherAccount = { id: pub.id, agencyName: pub.agencyName };
+          publisherAccount = {
+            id: pub.id,
+            agencyName: pub.agencyName,
+            autoPublish: pub.autoPublish === true,
+          };
         }
       } catch (err) {
         console.error("[auth/user] resolvePublisherForUser failed:", err);
@@ -7255,11 +7263,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Contributor creation can save and submit in one request. Without
       // this, the client navigates away believing the new article is pending
       // while the database still has a plain draft.
+      // الناشر الموثوق (auto_publish): لا يُرسل للمراجعة — يُنشر مباشرة.
       if (req.body?.submitForReview === true) {
-        const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
-        if (isContributor) {
-          articleData.reviewStatus = "pending_review";
-          articleData.status = "draft";
+        if (await trustedPublisherCanPublish(req.user.id)) {
+          articleData.status = "published";
+          articleData.reviewStatus = null;
+          if (!articleData.publishedAt) articleData.publishedAt = new Date();
+        } else {
+          const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
+          if (isContributor) {
+            articleData.reviewStatus = "pending_review";
+            articleData.status = "draft";
+          }
         }
       }
       
@@ -7771,9 +7786,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Contributor "save + send for review" — one PATCH instead of save then
       // POST submit-review (avoids races where the UI refetches needs_changes
       // before the second request lands).
+      // الناشر الموثوق: إرسال = نشر فوري.
       const wantsSubmitForReview = req.body?.submitForReview === true;
       if (wantsSubmitForReview && !canEditAny && canEditOwn && isOwner) {
-        if (existingArticle.reviewStatus !== "pending_review") {
+        if (await trustedPublisherCanPublish(req.user.id)) {
+          updateData.status = "published";
+          updateData.reviewStatus = null;
+          if (!updateData.publishedAt && !existingArticle.publishedAt) {
+            updateData.publishedAt = new Date();
+          }
+        } else if (existingArticle.reviewStatus !== "pending_review") {
           updateData.reviewStatus = "pending_review";
           updateData.status = "draft";
         }
