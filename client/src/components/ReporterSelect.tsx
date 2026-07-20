@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, User, X, Search, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, X, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth, hasRole } from "@/hooks/useAuth";
+import {
+  SABQ_NEWSPAPER_ACCOUNT_ID,
+  SABQ_NEWSPAPER_DISPLAY_NAME,
+} from "@shared/sabqNewspaper";
 
 interface Reporter {
   id: string;
@@ -32,15 +35,21 @@ interface ReporterSelectProps {
   disabled?: boolean;
 }
 
+const SABQ_NEWSPAPER_REPORTER: Reporter = {
+  id: SABQ_NEWSPAPER_ACCOUNT_ID,
+  name: SABQ_NEWSPAPER_DISPLAY_NAME,
+  email: "admin@sabq.org",
+};
+
 // Arabic text normalization for better search
 function normalizeArabic(text: string): string {
   return text
-    .replace(/[أإآ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/ؤ/g, 'و')
-    .replace(/ئ/g, 'ي')
-    .replace(/[\u064B-\u065F]/g, '') // Remove tashkeel
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/[\u064B-\u065F]/g, "") // Remove tashkeel
     .toLowerCase()
     .trim();
 }
@@ -50,65 +59,103 @@ function fuzzyMatch(searchTerm: string, text: string): boolean {
   if (!searchTerm || !text) return true;
   const normalizedSearch = normalizeArabic(searchTerm);
   const normalizedText = normalizeArabic(text);
-  
-  // Direct includes match
+
   if (normalizedText.includes(normalizedSearch)) return true;
-  
-  // Check each word
+
   const searchWords = normalizedSearch.split(/\s+/);
   const textWords = normalizedText.split(/\s+/);
-  
-  return searchWords.every(sw => 
-    textWords.some(tw => tw.includes(sw) || sw.includes(tw))
+
+  return searchWords.every((sw) =>
+    textWords.some((tw) => tw.includes(sw) || sw.includes(tw)),
   );
+}
+
+function collectUserRoles(user: {
+  role?: string | null;
+  roles?: Array<string | { name?: string }> | null;
+}): string[] {
+  const userRoles: string[] = [];
+  if (user.role) userRoles.push(user.role);
+  if (user.roles) {
+    user.roles.forEach((r) => {
+      if (typeof r === "string") userRoles.push(r);
+      else if (r?.name) userRoles.push(r.name);
+    });
+  }
+  return userRoles;
 }
 
 export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const { user } = useAuth();
-  
-  // Debounce search input
+  const { data: user } = useQuery<{
+    id?: string;
+    role?: string | null;
+    roles?: string[];
+    firstName?: string | null;
+    lastName?: string | null;
+    name?: string | null;
+    email?: string | null;
+    profileImageUrl?: string | null;
+    linkedPublisherId?: string | null;
+    publisherAccount?: { id: string; agencyName: string } | null;
+  }>({
+    queryKey: ["/api/auth/user"],
+  });
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-  
-  // Check if current user is a reporter-only (not admin/editor/content_manager)
-  // Admins/editors should always see the dropdown to select any reporter
-  const isReporterRole = useMemo(() => {
+
+  const userRoles = useMemo(() => (user ? collectUserRoles(user) : []), [user]);
+
+  // وكالة ناشري (مالك publishers أو linkedPublisherId أو دور publisher)
+  const isPublisherAccount = useMemo(() => {
     if (!user) return false;
-    
-    // Get all roles as strings (handles both string arrays and object arrays with .name)
-    const userRoles: string[] = [];
-    if (user.role) userRoles.push(user.role);
-    if (user.roles) {
-      user.roles.forEach((r: any) => {
-        if (typeof r === 'string') userRoles.push(r);
-        else if (r?.name) userRoles.push(r.name);
-      });
-    }
-    
-    // Staff roles that can select any reporter
-    const staffRoles = ['admin', 'system_admin', 'super_admin', 'superadmin', 'editor', 'chief_editor', 'content_manager'];
-    const canSelectOthers = userRoles.some(role => staffRoles.includes(role));
-    
-    // Only restrict if user is ONLY a reporter and has no staff role
-    const isOnlyReporter = userRoles.includes('reporter') && !canSelectOthers;
-    return isOnlyReporter;
-  }, [user]);
-  
-  // Auto-set reporter ID to current user's ID if they're a reporter
+    return Boolean(
+      user.publisherAccount?.id ||
+        user.linkedPublisherId ||
+        user.role === "publisher" ||
+        userRoles.includes("publisher"),
+    );
+  }, [user, userRoles]);
+
+  // مراسل فقط — بدون صلاحية اختيار الآخرين وبدون حساب ناشر
+  const isReporterOnly = useMemo(() => {
+    if (!user || isPublisherAccount) return false;
+    const staffRoles = [
+      "admin",
+      "system_admin",
+      "super_admin",
+      "superadmin",
+      "editor",
+      "chief_editor",
+      "content_manager",
+    ];
+    const canSelectOthers = userRoles.some((role) => staffRoles.includes(role));
+    return userRoles.includes("reporter") && !canSelectOthers;
+  }, [user, userRoles, isPublisherAccount]);
+
+  const lockedToSingle = isPublisherAccount || isReporterOnly;
+
+  // الناشر → صحيفة سبق دائماً؛ المراسل → نفسه
   useEffect(() => {
-    if (isReporterRole && user?.id && !value) {
+    if (!user?.id) return;
+    if (isPublisherAccount) {
+      if (value !== SABQ_NEWSPAPER_ACCOUNT_ID) {
+        onChange(SABQ_NEWSPAPER_ACCOUNT_ID);
+      }
+      return;
+    }
+    if (isReporterOnly && !value) {
       onChange(user.id);
     }
-  }, [isReporterRole, user?.id, value, onChange]);
+  }, [isPublisherAccount, isReporterOnly, user?.id, value, onChange]);
 
-  // Fetch all reporters (limited for performance)
   const { data: reportersData, isLoading, isFetching } = useQuery<{ items: Reporter[] }>({
     queryKey: ["/api/admin/users", { role: "reporter", query: debouncedSearch, limit: 100 }],
     queryFn: async () => {
@@ -121,63 +168,76 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
       if (!res.ok) throw new Error("فشل في جلب المراسلين");
       return res.json();
     },
-    enabled: !isReporterRole,
-    staleTime: 30000, // Cache for 30 seconds
+    enabled: !lockedToSingle,
+    staleTime: 30000,
   });
 
-  // Fetch selected reporter data by ID (no role filter - we just need the user info)
-  const { data: selectedReporterData, isLoading: isLoadingSelected } = useQuery<{ items: Reporter[] }>({
+  const { data: selectedReporterData, isLoading: isLoadingSelected } = useQuery<{
+    items: Reporter[];
+  }>({
     queryKey: ["/api/admin/users", "byId", value],
     queryFn: async () => {
       if (!value) return { items: [] };
-      // Backend handles both ids (string) and ids[] (array) - use simple format
       const res = await fetch(`/api/admin/users?ids=${encodeURIComponent(value)}`);
       if (!res.ok) throw new Error("فشل في جلب بيانات المراسل");
       return res.json();
     },
-    enabled: !!value && !isReporterRole,
-    staleTime: 60000, // Cache for 1 minute
-    retry: 2, // Retry failed requests
+    enabled: !!value && !lockedToSingle,
+    staleTime: 60000,
+    retry: 2,
   });
 
-  // Process and filter reporters
   const reporters = useMemo(() => {
-    // If user is a reporter-only, show only their own data
-    if (isReporterRole && user) {
-      return [{
-        id: user.id,
-        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || user.email || 'المراسل',
-        email: user.email || '',
-        avatarUrl: user.profileImageUrl || null,
-      }];
+    if (isPublisherAccount) {
+      return [SABQ_NEWSPAPER_REPORTER];
     }
-    
+
+    if (isReporterOnly && user) {
+      return [
+        {
+          id: user.id!,
+          name:
+            `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+            user.name ||
+            user.email ||
+            "المراسل",
+          email: user.email || "",
+          avatarUrl: user.profileImageUrl || null,
+        },
+      ];
+    }
+
     let results = reportersData?.items || [];
     const selected = selectedReporterData?.items?.[0];
-    
-    // Include selected reporter if not in results
-    if (selected && !results.find(r => r.id === selected.id)) {
+
+    if (selected && !results.find((r) => r.id === selected.id)) {
       results = [selected, ...results];
     }
-    
-    // Apply client-side fuzzy filtering for better results
+
     if (searchQuery && results.length > 0) {
-      results = results.filter(reporter => 
-        fuzzyMatch(searchQuery, reporter.name) || 
-        fuzzyMatch(searchQuery, reporter.email)
+      results = results.filter(
+        (reporter) =>
+          fuzzyMatch(searchQuery, reporter.name) || fuzzyMatch(searchQuery, reporter.email),
       );
     }
-    
-    // Sort: selected first, then alphabetically
+
     results.sort((a, b) => {
       if (a.id === value) return -1;
       if (b.id === value) return 1;
-      return a.name.localeCompare(b.name, 'ar');
+      return a.name.localeCompare(b.name, "ar");
     });
-    
+
     return results;
-  }, [reportersData, selectedReporterData, isReporterRole, user, searchQuery, value]);
-  
+  }, [
+    reportersData,
+    selectedReporterData,
+    isPublisherAccount,
+    isReporterOnly,
+    user,
+    searchQuery,
+    value,
+  ]);
+
   const selectedReporter = useMemo(() => {
     return reporters.find((r) => r.id === value);
   }, [reporters, value]);
@@ -190,18 +250,21 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
     return name.substring(0, 2).toUpperCase();
   };
 
-  const handleSelect = useCallback((reporterId: string) => {
-    onChange(reporterId === value ? null : reporterId);
-    setOpen(false);
-    setSearchQuery("");
-  }, [value, onChange]);
+  const handleSelect = useCallback(
+    (reporterId: string) => {
+      onChange(reporterId === value ? null : reporterId);
+      setOpen(false);
+      setSearchQuery("");
+    },
+    [value, onChange],
+  );
 
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium" data-testid="label-reporter">
         المراسل
       </label>
-      
+
       <div className="flex gap-2">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -210,7 +273,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
               role="combobox"
               aria-expanded={open}
               className="w-full justify-between"
-              disabled={disabled || isReporterRole}
+              disabled={disabled || lockedToSingle}
               data-testid="button-reporter-select"
             >
               {selectedReporter ? (
@@ -291,7 +354,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
                         <Check
                           className={cn(
                             "ml-auto h-4 w-4 shrink-0",
-                            value === reporter.id ? "opacity-100 text-primary" : "opacity-0"
+                            value === reporter.id ? "opacity-100 text-primary" : "opacity-0",
                           )}
                         />
                       </CommandItem>
@@ -303,7 +366,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
           </PopoverContent>
         </Popover>
 
-        {value && !disabled && !isReporterRole && (
+        {value && !disabled && !lockedToSingle && (
           <Button
             variant="ghost"
             size="icon"
@@ -320,10 +383,11 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
       </div>
 
       <p className="text-xs text-muted-foreground" data-testid="text-reporter-helper">
-        {isReporterRole 
-          ? "سيتم نشر الخبر باسمك كمراسل."
-          : "اكتب اسم المراسل للبحث السريع، أو اختر من القائمة."
-        }
+        {isPublisherAccount
+          ? "أخبار الوكالة تُنشر باسم صحيفة سبق فقط."
+          : isReporterOnly
+            ? "سيتم نشر الخبر باسمك كمراسل."
+            : "اكتب اسم المراسل للبحث السريع، أو اختر من القائمة."}
       </p>
     </div>
   );

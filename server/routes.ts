@@ -74,7 +74,8 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
-import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish } from "./services/publisherPortalService";
+import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish, resolvePublisherForUser } from "./services/publisherPortalService";
+import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -1410,6 +1411,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      // حساب الوكالة (مالك publishers أو linkedPublisherId) — للواجهة
+      // (مثلاً قائمة المراسلين تقتصر على «صحيفة سبق»).
+      let publisherAccount: { id: string; agencyName: string } | null = null;
+      try {
+        const pub = await resolvePublisherForUser(userId);
+        if (pub) {
+          publisherAccount = { id: pub.id, agencyName: pub.agencyName };
+        }
+      } catch (err) {
+        console.error("[auth/user] resolvePublisherForUser failed:", err);
+      }
+
       // SECURITY: Never send passwordHash to client
       const { passwordHash, twoFactorSecret, ...safeUser } = user;
       const payload = {
@@ -1418,6 +1431,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         roles: allRoles,
         roleLabel,
         permissions: permissionsArray,
+        publisherAccount,
       };
       memoryCache.set(authUserCacheKey, payload, 60 * 1000);
       res.json(payload);
@@ -7158,6 +7172,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         authorId = opinionAuthorId;
       }
 
+      // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
+      const creatorPublisher = await resolvePublisherForUser(req.user.id);
+      if (creatorPublisher) {
+        parsed.data.reporterId = SABQ_NEWSPAPER_ACCOUNT_ID;
+      }
+
       // Validate reporterId if provided
       if (parsed.data.reporterId) {
         // Check if user exists
@@ -7216,6 +7236,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...parsed.data,
         authorId,
       };
+
+      if (creatorPublisher) {
+        articleData.reporterId = SABQ_NEWSPAPER_ACCOUNT_ID;
+        articleData.publisherId = creatorPublisher.id;
+        articleData.isPublisherNews = true;
+      }
 
       // Opinion: authorId may be the writer; track the entering editor separately.
       if (
@@ -7630,6 +7656,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           message: "Invalid data",
           errors: parsed.error.flatten(),
         });
+      }
+
+      // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
+      const updaterPublisher = await resolvePublisherForUser(req.user.id);
+      if (updaterPublisher) {
+        parsed.data.reporterId = SABQ_NEWSPAPER_ACCOUNT_ID;
+        (parsed.data as { publisherId?: string }).publisherId = updaterPublisher.id;
+        (parsed.data as { isPublisherNews?: boolean }).isPublisherNews = true;
       }
 
       // Validate reporterId if provided
