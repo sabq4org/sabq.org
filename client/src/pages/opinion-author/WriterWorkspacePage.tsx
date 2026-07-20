@@ -210,27 +210,47 @@ function WriterScheduleBanner() {
         <div className="space-y-0.5">
           <p className="text-sm font-bold sm:text-base">
             {banner.state === "late"
-              ? "فات موعد النشر لهذا الأسبوع"
+              ? new Date(banner.nextPublishAt).getTime() > Date.now()
+                ? "فات آخر موعد لإرسال مقالتك"
+                : "فات موعد النشر لهذا الأسبوع"
               : banner.state === "reminder"
                 ? "تذكير: اقترب موعد مقالتك"
                 : `يومك المخصص للنشر: ${WEEKDAYS_AR[banner.weekday]}`}
           </p>
           <p className="text-xs text-muted-foreground sm:text-sm">
             {banner.state === "late" ? (
-              <>
-                لم تُنشر مقالة في موعدك الماضي. عند إرسال مقالتك الآن ستُجدول ليوم{" "}
-                <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
-                المحررين عبر الاستفسارات.
-              </>
+              new Date(banner.nextPublishAt).getTime() > Date.now() ? (
+                <>
+                  أرسل مقالتك الآن لتُجدول ليوم{" "}
+                  <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
+                  المحررين عبر الاستفسارات.
+                </>
+              ) : (
+                <>
+                  لم تُنشر مقالة في موعدك الماضي. عند إرسال مقالتك الآن ستُجدول ليوم{" "}
+                  <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
+                  المحررين عبر الاستفسارات.
+                </>
+              )
             ) : banner.hasUpcoming ? (
               <>
                 مقالتك القادمة في مسار النشر — موعدها{" "}
                 <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>. شكراً لالتزامك.
               </>
-            ) : (
+            ) : banner.state === "reminder" ? (
+              <>
+                أرسلها قبل <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b> —
+                تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
+              </>
+            ) : new Date(banner.submitDeadline).getTime() > Date.now() ? (
               <>
                 مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
                 آخر موعد للإرسال: <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b>.
+              </>
+            ) : (
+              <>
+                مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
+                أرسلها في أقرب وقت.
               </>
             )}
           </p>
