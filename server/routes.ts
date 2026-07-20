@@ -78,6 +78,7 @@ import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalA
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
+import { mediaLicenseExpiryRejection } from "./services/mediaLicenseService";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
 import { findSimilarArticles, getPersonalizedRecommendations } from "./similarityEngine";
@@ -34064,7 +34065,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         "private",
       );
 
-      const expiresAt = licenseExpiresAt ? new Date(String(licenseExpiresAt)) : null;
+      const expiry = mediaLicenseExpiryRejection(String(licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
+      }
 
       const application = await storage.createOpinionAuthorApplication({
         arabicName,
@@ -34078,7 +34082,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         specializations: specializations || null,
         writingSamples: writingSamples || null,
         licenseNumber: String(licenseNumber).trim(),
-        licenseExpiresAt: expiresAt && !isNaN(expiresAt.getTime()) ? expiresAt : null,
+        licenseExpiresAt: expiry.expiresAt,
         licenseFileKey: licenseUpload.path,
         consentAt: new Date(),
       });

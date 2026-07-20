@@ -59,7 +59,14 @@ const registrationSchema = z.object({
   city: z.string().min(2, "المدينة مطلوبة"),
   jobTitle: z.string().default("مراسل صحفي"),
   licenseNumber: z.string().min(3, "رقم الترخيص المهني مطلوب"),
-  licenseExpiresAt: z.string().optional(),
+  licenseExpiresAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ انتهاء الترخيص مطلوب")
+    .refine((v) => {
+      const n = new Date();
+      const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+      return v >= today;
+    }, "لا يمكن إدخال ترخيص منتهٍ — اختر تاريخ انتهاء لاحق"),
   specializations: z.array(z.string()).min(1, "اختر مجال تغطية واحداً على الأقل"),
   yearsOfExperience: z.string().optional(),
   currentEmployer: z.string().optional(),
@@ -177,7 +184,7 @@ export default function CorrespondentRegister() {
       formData.append("city", data.city);
       formData.append("jobTitle", data.jobTitle || "مراسل صحفي");
       formData.append("licenseNumber", data.licenseNumber);
-      if (data.licenseExpiresAt) formData.append("licenseExpiresAt", data.licenseExpiresAt);
+      formData.append("licenseExpiresAt", data.licenseExpiresAt);
       formData.append("specializations", data.specializations.join("، "));
       if (data.yearsOfExperience) formData.append("yearsOfExperience", data.yearsOfExperience);
       if (data.currentEmployer) formData.append("currentEmployer", data.currentEmployer);
@@ -441,9 +448,17 @@ export default function CorrespondentRegister() {
                     name="licenseExpiresAt"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>تاريخ انتهاء الترخيص (اختياري)</FormLabel>
+                        <FormLabel>تاريخ انتهاء الترخيص *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} data-testid="input-license-expiry" />
+                          <Input
+                            type="date"
+                            min={(() => {
+                              const n = new Date();
+                              return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+                            })()}
+                            {...field}
+                            data-testid="input-license-expiry"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

@@ -27,6 +27,7 @@ import {
   listCorrespondentApplications,
   rejectCorrespondentApplication,
 } from "../services/correspondentApplicationService";
+import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
 
 const router = Router();
 
@@ -155,7 +156,10 @@ router.post(
       ]);
 
       const expYears = parseInt(String(yearsOfExperience), 10);
-      const expiresAt = licenseExpiresAt ? new Date(String(licenseExpiresAt)) : null;
+      const expiry = mediaLicenseExpiryRejection(String(licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
+      }
 
       const application = await createCorrespondentApplication({
         arabicName,
@@ -168,7 +172,7 @@ router.post(
         region,
         nationalId: String(nationalId).trim(),
         licenseNumber: String(licenseNumber).trim(),
-        licenseExpiresAt: expiresAt && !isNaN(expiresAt.getTime()) ? expiresAt : null,
+        licenseExpiresAt: expiry.expiresAt,
         licenseFileKey: licenseUpload.path,
         cvFileKey: cvUpload.path,
         specializations: String(specializations),
@@ -325,6 +329,9 @@ router.post(
           message:
             "يوجد حساب موظف/إداري بنفس البريد الإلكتروني — لا يمكن ترقيته تلقائياً. راجع حسابه من إدارة المستخدمين أولاً.",
         });
+      }
+      if (err.message.includes("ترخيص منتهٍ")) {
+        return res.status(400).json({ message: err.message });
       }
       res.status(500).json({ message: "فشل في الموافقة على الطلب: " + err.message });
     }
