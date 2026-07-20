@@ -167,15 +167,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل
   const isIdentitySidebar =
     role === "opinion_author" || role === "angle_writer" || role === "reporter";
-  // ختم الترخيص — مسار الترخيص مخصص لـ opinion_author (مرخّص / منتهٍ / غير مرخّص)
-  const showMediaLicenseQuery = Boolean(user) && role === "opinion_author";
+  // ختم الترخيص — كتّاب الرأي والمراسلون (مرخّص / جدّد / منتهٍ / غير مرخّص)
+  const mediaLicenseEndpoint =
+    role === "opinion_author"
+      ? "/api/opinion-author/media-license"
+      : role === "reporter"
+        ? "/api/reporter/media-license"
+        : null;
+  const showMediaLicenseQuery = Boolean(user) && Boolean(mediaLicenseEndpoint);
   const { data: mediaLicense, isFetched: mediaLicenseFetched } = useQuery<{
     submitted: boolean;
     valid?: boolean;
     expired?: boolean;
     expiringSoon?: boolean;
   }>({
-    queryKey: ["/api/opinion-author/media-license"],
+    queryKey: [mediaLicenseEndpoint],
     enabled: showMediaLicenseQuery,
     staleTime: 60 * 1000,
   });
