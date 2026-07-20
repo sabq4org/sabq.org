@@ -201,7 +201,7 @@ export default function OpinionWritersPage() {
 
   const filteredWriters = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return writers.filter((w) => {
+    const filtered = writers.filter((w) => {
       if (licenseFilter === "licensed" && !w.mediaLicense?.hasLicense) return false;
       if (licenseFilter === "expired" && !w.mediaLicense?.expired) return false;
       if (
@@ -215,6 +215,28 @@ export default function OpinionWritersPage() {
         (w.email?.toLowerCase().includes(q) ?? false) ||
         (w.mediaLicense?.number?.toLowerCase().includes(q) ?? false)
       );
+    });
+
+    // الأولوية: منتهٍ → جدّد (قريب الانتهاء) → بدون ترخيص → ساري (الأقرب انتهاءً أولاً)
+    const licenseRank = (w: WriterSummary) => {
+      if (w.mediaLicense?.expired) return 0;
+      if (w.mediaLicense?.expiringSoon) return 1;
+      if (!w.mediaLicense?.hasLicense) return 2;
+      return 3;
+    };
+    const expiresMs = (w: WriterSummary) => {
+      const raw = w.mediaLicense?.expiresAt;
+      if (!raw) return Number.POSITIVE_INFINITY;
+      const t = new Date(raw).getTime();
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+    };
+
+    return filtered.sort((a, b) => {
+      const rankDiff = licenseRank(a) - licenseRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      const expDiff = expiresMs(a) - expiresMs(b);
+      if (expDiff !== 0) return expDiff;
+      return a.name.localeCompare(b.name, "ar");
     });
   }, [writers, licenseFilter, search]);
 
@@ -592,72 +614,73 @@ export default function OpinionWritersPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 align-middle">
                             {license?.hasLicense || license?.expired ? (
-                              <div className="space-y-1.5">
-                                {license.expired ? (
-                                  <Badge
-                                    className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200"
-                                    data-testid={`badge-expired-license-${writer.id}`}
-                                  >
-                                    منتهٍ
-                                  </Badge>
-                                ) : license.expiringSoon ? (
-                                  <Badge
-                                    className="gap-1 border-0 bg-red-600 text-white hover:bg-red-600"
-                                    data-testid={`badge-expiring-license-${writer.id}`}
-                                  >
-                                    جدّد الترخيص
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 gap-1">
-                                    <BadgeCheck className="h-3 w-3" />
-                                    مرخّص
-                                  </Badge>
-                                )}
-                                {license.number && (
-                                  <div className="text-xs font-medium tabular-nums" dir="ltr">
-                                    {license.number}
-                                  </div>
-                                )}
+                              <div className="flex max-w-[11rem] flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  {license.expired ? (
+                                    <Badge
+                                      className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200"
+                                      data-testid={`badge-expired-license-${writer.id}`}
+                                    >
+                                      منتهٍ
+                                    </Badge>
+                                  ) : license.expiringSoon ? (
+                                    <Badge
+                                      className="gap-1 border-0 bg-red-600 text-white hover:bg-red-600"
+                                      title="أقل من شهرين — يجب التجديد للاستمرار"
+                                      data-testid={`badge-expiring-license-${writer.id}`}
+                                    >
+                                      جدّد الترخيص
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                      <BadgeCheck className="h-3 w-3" />
+                                      مرخّص
+                                    </Badge>
+                                  )}
+                                  {license.hasFile && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 shrink-0 text-muted-foreground"
+                                      title="عرض ملف الترخيص"
+                                      onClick={() =>
+                                        window.open(
+                                          apiUrl(
+                                            `/api/admin/opinion-writers/${writer.id}/media-license-file`,
+                                          ),
+                                          "_blank",
+                                          "noopener",
+                                        )
+                                      }
+                                      data-testid={`button-view-license-${writer.id}`}
+                                    >
+                                      <FileText className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
                                 {license.expiresAt && (
                                   <div
-                                    className={
+                                    className={cn(
+                                      "text-[11px] tabular-nums leading-none",
                                       license.expiringSoon || license.expired
-                                        ? "text-[11px] font-semibold text-red-700 dark:text-red-300"
-                                        : "text-[11px] text-muted-foreground"
-                                    }
+                                        ? "font-semibold text-red-700 dark:text-red-300"
+                                        : "text-muted-foreground",
+                                    )}
                                   >
-                                    ينتهي {formatDate(license.expiresAt, false)}
+                                    حتى{" "}
+                                    {format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}
                                   </div>
                                 )}
-                                {license.expiringSoon && (
-                                  <div className="text-[11px] font-medium text-red-700 dark:text-red-300">
-                                    أقل من شهرين — يجب التجديد للاستمرار
-                                  </div>
-                                )}
-                                {license.submittedAt && (
-                                  <div className="text-[11px] text-muted-foreground">
-                                    أُرسل {formatDate(license.submittedAt, false)}
-                                  </div>
-                                )}
-                                {license.hasFile && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 gap-1 px-2 text-xs"
-                                    onClick={() =>
-                                      window.open(
-                                        apiUrl(`/api/admin/opinion-writers/${writer.id}/media-license-file`),
-                                        "_blank",
-                                        "noopener",
-                                      )
-                                    }
-                                    data-testid={`button-view-license-${writer.id}`}
+                                {license.number && (
+                                  <div
+                                    className="truncate text-[11px] tabular-nums text-muted-foreground leading-none"
+                                    dir="ltr"
+                                    title={license.number}
                                   >
-                                    <FileText className="h-3 w-3" />
-                                    عرض الملف
-                                  </Button>
+                                    {license.number}
+                                  </div>
                                 )}
                               </div>
                             ) : (

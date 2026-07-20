@@ -85,10 +85,6 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium" data-testid="label-opinion-author">
-        كاتب المقال (يظهر للقارئ)
-      </label>
-      
       <div className="flex gap-2">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
