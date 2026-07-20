@@ -1,7 +1,8 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, BadgeCheck } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
@@ -163,6 +164,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         .slice(0, 8)
     : [];
 
+  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل
+  const isIdentitySidebar =
+    role === "opinion_author" || role === "angle_writer" || role === "reporter";
+  // ختم «مرخّص» لمن أرفق ترخيصه — مسار الترخيص مخصص لـ opinion_author
+  const showMediaLicenseQuery = Boolean(user) && role === "opinion_author";
+  const { data: mediaLicense } = useQuery<{ submitted: boolean }>({
+    queryKey: ["/api/opinion-author/media-license"],
+    enabled: showMediaLicenseQuery,
+    staleTime: 60 * 1000,
+  });
+  const isMediaLicensed = Boolean(mediaLicense?.submitted);
+
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
     return (
@@ -207,9 +220,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return 'س';
   };
 
-  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل (مثل بطاقة الوكالة في بوابة الناشر)
-  const isIdentitySidebar =
-    role === "opinion_author" || role === "angle_writer" || role === "reporter";
   const identityDisplayName =
     user.firstName && user.lastName
       ? `${user.firstName} ${user.lastName}`
@@ -363,7 +373,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             {getInitials(user.firstName, user.lastName, user.email)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 text-start">
                           <p
                             className="truncate text-sm font-bold leading-snug tracking-tight"
                             data-testid="sidebar-identity-name"
@@ -376,22 +386,34 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                               className="mt-0.5 truncate text-[11px] text-muted-foreground"
                               data-testid="sidebar-identity-email"
                               title={user.email}
-                              dir="ltr"
                             >
-                              {user.email}
+                              <span dir="ltr" className="inline-block max-w-full truncate align-bottom">
+                                {user.email}
+                              </span>
                             </p>
                           )}
                         </div>
                       </div>
-                      <Badge
-                        className={cn(
-                          "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge
+                          className={cn(
+                            "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
+                          )}
+                          data-testid="sidebar-identity-role-badge"
+                        >
+                          <IdentityRoleIcon className="h-3 w-3" />
+                          {identityRoleLabel}
+                        </Badge>
+                        {isMediaLicensed && (
+                          <Badge
+                            className="gap-1 border-0 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                            data-testid="sidebar-identity-licensed-badge"
+                          >
+                            <BadgeCheck className="h-3 w-3" />
+                            مرخّص
+                          </Badge>
                         )}
-                        data-testid="sidebar-identity-role-badge"
-                      >
-                        <IdentityRoleIcon className="h-3 w-3" />
-                        {identityRoleLabel}
-                      </Badge>
+                      </div>
                     </div>
                   </div>
                 </div>
