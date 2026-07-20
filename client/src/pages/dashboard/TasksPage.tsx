@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { isPast } from "date-fns";
 import type { Task, InsertTask } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 interface TaskStatistics {
   total: number;
@@ -116,44 +117,54 @@ function formatTaskDate(date: Date) {
   });
 }
 
-function getStatusVariant(status: string): "default" | "secondary" | "outline" {
+function getStatusBadgeClass(status: string): string {
   switch (status) {
-    case 'completed':
-      return 'default';
-    case 'in_progress':
-      return 'secondary';
+    case "completed":
+      return "border-0 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300";
+    case "in_progress":
+      return "border-0 bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/40 dark:text-sky-300";
+    case "review":
+      return "border-0 bg-violet-100 text-violet-800 hover:bg-violet-100 dark:bg-violet-900/40 dark:text-violet-300";
+    case "todo":
+      return "border-border bg-muted text-muted-foreground hover:bg-muted";
+    case "archived":
+      return "border-border bg-muted/60 text-muted-foreground hover:bg-muted/60";
     default:
-      return 'outline';
+      return "border-border bg-muted text-muted-foreground hover:bg-muted";
   }
 }
 
-function getPriorityColor(priority: string): string {
+function getPriorityBadgeClass(priority: string): string {
   switch (priority) {
-    case 'low':
-      return 'text-gray-600 dark:text-gray-400';
-    case 'medium':
-      return 'text-blue-600 dark:text-blue-400';
-    case 'high':
-      return 'text-orange-600 dark:text-orange-400';
-    case 'critical':
-      return 'text-red-600 dark:text-red-400';
+    case "critical":
+      return "border-0 bg-rose-100 text-rose-800 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-300";
+    case "high":
+      return "border-0 bg-orange-100 text-orange-800 hover:bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300";
+    case "medium":
+      return "border-0 bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/40 dark:text-sky-300";
+    case "low":
+      return "border-0 bg-slate-100 text-slate-700 hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-300";
     default:
-      return 'text-gray-600 dark:text-gray-400';
+      return "border-border bg-muted text-muted-foreground hover:bg-muted";
   }
 }
 
-function getPriorityBackground(priority: string): string {
+/** تلوين الصف حسب الأولوية للمهام المفتوحة فقط — المكتملة محايدة */
+function getTaskRowBackground(priority: string, status: string): string {
+  if (status === "completed" || status === "archived") {
+    return "bg-muted/25 dark:bg-card border-border";
+  }
   switch (priority) {
-    case 'critical':
-      return 'bg-red-50 dark:bg-card border-red-200 dark:border-border';
-    case 'high':
-      return 'bg-blue-50 dark:bg-card border-blue-200 dark:border-border';
-    case 'medium':
-      return 'bg-yellow-50 dark:bg-card border-yellow-200 dark:border-border';
-    case 'low':
-      return 'bg-green-50 dark:bg-card border-green-200 dark:border-border';
+    case "critical":
+      return "bg-rose-50/90 dark:bg-card border-rose-200/80 dark:border-border";
+    case "high":
+      return "bg-orange-50/90 dark:bg-card border-orange-200/80 dark:border-border";
+    case "medium":
+      return "bg-sky-50/70 dark:bg-card border-sky-200/70 dark:border-border";
+    case "low":
+      return "bg-slate-50/80 dark:bg-card border-slate-200/70 dark:border-border";
     default:
-      return 'bg-gray-50 dark:bg-card border-gray-200 dark:border-border';
+      return "bg-card border-border";
   }
 }
 
@@ -181,17 +192,6 @@ function getCategoryIcon(department: string | null, category: string | null): Lu
   }
   
   return FileText;
-}
-
-function getPriorityBadgeVariant(priority: string): "default" | "destructive" | "outline" {
-  switch (priority) {
-    case 'critical':
-      return 'destructive';
-    case 'high':
-      return 'default';
-    default:
-      return 'outline';
-  }
 }
 
 // Component for rendering subtasks
@@ -256,14 +256,14 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
               </div>
             </TableCell>
             <TableCell data-testid={`badge-status-${subtask.id}`}>
-              <Badge variant={getStatusVariant(subtask.status)}>
+              <Badge className={getStatusBadgeClass(subtask.status)}>
                 {statusLabels[subtask.status]}
               </Badge>
             </TableCell>
             <TableCell data-testid={`badge-priority-${subtask.id}`}>
-              <span className={getPriorityColor(subtask.priority)}>
+              <Badge className={getPriorityBadgeClass(subtask.priority)}>
                 {priorityLabels[subtask.priority]}
-              </span>
+              </Badge>
             </TableCell>
             <TableCell data-testid={`text-assignee-${subtask.id}`}>
               {getUserName(subtask.assignedToId)}
@@ -363,7 +363,7 @@ function TaskRowWithSubtasks({
       <TableRow 
         key={task.id} 
         data-testid={`row-task-${task.id}`}
-        className={`group border rounded-lg p-3 ${getPriorityBackground(task.priority)}`}
+        className={`group border rounded-lg p-3 ${getTaskRowBackground(task.priority, task.status)}`}
       >
         <TableCell>
           <Checkbox
@@ -392,7 +392,10 @@ function TaskRowWithSubtasks({
             <CategoryIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-base font-semibold">{task.title}</span>
+                <span className={cn(
+                  "text-base font-semibold",
+                  task.status === "completed" && "text-muted-foreground",
+                )}>{task.title}</span>
                 {hasSubtasks && (
                   <Badge variant="outline" className="text-xs">
                     {subtasksCount}
@@ -408,14 +411,14 @@ function TaskRowWithSubtasks({
           </div>
         </TableCell>
         <TableCell data-testid={`badge-status-${task.id}`}>
-          <Badge variant={getStatusVariant(task.status)}>
+          <Badge className={getStatusBadgeClass(task.status)}>
             {statusLabels[task.status]}
           </Badge>
         </TableCell>
         <TableCell data-testid={`badge-priority-${task.id}`}>
-          <span className={getPriorityColor(task.priority)}>
+          <Badge className={getPriorityBadgeClass(task.priority)}>
             {priorityLabels[task.priority]}
-          </span>
+          </Badge>
         </TableCell>
         <TableCell data-testid={`text-assignee-${task.id}`}>
           {getUserName(task.assignedToId)}
@@ -503,7 +506,7 @@ interface MobileTaskCardProps {
 
 function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: MobileTaskCardProps) {
   const Icon = getCategoryIcon(task.department, task.category);
-  const bgClass = getPriorityBackground(task.priority);
+  const bgClass = getTaskRowBackground(task.priority, task.status);
   
   const getUserName = (userId: string | null) => {
     if (!userId) return 'غير مسند';
@@ -518,7 +521,13 @@ function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: M
       <div className="flex items-start gap-3 mb-2">
         <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-1" />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-base line-clamp-2" data-testid={`text-title-${task.id}`}>
+          <h3
+            className={cn(
+              "font-semibold text-base line-clamp-2",
+              task.status === "completed" && "text-muted-foreground",
+            )}
+            data-testid={`text-title-${task.id}`}
+          >
             {task.title}
           </h3>
           {task.description && (
@@ -527,14 +536,14 @@ function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: M
             </p>
           )}
         </div>
-        <Badge variant={getPriorityBadgeVariant(task.priority)} className="flex-shrink-0" data-testid={`badge-priority-${task.id}`}>
+        <Badge className={cn("flex-shrink-0", getPriorityBadgeClass(task.priority))} data-testid={`badge-priority-${task.id}`}>
           {priorityLabels[task.priority]}
         </Badge>
       </div>
 
       {/* Meta Info: Status + Due Date + Assignee + Subtasks Count */}
       <div className="flex flex-wrap gap-2 mb-3 text-sm">
-        <Badge variant={getStatusVariant(task.status)} data-testid={`badge-status-${task.id}`}>
+        <Badge className={getStatusBadgeClass(task.status)} data-testid={`badge-status-${task.id}`}>
           {statusLabels[task.status]}
         </Badge>
         {task.subtasksCount && task.subtasksCount > 0 && (
