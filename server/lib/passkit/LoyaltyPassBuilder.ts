@@ -1,5 +1,6 @@
 import { PassBuilder, LoyaltyPassData } from './PassBuilder';
 import { PKPass } from 'passkit-generator';
+import { LOYALTY_TIERS } from '@shared/loyalty';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -80,12 +81,7 @@ export class LoyaltyPassBuilder extends PassBuilder {
   }
   
   private translateLevel(level: number): string {
-    const levelMap: Record<number, string> = {
-      1: 'برونزي',
-      2: 'فضي',
-      3: 'ذهبي',
-      4: 'بلاتيني',
-    };
-    return levelMap[level] || 'برونزي';
+    const tier = LOYALTY_TIERS.find((t) => t.level === level);
+    return tier?.nameAr ?? LOYALTY_TIERS[0].nameAr;
   }
 }

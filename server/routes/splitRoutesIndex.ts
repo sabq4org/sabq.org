@@ -27,6 +27,7 @@ import opinionTicketsRouter from "./opinionTickets";
 import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
 import opinionWritersRouter from "./opinionWriters";
 import reporterMediaLicenseRouter from "./reporterMediaLicense";
+import sabqPlusPreviewRouter from "./sabqPlusPreview";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
@@ -119,6 +120,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(opinionAuthorWorkspaceRouter);
   app.use(opinionWritersRouter);
   app.use(reporterMediaLicenseRouter);
+  app.use(sabqPlusPreviewRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);

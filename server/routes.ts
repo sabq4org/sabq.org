@@ -20078,33 +20078,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Manual points update endpoint (for testing/admin use)
-  app.post("/api/loyalty/update-points", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const { points, reason } = req.body;
-      
-      if (typeof points !== 'number') {
-        return res.status(400).json({ error: 'Points must be a number' });
-      }
-      
-      // Update points
-      await storage.updateUserPointsTotal(userId, {
-        totalPoints: points,
-      });
-      
-      // Trigger pass update
-      await storage.triggerLoyaltyPassUpdate(userId, reason || 'manual_update');
-      
-      res.json({ success: true, points });
-    } catch (error: any) {
-      console.error('Error updating points:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
   // ============================================================
   // MUQTARAB PUBLIC ROUTES
   // ============================================================

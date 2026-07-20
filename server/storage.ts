@@ -433,7 +433,7 @@ import {
   type InsertFocusReadingSession,
   type UpdateFocusReadingSession,
 } from "@shared/schema";
-import { computeTier } from "@shared/loyalty";
+import { computeTier, getLoyaltyActionMeta } from "@shared/loyalty";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
@@ -9716,12 +9716,20 @@ export class DatabaseStorage implements IStorage {
         );
       }
       
-      // 1. Get active campaign inside transaction
-      const applicableCampaign = await this.getApplicableCampaignInTx(
-        tx,
-        params.action, 
-        params.metadata?.categoryId
-      );
+      // 1. Get active campaign inside transaction. Sports prediction awards
+      // are already tier-multiplied at settlement time and admin adjustments
+      // are exact by definition — applying a campaign multiplier on top of
+      // either would double-inflate large payouts, so campaigns only apply
+      // to editorial/engagement/account actions.
+      const actionCategory = getLoyaltyActionMeta(params.action).category;
+      const applicableCampaign =
+        actionCategory === "sports" || actionCategory === "admin"
+          ? undefined
+          : await this.getApplicableCampaignInTx(
+              tx,
+              params.action,
+              params.metadata?.categoryId
+            );
 
       // 2. Calculate points with multiplier or bonus
       let pointsToAward = params.points;
@@ -9860,6 +9868,9 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(loyaltyRewards.isActive, true),
+          // سبق بلس preview-simulation rewards are admin-only surfaces —
+          // never expose them in the member-facing catalog.
+          sql`COALESCE(${loyaltyRewards.rewardData}->'partnerApiData'->>'previewOnly', '') <> 'true'`,
           or(
             sql`${loyaltyRewards.expiresAt} IS NULL`,
             gte(loyaltyRewards.expiresAt, now)
@@ -9880,106 +9891,146 @@ export class DatabaseStorage implements IStorage {
   async redeemReward(params: {
     userId: string;
     rewardId: string;
-  }): Promise<{ success: boolean; message: string; redemption?: UserRewardsHistory }> {
-    return await db.transaction(async (tx) => {
-      // 1. Get reward details
-      const [reward] = await tx
-        .select()
-        .from(loyaltyRewards)
-        .where(eq(loyaltyRewards.id, params.rewardId));
+    // سبق بلس preview rewards are redeemable only through the admin-gated
+    // /api/plus-preview surface, which passes allowPreview: true.
+    allowPreview?: boolean;
+  }): Promise<{
+    success: boolean;
+    code?: "NOT_FOUND" | "INACTIVE" | "EXPIRED" | "INSUFFICIENT_POINTS" | "OUT_OF_STOCK" | "MAX_REDEMPTIONS";
+    message: string;
+    redemption?: UserRewardsHistory;
+    remainingBalance?: number;
+  }> {
+    // Thrown inside the transaction to roll back the points debit if the
+    // guarded stock decrement touches zero rows.
+    class OutOfStockRollback extends Error {}
+    try {
+      return await db.transaction(async (tx) => {
+        // 1. Lock the reward row — serializes concurrent redemptions of the
+        // same reward so stock and per-user-count checks can't race.
+        const [reward] = await tx
+          .select()
+          .from(loyaltyRewards)
+          .where(eq(loyaltyRewards.id, params.rewardId))
+          .for("update");
 
-      if (!reward) {
-        return { success: false, message: "الجائزة غير موجودة" };
-      }
+        if (!reward) {
+          return { success: false, code: "NOT_FOUND" as const, message: "الجائزة غير موجودة" };
+        }
 
-      if (!reward.isActive) {
-        return { success: false, message: "الجائزة غير متاحة حالياً" };
-      }
+        if (!reward.isActive) {
+          return { success: false, code: "INACTIVE" as const, message: "الجائزة غير متاحة حالياً" };
+        }
 
-      if (reward.expiresAt && new Date(reward.expiresAt) < new Date()) {
-        return { success: false, message: "انتهت صلاحية الجائزة" };
-      }
+        if ((reward.rewardData as any)?.partnerApiData?.previewOnly === true && !params.allowPreview) {
+          return { success: false, code: "NOT_FOUND" as const, message: "الجائزة غير موجودة" };
+        }
 
-      // 2. Check user points
-      const [userPoints] = await tx
-        .select()
-        .from(userPointsTotal)
-        .where(eq(userPointsTotal.userId, params.userId));
+        if (reward.expiresAt && new Date(reward.expiresAt) < new Date()) {
+          return { success: false, code: "EXPIRED" as const, message: "انتهت صلاحية الجائزة" };
+        }
 
-      if (!userPoints || userPoints.totalPoints < reward.pointsCost) {
-        return { 
-          success: false, 
-          message: `النقاط غير كافية. تحتاج إلى ${reward.pointsCost} نقطة` 
-        };
-      }
+        // 2. Check stock
+        if (reward.remainingStock !== null && reward.remainingStock <= 0) {
+          return { success: false, code: "OUT_OF_STOCK" as const, message: "نفذت كمية الجائزة" };
+        }
 
-      // 3. Check stock
-      if (reward.remainingStock !== null && reward.remainingStock <= 0) {
-        return { success: false, message: "نفذت كمية الجائزة" };
-      }
+        // 3. Check max redemptions per user (safe under the reward row lock)
+        if (reward.maxRedemptionsPerUser !== null) {
+          const [{ count: userRedemptions }] = await tx
+            .select({ count: sql<number>`count(*)` })
+            .from(userRewardsHistory)
+            .where(
+              and(
+                eq(userRewardsHistory.userId, params.userId),
+                eq(userRewardsHistory.rewardId, params.rewardId)
+              )
+            );
 
-      // 4. Check max redemptions per user
-      if (reward.maxRedemptionsPerUser !== null) {
-        const [{ count: userRedemptions }] = await tx
-          .select({ count: sql<number>`count(*)` })
-          .from(userRewardsHistory)
+          if (Number(userRedemptions) >= reward.maxRedemptionsPerUser) {
+            return {
+              success: false,
+              code: "MAX_REDEMPTIONS" as const,
+              message: `لقد وصلت إلى الحد الأقصى لاستبدال هذه الجائزة (${reward.maxRedemptionsPerUser})`
+            };
+          }
+        }
+
+        // 4. Deduct points — atomic guarded decrement so two concurrent
+        // redemptions can't both spend the same balance.
+        const debited = await tx
+          .update(userPointsTotal)
+          .set({
+            totalPoints: sql`${userPointsTotal.totalPoints} - ${reward.pointsCost}`,
+            updatedAt: new Date(),
+          })
           .where(
             and(
-              eq(userRewardsHistory.userId, params.userId),
-              eq(userRewardsHistory.rewardId, params.rewardId)
+              eq(userPointsTotal.userId, params.userId),
+              gte(userPointsTotal.totalPoints, reward.pointsCost)
             )
-          );
+          )
+          .returning({ totalPoints: userPointsTotal.totalPoints });
 
-        if (Number(userRedemptions) >= reward.maxRedemptionsPerUser) {
-          return { 
-            success: false, 
-            message: `لقد وصلت إلى الحد الأقصى لاستبدال هذه الجائزة (${reward.maxRedemptionsPerUser})` 
+        if (debited.length === 0) {
+          return {
+            success: false,
+            code: "INSUFFICIENT_POINTS" as const,
+            message: `النقاط غير كافية. تحتاج إلى ${reward.pointsCost} نقطة`
           };
         }
+
+        // 5. Decrement stock — guarded so it can never go negative; zero
+        // affected rows means someone else took the last unit, so roll the
+        // whole redemption (including the debit above) back.
+        if (reward.remainingStock !== null) {
+          const stockRows = await tx
+            .update(loyaltyRewards)
+            .set({ remainingStock: sql`${loyaltyRewards.remainingStock} - 1` })
+            .where(
+              and(
+                eq(loyaltyRewards.id, params.rewardId),
+                gte(loyaltyRewards.remainingStock, 1)
+              )
+            )
+            .returning({ remainingStock: loyaltyRewards.remainingStock });
+          if (stockRows.length === 0) {
+            throw new OutOfStockRollback();
+          }
+        }
+
+        // 6. Create redemption record with snapshot
+        const [redemption] = await tx
+          .insert(userRewardsHistory)
+          .values({
+            userId: params.userId,
+            rewardId: params.rewardId,
+            pointsSpent: reward.pointsCost,
+            rewardSnapshot: {
+              nameAr: reward.nameAr,
+              nameEn: reward.nameEn,
+              pointsCost: reward.pointsCost,
+              rewardType: reward.rewardType,
+            },
+            deliveryData: reward.rewardData?.couponCode ? {
+              couponCode: reward.rewardData.couponCode,
+            } : undefined,
+          })
+          .returning();
+
+        return {
+          success: true,
+          message: "تم استبدال الجائزة بنجاح",
+          redemption,
+          remainingBalance: Number(debited[0].totalPoints),
+        };
+      });
+    } catch (err) {
+      if (err instanceof OutOfStockRollback) {
+        return { success: false, code: "OUT_OF_STOCK" as const, message: "نفذت كمية الجائزة" };
       }
-
-      // 5. Deduct points
-      await tx
-        .update(userPointsTotal)
-        .set({ 
-          totalPoints: userPoints.totalPoints - reward.pointsCost,
-          updatedAt: new Date(),
-        })
-        .where(eq(userPointsTotal.userId, params.userId));
-
-      // 6. Create redemption record with snapshot
-      const [redemption] = await tx
-        .insert(userRewardsHistory)
-        .values({
-          userId: params.userId,
-          rewardId: params.rewardId,
-          pointsSpent: reward.pointsCost,
-          rewardSnapshot: {
-            nameAr: reward.nameAr,
-            nameEn: reward.nameEn,
-            pointsCost: reward.pointsCost,
-            rewardType: reward.rewardType,
-          },
-          deliveryData: reward.rewardData?.couponCode ? {
-            couponCode: reward.rewardData.couponCode,
-          } : undefined,
-        })
-        .returning();
-
-      // 7. Update stock if applicable
-      if (reward.remainingStock !== null) {
-        await tx
-          .update(loyaltyRewards)
-          .set({ remainingStock: reward.remainingStock - 1 })
-          .where(eq(loyaltyRewards.id, params.rewardId));
-      }
-
-      return { 
-        success: true, 
-        message: "تم استبدال الجائزة بنجاح", 
-        redemption 
-      };
-    });
+      throw err;
+    }
   }
 
   async getUserRedemptionHistory(userId: string): Promise<UserRewardsHistory[]> {
