@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-20 (listOpinionWriters يتحمّل تواريخ فاسدة) | المالك: editorial
+> آخر مراجعة: 2026-07-20 (ناشر → مراسل صحيفة سبق فقط) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -29,6 +29,7 @@
 - **الموجز في صفحة المقال:** حقل المحرر `excerpt` عند الحفظ يزامن `aiSummary` ويمسح `aiBullets`. تفريغ الملخص يخفي الصندوق (لا إعادة توليد من نص المقال). الواجهة لا تكرر الفقرة تحت النقاط إن كانا نفس النص.
 - **أسلوب الصور المولّدة:** مفتاح `auto_image_generation_settings` يحتوي `newsStyle` (أخبار/تحليل) و`articleStyle` (رأي/عمود). `defaultStyle` يبقى متزامناً مع `newsStyle` للتوافق. الاختيار عبر `resolveStyleForArticleType` في `autoImageGenerationService`. كتّاب الرأي لا يرون ألبوم الصور ولا المرفقات في `ArticleEditor`.
 - **KPI كتّاب الرأي** (`OpinionWritersPage`): تُحسب من قائمة `/api/admin/opinion-writers` في الواجهة — منها «اختاروا يوم النشر» (`schedule.active`) و«بلا نشاط أكثر من شهرين» (لا `lastArticle` أو أقدم من ٦٠ يوماً). `listOpinionWriters` يستخدم `toIsoOrNull` حتى لا يُسقط الطلب كاملاً بـ `Invalid time value` من صف تاريخ فاسد.
+- **ناشر / وكالة في محرّر الخبر:** إن وُجد حساب `publishers` للمستخدم (`resolvePublisherForUser` → `publisherAccount` في `/api/auth/user`)، قائمة المراسلين في `ReporterSelect` تقتصر على «صحيفة سبق» (`SABQ_NEWSPAPER_ACCOUNT_ID`) وتُثبَّت عند الإنشاء/التحديث مع `publisherId` و`isPublisherNews`. لا يعتمد على دور `publisher` وحده — مالك الوكالة قد يكون دوره `reporter`.
 - **سعة يوم النشر:** حد ثابت `OPINION_WRITERS_PER_DAY_CAP = 10` في `shared/opinionWriterConstants.ts`. عند الامتلاء تظهر «غير متاح للنشر» في لوحة الكتّاب ومنتقي الكاتب، ويُرفض التعيين الذاتي والإداري ليوم ممتلئ (إلا تحديث نفس اليوم). العرض: «X من 10 كتّاب» (لا `X/10` حتى لا يُقرأ كتاريخ).
 - **التزام كتّاب الرأي:** `hasUpcoming` / `pendingCount` يعتبران المقال مُرسلاً إن `reviewStatus=pending_review` أو مسودة موبايل (`source` ios-app/android-app و`reviewStatus` فارغ). إرسال `/api/v1/articles/submit` يضبط `pending_review` من البداية.
 - **بانر موعد الكاتب:** `submitDeadline = nextPublishAt − يومان`. التذكير (`reminder`/`due_soon`) فقط والمهلة ما زالت في المستقبل؛ بعد فواتها → `late` بنص «فات آخر موعد للإرسال» دون عرض تاريخ ماضٍ. لا تربط التذكير بـ«خلال يومين من النشر» لأنها تتزامن مع انتهاء المهلة فتظهر رسالة محرجة.
