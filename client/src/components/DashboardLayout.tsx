@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, BadgeCheck } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, BadgeCheck, BadgeAlert } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
@@ -167,14 +167,28 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل
   const isIdentitySidebar =
     role === "opinion_author" || role === "angle_writer" || role === "reporter";
-  // ختم «مرخّص» لمن أرفق ترخيصه — مسار الترخيص مخصص لـ opinion_author
+  // ختم الترخيص — مسار الترخيص مخصص لـ opinion_author (مرخّص / منتهٍ / غير مرخّص)
   const showMediaLicenseQuery = Boolean(user) && role === "opinion_author";
-  const { data: mediaLicense } = useQuery<{ submitted: boolean }>({
+  const { data: mediaLicense, isFetched: mediaLicenseFetched } = useQuery<{
+    submitted: boolean;
+    valid?: boolean;
+    expired?: boolean;
+    expiringSoon?: boolean;
+  }>({
     queryKey: ["/api/opinion-author/media-license"],
     enabled: showMediaLicenseQuery,
     staleTime: 60 * 1000,
   });
-  const isMediaLicensed = Boolean(mediaLicense?.submitted);
+  const isMediaLicensed = Boolean(mediaLicense?.valid) && !mediaLicense?.expiringSoon;
+  const showExpiringSoonBadge =
+    showMediaLicenseQuery && mediaLicenseFetched && Boolean(mediaLicense?.expiringSoon);
+  const showExpiredBadge =
+    showMediaLicenseQuery && mediaLicenseFetched && Boolean(mediaLicense?.expired);
+  const showUnlicensedBadge =
+    showMediaLicenseQuery &&
+    mediaLicenseFetched &&
+    !mediaLicense?.submitted &&
+    !mediaLicense?.valid;
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
@@ -411,6 +425,33 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           >
                             <BadgeCheck className="h-3 w-3" />
                             مرخّص
+                          </Badge>
+                        )}
+                        {showExpiringSoonBadge && (
+                          <Badge
+                            className="gap-1 border-0 bg-red-600 text-white hover:bg-red-600 dark:bg-red-700 dark:text-white dark:hover:bg-red-700"
+                            data-testid="sidebar-identity-expiring-license-badge"
+                          >
+                            <BadgeAlert className="h-3 w-3" />
+                            جدّد الترخيص
+                          </Badge>
+                        )}
+                        {showExpiredBadge && (
+                          <Badge
+                            className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200 dark:hover:bg-rose-900/40"
+                            data-testid="sidebar-identity-expired-license-badge"
+                          >
+                            <BadgeAlert className="h-3 w-3" />
+                            منتهٍ
+                          </Badge>
+                        )}
+                        {showUnlicensedBadge && (
+                          <Badge
+                            className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                            data-testid="sidebar-identity-unlicensed-badge"
+                          >
+                            <BadgeAlert className="h-3 w-3" />
+                            غير مرخّص
                           </Badge>
                         )}
                       </div>

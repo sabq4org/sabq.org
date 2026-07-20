@@ -390,13 +390,89 @@ export async function getWriterStyleProfile(userId: string) {
 /** مهلة تقديم الترخيص المهني لكتّاب الرأي (نهاية يوليو 2026). */
 export const WRITER_MEDIA_LICENSE_DEADLINE = "2026-07-31";
 
+const GMEDIA_REGISTER_URL = "https://gmedia.gov.sa/services/registering-media-professionals";
+
+/** يفسّر تاريخ انتهاء بصيغة YYYY-MM-DD كنهاية يوم الرياض. */
+export function parseMediaLicenseExpiry(raw: string): Date | null {
+  const s = String(raw || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T23:59:59+03:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function resolveLicenseEnd(
+  expiresAt: Date | string | null | undefined,
+): Date | null {
+  if (!expiresAt) return null;
+  if (expiresAt instanceof Date) {
+    return Number.isNaN(expiresAt.getTime()) ? null : expiresAt;
+  }
+  return parseMediaLicenseExpiry(expiresAt.slice(0, 10)) ?? (() => {
+    const d = new Date(expiresAt);
+    return Number.isNaN(d.getTime()) ? null : d;
+  })();
+}
+
+export function isMediaLicenseExpired(
+  expiresAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const end = resolveLicenseEnd(expiresAt);
+  if (!end) return false;
+  return end.getTime() < now.getTime();
+}
+
+/** نافذة التجديد: نحو شهرين قبل انتهاء الترخيص (٦٥ يوماً لتغطية التقويم) */
+export const MEDIA_LICENSE_RENEWAL_WARN_MS = 65 * 24 * 60 * 60 * 1000;
+
+export function isMediaLicenseExpiringSoon(
+  expiresAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const end = resolveLicenseEnd(expiresAt);
+  if (!end || end.getTime() < now.getTime()) return false;
+  return end.getTime() - now.getTime() <= MEDIA_LICENSE_RENEWAL_WARN_MS;
+}
+
 export type WriterMediaLicenseStatus = {
   submitted: boolean;
+  /** مرسل وضمن الصلاحية */
+  valid: boolean;
+  expired: boolean;
+  /** ساري لكن يتبقّى شهران أو أقل — يجب التجديد */
+  expiringSoon: boolean;
   licenseNumber: string | null;
   submittedAt: string | null;
+  expiresAt: string | null;
   deadline: string;
   gmediaRegisterUrl: string;
 };
+
+function toLicenseStatus(row: {
+  mediaLicenseNumber: string | null;
+  mediaLicenseFileKey: string | null;
+  mediaLicenseSubmittedAt: Date | null;
+  mediaLicenseExpiresAt: Date | null;
+} | undefined): WriterMediaLicenseStatus {
+  const submitted = Boolean(
+    row?.mediaLicenseNumber && row?.mediaLicenseFileKey && row?.mediaLicenseSubmittedAt,
+  );
+  const expiresAt = row?.mediaLicenseExpiresAt ?? null;
+  // بلا تاريخ انتهاء (بيانات قديمة) أو بعد انتهائه → غير صالح ويُطلب التحديث
+  const expired = submitted && (!expiresAt || isMediaLicenseExpired(expiresAt));
+  const valid = submitted && Boolean(expiresAt) && !isMediaLicenseExpired(expiresAt);
+  return {
+    submitted,
+    valid,
+    expired,
+    expiringSoon: valid && isMediaLicenseExpiringSoon(expiresAt),
+    licenseNumber: submitted ? (row?.mediaLicenseNumber ?? null) : null,
+    submittedAt: row?.mediaLicenseSubmittedAt?.toISOString() ?? null,
+    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    deadline: WRITER_MEDIA_LICENSE_DEADLINE,
+    gmediaRegisterUrl: GMEDIA_REGISTER_URL,
+  };
+}
 
 export async function getWriterMediaLicense(userId: string): Promise<WriterMediaLicenseStatus> {
   const [row] = await db
@@ -404,25 +480,18 @@ export async function getWriterMediaLicense(userId: string): Promise<WriterMedia
       mediaLicenseNumber: users.mediaLicenseNumber,
       mediaLicenseFileKey: users.mediaLicenseFileKey,
       mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+      mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
     })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
 
-  const submitted = Boolean(row?.mediaLicenseNumber && row?.mediaLicenseFileKey && row?.mediaLicenseSubmittedAt);
-
-  return {
-    submitted,
-    licenseNumber: submitted ? (row?.mediaLicenseNumber ?? null) : null,
-    submittedAt: row?.mediaLicenseSubmittedAt?.toISOString() ?? null,
-    deadline: WRITER_MEDIA_LICENSE_DEADLINE,
-    gmediaRegisterUrl: "https://gmedia.gov.sa/services/registering-media-professionals",
-  };
+  return toLicenseStatus(row);
 }
 
 export async function saveWriterMediaLicense(
   userId: string,
-  data: { licenseNumber: string; licenseFileKey: string },
+  data: { licenseNumber: string; licenseFileKey: string; expiresAt: Date },
 ): Promise<WriterMediaLicenseStatus> {
   const submittedAt = new Date();
   await db
@@ -431,14 +500,14 @@ export async function saveWriterMediaLicense(
       mediaLicenseNumber: data.licenseNumber,
       mediaLicenseFileKey: data.licenseFileKey,
       mediaLicenseSubmittedAt: submittedAt,
+      mediaLicenseExpiresAt: data.expiresAt,
     })
     .where(eq(users.id, userId));
 
-  return {
-    submitted: true,
-    licenseNumber: data.licenseNumber,
-    submittedAt: submittedAt.toISOString(),
-    deadline: WRITER_MEDIA_LICENSE_DEADLINE,
-    gmediaRegisterUrl: "https://gmedia.gov.sa/services/registering-media-professionals",
-  };
+  return toLicenseStatus({
+    mediaLicenseNumber: data.licenseNumber,
+    mediaLicenseFileKey: data.licenseFileKey,
+    mediaLicenseSubmittedAt: submittedAt,
+    mediaLicenseExpiresAt: data.expiresAt,
+  });
 }

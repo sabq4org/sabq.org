@@ -9,8 +9,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type MediaLicenseStatus = {
   submitted: boolean;
+  valid: boolean;
+  expired: boolean;
+  expiringSoon: boolean;
   licenseNumber: string | null;
   submittedAt: string | null;
+  expiresAt: string | null;
   deadline: string;
   gmediaRegisterUrl: string;
 };
@@ -24,6 +28,19 @@ function formatDeadlineAr(isoDate: string): string {
     });
   } catch {
     return "نهاية هذا الشهر";
+  }
+}
+
+function formatExpiresAr(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return null;
   }
 }
 
@@ -100,27 +117,58 @@ function LicenseDeadlineCountdown({ deadline }: { deadline: string }) {
   );
 }
 
+function toDateInputValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // تاريخ تقويمي بتوقيت الرياض
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  return y && m && day ? `${y}-${m}-${day}` : "";
+}
+
 export function WriterMediaLicenseCard() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [licenseNumber, setLicenseNumber] = useState("");
+  const [licenseExpiresAt, setLicenseExpiresAt] = useState("");
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+  const [forceShowForm, setForceShowForm] = useState(false);
 
   const { data, isLoading } = useQuery<MediaLicenseStatus>({
     queryKey: ["/api/opinion-author/media-license"],
     staleTime: 60 * 1000,
   });
 
+  useEffect(() => {
+    if (!data || prefilled) return;
+    if (data.licenseNumber) setLicenseNumber(data.licenseNumber);
+    if (data.expiresAt) setLicenseExpiresAt(toDateInputValue(data.expiresAt));
+    setPrefilled(true);
+  }, [data, prefilled]);
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       if (!licenseNumber.trim() || licenseNumber.trim().length < 3) {
         throw new Error("يرجى إدخال رقم الترخيص المهني");
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(licenseExpiresAt.trim())) {
+        throw new Error("يرجى إدخال تاريخ انتهاء الترخيص");
       }
       if (!licenseFile) {
         throw new Error("يرجى إرفاق صورة الترخيص أو ملف PDF");
       }
       const formData = new FormData();
       formData.append("licenseNumber", licenseNumber.trim());
+      formData.append("licenseExpiresAt", licenseExpiresAt.trim());
       formData.append("licenseFile", licenseFile);
       return apiRequest<MediaLicenseStatus & { message: string }>("/api/opinion-author/media-license", {
         method: "POST",
@@ -130,13 +178,18 @@ export function WriterMediaLicenseCard() {
     },
     onSuccess: (result) => {
       queryClient.setQueryData(["/api/opinion-author/media-license"], {
-        submitted: true,
+        submitted: result.submitted,
+        valid: result.valid,
+        expired: result.expired,
+        expiringSoon: result.expiringSoon,
         licenseNumber: result.licenseNumber,
         submittedAt: result.submittedAt,
+        expiresAt: result.expiresAt,
         deadline: result.deadline,
         gmediaRegisterUrl: result.gmediaRegisterUrl,
       });
       setLicenseFile(null);
+      setForceShowForm(false);
       toast({
         title: "شكراً لك",
         description: result.message || "تم استلام بيانات الترخيص بنجاح",
@@ -179,7 +232,58 @@ export function WriterMediaLicenseCard() {
     return null;
   }
 
-  if (data.submitted) {
+  if (data.valid && !forceShowForm) {
+    const expiresLabel = formatExpiresAr(data.expiresAt);
+    if (data.expiringSoon) {
+      return (
+        <section
+          className="rounded-xl border border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/40"
+          dir="rtl"
+          data-testid="writer-media-license-renewal-warn"
+        >
+          <div className="flex items-start gap-3 p-4 sm:p-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 space-y-2">
+              <p className="text-base font-bold tracking-tight text-red-800 dark:text-red-200">
+                تنبيه: يتبقّى أقل من شهرين على انتهاء ترخيصك
+              </p>
+              <p className="text-sm leading-relaxed text-red-900/90 dark:text-red-100/90">
+                يجب تجديد الترخيص المهني للاستمرار.
+                {expiresLabel ? (
+                  <>
+                    {" "}
+                    تاريخ الانتهاء: <strong>{expiresLabel}</strong>.
+                  </>
+                ) : null}
+              </p>
+              <a
+                href={data.gmediaRegisterUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-red-700 underline hover:text-red-900 dark:text-red-300"
+              >
+                جدّد عبر منصة هيئة تنظيم الإعلام
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <p className="text-xs text-red-800/80 dark:text-red-200/70">
+                بعد التجديد، أعد إدخال رقم الترخيص وتاريخ الانتهاء الجديد وملف الترخيص من هنا.
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                className="mt-1"
+                onClick={() => setForceShowForm(true)}
+                data-testid="button-writer-license-renew-form"
+              >
+                تحديث بيانات الترخيص الآن
+              </Button>
+            </div>
+          </div>
+        </section>
+      );
+    }
     return (
       <section
         className="rounded-xl border border-border bg-card"
@@ -202,13 +306,22 @@ export function WriterMediaLicenseCard() {
                   (<span className="font-medium text-foreground" dir="ltr">{data.licenseNumber}</span>)
                 </>
               ) : null}
-              {" "}بنجاح.
+              {" "}بنجاح
+              {expiresLabel ? (
+                <>
+                  {" "}
+                  — ساري حتى <span className="font-medium text-foreground">{expiresLabel}</span>
+                </>
+              ) : null}
+              .
             </p>
           </div>
         </div>
       </section>
     );
   }
+
+  const isRenewal = data.expired || forceShowForm || data.expiringSoon;
 
   return (
     <section
@@ -224,13 +337,15 @@ export function WriterMediaLicenseCard() {
           <div className="min-w-0 flex-1 space-y-2.5">
             <div className="space-y-1.5">
               <p className="text-base font-bold tracking-tight">
-                الترخيص المهني يعزّز حضورك ومصداقيتك
+                {isRenewal
+                  ? "ترخيصك منتهٍ أو ناقص تاريخ الانتهاء — حدّث بياناتك"
+                  : "الترخيص المهني يعزّز حضورك ومصداقيتك"}
               </p>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وإرفاق صورة منه.
+                وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وتاريخ انتهائه وإرفاق صورة منه.
               </p>
             </div>
-            <LicenseDeadlineCountdown deadline={data.deadline} />
+            {!isRenewal && <LicenseDeadlineCountdown deadline={data.deadline} />}
             <a
               href={data.gmediaRegisterUrl}
               target="_blank"
@@ -254,6 +369,19 @@ export function WriterMediaLicenseCard() {
             placeholder="أدخل رقم الترخيص"
             data-testid="input-writer-license-number"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="writer-license-expires">تاريخ انتهاء الترخيص</Label>
+          <Input
+            id="writer-license-expires"
+            type="date"
+            value={licenseExpiresAt}
+            onChange={(e) => setLicenseExpiresAt(e.target.value)}
+            required
+            data-testid="input-writer-license-expires"
+          />
+          <p className="text-xs text-muted-foreground">إلزامي — حتى نعرف متى ينتهي ترخيصك</p>
         </div>
 
         <div className="space-y-2">
@@ -290,6 +418,8 @@ export function WriterMediaLicenseCard() {
               <Loader2 className="h-4 w-4 animate-spin" />
               جاري الإرسال...
             </>
+          ) : isRenewal ? (
+            "تحديث الترخيص"
           ) : (
             "إرسال الترخيص"
           )}

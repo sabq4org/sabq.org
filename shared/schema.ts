@@ -642,6 +642,8 @@ export const users = pgTable("users", {
   mediaLicenseNumber: text("media_license_number"),
   mediaLicenseFileKey: text("media_license_file_key"), // مفتاح خاص في R2/S3
   mediaLicenseSubmittedAt: timestamp("media_license_submitted_at"),
+  /** تاريخ انتهاء الترخيص — إلزامي عند الإدخال لمعرفة المنتهي */
+  mediaLicenseExpiresAt: timestamp("media_license_expires_at"),
   
   // Reporter notification preferences
   notifyOnPublish: boolean("notify_on_publish").default(true).notNull(),

@@ -12,6 +12,10 @@ import {
   type UpsertOpinionWriterSchedule,
 } from "@shared/schema";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
+import {
+  isMediaLicenseExpired,
+  isMediaLicenseExpiringSoon,
+} from "./opinionAuthorWorkspaceService";
 
 export { OPINION_WRITERS_PER_DAY_CAP };
 
@@ -62,9 +66,14 @@ export type OpinionWriterSummary = {
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
   /** الترخيص المهني (هيئة تنظيم الإعلام) المرفوع من مساحة الكاتب */
   mediaLicense: {
+    /** مرسل وضمن الصلاحية */
     hasLicense: boolean;
+    expired: boolean;
+    /** ساري ويتبقّى شهران أو أقل */
+    expiringSoon: boolean;
     number: string | null;
     submittedAt: string | null;
+    expiresAt: string | null;
     hasFile: boolean;
   };
 };
@@ -147,6 +156,7 @@ async function fetchWriterUsers(writerId?: string) {
       mediaLicenseNumber: users.mediaLicenseNumber,
       mediaLicenseFileKey: users.mediaLicenseFileKey,
       mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+      mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
       scheduleWeekday: opinionWriterSchedules.weekday,
       schedulePublishTime: opinionWriterSchedules.publishTime,
       scheduleActive: opinionWriterSchedules.active,
@@ -266,9 +276,13 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       commitment = "due_soon";
     else commitment = "ok";
 
-    const hasLicense = Boolean(
+    const submitted = Boolean(
       w.mediaLicenseNumber && w.mediaLicenseFileKey && w.mediaLicenseSubmittedAt,
     );
+    const expiresAt = w.mediaLicenseExpiresAt ?? null;
+    const expired = submitted && (!expiresAt || isMediaLicenseExpired(expiresAt, now));
+    const hasLicense = submitted && Boolean(expiresAt) && !isMediaLicenseExpired(expiresAt, now);
+    const expiringSoon = hasLicense && isMediaLicenseExpiringSoon(expiresAt, now);
 
     return {
       id: w.id,
@@ -302,8 +316,11 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       commitment,
       mediaLicense: {
         hasLicense,
+        expired,
+        expiringSoon,
         number: w.mediaLicenseNumber ?? null,
         submittedAt: w.mediaLicenseSubmittedAt?.toISOString() ?? null,
+        expiresAt: expiresAt ? expiresAt.toISOString() : null,
         hasFile: Boolean(w.mediaLicenseFileKey),
       },
     };
