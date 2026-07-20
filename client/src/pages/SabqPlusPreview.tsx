@@ -123,6 +123,32 @@ export default function SabqPlusPreview() {
     },
   });
 
+  const removeRedemption = useMutation({
+    mutationFn: async (redemptionId: string) =>
+      apiRequest(`/api/plus-preview/redemptions/${redemptionId}`, { method: "DELETE" }),
+    onSuccess: (data: { refundedPoints: number; remainingBalance: number }, redemptionId) => {
+      if (voucher?.redemptionId === redemptionId) setVoucher(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/plus-preview/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plus-preview/catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plus-preview/redemptions"] });
+      toast({
+        title: "أُزيلت القسيمة",
+        description: `أُرجعت ${fmt(data.refundedPoints)} نقطة إلى رصيدك. إن كانت مضافة في Apple Wallet فاحذفها يدوياً من هناك (⋯ ← حذف البطاقة).`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "تعذر إزالة القسيمة", description: err?.message ?? "حاول مرة أخرى", variant: "destructive" });
+    },
+  });
+
+  const confirmRemove = (redemptionId: string, partnerName: string) => {
+    if (removeRedemption.isPending) return;
+    const ok = window.confirm(
+      `إزالة قسيمة «${partnerName}»؟\nستُرجع النقاط إلى رصيدك ويُحذف السجل من المعاينة.\n(بطاقة Apple Wallet على جهازك لا تُحذف تلقائياً.)`,
+    );
+    if (ok) removeRedemption.mutate(redemptionId);
+  };
+
   // رمز QR حقيقي من رقم القسيمة
   useEffect(() => {
     if (!voucher) {
@@ -297,6 +323,15 @@ export default function SabqPlusPreview() {
                     🎟 Wallet
                   </a>
                 )}
+                <button
+                  type="button"
+                  className="spp-h-remove"
+                  disabled={removeRedemption.isPending}
+                  onClick={() => confirmRemove(r.id, r.partnerName)}
+                  title="إزالة القسيمة وإرجاع النقاط"
+                >
+                  إزالة
+                </button>
                 <div className="spp-h-pts">−{fmt(r.pointsSpent)} نقطة</div>
               </div>
             ))
@@ -450,6 +485,14 @@ export default function SabqPlusPreview() {
               نقطة
             </p>
             <div className="spp-m-actions">
+              <button
+                type="button"
+                className="spp-btn spp-btn-ghost spp-btn-danger"
+                disabled={removeRedemption.isPending}
+                onClick={() => confirmRemove(voucher.redemptionId, voucher.partnerName)}
+              >
+                إزالة القسيمة
+              </button>
               <button className="spp-btn spp-btn-ghost" style={{ flex: 1 }} onClick={() => setVoucher(null)}>
                 تم
               </button>
@@ -628,8 +671,17 @@ const PAGE_CSS = `
   border: 1px solid color-mix(in srgb, var(--wala) 35%, transparent); border-radius: 999px; padding: 4px 12px;
 }
 .spp-h-wallet:hover { background: var(--wala-bg); }
+.spp-h-remove {
+  font-size: 12px; font-weight: 800; color: var(--danger); background: transparent; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: 999px; padding: 4px 12px;
+  font-family: inherit;
+}
+.spp-h-remove:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.spp-h-remove:disabled { opacity: .5; cursor: not-allowed; }
 .spp-h-status { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 12px; }
 .spp-h-ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.spp-btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.spp-btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .spp-hist-empty { padding: 26px; text-align: center; color: var(--ink-3); font-size: 14px; }
 .spp-terms { display: flex; flex-direction: column; gap: 10px; }
 .spp-terms details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 0 22px; }

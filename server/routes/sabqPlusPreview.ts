@@ -14,6 +14,7 @@ import {
   getVoucherPassData,
   isPlusPreviewAdmin,
   redeemPreviewReward,
+  removePreviewRedemption,
 } from "../services/sabqPlusPreviewService";
 
 const router = Router();
@@ -125,6 +126,22 @@ router.get("/api/plus-preview/redemptions", async (req: Request, res: Response) 
   } catch (error) {
     console.error("[SabqPlusPreview] redemptions error:", error);
     res.status(500).json({ message: "تعذر جلب السجل" });
+  }
+});
+
+// إزالة قسيمة معاينة: تُرجع النقاط وتُسقط السجل. لا تحذف بطاقة Wallet المُضافة
+// على الجهاز — المستخدم يحذفها يدوياً من Apple Wallet (⋯ / i ← حذف البطاقة).
+router.delete("/api/plus-preview/redemptions/:id", async (req: Request, res: Response) => {
+  try {
+    const result = await removePreviewRedemption((req.user as any).id, req.params.id);
+    if (!result.success) {
+      const status = result.code === "NOT_FOUND" ? 404 : 409;
+      return res.status(status).json({ message: result.message });
+    }
+    res.json(result);
+  } catch (error) {
+    console.error("[SabqPlusPreview] remove redemption error:", error);
+    res.status(500).json({ message: "تعذر إزالة القسيمة" });
   }
 });
 

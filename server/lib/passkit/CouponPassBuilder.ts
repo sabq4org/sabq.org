@@ -158,6 +158,13 @@ export class CouponPassBuilder extends PassBuilder {
         ...RTL,
       },
       {
+        key: 'remove',
+        label: 'إزالة البطاقة من Wallet',
+        value:
+          'لحذف هذه البطاقة من Apple Wallet: افتح البطاقة ثم اضغط ⋯ أو (i) في الأعلى واختر «حذف البطاقة». PassKit لا يسمح بزر حذف على وجه البطاقة.',
+        ...RTL,
+      },
+      {
         key: 'terms',
         label: 'الشروط',
         value:

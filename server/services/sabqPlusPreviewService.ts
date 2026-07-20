@@ -300,7 +300,14 @@ export async function getPlusRedemptions(userId: string) {
     })
     .from(userRewardsHistory)
     .innerJoin(loyaltyRewards, eq(userRewardsHistory.rewardId, loyaltyRewards.id))
-    .where(and(eq(userRewardsHistory.userId, userId), isPreviewReward))
+    .where(
+      and(
+        eq(userRewardsHistory.userId, userId),
+        isPreviewReward,
+        // المعاينة فقط: المُزالة لا تظهر في السجل (ما زال يمكن حذفها نهائياً عبر remove).
+        sql`${userRewardsHistory.status} <> 'cancelled'`,
+      ),
+    )
     .orderBy(desc(userRewardsHistory.redeemedAt))
     .limit(30);
 
@@ -318,6 +325,73 @@ export async function getPlusRedemptions(userId: string) {
       voucherExpiresAt: delivery.voucherExpiresAt ?? null,
       brandColor: meta.brandColor ?? "#4A4A5A",
       valueLabel: meta.valueLabel ?? "",
+    };
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Remove a preview voucher — refund points + restock + cancel row
+// (admin testing surface only; does NOT remove an already-added Apple Wallet pass)
+// ----------------------------------------------------------------------------
+export async function removePreviewRedemption(
+  userId: string,
+  redemptionId: string,
+): Promise<
+  | { success: true; refundedPoints: number; remainingBalance: number }
+  | { success: false; code: "NOT_FOUND" | "ALREADY_REMOVED"; message: string }
+> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: userRewardsHistory.id,
+        status: userRewardsHistory.status,
+        pointsSpent: userRewardsHistory.pointsSpent,
+        rewardId: userRewardsHistory.rewardId,
+        remainingStock: loyaltyRewards.remainingStock,
+      })
+      .from(userRewardsHistory)
+      .innerJoin(loyaltyRewards, eq(userRewardsHistory.rewardId, loyaltyRewards.id))
+      .where(
+        and(
+          eq(userRewardsHistory.id, redemptionId),
+          eq(userRewardsHistory.userId, userId),
+          isPreviewReward,
+        ),
+      )
+      .limit(1);
+
+    if (!row) {
+      return { success: false as const, code: "NOT_FOUND" as const, message: "القسيمة غير موجودة أو لا تخص حسابك" };
+    }
+    if (row.status === "cancelled") {
+      return { success: false as const, code: "ALREADY_REMOVED" as const, message: "القسيمة مُزالة مسبقاً" };
+    }
+
+    const refundedPoints = Number(row.pointsSpent);
+
+    const [balance] = await tx
+      .update(userPointsTotal)
+      .set({
+        totalPoints: sql`${userPointsTotal.totalPoints} + ${refundedPoints}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(userPointsTotal.userId, userId))
+      .returning({ totalPoints: userPointsTotal.totalPoints });
+
+    if (row.remainingStock !== null) {
+      await tx
+        .update(loyaltyRewards)
+        .set({ remainingStock: sql`${loyaltyRewards.remainingStock} + 1` })
+        .where(eq(loyaltyRewards.id, row.rewardId));
+    }
+
+    // حذف الصف حتى لا يُحسب في maxRedemptionsPerUser عند إعادة الاختبار.
+    await tx.delete(userRewardsHistory).where(eq(userRewardsHistory.id, redemptionId));
+
+    return {
+      success: true as const,
+      refundedPoints,
+      remainingBalance: Number(balance?.totalPoints ?? 0),
     };
   });
 }
