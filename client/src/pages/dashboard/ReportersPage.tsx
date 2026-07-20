@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -178,15 +179,12 @@ export default function ReportersPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 sm:p-6" dir="rtl">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Mic className="h-6 w-6 text-primary" />
-            المراسلون
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            الترخيص المهني، المدينة، نشاط النشر، والإحصائيات
-          </p>
-        </div>
+        <DashboardPageHeader
+          icon={Mic}
+          title="المراسلون"
+          description="الترخيص المهني، المدينة، نشاط النشر، والإحصائيات"
+          titleTestId="text-reporters-title"
+        />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <Card>
