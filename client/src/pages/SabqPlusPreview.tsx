@@ -530,7 +530,7 @@ const PAGE_CSS = `
 }
 .spp-site { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 14px; }
 .spp-brand { display: flex; align-items: baseline; gap: 10px; }
-.spp-mark { font-size: 30px; font-weight: 900; letter-spacing: -.5px; }
+.spp-mark { font-size: 30px; font-weight: 900; letter-spacing: -.5px; white-space: nowrap; }
 .spp-plus { color: var(--sabq); }
 .spp-sub { font-size: 13px; color: var(--ink-3); font-weight: 600; }
 .spp-route-chip {
@@ -696,7 +696,19 @@ const PAGE_CSS = `
 .spp-note { margin-top: 60px; color: var(--ink-3); font-size: 12.5px; text-align: center; }
 @media (prefers-reduced-motion: reduce) { .spp * { transition: none !important; } }
 @media (max-width: 560px) {
-  .spp-sar { font-size: 40px; }
-  .spp-member-card { padding: 24px 22px; }
+  .spp-site { flex-direction: column; align-items: flex-start; gap: 10px; padding: 18px 0 12px; }
+  .spp-brand { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .spp-mark { font-size: 26px; }
+  .spp-route-chip { font-size: 11px; padding: 4px 12px; }
+  .spp-member-card { padding: 22px 18px; border-radius: 18px; }
+  .spp-mc-name { font-size: 18px; }
+  .spp-tier-pill { font-size: 12.5px; padding: 6px 12px; }
+  .spp-sar { font-size: 38px; }
+  .spp-sar small { font-size: 17px; }
+  .spp-mc-balance { margin-top: 20px; gap: 10px; }
+  .spp-mc-meta { gap: 14px 22px; margin-top: 18px; }
+  .spp-mc-meta b { font-size: 14px; }
+  .spp-sec { font-size: 19px; }
+  .spp-hist-row { flex-wrap: wrap; padding: 13px 16px; }
 }
 `;
