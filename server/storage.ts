@@ -7903,11 +7903,11 @@ export class DatabaseStorage implements IStorage {
         )
       )
       // التمييز من بعض المسارات (iOS الإداري) لا يختم displayOrder فيبقى 0
-      // ويغرق تحت المختومين — GREATEST يساوي غير المختوم بحداثة نشره
+      // ويغرق تحت المختومين — GREATEST يساوي غير المختوم بحداثة نشره/إنعاشه
       // (displayOrder المختوم = ثوانٍ يونكس، نفس مقياس EPOCH)
       .orderBy(
-        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
-        desc(articles.publishedAt),
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+        desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`),
         desc(articles.views)
       )
       .limit(3);

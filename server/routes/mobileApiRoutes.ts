@@ -3904,8 +3904,8 @@ router.get("/homepage", async (req: Request, res: Response) => {
         )
       )
       .orderBy(
-        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
-        desc(articles.publishedAt)
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+        desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`)
       )
       .limit(5);
 
@@ -3926,7 +3926,8 @@ router.get("/homepage", async (req: Request, res: Response) => {
           eq(articles.hideFromHomepage, false)
         )
       )
-      .orderBy(desc(articles.publishedAt))
+      // «إنعاش»: صدارة الموجز بوقت الإنعاش دون تغيير تاريخ النشر الظاهر
+      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
       .limit(20);
 
     const breakingArticles = await db
@@ -3947,7 +3948,7 @@ router.get("/homepage", async (req: Request, res: Response) => {
           gte(articles.publishedAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
         )
       )
-      .orderBy(desc(articles.publishedAt))
+      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
       .limit(10);
 
     const result = {
