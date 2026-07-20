@@ -72,6 +72,12 @@ router.post("/api/plus-preview/redeem/:id", async (req: Request, res: Response) 
   }
 });
 
+// هذا المسار يُفتح بتنقل متصفح مباشر (نقرة <a>)، فأخطاؤه يجب أن تظهر
+// صفحة عربية لطيفة تعيد للمعاينة — لا JSON خام في وجه المستخدم.
+function walletErrorPage(message: string): string {
+  return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>سبق بلس</title></head><body style="font-family:-apple-system,'SF Arabic','Segoe UI',Tahoma,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#F4F8FC;color:#13202E;text-align:center;padding:24px"><div><div style="font-size:44px">🎟️</div><h2 style="margin:12px 0 6px">تعذر إصدار البطاقة</h2><p style="color:#4A5A6B;max-width:42ch;margin:0 auto;line-height:1.7">${message}</p><a href="/plus-preview" style="display:inline-block;margin-top:18px;background:#1793E8;color:#fff;text-decoration:none;font-weight:700;border-radius:12px;padding:10px 22px">العودة إلى سبق بلس</a></div></body></html>`;
+}
+
 // بطاقة Apple Wallet للقسيمة (نمط Coupon، موقعة بشهادة الولاء الموجودة).
 // GET كي يعمل التنزيل بنقرة مباشرة من متصفح الجوال.
 router.get("/api/plus-preview/voucher/:redemptionId/wallet-pass", async (req: Request, res: Response) => {
@@ -79,7 +85,7 @@ router.get("/api/plus-preview/voucher/:redemptionId/wallet-pass", async (req: Re
     const user = req.user as any;
     const voucher = await getVoucherPassData(user.id, req.params.redemptionId);
     if (!voucher) {
-      return res.status(404).json({ message: "القسيمة غير موجودة" });
+      return res.status(404).type("html").send(walletErrorPage("القسيمة غير موجودة أو لا تخص حسابك."));
     }
 
     const { passKitService } = await import("../lib/passkit/PassKitService");
@@ -106,7 +112,10 @@ router.get("/api/plus-preview/voucher/:redemptionId/wallet-pass", async (req: Re
     res.send(passBuffer);
   } catch (error: any) {
     console.error("[SabqPlusPreview] wallet-pass error:", error);
-    res.status(400).json({ message: error?.message ?? "تعذر إنشاء بطاقة المحفظة" });
+    res
+      .status(400)
+      .type("html")
+      .send(walletErrorPage(error?.message ?? "تعذر إنشاء بطاقة المحفظة. حاول مرة أخرى."));
   }
 });
 
