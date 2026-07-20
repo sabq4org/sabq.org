@@ -435,13 +435,21 @@ export default function ArticleEditor() {
     )
   );
   
-  // Check if user can publish directly (otherwise saves as draft)
-  const canPublish = user && hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH);
+  // Check if user can publish directly (otherwise saves as draft).
+  // الناشر الموثوق (auto_publish) يُمنح articles.publish من /api/auth/user،
+  // ونحتاط أيضاً بـ publisherAccount.autoPublish إن تأخّر كاش الصلاحيات.
+  const canPublish = Boolean(
+    user &&
+      (hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH) ||
+        (user as { publisherAccount?: { autoPublish?: boolean } }).publisherAccount
+          ?.autoPublish === true),
+  );
   const isContributorRole =
-    user?.role === "reporter" ||
-    user?.role === "opinion_author" ||
-    (user?.roles?.includes("reporter") ?? false) ||
-    (user?.roles?.includes("opinion_author") ?? false);
+    !canPublish &&
+    (user?.role === "reporter" ||
+      user?.role === "opinion_author" ||
+      (user?.roles?.includes("reporter") ?? false) ||
+      (user?.roles?.includes("opinion_author") ?? false));
 
   const submitReviewMutation = useMutation({
     mutationFn: async (articleId?: string) => {
