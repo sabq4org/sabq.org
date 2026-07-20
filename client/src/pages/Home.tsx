@@ -39,7 +39,6 @@ const TrendingWeekSection = lazyNamed(() => import("@/components/TrendingWeekSec
 const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopicsShowcase"), "MuqtarabTopicsShowcase");
 const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesBlock"), "QuadCategoriesBlock");
 const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
-const WorldCupHomeSection = lazyDefault(() => import("@/components/worldcup/WorldCupHomeSection"));
 const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCupHomeSection"));
 const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
@@ -447,12 +446,7 @@ export default function Home() {
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
 
-        {/* كأس العالم 2026 — تقرير بالأرقام مكان الشريط/الأخبار بعد انتهاء البطولة */}
-        <ErrorBoundary fallback={null}>
-          <Suspense fallback={null}>
-            <WorldCupHomeSection />
-          </Suspense>
-        </ErrorBoundary>
+        {/* كأس العالم 2026 على الرئيسية — مخفي 2026-07-20؛ إعادة التفعيل: WorldCupHomeSection تحت الهيرو */}
 
         {/* Gulf Cup 27 + Asian Cup 2027 strips — each hides itself entirely
             when toggled off from dashboard (blockHidden / schedule window)
