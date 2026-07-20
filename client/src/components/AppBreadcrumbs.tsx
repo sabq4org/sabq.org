@@ -3,19 +3,35 @@ import { Link, useLocation } from "wouter";
 import { ChevronLeft, Home } from "lucide-react";
 import { useNav } from "@/nav/useNav";
 import type { UserRole } from "@/nav/types";
+import { DashboardFavoriteToggle } from "@/components/dashboard/DashboardFavoriteToggle";
 
 interface AppBreadcrumbsProps {
   role: UserRole;
   flags: Record<string, boolean>;
+  /** صلاحيات المستخدم — لازمة لمطابقة عناصر القائمة ذات permissions */
+  permissions?: string[];
+  /** كل أدوار المستخدم — لـ excludeRoles / requireRoles */
+  allRoles?: string[];
 }
 
 /**
  * مكون مسار التنقل المتزامن مع شجرة القائمة
  * Breadcrumbs component synchronized with navigation tree
  */
-export function AppBreadcrumbs({ role, flags }: AppBreadcrumbsProps) {
+export function AppBreadcrumbs({
+  role,
+  flags,
+  permissions = [],
+  allRoles = [],
+}: AppBreadcrumbsProps) {
   const [pathname] = useLocation();
-  const { activeItem, parents } = useNav({ role, flags, pathname });
+  const { activeItem, parents } = useNav({
+    role,
+    flags,
+    pathname,
+    permissions,
+    allRoles,
+  });
 
   // لا تعرض شيء إذا لم يكن هناك عنصر نشط
   // Don't show anything if no active item
@@ -24,12 +40,12 @@ export function AppBreadcrumbs({ role, flags }: AppBreadcrumbsProps) {
   }
 
   // Determine language from pathname
-  const isUrdu = pathname.startsWith('/ur/');
-  const isEnglish = pathname.startsWith('/en/');
+  const isUrdu = pathname.startsWith("/ur/");
+  const isEnglish = pathname.startsWith("/en/");
   const isArabic = !isUrdu && !isEnglish; // Default to Arabic
 
   // Get appropriate label based on language
-  const getLabel = (item: any) => {
+  const getLabel = (item: { labelUr?: string; labelEn?: string; labelAr?: string; labelKey: string }) => {
     if (isUrdu) return item.labelUr || item.labelEn || item.labelKey;
     if (isEnglish) return item.labelEn || item.labelKey;
     return item.labelAr || item.labelKey;
@@ -43,7 +59,7 @@ export function AppBreadcrumbs({ role, flags }: AppBreadcrumbsProps) {
   // Build path: Home + Parents + Active Item
   const breadcrumbItems = [
     { id: "home", label: homeLabel, path: homePath, icon: Home },
-    ...parents.map(parent => ({
+    ...parents.map((parent) => ({
       id: parent.id,
       label: getLabel(parent),
       path: parent.path,
@@ -56,7 +72,10 @@ export function AppBreadcrumbs({ role, flags }: AppBreadcrumbsProps) {
   ];
 
   return (
-    <nav aria-label="مسار التنقل" className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
+    <nav
+      aria-label="مسار التنقل"
+      className="mb-6 flex items-center gap-2 text-sm text-muted-foreground"
+    >
       {breadcrumbItems.map((item, index) => {
         const isLast = index === breadcrumbItems.length - 1;
         const Icon = index === 0 ? Home : null;
@@ -67,17 +86,19 @@ export function AppBreadcrumbs({ role, flags }: AppBreadcrumbsProps) {
               <ChevronLeft className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
             )}
             {isLast ? (
-              <span 
-                className="font-medium text-foreground flex items-center gap-2"
+              <span
+                className="flex items-center gap-1 font-medium text-foreground"
                 aria-current="page"
               >
                 {Icon && <Icon className="h-4 w-4" />}
-                {item.label}
+                <span>{item.label}</span>
+                {/* نجمة المفضلة بجانب اسم الصفحة النشطة — لكل صفحات اللوحة */}
+                {isArabic ? <DashboardFavoriteToggle item={activeItem} className="h-8 w-8" /> : null}
               </span>
             ) : (
-              <Link 
+              <Link
                 href={item.path || homePath}
-                className="hover:text-foreground transition-colors flex items-center gap-2"
+                className="flex items-center gap-2 transition-colors hover:text-foreground"
               >
                 {Icon && <Icon className="h-4 w-4" />}
                 {item.label}

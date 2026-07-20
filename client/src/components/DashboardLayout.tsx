@@ -650,7 +650,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <AutoPublishBanner />
 
           <div className="flex-1 overflow-auto p-3 md:p-6">
-            <AppBreadcrumbs role={role} flags={flags} />
+            <AppBreadcrumbs
+              role={role}
+              flags={flags}
+              permissions={user?.permissions || []}
+              allRoles={
+                user?.roles && user.roles.length > 0
+                  ? user.roles
+                  : user?.role
+                    ? [user.role]
+                    : []
+              }
+            />
             {children}
           </div>
         </SidebarInset>

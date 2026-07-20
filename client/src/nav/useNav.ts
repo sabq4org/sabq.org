@@ -413,9 +413,15 @@ function findActiveItem(items: NavItem[], pathname: string): NavItem | null {
     return exactMatch;
   }
 
-  // Then, try startsWith match (longest path first)
+  // Then, try startsWith match (longest path first).
+  // عناصر meta.exact (مثل /dashboard) لا تُطابق بالمقدّمة — وإلا تسرق كل الصفحات الفرعية.
   const startsWithMatches = flat
-    .filter((item) => item.path && pathname.startsWith(item.path))
+    .filter(
+      (item) =>
+        item.path &&
+        !item.meta?.exact &&
+        (pathname === item.path || pathname.startsWith(`${item.path}/`)),
+    )
     .sort((a, b) => (b.path?.length || 0) - (a.path?.length || 0));
 
   return startsWithMatches[0] || null;

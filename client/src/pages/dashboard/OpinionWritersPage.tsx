@@ -5,6 +5,7 @@ import { ar } from "date-fns/locale";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -281,15 +282,12 @@ export default function OpinionWritersPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 md:p-6" dir="rtl">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <CalendarClock className="h-6 w-6 text-primary" />
-            كتّاب الرأي
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            الترخيص المهني، يوم النشر، الالتزام، والإحصائيات — من مكان واحد
-          </p>
-        </div>
+        <DashboardPageHeader
+          icon={CalendarClock}
+          title="كتّاب الرأي"
+          description="الترخيص المهني، يوم النشر، الالتزام، والإحصائيات — من مكان واحد"
+          titleTestId="text-opinion-writers-title"
+        />
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
