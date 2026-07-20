@@ -81,10 +81,12 @@ export abstract class PassBuilder {
         }
       );
       
-      // Add barcode using setBarcodes method
+      // Add barcode using setBarcodes method. Membership-style passes encode
+      // the user id; coupon passes override getBarcodeMessage() to encode the
+      // voucher code the partner till actually scans.
       pass.setBarcodes({
         format: 'PKBarcodeFormatQR',
-        message: data.userId,
+        message: this.getBarcodeMessage(data),
         messageEncoding: 'iso-8859-1',
       });
       
@@ -107,6 +109,10 @@ export abstract class PassBuilder {
   }
   
   protected abstract getBackgroundColor(): string;
+
+  protected getBarcodeMessage(data: any): string {
+    return data.userId;
+  }
 
   // Default white text on dark cards. Subclasses with a light background
   // (e.g. PressPassBuilder after the 2026-05-19 redesign) override these

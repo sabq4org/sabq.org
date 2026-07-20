@@ -11,6 +11,7 @@ import {
   getPlusCatalog,
   getPlusRedemptions,
   getPlusSummary,
+  getVoucherPassData,
   isPlusPreviewAdmin,
   redeemPreviewReward,
 } from "../services/sabqPlusPreviewService";
@@ -68,6 +69,44 @@ router.post("/api/plus-preview/redeem/:id", async (req: Request, res: Response) 
   } catch (error) {
     console.error("[SabqPlusPreview] redeem error:", error);
     res.status(500).json({ message: "تعذر إتمام الاستبدال" });
+  }
+});
+
+// بطاقة Apple Wallet للقسيمة (نمط Coupon، موقعة بشهادة الولاء الموجودة).
+// GET كي يعمل التنزيل بنقرة مباشرة من متصفح الجوال.
+router.get("/api/plus-preview/voucher/:redemptionId/wallet-pass", async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    const voucher = await getVoucherPassData(user.id, req.params.redemptionId);
+    if (!voucher) {
+      return res.status(404).json({ message: "القسيمة غير موجودة" });
+    }
+
+    const { passKitService } = await import("../lib/passkit/PassKitService");
+    const passBuffer = await passKitService.generateCouponPass({
+      userId: user.id,
+      serialNumber: `SABQ-PLUS-${req.params.redemptionId.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      authToken: passKitService.generateAuthToken(),
+      userName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "عضو سبق",
+      userEmail: user.email ?? "",
+      userRole: user.role ?? "reader",
+      partnerName: voucher.partnerName,
+      offer: voucher.offer,
+      valueLabel: voucher.valueLabel,
+      couponCode: voucher.couponCode,
+      voucherExpiresAt: voucher.voucherExpiresAt,
+    });
+
+    res.set({
+      "Content-Type": "application/vnd.apple.pkpass",
+      "Content-Disposition": `attachment; filename="sabq-plus-voucher-${voucher.couponCode}.pkpass"`,
+      "Content-Length": String(passBuffer.length),
+      "Cache-Control": "private, no-store",
+    });
+    res.send(passBuffer);
+  } catch (error: any) {
+    console.error("[SabqPlusPreview] wallet-pass error:", error);
+    res.status(400).json({ message: error?.message ?? "تعذر إنشاء بطاقة المحفظة" });
   }
 });
 
