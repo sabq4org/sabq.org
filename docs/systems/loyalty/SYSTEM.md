@@ -1,6 +1,6 @@
 # نظام الولاء (`loyalty`)
 
-> آخر مراجعة: 2026-07-17 | المالك: platform
+> آخر مراجعة: 2026-07-20 | المالك: platform
 
 ## الغرض
 إدارة نقاط الولاء، حسابات الأعضاء، معاينة اكتساب النقاط (ولاء ون)، وشروط الاستخدام — ويب + موبايل + لوحة إدارة.
@@ -18,6 +18,7 @@
 | Docs | `docs/LOYALTY_*.md` |
 
 ## التوثيق المرتبط
+- `docs/LOYALTY_SYSTEM_STUDY_AND_ROADMAP.md` — دراسة شاملة + خارطة طريق النقلة النوعية وولاء ون
 - `docs/LOYALTY_iOS_HANDOFF.md`
 - `docs/LOYALTY_WALAONE_ACQUISITION_PREVIEW.md` — معاينة؛ ليست قيماً إنتاجية بعد
 - `docs/LOYALTY_WALAONE_TERMS_RISK_MAP.md`

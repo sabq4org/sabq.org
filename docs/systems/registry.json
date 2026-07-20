@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-19",
+  "updatedAt": "2026-07-20",
   "systems": [
     {
       "id": "loyalty",
@@ -12,6 +12,7 @@
       "summary": "نقاط الولاء، الحسابات، شروط ولاء ون، ولوحة إدارة الولاء.",
       "docPath": "docs/systems/loyalty/SYSTEM.md",
       "relatedDocs": [
+        "docs/LOYALTY_SYSTEM_STUDY_AND_ROADMAP.md",
         "docs/LOYALTY_iOS_HANDOFF.md",
         "docs/LOYALTY_WALAONE_ACQUISITION_PREVIEW.md",
         "docs/LOYALTY_WALAONE_TERMS_RISK_MAP.md"
@@ -29,7 +30,7 @@
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/loyalty-admin",
       "owners": ["platform"],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-07-20"
     },
     {
       "id": "predictions-core",
