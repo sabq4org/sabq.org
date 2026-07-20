@@ -911,7 +911,19 @@ function Router() {
         <Route path="/dashboard/quizzes">{() => <LazyRoute component={QuizManagement} />}</Route>
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
-        <Route path="/dashboard/reporters">{() => <LazyRoute component={ReportersPage} />}</Route>
+        {/* إدارة المراسلين — مسؤول النظام فقط */}
+        <Route path="/dashboard/reporters">
+          {() => (
+            <ProtectedRoute
+              requireStaff={true}
+              requireRoles={["system_admin", "system.admin", "superadmin", "super_admin"]}
+            >
+              <Suspense fallback={<PageLoader />}>
+                <ReportersPage />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/dashboard/categories">{() => <LazyRoute component={CategoriesManagement} />}</Route>
         <Route path="/dashboard/media-library">{() => <LazyRoute component={MediaLibrary} />}</Route>
         <Route path="/dashboard/ai-tools">{() => <LazyRoute component={AITools} />}</Route>
