@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
@@ -61,7 +61,10 @@ type Voucher = {
   valueLabel: string;
   brandColor: string;
   pointsSpent: number;
+  redemptionId: string;
 };
+
+const walletPassUrl = (redemptionId: string) => apiUrl(`/api/plus-preview/voucher/${redemptionId}/wallet-pass`);
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 const sar = (pts: number) => (pts / 500).toFixed(2);
@@ -289,6 +292,11 @@ export default function SabqPlusPreview() {
                   </div>
                 </div>
                 <span className="spp-h-status spp-h-ok">{r.status === "delivered" ? "صادرة" : r.status}</span>
+                {r.code && (
+                  <a className="spp-h-wallet" href={walletPassUrl(r.id)} title="أضفها إلى Apple Wallet">
+                    🎟 Wallet
+                  </a>
+                )}
                 <div className="spp-h-pts">−{fmt(r.pointsSpent)} نقطة</div>
               </div>
             ))
@@ -422,10 +430,7 @@ export default function SabqPlusPreview() {
                 <span>سبق بلس × ولاء ون</span>
               </div>
             </div>
-            <button
-              className="spp-apple-wallet"
-              onClick={() => toast({ title: "بطاقة Apple Wallet قادمة في المرحلة التالية" })}
-            >
+            <a className="spp-apple-wallet" href={walletPassUrl(voucher.redemptionId)}>
               <span className="spp-aw-icon">
                 <span className="spp-c1" />
                 <span className="spp-c2" />
@@ -433,7 +438,7 @@ export default function SabqPlusPreview() {
                 <span className="spp-c4" />
               </span>
               أضفها إلى Apple Wallet
-            </button>
+            </a>
             <p className="spp-d-left">
               خُصمت <b>{fmt(voucher.pointsSpent)}</b> نقطة · رصيدك الجديد <b>{summary ? fmt(summary.totalPoints) : ""}</b>{" "}
               نقطة
@@ -612,6 +617,11 @@ const PAGE_CSS = `
 .spp-h-brand { font-weight: 700; }
 .spp-h-date { color: var(--ink-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .spp-h-pts { color: var(--danger); font-weight: 800; font-variant-numeric: tabular-nums; }
+.spp-h-wallet {
+  font-size: 12px; font-weight: 800; color: var(--wala); text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--wala) 35%, transparent); border-radius: 999px; padding: 4px 12px;
+}
+.spp-h-wallet:hover { background: var(--wala-bg); }
 .spp-h-status { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 12px; }
 .spp-h-ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .spp-hist-empty { padding: 26px; text-align: center; color: var(--ink-3); font-size: 14px; }

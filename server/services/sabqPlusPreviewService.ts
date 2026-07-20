@@ -252,6 +252,38 @@ export async function redeemPreviewReward(userId: string, rewardId: string): Pro
 }
 
 // ----------------------------------------------------------------------------
+// Voucher lookup for the Apple Wallet coupon pass
+// ----------------------------------------------------------------------------
+export async function getVoucherPassData(userId: string, redemptionId: string): Promise<
+  | { partnerName: string; offer: string; valueLabel: string; couponCode: string; voucherExpiresAt: Date }
+  | null
+> {
+  const [row] = await db
+    .select({
+      deliveryData: userRewardsHistory.deliveryData,
+      partnerName: loyaltyRewards.partnerName,
+      offer: loyaltyRewards.description,
+      rewardData: loyaltyRewards.rewardData,
+    })
+    .from(userRewardsHistory)
+    .innerJoin(loyaltyRewards, eq(userRewardsHistory.rewardId, loyaltyRewards.id))
+    .where(and(eq(userRewardsHistory.id, redemptionId), eq(userRewardsHistory.userId, userId), isPreviewReward))
+    .limit(1);
+
+  if (!row) return null;
+  const delivery = (row.deliveryData as any) ?? {};
+  if (!delivery.couponCode) return null;
+  const meta = (row.rewardData as any)?.partnerApiData ?? {};
+  return {
+    partnerName: row.partnerName ?? "سبق بلس",
+    offer: row.offer ?? "",
+    valueLabel: meta.valueLabel ?? "",
+    couponCode: delivery.couponCode,
+    voucherExpiresAt: delivery.voucherExpiresAt ? new Date(delivery.voucherExpiresAt) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+  };
+}
+
+// ----------------------------------------------------------------------------
 // My preview redemptions
 // ----------------------------------------------------------------------------
 export async function getPlusRedemptions(userId: string) {
