@@ -70,12 +70,16 @@ COPY --from=builder /app/drizzle.config.ts ./
 # PassKit service reads from disk relative to process.cwd() (=/app):
 #   - server/lib/passkit/pass-template.pass/         (press card model)
 #   - server/lib/passkit/loyalty-pass-template.pass/ (loyalty card model)
+#   - server/lib/passkit/coupon-pass-template.pass/  (سبق بلس voucher model)
 #   - certs/wwdr.pem                                 (Apple intermediate)
 # They were missing in the prior image, which is why /api/v1/wallet/press/issue
 # was throwing "Cannot import model: directory /app/server/lib/passkit/
 # pass-template.pass not found" even after env-var creds were configured.
+# Any NEW .pass template must get its own COPY line here or it will 404 in
+# production while working locally.
 COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/passkit/pass-template.pass
 COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
+COPY --from=builder /app/server/lib/passkit/coupon-pass-template.pass ./server/lib/passkit/coupon-pass-template.pass
 COPY --from=builder /app/certs ./certs
 
 # كتالوج الأنظمة — السجل + SYSTEM.md + لقطة الجرد (للوحة /dashboard/systems-catalog)
