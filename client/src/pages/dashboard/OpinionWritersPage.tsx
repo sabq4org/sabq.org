@@ -40,13 +40,16 @@ type WriterSummary = {
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
   mediaLicense: {
     hasLicense: boolean;
+    expired: boolean;
+    expiringSoon: boolean;
     number: string | null;
     submittedAt: string | null;
+    expiresAt: string | null;
     hasFile: boolean;
   };
 };
 
-type LicenseFilter = "all" | "licensed" | "missing";
+type LicenseFilter = "all" | "licensed" | "expired" | "missing";
 
 type WriterArticlesResponse = {
   writer: { id: string; name: string; profileImageUrl: string | null } | null;
@@ -174,6 +177,10 @@ export default function OpinionWritersPage() {
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const twoMonthsAgo = now - 60 * 24 * 60 * 60 * 1000;
     const licensed = writers.filter((w) => w.mediaLicense?.hasLicense).length;
+    const expiredLicense = writers.filter((w) => w.mediaLicense?.expired).length;
+    const missingLicense = writers.filter(
+      (w) => !w.mediaLicense?.hasLicense && !w.mediaLicense?.expired,
+    ).length;
     return {
       total: writers.length,
       publishedThisWeek: writers.filter(
@@ -187,7 +194,8 @@ export default function OpinionWritersPage() {
           !w.lastArticle || new Date(w.lastArticle.publishedAt).getTime() < twoMonthsAgo,
       ).length,
       licensed,
-      missingLicense: writers.length - licensed,
+      expiredLicense,
+      missingLicense,
     };
   }, [writers]);
 
@@ -195,7 +203,12 @@ export default function OpinionWritersPage() {
     const q = search.trim().toLowerCase();
     return writers.filter((w) => {
       if (licenseFilter === "licensed" && !w.mediaLicense?.hasLicense) return false;
-      if (licenseFilter === "missing" && w.mediaLicense?.hasLicense) return false;
+      if (licenseFilter === "expired" && !w.mediaLicense?.expired) return false;
+      if (
+        licenseFilter === "missing" &&
+        (w.mediaLicense?.hasLicense || w.mediaLicense?.expired)
+      )
+        return false;
       if (!q) return true;
       return (
         w.name.toLowerCase().includes(q) ||
@@ -275,7 +288,18 @@ export default function OpinionWritersPage() {
                   {kpis.licensed}
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground">أرسلوا الترخيص</div>
+              <div className="text-sm text-muted-foreground">ترخيص ساري</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md border-rose-200/60 dark:border-rose-900/40"
+            onClick={() => setLicenseFilter("expired")}
+          >
+            <CardContent className="p-4">
+              <div className="text-2xl font-extrabold tabular-nums text-rose-600 dark:text-rose-400">
+                {kpis.expiredLicense}
+              </div>
+              <div className="text-sm text-muted-foreground">ترخيص منتهٍ</div>
             </CardContent>
           </Card>
           <Card
@@ -498,7 +522,8 @@ export default function OpinionWritersPage() {
               {(
                 [
                   { id: "all" as const, label: "الكل" },
-                  { id: "licensed" as const, label: `لديهم ترخيص (${kpis.licensed})` },
+                  { id: "licensed" as const, label: `ساري (${kpis.licensed})` },
+                  { id: "expired" as const, label: `منتهٍ (${kpis.expiredLicense})` },
                   { id: "missing" as const, label: `بدون ترخيص (${kpis.missingLicense})` },
                 ] as const
               ).map((tab) => (
@@ -568,20 +593,52 @@ export default function OpinionWritersPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            {license?.hasLicense ? (
+                            {license?.hasLicense || license?.expired ? (
                               <div className="space-y-1.5">
-                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 gap-1">
-                                  <BadgeCheck className="h-3 w-3" />
-                                  مرخّص
-                                </Badge>
+                                {license.expired ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200"
+                                    data-testid={`badge-expired-license-${writer.id}`}
+                                  >
+                                    منتهٍ
+                                  </Badge>
+                                ) : license.expiringSoon ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-red-600 text-white hover:bg-red-600"
+                                    data-testid={`badge-expiring-license-${writer.id}`}
+                                  >
+                                    جدّد الترخيص
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 gap-1">
+                                    <BadgeCheck className="h-3 w-3" />
+                                    مرخّص
+                                  </Badge>
+                                )}
                                 {license.number && (
                                   <div className="text-xs font-medium tabular-nums" dir="ltr">
                                     {license.number}
                                   </div>
                                 )}
+                                {license.expiresAt && (
+                                  <div
+                                    className={
+                                      license.expiringSoon || license.expired
+                                        ? "text-[11px] font-semibold text-red-700 dark:text-red-300"
+                                        : "text-[11px] text-muted-foreground"
+                                    }
+                                  >
+                                    ينتهي {formatDate(license.expiresAt, false)}
+                                  </div>
+                                )}
+                                {license.expiringSoon && (
+                                  <div className="text-[11px] font-medium text-red-700 dark:text-red-300">
+                                    أقل من شهرين — يجب التجديد للاستمرار
+                                  </div>
+                                )}
                                 {license.submittedAt && (
                                   <div className="text-[11px] text-muted-foreground">
-                                    {formatDate(license.submittedAt, false)}
+                                    أُرسل {formatDate(license.submittedAt, false)}
                                   </div>
                                 )}
                                 {license.hasFile && (
@@ -604,8 +661,11 @@ export default function OpinionWritersPage() {
                                 )}
                               </div>
                             ) : (
-                              <Badge variant="outline" className="text-amber-700 border-amber-300 dark:text-amber-300">
-                                لم يُرسل
+                              <Badge
+                                className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200"
+                                data-testid={`badge-unlicensed-${writer.id}`}
+                              >
+                                غير مرخّص
                               </Badge>
                             )}
                           </td>

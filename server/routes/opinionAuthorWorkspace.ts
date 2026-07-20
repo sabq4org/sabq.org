@@ -14,6 +14,7 @@ import {
   getWriterStyleProfile,
   markAllWriterEditorialNotificationsRead,
   markWriterEditorialNotificationRead,
+  parseMediaLicenseExpiry,
   reviewWriterArticle,
   saveWriterMediaLicense,
 } from "../services/opinionAuthorWorkspaceService";
@@ -148,6 +149,11 @@ router.post(
         return res.status(400).json({ message: "رقم الترخيص المهني مطلوب" });
       }
 
+      const expiresAt = parseMediaLicenseExpiry(String(req.body?.licenseExpiresAt || ""));
+      if (!expiresAt) {
+        return res.status(400).json({ message: "تاريخ انتهاء الترخيص مطلوب (يوم/شهر/سنة)" });
+      }
+
       const file = req.file;
       if (!file) {
         return res.status(400).json({ message: "يرجى إرفاق صورة الترخيص أو ملف PDF" });
@@ -173,6 +179,7 @@ router.post(
       const status = await saveWriterMediaLicense(requestUserId(req), {
         licenseNumber,
         licenseFileKey: uploaded.path,
+        expiresAt,
       });
 
       res.json({
