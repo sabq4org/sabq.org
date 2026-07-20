@@ -1,7 +1,7 @@
 // مسارات إدارة المراسلين: القائمة، أخبار المراسل، وملف الترخيص.
+// مقيدة بمسؤول النظام فقط (مثل صفحة الرادار) — لا تكفي users.view/articles.view.
 import { Router, type Request, type Response } from "express";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
-import { requireAuth, requireAnyPermission } from "../rbac";
+import { requireAuth, requireRole } from "../rbac";
 import { ObjectStorageService } from "../objectStorage";
 import {
   getReporterArticlesWithStats,
@@ -12,7 +12,7 @@ import {
 const router = Router();
 const reportersAdminAuth = [
   requireAuth,
-  requireAnyPermission(PERMISSION_CODES.USERS_VIEW, PERMISSION_CODES.ARTICLES_VIEW),
+  requireRole("system_admin", "system.admin", "superadmin", "super_admin"),
 ] as const;
 
 router.get("/api/admin/reporters", ...reportersAdminAuth, async (_req: Request, res: Response) => {

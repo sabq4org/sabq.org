@@ -458,15 +458,16 @@ export const navConfig: NavItem[] = [
     permissions: ["opinion.review"],
   },
 
-  // ===== المراسلون / Reporters (ترخيص + نشاط) =====
+  // ===== المراسلون / Reporters (ترخيص + نشاط) — مسؤول النظام فقط =====
+  // requireRoles يتجاهل permission-first وwildcard حتى لا يراها من لديه articles.view
   {
     id: "reporters",
     labelKey: "nav.reporters",
     labelAr: "المراسلون",
     path: "/dashboard/reporters",
     icon: Mic,
-    roles: ["admin", "editor", "system_admin"],
-    permissions: ["users.view", "articles.view"],
+    roles: ["system_admin"],
+    requireRoles: ["system_admin", "system.admin", "superadmin", "super_admin"],
   },
 
   // ===== استفسارات المساهمين (مراسلون + كتّاب رأي/زوايا — صندوق واحد) =====

@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-20 (مفضلة اللوحة + قائمة مراسلين بلا نشر) | المالك: editorial
+> آخر مراجعة: 2026-07-20 (إدارة المراسلين لمسؤول النظام فقط) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -38,7 +38,7 @@
 - **عرض بانر الإعلان (`InternalAnnouncement`):** بطاقة قابلة للطي مع أيقونة وشريط أولوية ومعاينة سطرين عند الطي. نص الرسالة يُعرض بمحاذاة البداية (يتجاوز توسيط HTML الملصوق من البريد). استخدم حقل زر الإجراء للروابط بدل لصق URL خام داخل النص.
 - **ترخيص مهني مشترك (كاتب رأي + مراسل):** أعمدة `users.media_license_*`؛ المنطق في `server/services/mediaLicenseService.ts`. مسارات: `GET/POST /api/opinion-author/media-license` و`GET/POST /api/reporter/media-license` (رفع R2/S3 خاص؛ `licenseExpiresAt` إلزامي). الاستجابة: `submitted` / `valid` / `expired` / `expiringSoon` / `expiresAt`. `expiringSoon` ≤ ٦٥ يوماً → تنبيه أحمر. البطاقة `WriterMediaLicenseCard` تقبل `endpoint`؛ على مساحة الكاتب وصفحة «أخباري» للمراسل. السايدبار يعرض الشارات لكلا الدورين. عند قبول طلب مراسل تُنسخ بيانات الترخيص من الطلب إلى الحساب إن وُجدت. المهلة التنظيمية لأول تقديم: `2026-07-31`.
 - **إدارة الترخيص — كتّاب الرأي:** `/dashboard/opinion-writers` عبر `DashboardPageHeader`؛ خلية مضغوطة + فلترة؛ `GET /api/admin/opinion-writers/:id/media-license-file`.
-- **إدارة المراسلين:** `/dashboard/reporters` (أدوار admin/editor/system_admin، صلاحية `users.view` أو `articles.view`). أعمدة الصفحة: ترخيص، مدينة، آخر دخول — **بدون** منشورة/آخر خبر/مشاهدات (عدد الأخبار كان يبطئ الجلب). API: `GET /api/admin/reporters` من `users` فقط + ملف الترخيص؛ مسار المقالات `GET /api/admin/reporters/:id/articles` يبقى متاحاً ولا تستهلكه الصفحة. ترتيب: منتهٍ → جدّد → بدون → ساري. العنوان عبر `DashboardPageHeader`. KPI «نشطون آخر ٧ أيام» يعتمد `lastLoginAt` فقط.
+- **إدارة المراسلين:** `/dashboard/reporters` — **مسؤول النظام فقط** (`requireRoles` في السايدبار + `ProtectedRoute` + `requireRole` على `/api/admin/reporters*`). لا تُفتح عبر `articles.view`/`users.view`. أعمدة الصفحة: ترخيص، مدينة، آخر دخول — **بدون** منشورة/آخر خبر/مشاهدات. API: `GET /api/admin/reporters` من `users` + ملف الترخيص؛ `GET /api/admin/reporters/:id/articles` موجود ولا تستهلكه الصفحة. ترتيب: منتهٍ → جدّد → بدون → ساري. KPI «نشطون آخر ٧ أيام» يعتمد `lastLoginAt` فقط.
 - **مفضلة لوحة التحكم:** نجمة ★ بجانب اسم الصفحة النشطة في `AppBreadcrumbs` (كل صفحات `/dashboard/*` ذات عنصر قائمة). `AppBreadcrumbs` يمرّر `permissions`/`allRoles` وإلا تُستبعد العناصر ذات صلاحيات ويُعرض «نظرة عامة» خطأً. `findActiveItem` لا يطابق `meta.exact` بالمقدّمة. `DashboardPageHeader.showFavoriteToggle` افتراضياً false لتفادي نجمتين.
 - **سايدبار محرّر المقال:** بدون `sticky`/`max-h` على عمود الإعدادات — التمرير يتم مع صفحة الداشبورد حتى يُصل لآخر حقول SEO والكلمات المفتاحية (كان sticky يقصّ الأسفل داخل `overflow-auto` للداشبورد).
 - **إنعاش الخبر:** `POST /api/articles/:id/resurface` يختم `articles.resurfaced_at` فقط (لا يغيّر `publishedAt`/المشاهدات/الرابط). صدارة الواجهة تعتمد `COALESCE(resurfaced_at, published_at)` في `homepage-lite` و`/api/v1/homepage` و`home-bundle` — أي مسار موجز جديد يجب أن يستخدم نفس الترتيب وإلا لن يظهر المُنعش أولاً.
