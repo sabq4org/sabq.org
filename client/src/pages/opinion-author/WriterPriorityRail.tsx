@@ -248,11 +248,16 @@ export function WriterPriorityRail({
   const items = useMemo<RailItem[]>(() => {
     const list: RailItem[] = [];
     if (banner?.state === "late") {
+      const publishStillAhead = new Date(banner.nextPublishAt).getTime() > Date.now();
       list.push({
         key: "schedule-late",
         kind: "late",
-        title: "فات موعد النشر لهذا الأسبوع",
-        subtitle: `عند إرسال مقالتك الآن ستُجدول ليوم ${fmtDate(banner.nextPublishAt)}`,
+        title: publishStillAhead
+          ? "فات آخر موعد لإرسال مقالتك"
+          : "فات موعد النشر لهذا الأسبوع",
+        subtitle: publishStillAhead
+          ? `أرسلها الآن لتُجدول ليوم ${fmtDate(banner.nextPublishAt)}`
+          : `عند إرسال مقالتك الآن ستُجدول ليوم ${fmtDate(banner.nextPublishAt)}`,
       });
     } else if (banner?.state === "reminder") {
       list.push({
@@ -281,13 +286,16 @@ export function WriterPriorityRail({
       });
     }
     if (banner && banner.state === "ok") {
+      const submitOpen = new Date(banner.submitDeadline).getTime() > Date.now();
       list.push({
         key: "schedule-ok",
         kind: "schedule_ok",
         title: `يومك المخصص: ${WEEKDAYS_AR[banner.weekday]}`,
         subtitle: banner.hasUpcoming
           ? `مقالتك القادمة في مسار النشر — موعدها ${fmtDate(banner.nextPublishAt)}`
-          : `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — آخر موعد للإرسال ${fmtDate(banner.submitDeadline, false)}`,
+          : submitOpen
+            ? `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — آخر موعد للإرسال ${fmtDate(banner.submitDeadline, false)}`
+            : `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — أرسلها في أقرب وقت`,
       });
     }
     return list.sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]);

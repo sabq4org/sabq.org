@@ -20,6 +20,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
 // الحد الأدنى بين مقالتين للكاتب نفسه (أسبوع مع تسامح ساعات)
 const MIN_GAP_MS = 6 * DAY_MS + 12 * 60 * 60 * 1000;
+/** يجب أن تصل المقالة قبل موعد النشر بهذا الهامش */
+const SUBMIT_LEAD_MS = 2 * DAY_MS;
+/** نافذة التذكير: قبل آخر موعد للإرسال (وليس بعد فواته) */
+const REMINDER_WINDOW_MS = 2 * DAY_MS;
 
 /**
  * مقالة «أُرسلت» وتنتظر التحرير: مراجعة معلّقة، أو مسودة موبايل قديمة
@@ -243,17 +247,23 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
     // فترة سماح: تخصيص اليوم حديث (< أسبوع) لا يجعل الكاتب "متأخراً" فوراً
     const scheduleIsFresh =
       w.scheduleCreatedAt != null && now.getTime() - w.scheduleCreatedAt.getTime() < 7 * DAY_MS;
+    const submitDeadlineMs = nextSlot ? nextSlot.getTime() - SUBMIT_LEAD_MS : null;
     let commitment: OpinionWriterSummary["commitment"];
     if (!schedule || !schedule.active) commitment = "unassigned";
     else if (!lastPublishedAt && !hasUpcoming) commitment = "awaiting_first";
     else if (hasUpcoming) commitment = "ok";
     else if (
       !scheduleIsFresh &&
-      lastPublishedAt &&
-      now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS
+      ((submitDeadlineMs != null && now.getTime() >= submitDeadlineMs) ||
+        (lastPublishedAt && now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS))
     )
       commitment = "late";
-    else if (nextSlot && nextSlot.getTime() - now.getTime() <= 2 * DAY_MS) commitment = "due_soon";
+    else if (
+      submitDeadlineMs != null &&
+      now.getTime() < submitDeadlineMs &&
+      submitDeadlineMs - now.getTime() <= REMINDER_WINDOW_MS
+    )
+      commitment = "due_soon";
     else commitment = "ok";
 
     const hasLicense = Boolean(
@@ -618,18 +628,25 @@ export async function getWriterScheduleBanner(
   const nextSlot = computeNextSlot(schedule.weekday, schedule.publishTime, floor, now);
   if (!nextSlot) return null;
 
+  const submitDeadline = new Date(nextSlot.getTime() - SUBMIT_LEAD_MS);
+
   // فترة سماح: لا نُظهر "متأخر" لكاتب خُصص له يومه قبل أقل من أسبوع
   const scheduleIsFresh =
     schedule.createdAt != null && now.getTime() - schedule.createdAt.getTime() < 7 * DAY_MS;
   let state: WriterScheduleBanner["state"] = "ok";
   if (!hasUpcoming) {
+    // فات آخر موعد للإرسال → متأخر (حتى لو بقي وقت قبل لحظة النشر)
+    // التذكير فقط والمهلة ما زالت في المستقبل — يمنع «أرسلها قبل 18» ونحن في 20
     if (
       !scheduleIsFresh &&
-      lastPublishedAt &&
-      now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS
+      (now.getTime() >= submitDeadline.getTime() ||
+        (lastPublishedAt != null && now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS))
     ) {
       state = "late";
-    } else if (nextSlot.getTime() - now.getTime() <= 2 * DAY_MS) {
+    } else if (
+      now.getTime() < submitDeadline.getTime() &&
+      submitDeadline.getTime() - now.getTime() <= REMINDER_WINDOW_MS
+    ) {
       state = "reminder";
     }
   }
@@ -638,7 +655,7 @@ export async function getWriterScheduleBanner(
     weekday: schedule.weekday,
     publishTime: schedule.publishTime,
     nextPublishAt: nextSlot.toISOString(),
-    submitDeadline: new Date(nextSlot.getTime() - 2 * DAY_MS).toISOString(),
+    submitDeadline: submitDeadline.toISOString(),
     state,
     hasUpcoming,
     lastPublishedAt: lastPublishedAt ? lastPublishedAt.toISOString() : null,
