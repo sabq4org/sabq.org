@@ -84,9 +84,22 @@ export type OpinionWriterSummary = {
  */
 function parseDbTimestamp(v: string | Date | null | undefined): Date | null {
   if (!v) return null;
-  if (v instanceof Date) return v;
-  const s = v.includes("T") ? v : v.replace(" ", "T");
-  return new Date(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s) ? s : `${s}Z`);
+  const d =
+    v instanceof Date
+      ? v
+      : new Date(
+          (() => {
+            const s = v.includes("T") ? v : v.replace(" ", "T");
+            return /(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s) ? s : `${s}Z`;
+          })(),
+        );
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** toISOString آمن — لا يُسقط قائمة الكتّاب بسبب تاريخ فاسد في صف واحد. */
+function toIsoOrNull(v: string | Date | null | undefined): string | null {
+  const d = parseDbTimestamp(v);
+  return d ? d.toISOString() : null;
 }
 
 function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: number } {
@@ -103,7 +116,11 @@ function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: n
 function riyadhDateTime(y: number, m: number, d: number, publishTime: string): Date {
   const mm = String(m).padStart(2, "0");
   const dd = String(d).padStart(2, "0");
-  return new Date(`${y}-${mm}-${dd}T${publishTime}:00+03:00`);
+  // اقبل HH:mm أو HH:mm:ss — غير ذلك → 06:00 افتراضي
+  const time = /^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(publishTime.trim())
+    ? publishTime.trim().slice(0, 5)
+    : "06:00";
+  return new Date(`${y}-${mm}-${dd}T${time}:00+03:00`);
 }
 
 /**
@@ -295,32 +312,34 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       publishedCount: s?.publishedCount ?? 0,
       pendingCount: s?.pendingCount ?? 0,
       totalViews: s?.totalViews ?? 0,
-      lastArticle:
-        last && last.publishedAt
-          ? {
-              id: last.id,
-              title: last.title,
-              slug: last.slug,
-              publishedAt: new Date(last.publishedAt).toISOString(),
-            }
-          : null,
-      nextScheduled:
-        next && next.scheduledAt
-          ? {
-              id: next.id,
-              title: next.title,
-              scheduledAt: new Date(next.scheduledAt).toISOString(),
-            }
-          : null,
-      nextSlot: nextSlot ? nextSlot.toISOString() : null,
+      lastArticle: (() => {
+        const publishedAt = toIsoOrNull(last?.publishedAt);
+        if (!last || !publishedAt) return null;
+        return {
+          id: last.id,
+          title: last.title,
+          slug: last.slug,
+          publishedAt,
+        };
+      })(),
+      nextScheduled: (() => {
+        const scheduledAt = toIsoOrNull(next?.scheduledAt);
+        if (!next || !scheduledAt) return null;
+        return {
+          id: next.id,
+          title: next.title,
+          scheduledAt,
+        };
+      })(),
+      nextSlot: toIsoOrNull(nextSlot),
       commitment,
       mediaLicense: {
         hasLicense,
         expired,
         expiringSoon,
         number: w.mediaLicenseNumber ?? null,
-        submittedAt: w.mediaLicenseSubmittedAt?.toISOString() ?? null,
-        expiresAt: expiresAt ? expiresAt.toISOString() : null,
+        submittedAt: toIsoOrNull(w.mediaLicenseSubmittedAt),
+        expiresAt: toIsoOrNull(expiresAt),
         hasFile: Boolean(w.mediaLicenseFileKey),
       },
     };
