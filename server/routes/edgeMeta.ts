@@ -2519,7 +2519,8 @@ router.get("/api/edge/home-bundle", async (_req, res) => {
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .where(eq(articles.status, "published"))
-        .orderBy(desc(articles.publishedAt))
+        // «إنعاش»: صدارة الموجز بوقت الإنعاش دون تغيير تاريخ النشر الظاهر
+        .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
         .limit(30),
       db
         .select({
