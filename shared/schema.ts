@@ -3966,7 +3966,7 @@ export const insertUserPointsTotalSchema = createInsertSchema(userPointsTotal).o
   createdAt: true, 
   updatedAt: true 
 }).extend({
-  rankLevel: z.number().int().min(1).max(4).optional(), // Validate rankLevel is between 1-4
+  rankLevel: z.number().int().min(1).max(5).optional(), // Tiers span 1-5 (level 5 = سفير سبق), see LOYALTY_TIERS in shared/loyalty.ts
 });
 
 export const insertLoyaltyRewardSchema = createInsertSchema(loyaltyRewards).omit({ 

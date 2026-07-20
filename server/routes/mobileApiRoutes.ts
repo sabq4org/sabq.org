@@ -6587,8 +6587,19 @@ router.post("/loyalty/events", async (req: Request, res: Response) => {
     }
 
     const { awardPoints } = await import("../services/loyalty");
-    const { LOYALTY_ACTIONS, LOYALTY_ACTION_POINTS } = await import("@shared/loyalty");
-    const validActions = new Set(Object.values(LOYALTY_ACTIONS));
+    const { LOYALTY_ACTIONS } = await import("@shared/loyalty");
+    // Client-reportable engagement actions ONLY. Sports prediction wins,
+    // account milestones, and admin adjustments are always granted
+    // server-side; accepting their codes here would let a client mint
+    // uncapped high-value points with arbitrary dedup sources.
+    const validActions = new Set<string>([
+      LOYALTY_ACTIONS.READ_OPEN,
+      LOYALTY_ACTIONS.READ_DEEP,
+      LOYALTY_ACTIONS.LIKE,
+      LOYALTY_ACTIONS.SHARE,
+      LOYALTY_ACTIONS.COMMENT,
+      LOYALTY_ACTIONS.NOTIFICATION_OPEN,
+    ]);
 
     const results = [] as Array<{ action: string; outcome: string; points?: number }>;
     for (const evt of events) {
@@ -6870,99 +6881,33 @@ router.post("/loyalty/rewards/:id/redeem", async (req: Request, res: Response) =
     }
     const rewardId = req.params.id;
 
-    const { loyaltyRewards, userPointsTotal, userRewardsHistory } = await import("@shared/schema");
+    // Single transactional implementation shared with the web route —
+    // reward row lock + guarded balance/stock decrements live there.
+    const { storage } = await import("../storage");
+    const result = await storage.redeemReward({ userId: session.userId, rewardId });
 
-    const [reward] = await db
-      .select()
-      .from(loyaltyRewards)
-      .where(eq(loyaltyRewards.id, rewardId))
-      .limit(1);
-    if (!reward || !reward.isActive) {
-      return res.status(404).json({ success: false, message: "المكافأة غير متاحة" });
+    if (!result.success) {
+      const statusByCode: Record<string, number> = {
+        NOT_FOUND: 404,
+        INACTIVE: 404,
+        EXPIRED: 410,
+        OUT_OF_STOCK: 409,
+        MAX_REDEMPTIONS: 409,
+        INSUFFICIENT_POINTS: 402,
+      };
+      const status = statusByCode[result.code ?? ""] ?? 400;
+      return res.status(status).json({ success: false, message: result.message });
     }
 
-    if (reward.remainingStock !== null && (reward.remainingStock ?? 0) <= 0) {
-      return res.status(409).json({ success: false, message: "نفد المخزون" });
-    }
-
-    if (reward.expiresAt && reward.expiresAt < new Date()) {
-      return res.status(410).json({ success: false, message: "انتهت صلاحية المكافأة" });
-    }
-
-    if (reward.maxRedemptionsPerUser !== null) {
-      const [{ count: myCount }] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(userRewardsHistory)
-        .where(
-          and(
-            eq(userRewardsHistory.userId, session.userId),
-            eq(userRewardsHistory.rewardId, rewardId),
-          ),
-        );
-      if (Number(myCount) >= (reward.maxRedemptionsPerUser ?? Infinity)) {
-        return res.status(409).json({ success: false, message: "وصلت الحد الأقصى لاستبدال هذه المكافأة" });
-      }
-    }
-
-    // Atomic balance decrement: UPDATE ... WHERE totalPoints >= cost.
-    // If the WHERE clause prunes the row (insufficient balance), the
-    // update returns 0 rows and we know not to insert a redemption.
-    const cost = Number(reward.pointsCost);
-    const updated = await db
-      .update(userPointsTotal)
-      .set({
-        totalPoints: sql`${userPointsTotal.totalPoints} - ${cost}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(userPointsTotal.userId, session.userId),
-          gte(userPointsTotal.totalPoints, cost),
-        ),
-      )
-      .returning({ totalPoints: userPointsTotal.totalPoints });
-
-    if (updated.length === 0) {
-      return res.status(402).json({ success: false, message: "رصيد النقاط غير كافٍ" });
-    }
-
-    // Decrement the reward's remaining stock when applicable.
-    if (reward.remainingStock !== null) {
-      await db
-        .update(loyaltyRewards)
-        .set({ remainingStock: sql`${loyaltyRewards.remainingStock} - 1` })
-        .where(
-          and(
-            eq(loyaltyRewards.id, rewardId),
-            gte(loyaltyRewards.remainingStock, 1),
-          ),
-        );
-    }
-
-    const [history] = await db
-      .insert(userRewardsHistory)
-      .values({
-        userId: session.userId,
-        rewardId: rewardId,
-        pointsSpent: cost,
-        status: "pending",
-        rewardSnapshot: {
-          nameAr: reward.nameAr,
-          nameEn: reward.nameEn,
-          pointsCost: cost,
-          rewardType: reward.rewardType,
-        },
-      })
-      .returning();
-
+    const history = result.redemption!;
     res.json({
       success: true,
       message: "تم استلام طلب الاستبدال بنجاح ✨",
-      remainingBalance: Number(updated[0].totalPoints),
+      remainingBalance: result.remainingBalance,
       redemption: {
         id: history.id,
         rewardId,
-        pointsSpent: cost,
+        pointsSpent: history.pointsSpent,
         status: history.status,
         redeemedAt: history.redeemedAt,
       },
