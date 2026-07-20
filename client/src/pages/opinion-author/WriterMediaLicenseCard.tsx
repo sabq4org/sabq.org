@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle2, ExternalLink, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,79 @@ function formatDeadlineAr(isoDate: string): string {
   } catch {
     return "نهاية هذا الشهر";
   }
+}
+
+/** نهاية المهلة بنهاية يوم الرياض (UTC+3) */
+function deadlineEndMs(deadlineIso: string): number {
+  return new Date(`${deadlineIso}T23:59:59+03:00`).getTime();
+}
+
+function useDeadlineCountdown(deadlineIso: string) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const end = deadlineEndMs(deadlineIso);
+  const ms = Math.max(0, end - now);
+  const totalSec = Math.floor(ms / 1000);
+  return {
+    days: Math.floor(totalSec / 86400),
+    hours: Math.floor((totalSec % 86400) / 3600),
+    minutes: Math.floor((totalSec % 3600) / 60),
+    seconds: totalSec % 60,
+    expired: ms <= 0,
+  };
+}
+
+function CountdownUnit({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="flex min-w-[3.25rem] flex-col items-center rounded-xl border border-border bg-background/80 px-2 py-1.5 shadow-sm">
+      <span className="text-lg font-bold tabular-nums tracking-tight text-foreground sm:text-xl" dir="ltr">
+        {String(value).padStart(2, "0")}
+      </span>
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function LicenseDeadlineCountdown({ deadline }: { deadline: string }) {
+  const { days, hours, minutes, seconds, expired } = useDeadlineCountdown(deadline);
+  const deadlineLabel = formatDeadlineAr(deadline);
+
+  if (expired) {
+    return (
+      <div
+        className="rounded-xl border border-amber-300/70 bg-amber-50/90 px-3 py-2.5 dark:border-amber-800/50 dark:bg-amber-950/40"
+        data-testid="writer-license-countdown-expired"
+      >
+        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+          انتهت المهلة ({deadlineLabel}) — أرسل ترخيصك في أقرب وقت
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-3"
+      data-testid="writer-license-countdown"
+    >
+      <p className="mb-2 text-xs text-muted-foreground">
+        تبقّى على المهلة حتى <strong className="text-foreground">{deadlineLabel}</strong>
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-start sm:gap-2">
+        <CountdownUnit value={days} label="يوم" />
+        <span className="pb-3 text-muted-foreground">:</span>
+        <CountdownUnit value={hours} label="ساعة" />
+        <span className="pb-3 text-muted-foreground">:</span>
+        <CountdownUnit value={minutes} label="دقيقة" />
+        <span className="pb-3 text-muted-foreground">:</span>
+        <CountdownUnit value={seconds} label="ثانية" />
+      </div>
+    </div>
+  );
 }
 
 export function WriterMediaLicenseCard() {
@@ -137,8 +210,6 @@ export function WriterMediaLicenseCard() {
     );
   }
 
-  const deadlineLabel = formatDeadlineAr(data.deadline);
-
   return (
     <section
       className="rounded-xl border border-border bg-card"
@@ -150,14 +221,16 @@ export function WriterMediaLicenseCard() {
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <BadgeCheck className="h-5 w-5" />
           </div>
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-base font-bold tracking-tight">
-              الترخيص المهني يعزّز حضورك ومصداقيتك
-            </p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وإرفاق صورة منه.
-              لديك مهلة حتى <strong className="text-foreground">{deadlineLabel}</strong>.
-            </p>
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <div className="space-y-1.5">
+              <p className="text-base font-bold tracking-tight">
+                الترخيص المهني يعزّز حضورك ومصداقيتك
+              </p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وإرفاق صورة منه.
+              </p>
+            </div>
+            <LicenseDeadlineCountdown deadline={data.deadline} />
             <a
               href={data.gmediaRegisterUrl}
               target="_blank"

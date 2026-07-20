@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X, BadgeCheck, Search, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -157,8 +158,12 @@ export default function OpinionWritersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-writers"] });
       toast({ title: "تم حفظ يوم النشر" });
     },
-    onError: () => {
-      toast({ title: "تعذر حفظ يوم النشر", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({
+        title: "تعذر حفظ يوم النشر",
+        description: error.message || undefined,
+        variant: "destructive",
+      });
     },
   });
 
@@ -335,12 +340,17 @@ export default function OpinionWritersPage() {
               {WEEKDAYS.map((day, i) => {
                 const writersForDay = byWeekday[i];
                 const isToday = i === todayWeekday;
+                const isFull = writersForDay.length >= OPINION_WRITERS_PER_DAY_CAP;
                 return (
                   <div
                     key={day}
                     className={cn(
                       "rounded-xl border p-3",
-                      isToday ? "border-primary/35 bg-primary/5" : "border-border bg-muted/40",
+                      isFull
+                        ? "border-amber-300/70 bg-amber-50/80 dark:border-amber-800/60 dark:bg-amber-950/30"
+                        : isToday
+                          ? "border-primary/35 bg-primary/5"
+                          : "border-border bg-muted/40",
                     )}
                     data-testid={`weekday-mobile-${i}`}
                   >
@@ -348,21 +358,36 @@ export default function OpinionWritersPage() {
                       <div
                         className={cn(
                           "text-sm font-bold",
-                          isToday ? "text-primary" : "text-foreground",
+                          isFull
+                            ? "text-amber-800 dark:text-amber-300"
+                            : isToday
+                              ? "text-primary"
+                              : "text-foreground",
                         )}
                       >
                         {day}
-                        {isToday && (
+                        {isToday && !isFull && (
                           <span className="ms-1.5 text-xs font-semibold text-primary">(اليوم)</span>
                         )}
                       </div>
                       <Badge
                         variant="secondary"
-                        className="tabular-nums text-[11px] font-semibold"
+                        className={cn(
+                          "tabular-nums text-[11px] font-semibold",
+                          isFull && "bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200",
+                        )}
                       >
-                        {writersForDay.length}
+                        {writersForDay.length}/{OPINION_WRITERS_PER_DAY_CAP}
                       </Badge>
                     </div>
+                    {isFull && (
+                      <p
+                        className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-300"
+                        data-testid={`weekday-full-mobile-${i}`}
+                      >
+                        غير متاح للنشر — اكتمل العدد
+                      </p>
+                    )}
                     {writersForDay.length === 0 ? (
                       <p className="text-xs italic text-muted-foreground">شاغر</p>
                     ) : (
@@ -384,23 +409,51 @@ export default function OpinionWritersPage() {
 
             {/* Desktop / tablet: unchanged 7-column board */}
             <div className="hidden grid-cols-7 gap-2 md:grid">
-              {WEEKDAYS.map((day, i) => (
+              {WEEKDAYS.map((day, i) => {
+                const count = byWeekday[i].length;
+                const isFull = count >= OPINION_WRITERS_PER_DAY_CAP;
+                return (
                 <div
                   key={day}
-                  className={i === todayWeekday ? "rounded-lg bg-primary/5 p-1" : "p-1"}
+                  className={cn(
+                    "p-1",
+                    isFull
+                      ? "rounded-lg bg-amber-50/90 dark:bg-amber-950/30"
+                      : i === todayWeekday
+                        ? "rounded-lg bg-primary/5"
+                        : "",
+                  )}
                   data-testid={`weekday-desktop-${i}`}
                 >
                   <div
-                    className={`mb-2 border-b-2 pb-1 text-xs font-bold ${
-                      i === todayWeekday
-                        ? "border-primary text-primary"
-                        : "border-border text-muted-foreground"
+                    className={`mb-1 border-b-2 pb-1 text-xs font-bold ${
+                      isFull
+                        ? "border-amber-400 text-amber-800 dark:text-amber-300"
+                        : i === todayWeekday
+                          ? "border-primary text-primary"
+                          : "border-border text-muted-foreground"
                     }`}
                   >
                     {day}
-                    {i === todayWeekday && " (اليوم)"}
+                    {i === todayWeekday && !isFull && " (اليوم)"}
                   </div>
-                  {byWeekday[i].length === 0 ? (
+                  <div
+                    className={cn(
+                      "mb-1.5 text-[10px] font-semibold tabular-nums",
+                      isFull ? "text-amber-800 dark:text-amber-300" : "text-muted-foreground",
+                    )}
+                  >
+                    {count}/{OPINION_WRITERS_PER_DAY_CAP}
+                  </div>
+                  {isFull && (
+                    <p
+                      className="mb-1.5 text-[10px] font-semibold leading-snug text-amber-800 dark:text-amber-300"
+                      data-testid={`weekday-full-desktop-${i}`}
+                    >
+                      غير متاح للنشر
+                    </p>
+                  )}
+                  {count === 0 ? (
                     <div className="text-xs italic text-muted-foreground">شاغر</div>
                   ) : (
                     byWeekday[i].map((w) => (
@@ -414,7 +467,8 @@ export default function OpinionWritersPage() {
                     ))
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -570,11 +624,19 @@ export default function OpinionWritersPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">بدون يوم</SelectItem>
-                                {WEEKDAYS.map((day, i) => (
-                                  <SelectItem key={i} value={String(i)}>
-                                    {day}
-                                  </SelectItem>
-                                ))}
+                                {WEEKDAYS.map((day, i) => {
+                                  const count = byWeekday[i].length;
+                                  const isCurrent =
+                                    writer.schedule?.active && writer.schedule.weekday === i;
+                                  const isFull =
+                                    count >= OPINION_WRITERS_PER_DAY_CAP && !isCurrent;
+                                  return (
+                                    <SelectItem key={i} value={String(i)} disabled={isFull}>
+                                      {day} ({count}/{OPINION_WRITERS_PER_DAY_CAP})
+                                      {isFull ? " — غير متاح" : ""}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                           </td>

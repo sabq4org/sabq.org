@@ -11,6 +11,9 @@ import {
   users,
   type UpsertOpinionWriterSchedule,
 } from "@shared/schema";
+import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
+
+export { OPINION_WRITERS_PER_DAY_CAP };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // السعودية بلا توقيت صيفي — إزاحة ثابتة +03:00
@@ -358,6 +361,11 @@ export async function getWriterDayLoads(): Promise<number[]> {
   return loads;
 }
 
+/** هل امتلأ يوم النشر؟ (≥ حد المقالات/الكتّاب لكل يوم) */
+export function isWriterDayFull(load: number): boolean {
+  return load >= OPINION_WRITERS_PER_DAY_CAP;
+}
+
 /**
  * اختيار الكاتب يومه بنفسه — مرة واحدة فقط: أي صف موجود (حتى المعطَّل،
  * لأنه قرار إداري) يمنع الاختيار الذاتي ويُحال الكاتب للإدارة.
@@ -379,6 +387,14 @@ export async function selfAssignWriterSchedule(
       ok: false,
       status: 409,
       message: "يومك محدد مسبقاً — لتغييره تواصل مع إدارة التحرير",
+    };
+  }
+  const loads = await getWriterDayLoads();
+  if (isWriterDayFull(loads[weekday] ?? 0)) {
+    return {
+      ok: false,
+      status: 409,
+      message: `يوم النشر ممتلئ (${OPINION_WRITERS_PER_DAY_CAP}/${OPINION_WRITERS_PER_DAY_CAP}) — اختر يوماً آخر`,
     };
   }
   const schedule = await upsertWriterSchedule(writerId, { weekday }, writerId);

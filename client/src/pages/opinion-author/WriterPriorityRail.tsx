@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
   ArrowLeft,
   BellRing,
@@ -130,33 +131,50 @@ export function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
             <p className="text-sm font-bold sm:text-base">اختر يومك الأسبوعي للنشر</p>
             <p className="text-xs text-muted-foreground sm:text-sm">
               مقالتك ستُنشر في هذا اليوم من كل أسبوع. يُحدد مرة واحدة، وتغييره لاحقاً عبر إدارة
-              التحرير — الأرقام تحت كل يوم توضح عدد الكتّاب المسجلين فيه.
+              التحرير — الحد {OPINION_WRITERS_PER_DAY_CAP} كتّاب لكل يوم؛ الأيام المكتملة غير متاحة.
             </p>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
-          {WEEKDAYS_AR.map((day, i) => (
-            <button
-              key={day}
-              type="button"
-              onClick={() => setPicked(i)}
-              className={`min-h-[52px] rounded-lg border p-2 text-center transition-colors ${
-                picked === i
-                  ? "border-primary bg-primary/10 font-bold text-primary"
-                  : "border-border bg-muted/30 hover:border-primary/40"
-              }`}
-            >
-              <div className="text-xs sm:text-sm">{day}</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-                {dayLoads[i] ? `${dayLoads[i]} كاتب` : "شاغر"}
-              </div>
-            </button>
-          ))}
+          {WEEKDAYS_AR.map((day, i) => {
+            const load = dayLoads[i] ?? 0;
+            const isFull = load >= OPINION_WRITERS_PER_DAY_CAP;
+            const isPicked = picked === i;
+            return (
+              <button
+                key={day}
+                type="button"
+                disabled={isFull}
+                onClick={() => !isFull && setPicked(i)}
+                className={`min-h-[52px] rounded-lg border p-2 text-center transition-colors ${
+                  isFull
+                    ? "cursor-not-allowed border-amber-300/70 bg-amber-50/80 text-amber-900 opacity-90 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200"
+                    : isPicked
+                      ? "border-primary bg-primary/10 font-bold text-primary"
+                      : "border-border bg-muted/30 hover:border-primary/40"
+                }`}
+                data-testid={`writer-day-pick-${i}`}
+              >
+                <div className="text-xs sm:text-sm">{day}</div>
+                <div className="mt-0.5 text-[10px] sm:text-xs">
+                  {isFull
+                    ? "غير متاح للنشر"
+                    : load
+                      ? `${load}/${OPINION_WRITERS_PER_DAY_CAP}`
+                      : "شاغر"}
+                </div>
+              </button>
+            );
+          })}
         </div>
         <Button
           size="sm"
           className="gap-1.5"
-          disabled={picked === null || chooseMutation.isPending}
+          disabled={
+            picked === null ||
+            chooseMutation.isPending ||
+            (picked !== null && (dayLoads[picked] ?? 0) >= OPINION_WRITERS_PER_DAY_CAP)
+          }
           onClick={() => picked !== null && chooseMutation.mutate(picked)}
         >
           <CheckCircle2 className="h-4 w-4" />
