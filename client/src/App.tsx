@@ -276,6 +276,8 @@ const SentimentInsights = lazy(() => retryImport(() => import("@/pages/admin/Sen
 const PaymentsDashboard = lazy(() => retryImport(() => import("@/pages/admin/PaymentsDashboard")));
 const MediaStoreOrders = lazy(() => retryImport(() => import("@/pages/admin/MediaStoreOrders")));
 const StaffMembers = lazy(() => retryImport(() => import("@/pages/admin/StaffMembers")));
+const StaffProfilesDirectory = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilesDirectory")));
+const StaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilePage")));
 const AccessibilityInsights = lazy(() => retryImport(() => import("@/pages/admin/AccessibilityInsights")));
 const CorrespondentApplications = lazy(() => retryImport(() => import("@/pages/admin/CorrespondentApplications")));
 const OpinionAuthorApplications = lazy(() => retryImport(() => import("@/pages/admin/OpinionAuthorApplications")));
@@ -941,6 +943,8 @@ function Router() {
         </Route>
         <Route path="/dashboard/users">{() => <LazyRoute component={UsersManagement} />}</Route>
         <Route path="/dashboard/staff">{() => <LazyRoute component={StaffMembers} />}</Route>
+        <Route path="/dashboard/staff-profiles">{() => <LazyRoute component={StaffProfilesDirectory} />}</Route>
+        <Route path="/dashboard/staff-profiles/:userId">{() => <LazyRoute component={StaffProfilePage} />}</Route>
         <Route path="/dashboard/roles">{() => <LazyRoute component={RolesManagement} />}</Route>
         <Route path="/dashboard/push-notifications">{() => <LazyRoute component={PushNotifications} />}</Route>
         

@@ -11,14 +11,20 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../auth";
 import { getUserPermissions } from "../rbac";
+import { upload } from "../utils/uploadMiddleware";
+import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 import {
   addDepartment,
   addJobTitle,
   getLookups,
+  getStaffDocumentKey,
   getStaffProfile,
   listStaff,
   revealNationalId,
+  setStaffDocumentKey,
   upsertStaffProfile,
+  STAFF_DOC_KINDS,
+  type StaffDocKind,
   type StaffProfilePatch,
 } from "../services/staffProfileService";
 
@@ -150,6 +156,54 @@ router.get(
     } catch (error) {
       console.error("[StaffProfiles] reveal error:", error);
       res.status(500).json({ message: "تعذر كشف الهوية" });
+    }
+  },
+);
+
+// ── وثائق المنسوب: رفع للتخزين الخاص + تنزيل برابط موقّع قصير العمر ──
+
+router.post(
+  "/api/staff-profiles/:userId/documents/:kind",
+  requirePermission("staff_profiles.manage"),
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      const kind = req.params.kind as StaffDocKind;
+      if (!(kind in STAFF_DOC_KINDS)) {
+        return res.status(400).json({ message: "نوع الوثيقة غير صحيح" });
+      }
+      if (!req.file) return res.status(400).json({ message: "لم يُرفق ملف" });
+      if (!isPrivateObjectStorageConfigured()) {
+        return res.status(503).json({ message: "التخزين الخاص غير مهيأ" });
+      }
+      const ext = (req.file.originalname.split(".").pop() || "bin").toLowerCase().slice(0, 6);
+      const key = `staff-docs/${req.params.userId}-${kind}-${Date.now()}.${ext}`;
+      const stored = await new ObjectStorageService().uploadFile(key, req.file.buffer, req.file.mimetype, "private");
+      await setStaffDocumentKey(req.params.userId, kind, stored.path, (req.user as { id: string }).id);
+      res.json({ success: true, kind });
+    } catch (error) {
+      console.error("[StaffProfiles] document upload error:", error);
+      res.status(500).json({ message: "تعذر رفع الوثيقة" });
+    }
+  },
+);
+
+router.get(
+  "/api/staff-profiles/:userId/documents/:kind",
+  requirePermission("staff_documents.view"),
+  async (req: Request, res: Response) => {
+    try {
+      const kind = req.params.kind as StaffDocKind;
+      if (!(kind in STAFF_DOC_KINDS)) {
+        return res.status(400).json({ message: "نوع الوثيقة غير صحيح" });
+      }
+      const key = await getStaffDocumentKey(req.params.userId, kind);
+      if (!key) return res.status(404).json({ message: "لا توجد وثيقة" });
+      const url = await new ObjectStorageService().getPrivateFileDownloadURL(key, 300);
+      res.redirect(url);
+    } catch (error) {
+      console.error("[StaffProfiles] document download error:", error);
+      res.status(500).json({ message: "تعذر جلب الوثيقة" });
     }
   },
 );
