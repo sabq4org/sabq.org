@@ -9,7 +9,10 @@
 // يحترم DB_DRIVER مثل بقية سكربتات seed (neon الافتراضي | pg).
 // ----------------------------------------------------------------------------
 
-import "dotenv/config";
+// اتباع عرف المشروع: .env.local يتقدم على .env (dotenv/config لا يقرأه)
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: ".env.local" });
+loadEnv();
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "../server/db";
 import { staffProfiles, users, userRoles, roles } from "../shared/schema";
