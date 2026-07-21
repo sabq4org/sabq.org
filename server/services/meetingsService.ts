@@ -334,6 +334,8 @@ export async function listMeetingsForUser(
   userId: string,
   canManage: boolean,
 ): Promise<{ live: MeetingListItem[]; upcoming: MeetingListItem[]; recent: MeetingListItem[] }> {
+  // قبل العرض: أقفل الاجتماعات «المباشرة» التي فرغت غرفها فعلياً
+  await reconcileLiveMeetings().catch(() => {});
   const visibility = await meetingVisibilityFilter(userId, canManage);
 
   // باني الاستعلام في Drizzle لا يُعاد استخدامه بعد where — دالة تبني من الصفر لكل قائمة
@@ -786,7 +788,11 @@ export async function setMeetingLocked(meeting: Meeting, locked: boolean, actorU
   publishMeetingEvent({ type: "meeting_locked", meetingId: meeting.id, payload: { locked } });
 }
 
-export async function endMeeting(meeting: Meeting, actorUserId: string): Promise<void> {
+export async function endMeeting(
+  meeting: Meeting,
+  actorUserId: string,
+  opts: { auto?: boolean } = {},
+): Promise<void> {
   await db
     .update(meetings)
     .set({ status: "ended", endedAt: new Date() })
@@ -806,8 +812,54 @@ export async function endMeeting(meeting: Meeting, actorUserId: string): Promise
   } catch {
     /* الغرفة قد لا تكون أُنشئت أصلاً على LiveKit */
   }
-  logMeetingEvent(meeting.id, "ended", { actorUserId });
+  logMeetingEvent(meeting.id, "ended", {
+    actorUserId,
+    detail: opts.auto ? { auto: true } : undefined,
+  });
   publishMeetingEvent({ type: "meeting_ended", meetingId: meeting.id });
+}
+
+// ────────────────────────────────────────────────────────────────────
+// المصالحة التلقائية — الاجتماع «المباشر» الذي فرغت غرفته على LiveKit
+// (غادر الجميع أو انقطعوا) يُقفل تلقائياً بدل بقائه «مباشراً» للأبد.
+// تُستدعى عند فتح مركز الاجتماعات، بخانق ٣٠ ثانية عبر النسخة الواحدة.
+// ────────────────────────────────────────────────────────────────────
+
+// مهلة سماح: الغرفة لا تُنشأ على LiveKit إلا بدخول أول مشارك، فلا نقفل
+// اجتماعاً أُنشئ للتو ومضيفه ما زال يتصل
+const RECONCILE_GRACE_MS = 3 * 60_000;
+let lastReconcileAt = 0;
+
+export async function reconcileLiveMeetings(): Promise<void> {
+  if (!isMeetingsConfigured()) return;
+  if (Date.now() - lastReconcileAt < 30_000) return;
+  lastReconcileAt = Date.now();
+
+  const liveMeetings = await db.select().from(meetings).where(eq(meetings.status, "live"));
+  const candidates = liveMeetings.filter(
+    (m) => m.startedAt && Date.now() - m.startedAt.getTime() > RECONCILE_GRACE_MS,
+  );
+  if (!candidates.length) return;
+
+  let rooms;
+  try {
+    rooms = await roomService().listRooms(candidates.map((m) => m.roomName));
+  } catch (e) {
+    console.error("[Meetings] reconcile listRooms failed:", (e as Error).message);
+    return;
+  }
+  const participantsByRoom = new Map(rooms.map((r) => [r.name, r.numParticipants]));
+
+  for (const m of candidates) {
+    const count = participantsByRoom.get(m.roomName) ?? 0;
+    if (count > 0) continue;
+    try {
+      await endMeeting(m, m.hostUserId, { auto: true });
+      console.log(`[Meetings] auto-ended empty meeting ${m.id} (${m.title})`);
+    } catch (e) {
+      console.error("[Meetings] auto-end failed:", (e as Error).message);
+    }
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────
