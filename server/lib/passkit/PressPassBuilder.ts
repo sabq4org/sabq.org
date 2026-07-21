@@ -186,19 +186,30 @@ export class PressPassBuilder extends PassBuilder {
       value: data.userName,
     });
 
-    // المسمى الوظيفي ثم الجهة — صفان كما في المرجع.
+    // صف واحد أفقي: الإدارة (يسار) + المسمى (يمين) — بدل صفين متلاصقين.
+    // التسميات مختصرة عمداً: Wallet يفرض تباعد أحرف قبيحاً على التسميات
+    // العربية الطويلة (الـمـسـمـى) بينما القيم تُعرض طبيعية.
+    if (data.department) {
+      pass.secondaryFields.push({
+        key: 'department',
+        label: 'الإدارة',
+        value: data.department,
+      });
+    }
     if (data.jobTitle) {
       pass.secondaryFields.push({
         key: 'job_title',
-        label: 'المسمى الوظيفي',
+        label: 'المسمى',
         value: data.jobTitle,
       });
     }
 
+    // الجهة ثابتة دائماً — صحيفة سبق الإلكترونية (قرار المالك)؛
+    // الإدارة التابع لها المنسوب تُعرض في الصف أعلاه.
     pass.auxiliaryFields.push({
       key: 'company',
       label: 'الجهة',
-      value: data.department || 'صحيفة سبق الإلكترونية',
+      value: 'صحيفة سبق الإلكترونية',
     });
 
     // وجه البطاقة نظيف كالمرجع — رقم البطاقة والصلاحية في الخلف.
