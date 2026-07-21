@@ -4,6 +4,12 @@
 <dict>
 	<key>com.apple.developer.healthkit</key>
 	<true/>
+	<!-- إدارة بطاقات Wallet الصادرة من سبق (قراءة/حذف عبر PKPassLibrary):
+	     يتيح لسبق بلس حذف بطاقات القسائم من داخل التطبيق -->
+	<key>com.apple.developer.pass-type-identifiers</key>
+	<array>
+		<string>$(TeamIdentifierPrefix)*</string>
+	</array>
 	<key>aps-environment</key>
 	<string>production</string>
 	<key>com.apple.developer.applesignin</key>

@@ -55,6 +55,7 @@ struct PlusVoucher: Codable, Equatable, Identifiable {
     let offer: String
     let valueLabel: String
     let brandColor: String
+    let category: String?
     let pointsSpent: Int
     let redemptionId: String
 }
@@ -77,6 +78,7 @@ struct PlusRedemption: Codable, Identifiable, Equatable {
     let voucherExpiresAt: String?
     let brandColor: String?
     let valueLabel: String?
+    let category: String?
 }
 
 struct PlusRedemptionsResponse: Codable {

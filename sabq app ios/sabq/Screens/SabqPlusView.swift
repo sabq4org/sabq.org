@@ -27,6 +27,9 @@ struct SabqPlusView: View {
     @State private var pendingPass: PKPass?
     @State private var showAddPassSheet = false
     @State private var walletBusyId: String?
+    /// أرقام البطاقات المثبّتة فعلاً في Wallet (عبر PKPassLibrary + entitlement
+    /// pass-type-identifiers) — تتيح حالة «مضافة ✓» والحذف من داخل التطبيق.
+    @State private var installedSerials: Set<String> = []
 
     // إزالة قسيمة
     @State private var removalTarget: PlusRedemption?
@@ -55,8 +58,14 @@ struct SabqPlusView: View {
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("سبق بلس")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await loader.load() }
-        .refreshable { await loader.load() }
+        .task {
+            await loader.load()
+            refreshInstalledPasses()
+        }
+        .refreshable {
+            await loader.load()
+            refreshInstalledPasses()
+        }
         .environment(\.layoutDirection, .rightToLeft)
         .sheet(item: $confirmReward) { reward in
             redeemConfirmSheet(reward)
@@ -72,6 +81,7 @@ struct SabqPlusView: View {
                 PKAddPassesRepresentable(pass: pass) { _ in
                     showAddPassSheet = false
                     pendingPass = nil
+                    refreshInstalledPasses()
                 }
             }
         }
@@ -84,7 +94,7 @@ struct SabqPlusView: View {
             }
             Button("إلغاء", role: .cancel) { removalTarget = nil }
         } message: {
-            Text("ستُرجع \(removalTarget.map { formatPoints($0.pointsSpent) } ?? "") نقطة إلى رصيدك. بطاقة Apple Wallet على جهازك لا تُحذف تلقائياً.")
+            Text("ستُرجع \(removalTarget.map { formatPoints($0.pointsSpent) } ?? "") نقطة إلى رصيدك، وستُحذف بطاقتها من Apple Wallet إن كانت مضافة.")
         }
         .alert("تنبيه", isPresented: Binding(
             get: { errorMessage != nil },
@@ -328,32 +338,42 @@ struct SabqPlusView: View {
     private func rewardCard(_ reward: PlusReward) -> some View {
         let balance = loader.catalog?.balance ?? 0
         let affordable = balance >= reward.pointsCost
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(String(reward.partnerName.prefix(1)))
-                    .font(SabqFonts.app(size: 16, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(Color(plusHex: reward.brandColor), in: RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 1) {
+        let brand = Color(plusHex: reward.brandColor)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                partnerBadge(category: reward.category, brand: brand, size: 46, iconSize: 20)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(reward.partnerName)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                         .lineLimit(1)
-                    Text(reward.category)
+                        .minimumScaleFactor(0.8)
+                    Text(reward.category + " · ولاء ون")
                         .font(SabqFonts.app(size: 10.5, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
+                Spacer(minLength: 0)
             }
+
+            Text(reward.valueLabel)
+                .font(SabqFonts.app(size: 12, weight: .heavy))
+                .foregroundStyle(brand)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .background(brand.opacity(0.12), in: Capsule())
+
             Text(reward.offer)
                 .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineLimit(2)
                 .frame(minHeight: 32, alignment: .top)
-            HStack {
+
+            Divider().opacity(0.5)
+
+            HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(formatPoints(reward.pointsCost)) نقطة")
-                        .font(SabqFonts.app(size: 12, weight: .heavy))
+                        .font(SabqFonts.app(size: 12.5, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                         .monospacedDigit()
                     Text("≈ \(String(format: "%.2f", reward.sarValue)) ر.س")
@@ -369,16 +389,61 @@ struct SabqPlusView: View {
                     Text(affordable ? "استبدل" : "لا يكفي")
                         .font(SabqFonts.app(size: 12.5, weight: .heavy))
                         .foregroundStyle(.white)
-                        .padding(.vertical, 7)
-                        .padding(.horizontal, 14)
-                        .background(affordable ? walaPurple : SabqTheme.outline, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(
+                            affordable
+                                ? AnyShapeStyle(LinearGradient(colors: [walaPurple, walaDeep], startPoint: .top, endPoint: .bottom))
+                                : AnyShapeStyle(SabqTheme.outline),
+                            in: RoundedRectangle(cornerRadius: 11)
+                        )
                 }
                 .disabled(!affordable || isRedeeming)
             }
         }
-        .padding(12)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 1))
+        .padding(14)
+        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(brand.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 8, y: 3)
+    }
+
+    /// «شعار» الشريك: أيقونة الفئة داخل مربع متدرج بلون العلامة —
+    /// الشركاء تجريبيون فلا شعارات حقيقية، والأيقونة التعبيرية أرقى
+    /// بصرياً من حرف مفرد. عند تكامل ولاء ون تُستبدل بصور الكتالوج.
+    private func partnerBadge(category: String, brand: Color, size: CGFloat, iconSize: CGFloat) -> some View {
+        Image(systemName: categoryIcon(for: category))
+            .font(.system(size: iconSize, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(
+                LinearGradient(
+                    colors: [brand.opacity(0.85), brand],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: size * 0.28)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: size * 0.28)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+            )
+            .shadow(color: brand.opacity(0.35), radius: 5, y: 2)
+    }
+
+    private func categoryIcon(for category: String) -> String {
+        switch category {
+        case "مقاهٍ": return "cup.and.saucer.fill"
+        case "صحة": return "cross.case.fill"
+        case "مطاعم": return "fork.knife"
+        case "توصيل": return "car.fill"
+        case "ترفيه": return "film.fill"
+        case "تسوق": return "book.fill"
+        case "اتصالات": return "antenna.radiowaves.left.and.right"
+        case "أزياء": return "bag.fill"
+        default: return "gift.fill"
+        }
     }
 
     // MARK: - نافذة التأكيد
@@ -510,13 +575,31 @@ struct SabqPlusView: View {
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .environment(\.layoutDirection, .rightToLeft)
+        // نافذة PassKit تُعلَّق هنا داخل الغطاء الكامل — تعليقها على الشاشة
+        // الأساسية المغطاة يفشل صامتاً (الزر يرمش) ثم تنبثق فجأة بعد
+        // إغلاق التهنئة.
+        .sheet(isPresented: $showAddPassSheet) {
+            if let pass = pendingPass {
+                PKAddPassesRepresentable(pass: pass) { _ in
+                    showAddPassSheet = false
+                    pendingPass = nil
+                }
+            }
+        }
     }
 
     private func voucherPassCard(_ voucher: PlusVoucher) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(voucher.partnerName)
-                .font(SabqFonts.app(size: 17, weight: .heavy))
-                .foregroundStyle(.white)
+            HStack(spacing: 10) {
+                partnerBadge(
+                    category: voucher.category ?? "",
+                    brand: Color(plusHex: voucher.brandColor),
+                    size: 40, iconSize: 17
+                )
+                Text(voucher.partnerName)
+                    .font(SabqFonts.app(size: 17, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
             Text("\(voucher.offer) · \(voucher.valueLabel)")
                 .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(Color(red: 0.894, green: 0.871, blue: 1))
@@ -563,7 +646,22 @@ struct SabqPlusView: View {
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("سجل استبدالاتي")
+            HStack {
+                sectionTitle("سجل استبدالاتي")
+                Spacer()
+                if !installedSerials.isEmpty {
+                    Button {
+                        cleanupWalletPasses()
+                    } label: {
+                        Label("تنظيف Wallet (\(installedSerials.count))", systemImage: "wallet.pass")
+                            .font(SabqFonts.app(size: 11.5, weight: .bold))
+                            .foregroundStyle(walaPurple)
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            .background(walaPurple.opacity(0.10), in: Capsule())
+                    }
+                }
+            }
             if loader.redemptions.isEmpty {
                 Text("لا توجد استبدالات بعد — جرّب استبدال أول قسيمة ✨")
                     .font(SabqFonts.app(size: 13, weight: .medium))
@@ -583,6 +681,11 @@ struct SabqPlusView: View {
 
     private func redemptionRow(_ item: PlusRedemption) -> some View {
         HStack(spacing: 10) {
+            partnerBadge(
+                category: item.category ?? "",
+                brand: Color(plusHex: item.brandColor ?? "#4A4A5A"),
+                size: 34, iconSize: 14
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.partnerName ?? "قسيمة")
                     .font(SabqFonts.app(size: 13.5, weight: .bold))
@@ -606,15 +709,16 @@ struct SabqPlusView: View {
                 .foregroundStyle(Color(red: 0.840, green: 0.271, blue: 0.271))
                 .monospacedDigit()
             if item.code != nil {
+                let installed = installedSerials.contains(walletSerial(for: item.id))
                 Button {
                     Task { await addToWallet(redemptionId: item.id) }
                 } label: {
                     if walletBusyId == item.id {
                         ProgressView().frame(width: 26, height: 26)
                     } else {
-                        Image(systemName: "wallet.pass")
+                        Image(systemName: installed ? "wallet.pass.fill" : "wallet.pass")
                             .font(.system(size: 15))
-                            .foregroundStyle(walaPurple)
+                            .foregroundStyle(installed ? Color(red: 0.09, green: 0.64, blue: 0.42) : walaPurple)
                             .frame(width: 26, height: 26)
                     }
                 }
@@ -719,11 +823,51 @@ struct SabqPlusView: View {
         do {
             try await APIClient.shared.removePlusRedemption(id: item.id)
             removalTarget = nil
+            removeWalletPass(serial: walletSerial(for: item.id))
             await loader.load()
         } catch {
             removalTarget = nil
             errorMessage = "تعذر إزالة القسيمة."
         }
+    }
+
+    // MARK: - إدارة بطاقات Wallet من داخل التطبيق (PKPassLibrary)
+    //
+    // بفضل entitlement pass-type-identifiers يستطيع التطبيق قراءة وحذف
+    // البطاقات الصادرة بمعرّفات فريق سبق — فلا يحتاج المستخدم مطاردة زر
+    // «إزالة البطاقة» في تطبيق Wallet.
+
+    /// الرقم التسلسلي المطبوع في البطاقة — نفس الاشتقاق في الخادم.
+    private func walletSerial(for redemptionId: String) -> String {
+        "SABQ-PLUS-" + redemptionId.replacingOccurrences(of: "-", with: "").prefix(10).uppercased()
+    }
+
+    private func refreshInstalledPasses() {
+        let library = PKPassLibrary()
+        installedSerials = Set(
+            library.passes()
+                .filter { $0.serialNumber.hasPrefix("SABQ-PLUS-") }
+                .map(\.serialNumber)
+        )
+    }
+
+    private func removeWalletPass(serial: String) {
+        let library = PKPassLibrary()
+        if let pass = library.passes().first(where: { $0.serialNumber == serial }) {
+            library.removePass(pass)
+        }
+        refreshInstalledPasses()
+    }
+
+    /// حذف كل بطاقات قسائم سبق بلس المتراكمة من Wallet دفعة واحدة.
+    private func cleanupWalletPasses() {
+        let library = PKPassLibrary()
+        let plusPasses = library.passes().filter { $0.serialNumber.hasPrefix("SABQ-PLUS-") }
+        for pass in plusPasses {
+            library.removePass(pass)
+        }
+        refreshInstalledPasses()
+        errorMessage = "أُزيلت \(plusPasses.count) بطاقة من Apple Wallet."
     }
 
     // MARK: - أدوات

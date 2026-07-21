@@ -196,7 +196,7 @@ function generateVoucherCode(): string {
 }
 
 export async function redeemPreviewReward(userId: string, rewardId: string): Promise<
-  | { success: true; voucher: { code: string; expiresAt: string; partnerName: string | null; offer: string | null; valueLabel: string; brandColor: string; pointsSpent: number; redemptionId: string }; remainingBalance: number }
+  | { success: true; voucher: { code: string; expiresAt: string; partnerName: string | null; offer: string | null; valueLabel: string; brandColor: string; category: string; pointsSpent: number; redemptionId: string }; remainingBalance: number }
   | { success: false; code: string; message: string }
 > {
   const [reward] = await db
@@ -245,6 +245,7 @@ export async function redeemPreviewReward(userId: string, rewardId: string): Pro
       offer: reward.description,
       valueLabel: meta.valueLabel ?? "",
       brandColor: meta.brandColor ?? "#4A4A5A",
+      category: meta.category ?? "",
       pointsSpent: Number(reward.pointsCost),
       redemptionId: result.redemption.id,
     },
@@ -325,6 +326,7 @@ export async function getPlusRedemptions(userId: string) {
       voucherExpiresAt: delivery.voucherExpiresAt ?? null,
       brandColor: meta.brandColor ?? "#4A4A5A",
       valueLabel: meta.valueLabel ?? "",
+      category: meta.category ?? "",
     };
   });
 }
