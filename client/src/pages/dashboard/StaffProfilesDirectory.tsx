@@ -41,7 +41,7 @@ type StaffRow = {
 const EMPLOYMENT_LABELS: Record<string, string> = {
   employee: "موظف",
   collaborator: "متعاون",
-  field_reporter: "مراسل ميداني",
+  field_reporter: "مراسل صحفي",
   opinion_writer: "كاتب رأي",
 };
 

@@ -71,7 +71,7 @@ export function decryptNationalId(encrypted: string): string | null {
 export const EMPLOYMENT_TYPES = [
   { value: "employee", labelAr: "موظف" },
   { value: "collaborator", labelAr: "متعاون" },
-  { value: "field_reporter", labelAr: "مراسل ميداني" },
+  { value: "field_reporter", labelAr: "مراسل صحفي" },
   { value: "opinion_writer", labelAr: "كاتب رأي" },
 ] as const;
 
@@ -87,8 +87,6 @@ const REQUIRED_BASE: FieldRule[] = [
   { key: "departmentId", labelAr: "الإدارة" },
   { key: "employmentType", labelAr: "نوع العلاقة" },
   { key: "joinedAt", labelAr: "تاريخ الالتحاق" },
-  { key: "emergencyContactName", labelAr: "اسم جهة الطوارئ" },
-  { key: "emergencyContactPhone", labelAr: "جوال جهة الطوارئ" },
 ];
 
 const REQUIRED_BY_TYPE: Record<string, FieldRule[]> = {
@@ -111,7 +109,7 @@ export function requiredFieldsFor(employmentType: string | null | undefined): Fi
 
 function computeCompletion(
   profile: Partial<StaffProfile>,
-  user: { firstName: string | null; lastName: string | null; phoneNumber: string | null },
+  user: { firstName: string | null; lastName: string | null; phoneNumber: string | null; profileImageUrl?: string | null },
 ): { percent: number; missing: FieldRule[] } {
   const rules = requiredFieldsFor(profile.employmentType);
   const has = (key: string): boolean => {
@@ -120,6 +118,8 @@ function computeCompletion(
       case "lastName": return Boolean(user.lastName?.trim());
       case "phoneNumber": return Boolean(user.phoneNumber?.trim() || profile.officialPhone?.trim());
       case "nationalId": return Boolean(profile.nationalIdEncrypted);
+      // صورة الحساب تُحتسب إن لم تُرفع صورة رسمية مستقلة
+      case "officialPhotoUrl": return Boolean(profile.officialPhotoUrl || user.profileImageUrl);
       default: {
         const value = (profile as Record<string, unknown>)[key];
         return value !== null && value !== undefined && String(value).trim() !== "";
@@ -135,9 +135,10 @@ function computeCompletion(
 // القوائم الموحدة — تُبذر افتراضيات عند أول استخدام والإدارة تضيف عليها
 // ────────────────────────────────────────────────────────────────────
 
+// قائمة المالك المعتمدة (2026-07-21)
 const DEFAULT_DEPARTMENTS = [
-  "الإدارة العليا", "هيئة التحرير", "المراسلون", "الأخبار المحلية", "الرياضة",
-  "الاقتصاد", "كتّاب الرأي", "التقنية والتطوير", "التسويق والإعلانات", "الموارد البشرية",
+  "الإدارة العليا", "إدارة التحرير", "إدارة التقنية والتطوير", "إدارة التسويق والإعلان",
+  "إدارة الموارد البشرية", "الإدارة المالية", "إدارة الشؤون الإدارية",
 ];
 
 const DEFAULT_JOB_TITLES = [
@@ -297,6 +298,10 @@ export async function getStaffProfile(userId: string) {
   const profile = row.staff_profiles;
   const { nationalIdEncrypted: _omit, ...safeProfile } = profile ?? ({} as StaffProfile);
 
+  // الاكتمال يُحسب حياً عند القراءة — الملفات المرحّلة عبر SQL تحمل
+  // completion_percent=0 وmissing_fields=NULL فكانت تظهر «مكتملة» زوراً.
+  const live = computeCompletion(profile ?? {}, user);
+
   return {
     user: {
       id: user.id,
@@ -310,8 +315,16 @@ export async function getStaffProfile(userId: string) {
       bio: user.bio,
       role: user.role,
     },
-    profile: profile ? { ...safeProfile, hasNationalId: Boolean(profile.nationalIdEncrypted) } : null,
+    profile: profile
+      ? {
+          ...safeProfile,
+          hasNationalId: Boolean(profile.nationalIdEncrypted),
+          completionPercent: live.percent,
+          missingFields: live.missing.map((m) => m.key),
+        }
+      : null,
     requiredFields: requiredFieldsFor(profile?.employmentType),
+    missingLabels: live.missing.map((m) => m.labelAr),
   };
 }
 

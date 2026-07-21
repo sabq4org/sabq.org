@@ -26,29 +26,31 @@ export default function StaffProfilePage() {
   return (
     <DashboardLayout>
       <div dir="rtl" className="space-y-4 p-1">
-        <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-l from-[#10233A] to-[#17294A] p-5 text-white">
+        <div className="flex items-center gap-4 rounded-2xl border bg-card p-5">
           <Link href="/dashboard/staff-profiles">
-            <Button size="icon" variant="ghost" className="text-white/80 hover:text-white"><ArrowRight className="h-5 w-5" /></Button>
+            <Button size="icon" variant="ghost" className="text-muted-foreground"><ArrowRight className="h-5 w-5" /></Button>
           </Link>
           {data?.user?.profileImageUrl ? (
-            <img src={data.user.profileImageUrl} alt="" className="h-14 w-14 rounded-full border-2 border-white/25 object-cover" />
+            <img src={data.user.profileImageUrl} alt="" className="h-14 w-14 rounded-full border-2 border-sky-500/30 object-cover" />
           ) : (
-            <div className="grid h-14 w-14 place-items-center rounded-full border-2 border-white/25 bg-sky-500 text-lg font-black">
+            <div className="grid h-14 w-14 place-items-center rounded-full bg-sky-500/15 text-lg font-black text-sky-600">
               {name.slice(0, 1)}
             </div>
           )}
           <div>
-            <h1 className="text-lg font-black">{name}</h1>
-            <div className="text-xs text-white/60" dir="ltr">{data?.profile?.employeeNumber ?? "بلا رقم وظيفي بعد"}</div>
+            <h1 className="text-lg font-black text-foreground">{name}</h1>
+            <span className="mt-0.5 inline-block rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-bold text-sky-600" dir="ltr">
+              {data?.profile?.employeeNumber ?? "بلا رقم وظيفي بعد"}
+            </span>
           </div>
           <div className="mr-auto text-center">
             <div
               className="grid h-16 w-16 place-items-center rounded-full"
-              style={{ background: `conic-gradient(#17A26B ${percent}%, rgba(255,255,255,.12) 0)` }}
+              style={{ background: `conic-gradient(#1CA4F0 ${percent}%, hsl(var(--muted)) 0)` }}
             >
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-[#10233A] text-sm font-black">{percent}%</div>
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-card text-sm font-black text-foreground">{percent}%</div>
             </div>
-            <div className="mt-1 text-[10px] text-white/60">اكتمال الملف</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">اكتمال الملف</div>
           </div>
         </div>
 
