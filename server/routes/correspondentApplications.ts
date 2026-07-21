@@ -142,16 +142,17 @@ router.post(
 
       const objectStorage = new ObjectStorageService();
       const docId = randomUUID();
-      const licenseExt = licenseFile.mimetype === "application/pdf" ? "pdf"
-        : (licenseFile.mimetype.split("/")[1] || "jpg");
+      const { uploadMediaLicenseDocument } = await import("../services/mediaLicenseUpload");
       const [licenseUpload, cvUpload] = await Promise.all([
-        objectStorage.uploadFile(
-          `correspondent-docs/${docId}-license.${licenseExt}`,
-          licenseFile.buffer, licenseFile.mimetype, "private",
-        ),
-        objectStorage.uploadFile(
+        uploadMediaLicenseDocument({
+          relativeKey: `correspondent-docs/${docId}-license.bin`,
+          buffer: licenseFile.buffer,
+          contentType: licenseFile.mimetype,
+        }),
+        objectStorage.uploadPrivateDocument(
           `correspondent-docs/${docId}-cv.pdf`,
-          cvFile.buffer, cvFile.mimetype, "private",
+          cvFile.buffer,
+          cvFile.mimetype,
         ),
       ]);
 

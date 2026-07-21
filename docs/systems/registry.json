@@ -111,6 +111,7 @@
         "server/utils/internalAnnouncementTargeting.ts",
         "server/services/opinionWritersService.ts",
         "server/services/mediaLicenseService.ts",
+        "server/services/mediaLicenseUpload.ts",
         "server/services/reportersAdminService.ts",
         "server/routes/opinionWriters.ts",
         "server/routes/reporterMediaLicense.ts",
@@ -175,7 +176,7 @@
       ],
       "dashboardPath": "/dashboard",
       "owners": ["editorial"],
-      "lastReviewed": "2026-07-20"
+      "lastReviewed": "2026-07-21"
     },
     {
       "id": "ifox",

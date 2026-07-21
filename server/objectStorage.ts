@@ -104,6 +104,9 @@ console.log(
 
 /** True when private file upload/download (license/CV, PDFs, etc.) can work. */
 export function isPrivateObjectStorageConfigured(): boolean {
+  // R2 (incl. NEWS_IMAGES_R2_*) wins for private docs even when a stale
+  // STORAGE_PROVIDER=s3 / FORCE_S3 points at a dead Tigris bucket.
+  if (hasR2Credentials()) return true;
   if (STORAGE_PROVIDER === "s3") return hasS3Credentials();
   if (STORAGE_PROVIDER === "r2") return hasR2Credentials();
   if (STORAGE_PROVIDER === "gcs") return isReplitRuntime();
@@ -725,6 +728,28 @@ export class ObjectStorageService {
     const fullPath = key.startsWith('/') ? key : `${this.getPrivateObjectDir()}/${key}`;
     const { bucketName, objectName } = parseObjectPath(fullPath);
     return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
+  /**
+   * Private documents (media licenses, CVs). Always prefers R2 when credentials
+   * exist — ignores OBJECT_STORAGE_FORCE_S3 so a dead legacy S3 bucket cannot
+   * block writer/reporter license uploads.
+   */
+  async uploadPrivateDocument(
+    path: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<{ url: string; path: string }> {
+    if (hasR2Credentials()) {
+      return this.uploadFileR2(path, buffer, contentType, "private");
+    }
+    if (hasS3Credentials()) {
+      return this.uploadFileS3(path, buffer, contentType, "private");
+    }
+    throw new Error(
+      "[ObjectStorage] Private document upload unavailable — configure R2 " +
+        "(R2_* or NEWS_IMAGES_R2_*) or S3 credentials.",
+    );
   }
 
   async uploadFile(
