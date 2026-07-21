@@ -271,6 +271,15 @@ export function MeetingRoomView({
     ? [room.localParticipant, ...Array.from(room.remoteParticipants.values())]
     : [];
 
+  // مصدر الحقيقة للحضور هو غرفة LiveKit — من غادر أو انقطع يختفي فوراً،
+  // فلا تتراكم أسماء «غير متصل» في القائمة
+  const connectedRoster = roster.filter(
+    (r) =>
+      r.status === "admitted" &&
+      r.identity &&
+      participants.some((p) => p.identity === r.identity),
+  );
+
   // ── إجراءات ──
 
   const toggleMic = async () => {
@@ -498,7 +507,7 @@ export function MeetingRoomView({
               <span className="text-xs font-bold">
                 المشاركون
                 <span className="mr-1.5 rounded-full bg-[#2b3a48] px-1.5 text-[10px] tabular-nums">
-                  {roster.filter((r) => r.status === "admitted").length}
+                  {connectedRoster.length}
                 </span>
               </span>
               <button onClick={() => setPanelOpen(false)} className="text-[#8ba1b4] hover:text-white" aria-label="إغلاق اللوحة">
@@ -549,50 +558,51 @@ export function MeetingRoomView({
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              {roster
-                .filter((r) => r.status === "admitted")
-                .map((r) => {
-                  const live = r.identity
-                    ? participants.find((p) => p.identity === r.identity)
-                    : undefined;
-                  return (
-                    <div key={r.participantId} className="flex items-center gap-2 px-1 py-1.5">
-                      <Avatar className="h-7 w-7">
-                        {r.avatarUrl ? <AvatarImage src={r.avatarUrl} alt="" /> : null}
-                        <AvatarFallback className="bg-[#2e8f7a] text-[10px] font-bold text-white">
-                          {initialsOf(r.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium">
-                          {r.name}
-                          {r.role === "host" ? <span className="mr-1 text-[9px] text-sky-400">· المضيف</span> : null}
-                        </div>
-                        <div className="truncate text-[10px] text-[#8ba1b4]">
-                          {live ? (live.isMicrophoneEnabled ? "متصل" : "متصل · مكتوم") : "غير متصل"}
-                        </div>
+              {connectedRoster.map((r) => {
+                const live = participants.find((p) => p.identity === r.identity)!;
+                return (
+                  <div key={r.participantId} className="flex items-center gap-2 px-1 py-1.5">
+                    <Avatar className="h-7 w-7">
+                      {r.avatarUrl ? <AvatarImage src={r.avatarUrl} alt="" /> : null}
+                      <AvatarFallback className="bg-[#2e8f7a] text-[10px] font-bold text-white">
+                        {initialsOf(r.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-medium">
+                        {r.name}
+                        {r.role === "host" ? <span className="mr-1 text-[9px] text-sky-400">· المضيف</span> : null}
                       </div>
-                      {isHost && r.role !== "host" && live ? (
-                        <>
-                          {live.isMicrophoneEnabled ? (
-                            <button
-                              onClick={() => muteParticipant(r.identity!)}
-                              className="rounded-md border border-[#2b3a48] px-2 py-1 text-[10px] text-[#8ba1b4] hover:text-white"
-                            >
-                              كتم
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={() => removeParticipant(r.participantId)}
-                            className="rounded-md border border-red-900/60 px-2 py-1 text-[10px] text-red-400 hover:bg-red-950"
-                          >
-                            إخراج
-                          </button>
-                        </>
-                      ) : null}
+                      <div className="truncate text-[10px] text-[#8ba1b4]">
+                        {live.isMicrophoneEnabled ? "متصل" : "متصل · مكتوم"}
+                      </div>
                     </div>
-                  );
-                })}
+                    {isHost && r.role !== "host" ? (
+                      <>
+                        {live.isMicrophoneEnabled ? (
+                          <button
+                            onClick={() => muteParticipant(r.identity!)}
+                            className="rounded-md border border-[#2b3a48] px-2 py-1 text-[10px] text-[#8ba1b4] hover:text-white"
+                          >
+                            كتم
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => removeParticipant(r.participantId)}
+                          className="rounded-md border border-red-900/60 px-2 py-1 text-[10px] text-red-400 hover:bg-red-950"
+                        >
+                          إخراج
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {connectedRoster.length === 0 ? (
+                <div className="px-2 py-6 text-center text-[11px] text-[#8ba1b4]">
+                  لا مشاركين متصلين بعد
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

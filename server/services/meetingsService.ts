@@ -509,15 +509,17 @@ export async function requestJoin(
   if (!identityBase) return { error: "تعذر جلب بيانات المستخدم", code: 500 };
   const ident: MeetingIdentity = { ...identityBase, isHost };
 
-  // من أخرجه المضيف لا يعود تلقائياً حتى في اجتماع بلا موافقة — يمر بغرفة الانتظار
+  // من أخرجه المضيف لا يعود تلقائياً حتى في اجتماع بلا موافقة — يمر بغرفة الانتظار.
+  // ومن سبق قبوله (ثم انقطع أو غادر) يعود مباشرة دون موافقة ثانية — كسلوك Meet.
   const [existingRow] = await db
     .select({ status: meetingParticipants.status })
     .from(meetingParticipants)
     .where(and(eq(meetingParticipants.meetingId, meeting.id), eq(meetingParticipants.userId, userId)))
     .limit(1);
   const wasRemoved = existingRow?.status === "removed" || existingRow?.status === "denied";
+  const wasAdmitted = existingRow?.status === "admitted";
 
-  if (isHost || (!meeting.requireApproval && !wasRemoved)) {
+  if (isHost || wasAdmitted || (!meeting.requireApproval && !wasRemoved)) {
     if (meeting.isLocked && !isHost) return { error: "الغرفة مقفلة أمام الدخول الجديد", code: 423 };
     const participant = await upsertUserParticipant(
       meeting.id,
