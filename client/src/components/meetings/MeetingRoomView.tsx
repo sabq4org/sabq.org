@@ -183,13 +183,18 @@ export function MeetingRoomView({
         const pub = p.getTrackPublication(Track.Source.ScreenShare);
         if (pub?.track && !pub.isMuted) {
           const meta = parseMeta(p);
+          const isLocal = p === room.localParticipant;
           setScreenShareInfo({
             trackSid: pub.trackSid,
             ownerName: meta.name || p.name || p.identity,
-            isLocal: p === room.localParticipant,
+            isLocal,
           });
-          const el = screenVideoRef.current;
-          if (el) pub.track.attach(el);
+          // من يشارك لا يشاهد بث شاشته (وإلا ظهرت المرايا اللانهائية) —
+          // يرى لوحة تأكيد بدلاً منه، والبث يُعرض للبقية فقط
+          if (!isLocal) {
+            const el = screenVideoRef.current;
+            if (el) pub.track.attach(el);
+          }
           return;
         }
       }
@@ -409,15 +414,28 @@ export function MeetingRoomView({
           >
             <video
               ref={screenVideoRef}
-              className={cn("h-full w-full object-contain", !screenShareInfo && "hidden")}
+              className={cn(
+                "h-full w-full object-contain",
+                (!screenShareInfo || screenShareInfo.isLocal) && "hidden",
+              )}
               autoPlay
               playsInline
               muted
             />
-            {screenShareInfo ? (
+            {screenShareInfo?.isLocal ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/15">
+                  <ScreenShare className="h-7 w-7 text-sky-400" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold">أنت تشارك شاشتك الآن</p>
+                  <p className="mt-1 text-xs text-[#8ba1b4]">المشاركون يرونها مباشرة — أوقفها من «إيقاف المشاركة» بالأسفل</p>
+                </div>
+              </div>
+            ) : screenShareInfo ? (
               <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1 text-[11px]">
                 <ScreenShare className="h-3 w-3 text-sky-400" />
-                {screenShareInfo.isLocal ? "أنت تشارك شاشتك" : `${screenShareInfo.ownerName} يشارك الشاشة`}
+                {`${screenShareInfo.ownerName} يشارك الشاشة`}
               </div>
             ) : (
               <div className="hidden flex-col items-center gap-2 text-[#8ba1b4] lg:flex">

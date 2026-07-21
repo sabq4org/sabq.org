@@ -312,10 +312,16 @@ export interface MeetingListItem {
 async function meetingVisibilityFilter(userId: string, canManage: boolean) {
   if (canManage) return undefined;
   const deptId = await getUserDepartmentId(userId);
+  // المرفوض والمُخرَج لا يبقى الاجتماع ظاهراً له في المركز
   const myMeetingIds = db
     .select({ meetingId: meetingParticipants.meetingId })
     .from(meetingParticipants)
-    .where(eq(meetingParticipants.userId, userId));
+    .where(
+      and(
+        eq(meetingParticipants.userId, userId),
+        inArray(meetingParticipants.status, ["invited", "pending", "admitted"]),
+      ),
+    );
   return or(
     eq(meetings.hostUserId, userId),
     eq(meetings.accessType, "all"),
@@ -383,8 +389,13 @@ export async function listMeetingsForUser(
   const [live, upcoming, recent] = await Promise.all([
     fetchList(and(eq(meetings.status, "live")), "started"),
     fetchList(and(eq(meetings.status, "scheduled")), "scheduled", 20),
+    // أرشيف المنتهية للمضيف والإدارة فقط — بقية المنسوبين لا يحتاجون سجل العناوين
     fetchList(
-      and(eq(meetings.status, "ended"), gt(meetings.endedAt, sql`now() - interval '7 days'`)),
+      and(
+        eq(meetings.status, "ended"),
+        gt(meetings.endedAt, sql`now() - interval '7 days'`),
+        canManage ? undefined : eq(meetings.hostUserId, userId),
+      ),
       "ended",
       10,
     ),
