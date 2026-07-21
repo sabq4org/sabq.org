@@ -334,8 +334,34 @@ export function WriterMediaLicenseCard({
         </section>
       );
     }
-    // بعد الإرسال تظهر بطاقة الشكر لفترة قصيرة ثم تختفي — الترخيص محفوظ ولا حاجة لإبقاء الرسالة.
-    if (!showThanks) return null;
+    // بعد الإرسال: شكر قصير ثم شريط ثابت يؤكد أن الترخيص محفوظ (لا يختفي بالكامل).
+    if (!showThanks) {
+      return (
+        <section
+          className="rounded-xl border border-emerald-200 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/30"
+          dir="rtl"
+          data-testid="writer-media-license-active"
+        >
+          <div className="flex items-center gap-3 p-4 sm:px-5 sm:py-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 text-sm">
+              <p className="font-bold text-emerald-900 dark:text-emerald-100">ترخيصك المهني ساري ومسجّل</p>
+              <p className="text-emerald-800/90 dark:text-emerald-200/80">
+                {data.licenseNumber ? (
+                  <>
+                    الرقم <span dir="ltr">{data.licenseNumber}</span>
+                    {expiresLabel ? " — " : ""}
+                  </>
+                ) : null}
+                {expiresLabel ? <>ساري حتى {expiresLabel}</> : null}
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
     return (
       <section
         className="rounded-xl border border-border bg-card"
@@ -445,7 +471,7 @@ export function WriterMediaLicenseCard({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,application/pdf"
+            accept="image/*,image/heic,image/heif,application/pdf"
             className="hidden"
             onChange={onFileChange}
             data-testid="input-writer-license-file"

@@ -16,6 +16,8 @@ export const upload = multer({
     // If GIF is needed back, add a sharp.metadata().pages <= 1 gate.
     const allowedTypes = [
       'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+      // آيفون يرفع HEIC افتراضياً — تُحوَّل إلى JPEG في مسار الترخيص
+      'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence',
       'application/pdf',
       'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -30,3 +32,6 @@ export const upload = multer({
     }
   },
 });
+
+/** رفع مستندات الترخيص فقط — نفس الحدود مع قبول HEIC صراحة. */
+export const mediaLicenseUpload = upload;

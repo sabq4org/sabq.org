@@ -34016,7 +34016,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(502).json({ message: "خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً." });
       }
 
-      // License document → PRIVATE object storage (S3/R2) only — never Replit sidecar.
+      // License document → PRIVATE R2-first (HEIC→JPEG) — never dead S3 / Replit sidecar.
       if (!isPrivateObjectStorageConfigured()) {
         console.error(
           "[OpinionAuthor] Private object storage not configured " +
@@ -34027,16 +34027,13 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
       }
 
-      const objectStorage = new ObjectStorageService();
       const docId = randomUUID();
-      const licenseExt = licenseFile.mimetype === "application/pdf" ? "pdf"
-        : (licenseFile.mimetype.split("/")[1] || "jpg");
-      const licenseUpload = await objectStorage.uploadFile(
-        `opinion-author-docs/${docId}-license.${licenseExt}`,
-        licenseFile.buffer,
-        licenseFile.mimetype,
-        "private",
-      );
+      const { uploadMediaLicenseDocument } = await import("./services/mediaLicenseUpload");
+      const licenseUpload = await uploadMediaLicenseDocument({
+        relativeKey: `opinion-author-docs/${docId}-license.bin`,
+        buffer: licenseFile.buffer,
+        contentType: licenseFile.mimetype,
+      });
 
       const expiry = mediaLicenseExpiryRejection(String(licenseExpiresAt || ""));
       if ("error" in expiry) {

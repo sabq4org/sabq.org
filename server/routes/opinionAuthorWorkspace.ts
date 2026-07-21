@@ -3,8 +3,7 @@ import rateLimit from "express-rate-limit";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, userHasAnyRole } from "../rbac";
-import { upload } from "../utils/uploadMiddleware";
-import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
+import { mediaLicenseUpload } from "../utils/uploadMiddleware";
 import {
   coachWriterIdea,
   generateWriterIdeas,
@@ -18,6 +17,7 @@ import {
   saveWriterMediaLicense,
 } from "../services/opinionAuthorWorkspaceService";
 import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
+import { uploadMediaLicenseDocument } from "../services/mediaLicenseUpload";
 
 const router = Router();
 const requestUserId = (req: Request) => (req.user as { id: string }).id;
@@ -141,7 +141,7 @@ router.get("/api/opinion-author/media-license", async (req, res) => {
 // رفع الترخيص: رقم + ملف عبر تخزين خاص S3/R2 فقط (نفس آلية طلبات المراسلين).
 router.post(
   "/api/opinion-author/media-license",
-  upload.single("licenseFile"),
+  mediaLicenseUpload.single("licenseFile"),
   async (req, res) => {
     try {
       const licenseNumber = String(req.body?.licenseNumber || "").trim();
@@ -163,19 +163,11 @@ router.post(
         return res.status(400).json({ message: "الترخيص يجب أن يكون صورة أو ملف PDF" });
       }
 
-      if (!isPrivateObjectStorageConfigured()) {
-        console.error("[Writer Workspace] Private object storage not configured for media license");
-        return res.status(502).json({ message: "خدمة رفع المستندات غير متاحة حالياً. حاول لاحقاً." });
-      }
-
-      const ext = file.mimetype === "application/pdf" ? "pdf" : (file.mimetype.split("/")[1] || "jpg");
-      const key = `writer-media-licenses/${requestUserId(req)}/${randomUUID()}.${ext}`;
-      const uploaded = await new ObjectStorageService().uploadFile(
-        key,
-        file.buffer,
-        file.mimetype,
-        "private",
-      );
+      const uploaded = await uploadMediaLicenseDocument({
+        relativeKey: `writer-media-licenses/${requestUserId(req)}/${randomUUID()}.bin`,
+        buffer: file.buffer,
+        contentType: file.mimetype,
+      });
 
       const status = await saveWriterMediaLicense(requestUserId(req), {
         licenseNumber,
@@ -189,8 +181,12 @@ router.post(
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : "";
-      if (msg.includes("ترخيص منتهٍ")) {
+      if (msg.includes("ترخيص منتهٍ") || msg.includes("صورة أو ملف PDF")) {
         return res.status(400).json({ message: msg });
+      }
+      if (msg.includes("غير متاحة حالياً")) {
+        console.error("[Writer Workspace] Private object storage not configured for media license");
+        return res.status(502).json({ message: msg });
       }
       console.error("[Writer Workspace] media license upload failed:", error);
       res.status(500).json({ message: "تعذر حفظ الترخيص. حاول مرة أخرى لاحقاً." });
