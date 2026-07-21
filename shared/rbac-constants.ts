@@ -267,6 +267,9 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
     // Breaking News Ticker
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // اجتماعات سبق — أكواد نصية كنمط hr أدناه
+    "meetings.view",
+    "meetings.create",
   ],
 
   [ROLE_NAMES.CONTENT_MANAGER]: [
@@ -295,6 +298,8 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    "meetings.view",
+    "meetings.create",
   ],
 
   [ROLE_NAMES.REPORTER]: [
@@ -309,6 +314,7 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.ANALYTICS_VIEW_OWN, // عرض إحصائيات مقالاته فقط
     // Dashboard - يدخل إلى مساحة أخباره الشخصية فقط، بلا إحصاءات عامة للصحيفة
     PERMISSION_CODES.DASHBOARD_VIEW,
+    "meetings.view",
   ],
 
   [ROLE_NAMES.OPINION_AUTHOR]: [
@@ -325,6 +331,7 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     // hidden (it gates on dashboard.view), so writers couldn't find their panel.
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW_STATS,
+    "meetings.view",
   ],
 
   [ROLE_NAMES.COMMENTS_MODERATOR]: [
@@ -385,6 +392,8 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     "staff_documents.view",
     "users.view",
     "dashboard.view",
+    "meetings.view",
+    "meetings.create",
   ],
 
   [ROLE_NAMES.READER]: [],
