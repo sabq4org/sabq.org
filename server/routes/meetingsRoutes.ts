@@ -12,7 +12,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../auth";
-import { getUserPermissions } from "../rbac";
+import { userHasPermission } from "../rbac";
 import {
   createMeeting,
   endMeeting,
@@ -39,26 +39,24 @@ import type { Meeting as MeetingRow } from "@shared/schema";
 const router = Router();
 
 // ────────────────────────────────────────────────────────────────────
-// أدوات الصلاحيات (نفس نمط staffProfiles)
+// أدوات الصلاحيات — عبر userHasPermission تحديداً: فيها اختصار الأدمن
+// الكامل ودمج خريطة ROLE_PERMISSIONS_MAP، بينما getUserPermissions تعيد
+// أكواد جدول permissions فقط وأكواد meetings.* ليست مزروعة فيه (سبب 403
+// الذي ظهر للأدمن بعد أول نشر)
 // ────────────────────────────────────────────────────────────────────
 
-async function userPerms(req: Request): Promise<string[]> {
+async function hasPerm(req: Request, code: string): Promise<boolean> {
   const user = req.user as { id: string } | undefined;
-  if (!user) return [];
-  return getUserPermissions(user.id);
-}
-
-function can(perms: string[], code: string): boolean {
-  return perms.includes(code) || perms.includes("*");
+  if (!user) return false;
+  return userHasPermission(user.id, code);
 }
 
 function requirePermission(code: string) {
   return async (req: Request, res: Response, next: () => void) => {
-    const perms = await userPerms(req);
     if (!(req.user as { id: string } | undefined)) {
       return res.status(401).json({ message: "غير مصرح" });
     }
-    if (can(perms, code) || can(perms, "meetings.manage")) return next();
+    if ((await hasPerm(req, code)) || (await hasPerm(req, "meetings.manage"))) return next();
     return res.status(403).json({ message: "لا تملك صلاحية الوصول للاجتماعات" });
   };
 }
@@ -81,8 +79,7 @@ async function loadMeetingAsHost(
     res.status(404).json({ message: "الاجتماع غير موجود" });
     return null;
   }
-  const perms = await userPerms(req);
-  if (meeting.hostUserId !== userId && !can(perms, "meetings.manage")) {
+  if (meeting.hostUserId !== userId && !(await hasPerm(req, "meetings.manage"))) {
     res.status(403).json({ message: "هذا الإجراء للمضيف فقط" });
     return null;
   }
@@ -127,8 +124,7 @@ router.post("/api/meetings/invite/:token/join", requireConfigured, async (req, r
     const authedUser = req.user as { id: string } | undefined;
     if (authedUser) {
       // منسوب مسجَّل وصل عبر الرابط: يدخل بهويته الحقيقية (بموافقة المضيف إن كانت مفعّلة)
-      const perms = await userPerms(req);
-      const result = await requestJoin(meeting, authedUser.id, can(perms, "meetings.manage"));
+      const result = await requestJoin(meeting, authedUser.id, await hasPerm(req, "meetings.manage"));
       if ("error" in result) return res.status(result.code).json({ message: result.error });
       return res.json(result);
     }
@@ -178,8 +174,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const userId = (req.user as { id: string }).id;
-      const perms = await userPerms(req);
-      const lists = await listMeetingsForUser(userId, can(perms, "meetings.manage"));
+      const lists = await listMeetingsForUser(userId, await hasPerm(req, "meetings.manage"));
       res.json({ ...lists, configured: isMeetingsConfigured() });
     } catch (error) {
       console.error("[Meetings] list error:", error);
@@ -250,8 +245,7 @@ router.get(
       const userId = (req.user as { id: string }).id;
       const meeting = await getMeeting(req.params.id);
       if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
-      const perms = await userPerms(req);
-      const canManage = can(perms, "meetings.manage");
+      const canManage = await hasPerm(req, "meetings.manage");
       if (!(await isUserEligible(meeting, userId, canManage))) {
         return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
       }
@@ -282,8 +276,7 @@ router.post(
       const userId = (req.user as { id: string }).id;
       const meeting = await getMeeting(req.params.id);
       if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
-      const perms = await userPerms(req);
-      const canManage = can(perms, "meetings.manage");
+      const canManage = await hasPerm(req, "meetings.manage");
       if (!(await isUserEligible(meeting, userId, canManage))) {
         return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
       }
@@ -348,8 +341,7 @@ router.get(
       const userId = (req.user as { id: string }).id;
       const meeting = await getMeeting(req.params.id);
       if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
-      const perms = await userPerms(req);
-      const canManage = can(perms, "meetings.manage");
+      const canManage = await hasPerm(req, "meetings.manage");
       if (!(await isUserEligible(meeting, userId, canManage))) {
         return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
       }
@@ -480,8 +472,7 @@ router.get(
       const userId = (req.user as { id: string }).id;
       const meeting = await getMeeting(req.params.id);
       if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
-      const perms = await userPerms(req);
-      const canManage = can(perms, "meetings.manage");
+      const canManage = await hasPerm(req, "meetings.manage");
       if (!(await isUserEligible(meeting, userId, canManage))) {
         return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
       }
