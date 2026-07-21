@@ -24,6 +24,9 @@ const EMPLOYMENT_BY_ROLE: Record<string, string> = {
   angle_writer: "opinion_writer",
 };
 
+// SBQ-0001 محجوز لرئيس التحرير (قرار المالك) — ثم البقية بأقدمية الحساب.
+const EDITOR_IN_CHIEF_EMAIL = "aalhazmi@sabq.org";
+
 async function main() {
   console.log("🔎 جمع المنسوبين الحاليين…");
 
@@ -45,7 +48,16 @@ async function main() {
   const staffUsers = candidates.filter(
     (u) => !u.deletedAt && (STAFF_ROLE_NAMES.includes(u.role) || rbacRoleByUser.has(u.id)),
   );
-  console.log(`👥 ${staffUsers.length} منسوباً مرشحاً`);
+
+  // رئيس التحرير أولاً (SBQ-0001) ثم البقية بأقدمية إنشاء الحساب.
+  staffUsers.sort((a, b) => {
+    const aChief = a.email?.toLowerCase() === EDITOR_IN_CHIEF_EMAIL ? 0 : 1;
+    const bChief = b.email?.toLowerCase() === EDITOR_IN_CHIEF_EMAIL ? 0 : 1;
+    if (aChief !== bChief) return aChief - bChief;
+    return (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0);
+  });
+  const hasChief = staffUsers[0]?.email?.toLowerCase() === EDITOR_IN_CHIEF_EMAIL;
+  console.log(`👥 ${staffUsers.length} منسوباً مرشحاً${hasChief ? " — SBQ-0001 لرئيس التحرير ✓" : " — ⚠ لم يُعثر على حساب رئيس التحرير " + EDITOR_IN_CHIEF_EMAIL}`);
 
   const existing = await db.select({ userId: staffProfiles.userId, employeeNumber: staffProfiles.employeeNumber }).from(staffProfiles);
   const existingByUser = new Set(existing.map((e) => e.userId));
