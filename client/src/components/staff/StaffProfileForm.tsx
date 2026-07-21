@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ImageUpload } from "@/components/ImageUpload";
+import { DateField } from "@/components/staff/DateField";
 import {
   IdCard, Briefcase, Newspaper, Phone, Globe, FolderLock, Eye, Loader2, Plus, Upload, ExternalLink,
 } from "lucide-react";
@@ -44,6 +45,7 @@ type ProfileResponse = {
     hasNationalId?: boolean;
   }) | null;
   requiredFields: { key: string; labelAr: string }[];
+  missingLabels?: string[];
 };
 
 const SECTIONS = [
@@ -96,8 +98,14 @@ export function StaffProfileForm({
   const lookups = (lookupsRaw ?? null) as Lookups | null;
 
   useEffect(() => {
-    if (data?.profile) setForm(data.profile);
-  }, [data?.profile]);
+    if (!data) return;
+    const base: Record<string, unknown> = data.profile ? { ...data.profile } : {};
+    // سحب الصورة الرسمية تلقائياً من صورة الحساب إن لم تُرفع صورة مستقلة
+    if (!base.officialPhotoUrl && data.user.profileImageUrl) {
+      base.officialPhotoUrl = data.user.profileImageUrl;
+    }
+    setForm(base);
+  }, [data]);
 
   const set = (key: string, value: unknown) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -262,10 +270,10 @@ export function StaffProfileForm({
           {field("nationality", "الجنسية",
             <Input value={String(form.nationality ?? "")} onChange={(e) => set("nationality", e.target.value)} />)}
           {field("officialBirthDate", "تاريخ الميلاد الرسمي",
-            <Input type="date" value={dateInput(form.officialBirthDate)} onChange={(e) => set("officialBirthDate", e.target.value)} />)}
+            <DateField value={dateInput(form.officialBirthDate)} onChange={(v) => set("officialBirthDate", v)} toYear={new Date().getFullYear() - 15} />)}
           {field("officialPhotoUrl", "الصورة الرسمية",
             <ImageUpload value={(form.officialPhotoUrl as string) ?? null} onChange={(url) => set("officialPhotoUrl", url)} />,
-            { required: true, hint: "تُستخدم في البطاقة الصحفية", wide: true })}
+            { required: true, hint: data?.profile?.officialPhotoUrl ? "تُستخدم في البطاقة الصحفية" : "مسحوبة تلقائياً من صورة الحساب — استبدلها إن أردت صورة رسمية مختلفة", wide: true })}
         </div>
       )}
 
@@ -293,7 +301,7 @@ export function StaffProfileForm({
               <SelectContent>{(lookups?.employmentTypes ?? []).map((t) => <SelectItem key={t.value} value={t.value}>{t.labelAr}</SelectItem>)}</SelectContent>
             </Select>, { required: true })}
           {field("joinedAt", "تاريخ الالتحاق",
-            <Input type="date" className={missingClass("joinedAt")} value={dateInput(form.joinedAt)} onChange={(e) => set("joinedAt", e.target.value)} />,
+            <DateField value={dateInput(form.joinedAt)} onChange={(v) => set("joinedAt", v)} fromYear={2005} toYear={new Date().getFullYear()} className={missingClass("joinedAt")} />,
             { required: true })}
           {field("workRegion", "مقر العمل / المنطقة",
             <Input className={missingClass("workRegion")} value={String(form.workRegion ?? "")} onChange={(e) => set("workRegion", e.target.value)} />,
@@ -309,12 +317,12 @@ export function StaffProfileForm({
           {field("pressIdNumber", "رقم البطاقة الصحفية",
             <Input className={missingClass("pressIdNumber")} value={String(form.pressIdNumber ?? "")} onChange={(e) => set("pressIdNumber", e.target.value)} />)}
           {field("pressCardValidUntil", "صلاحية البطاقة",
-            <Input type="date" value={dateInput(form.pressCardValidUntil)} onChange={(e) => set("pressCardValidUntil", e.target.value)} />)}
+            <DateField value={dateInput(form.pressCardValidUntil)} onChange={(v) => set("pressCardValidUntil", v)} fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 6} />)}
           {field("mediaLicenseNumber", "رقم الترخيص المهني",
             <Input className={missingClass("mediaLicenseNumber")} value={String(form.mediaLicenseNumber ?? "")} onChange={(e) => set("mediaLicenseNumber", e.target.value)} />,
             { hint: "ملزم للمراسل الميداني وكاتب الرأي" })}
           {field("mediaLicenseExpiresAt", "انتهاء الترخيص",
-            <Input type="date" className={missingClass("mediaLicenseExpiresAt")} value={dateInput(form.mediaLicenseExpiresAt)} onChange={(e) => set("mediaLicenseExpiresAt", e.target.value)} />)}
+            <DateField value={dateInput(form.mediaLicenseExpiresAt)} onChange={(v) => set("mediaLicenseExpiresAt", v)} fromYear={new Date().getFullYear() - 1} toYear={new Date().getFullYear() + 6} className={missingClass("mediaLicenseExpiresAt")} />)}
         </div>
       )}
 
@@ -325,13 +333,11 @@ export function StaffProfileForm({
           {field("officialEmail", "البريد الرسمي",
             <Input dir="ltr" value={String(form.officialEmail ?? "")} onChange={(e) => set("officialEmail", e.target.value)} />)}
           {field("emergencyContactName", "اسم جهة الطوارئ",
-            <Input className={missingClass("emergencyContactName")} value={String(form.emergencyContactName ?? "")} onChange={(e) => set("emergencyContactName", e.target.value)} />,
-            { required: true })}
+            <Input value={String(form.emergencyContactName ?? "")} onChange={(e) => set("emergencyContactName", e.target.value)} />)}
           {field("emergencyContactRelation", "صلة القرابة",
             <Input value={String(form.emergencyContactRelation ?? "")} onChange={(e) => set("emergencyContactRelation", e.target.value)} />)}
           {field("emergencyContactPhone", "جوال الطوارئ",
-            <Input dir="ltr" className={missingClass("emergencyContactPhone")} value={String(form.emergencyContactPhone ?? "")} onChange={(e) => set("emergencyContactPhone", e.target.value)} />,
-            { required: true })}
+            <Input dir="ltr" value={String(form.emergencyContactPhone ?? "")} onChange={(e) => set("emergencyContactPhone", e.target.value)} />)}
           {field("bloodType", "فصيلة الدم",
             <Select value={(form.bloodType as string) ?? ""} onValueChange={(v) => set("bloodType", v)}>
               <SelectTrigger><SelectValue placeholder="اختياري" /></SelectTrigger>
@@ -417,7 +423,11 @@ export function StaffProfileForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
-        {missingLabels.length > 0 ? (
+        {!data.profile ? (
+          <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-600">
+            الملف لم يُنشأ بعد — الحفظ الأول ينشئه برقم وظيفي
+          </Badge>
+        ) : missingLabels.length > 0 ? (
           <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600">
             ⚠ {missingLabels.length} نواقص ملزمة: {missingLabels.slice(0, 4).join("، ")}{missingLabels.length > 4 ? "…" : ""}
           </Badge>
