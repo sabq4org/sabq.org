@@ -19,6 +19,7 @@ import {
   getMeeting,
   getMeetingByInviteToken,
   getMeetingFormOptions,
+  getMeetingRsvps,
   getRequestStatus,
   getRoster,
   isMeetingsConfigured,
@@ -31,6 +32,7 @@ import {
   requestGuestJoin,
   requestJoin,
   resolveJoinRequest,
+  setRsvp,
   setMeetingLocked,
   subscribeMeetingEvents,
 } from "../services/meetingsService";
@@ -324,6 +326,55 @@ router.get(
     } catch (error) {
       console.error("[Meetings] my-request error:", error);
       res.status(500).json({ message: "تعذر جلب حالة الطلب" });
+    }
+  },
+);
+
+// ────────────────────────────────────────────────────────────────────
+// تأكيد الحضور للاجتماعات المجدولة
+// ────────────────────────────────────────────────────────────────────
+
+router.post(
+  "/api/meetings/:id/rsvp",
+  isAuthenticated,
+  requirePermission("meetings.view"),
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as { id: string }).id;
+      const meeting = await getMeeting(req.params.id);
+      if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
+      if (meeting.status !== "scheduled") {
+        return res.status(409).json({ message: "تأكيد الحضور للاجتماعات المجدولة فقط" });
+      }
+      const canManage = await hasPerm(req, "meetings.manage");
+      if (!(await isUserEligible(meeting, userId, canManage))) {
+        return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
+      }
+      const response = String(req.body?.response || "");
+      if (response !== "yes" && response !== "no") {
+        return res.status(400).json({ message: "رد غير معروف" });
+      }
+      await setRsvp(meeting, userId, response);
+      res.json({ ok: true, response });
+    } catch (error) {
+      console.error("[Meetings] rsvp error:", error);
+      res.status(500).json({ message: "تعذر حفظ ردك" });
+    }
+  },
+);
+
+// قائمة الردود بالأسماء — للمضيف (أو صلاحية الإدارة) فقط
+router.get(
+  "/api/meetings/:id/rsvps",
+  isAuthenticated,
+  async (req: Request, res: Response) => {
+    try {
+      const loaded = await loadMeetingAsHost(req, res);
+      if (!loaded) return;
+      res.json({ rsvps: await getMeetingRsvps(loaded.meeting) });
+    } catch (error) {
+      console.error("[Meetings] rsvps list error:", error);
+      res.status(500).json({ message: "تعذر جلب الردود" });
     }
   },
 );

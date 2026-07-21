@@ -25,8 +25,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
-  Building2, CalendarClock, Headphones, Link2, ListChecks, Loader2,
-  Lock, Mic, Plus, Radio, Search, Users, UsersRound,
+  Building2, CalendarClock, Check, Headphones, Link2, ListChecks, Loader2,
+  Lock, Mic, Plus, Radio, Search, Users, UsersRound, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -46,6 +46,9 @@ type MeetingListItem = {
   departmentName: string | null;
   participantCount: number;
   inviteToken: string | null;
+  rsvpYesCount: number;
+  rsvpNoCount: number;
+  myRsvp: "yes" | "no" | null;
 };
 
 type MeetingsResponse = {
@@ -206,14 +209,19 @@ export default function MeetingsHub() {
                 )}
                 action={(m) =>
                   m.hostUserId === user?.id ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
-                    >
-                      بدء الآن
-                    </Button>
-                  ) : null
+                    <div className="flex items-center gap-2">
+                      <HostRsvpSummary meeting={m} />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
+                      >
+                        بدء الآن
+                      </Button>
+                    </div>
+                  ) : (
+                    <RsvpButtons meeting={m} />
+                  )
                 }
               />
 
@@ -298,6 +306,164 @@ function MeetingRows({
             {action?.(m)}
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// تأكيد الحضور للاجتماع المجدول — «سأحضر / لا أستطيع».
+// الدعوة تبقى قائمة بالحالين، والمعتذر نطمئنه أن بابنا مفتوح متى زال ظرفه.
+// ────────────────────────────────────────────────────────────────────
+
+function RsvpButtons({ meeting }: { meeting: MeetingListItem }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const rsvpMutation = useMutation({
+    mutationFn: (response: "yes" | "no") =>
+      apiRequest(`/api/meetings/${meeting.id}/rsvp`, {
+        method: "POST",
+        body: JSON.stringify({ response }),
+      }),
+    onSuccess: (_data, response) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      if (response === "no") {
+        toast({
+          title: "نعتذر عن غيابك 🌹",
+          description: "الدعوة تبقى قائمة — بإمكانك الانضمام لنا في أي لحظة متى زال ظرفك.",
+        });
+      } else {
+        toast({ title: "تم تأكيد حضورك 🎉", description: "بانتظارك في موعد الاجتماع" });
+      }
+    },
+    onError: () => toast({ title: "تعذر حفظ ردك", variant: "destructive" }),
+  });
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => rsvpMutation.mutate("yes")}
+        disabled={rsvpMutation.isPending}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors",
+          meeting.myRsvp === "yes"
+            ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            : "border-border text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-600",
+        )}
+        data-testid={`button-rsvp-yes-${meeting.id}`}
+      >
+        <Check className="h-3 w-3" /> سأحضر
+      </button>
+      <button
+        onClick={() => rsvpMutation.mutate("no")}
+        disabled={rsvpMutation.isPending}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors",
+          meeting.myRsvp === "no"
+            ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            : "border-border text-muted-foreground hover:border-amber-500/50 hover:text-amber-600",
+        )}
+        data-testid={`button-rsvp-no-${meeting.id}`}
+      >
+        <X className="h-3 w-3" /> لا أستطيع
+      </button>
+    </div>
+  );
+}
+
+type RsvpEntry = {
+  name: string;
+  avatarUrl: string | null;
+  department: string | null;
+  rsvp: "yes" | "no";
+};
+
+function HostRsvpSummary({ meeting }: { meeting: MeetingListItem }) {
+  const [open, setOpen] = useState(false);
+  const { data: rsvpsRaw } = useQuery({
+    queryKey: [`/api/meetings/${meeting.id}/rsvps`],
+    enabled: open,
+  });
+  const rsvps = ((rsvpsRaw as { rsvps?: RsvpEntry[] } | null)?.rsvps ?? []) as RsvpEntry[];
+
+  if (!meeting.rsvpYesCount && !meeting.rsvpNoCount) return null;
+
+  const attending = rsvps.filter((r) => r.rsvp === "yes");
+  const declined = rsvps.filter((r) => r.rsvp === "no");
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] font-bold text-muted-foreground hover:border-primary/40 hover:text-foreground"
+        data-testid={`button-rsvp-summary-${meeting.id}`}
+      >
+        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+          <Check className="h-3 w-3" /> {meeting.rsvpYesCount}
+        </span>
+        <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+          <X className="h-3 w-3" /> {meeting.rsvpNoCount}
+        </span>
+      </button>
+
+      {open ? (
+        <Dialog open onOpenChange={(o) => !o && setOpen(false)}>
+          <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[420px]" dir="rtl">
+            <DialogHeader>
+              <DialogTitle className="text-base">تأكيدات الحضور — {meeting.title}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <RsvpGroup
+                title={`سيحضرون (${meeting.rsvpYesCount})`}
+                titleClass="text-emerald-600 dark:text-emerald-400"
+                entries={attending}
+                empty="لا تأكيدات بعد"
+              />
+              <RsvpGroup
+                title={`معتذرون (${meeting.rsvpNoCount})`}
+                titleClass="text-amber-600 dark:text-amber-400"
+                entries={declined}
+                empty="لا اعتذارات"
+              />
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                المعتذرون تبقى دعوتهم قائمة — يستطيعون الانضمام متى زال ظرفهم.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
+function RsvpGroup({
+  title, titleClass, entries, empty,
+}: {
+  title: string;
+  titleClass: string;
+  entries: RsvpEntry[];
+  empty: string;
+}) {
+  return (
+    <div>
+      <div className={cn("mb-1.5 text-xs font-bold", titleClass)}>{title}</div>
+      {entries.length === 0 ? (
+        <div className="text-xs text-muted-foreground">{empty}</div>
+      ) : (
+        <div className="space-y-1.5">
+          {entries.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Avatar className="h-6 w-6">
+                {r.avatarUrl ? <AvatarImage src={r.avatarUrl} alt="" /> : null}
+                <AvatarFallback className="text-[9px]">{initialsOf(r.name)}</AvatarFallback>
+              </Avatar>
+              <span className="text-xs">{r.name}</span>
+              {r.department ? (
+                <span className="text-[10px] text-muted-foreground">· {r.department}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
