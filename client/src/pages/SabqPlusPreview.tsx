@@ -12,6 +12,7 @@ import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { LOYALTY_TIERS } from "@shared/loyalty";
 import NotFound from "@/pages/not-found";
 
 type PlusSummary = {
@@ -191,46 +192,71 @@ export default function SabqPlusPreview() {
           <div className="spp-route-chip">sabq.org/plus-preview</div>
         </header>
 
-        {/* بطاقة العضوية */}
+        {/* بطاقة العضوية (v2 — كحلي سبق) */}
         <section className="spp-member-card" aria-label="بطاقة العضوية">
-          <div className="spp-mc-top">
+          <div className="spp-mc-grid">
             <div>
               <h1 className="spp-mc-name">{displayName}</h1>
               <div className="spp-mc-role">مسؤول النظام · حساب التجربة</div>
-            </div>
-            {summary && (
-              <span className="spp-tier-pill">
-                <span className="spp-dot" style={{ background: summary.tier.color, boxShadow: `0 0 8px ${summary.tier.color}` }} />
-                {summary.tier.nameAr} · الفئة {["", "الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة"][summary.tier.level]}
-              </span>
-            )}
-          </div>
-          <div className="spp-mc-balance">
-            <div className="spp-sar">
-              {summary ? summary.sarValue.toFixed(2) : "…"} <small>ر.س</small>
-            </div>
-            <div className="spp-pts">{summary ? fmt(summary.totalPoints) : "…"} نقطة</div>
-          </div>
-          <div className="spp-mc-rate">كل 500 نقطة = 1 ريال سعودي · الاستبدال عبر شركاء ولاء ون</div>
-          <div className="spp-mc-meta">
-            <div>
-              نقاط مدى الحياة<b>{summary ? fmt(summary.lifetimePoints) : "…"}</b>
-            </div>
-            <div>
-              نقاط هذا الشهر<b>{summary ? `+${fmt(summary.monthPoints)}` : "…"}</b>
-            </div>
-            <div>
-              مضاعف التوقعات<b>×{summary?.predictionMultiplier ?? "…"}</b>
-            </div>
-          </div>
-          {summary &&
-            (summary.nextTier ? (
-              <div className="spp-tier-max">
-                يفصلك <b>{fmt(summary.pointsToNext)}</b> نقطة عن فئة «{summary.nextTier.nameAr}»
+              <div className="spp-mc-balance">
+                <div className="spp-sar">
+                  {summary ? summary.sarValue.toFixed(2) : "…"} <small>ر.س</small>
+                </div>
+                <div className="spp-pts">{summary ? fmt(summary.totalPoints) : "…"} نقطة</div>
               </div>
-            ) : (
-              <div className="spp-tier-max">وصلت لأعلى فئة — يُحتسب مضاعف السفير على كل مكافآت التوقعات</div>
-            ))}
+              <div className="spp-mc-rate">كل 500 نقطة = 1 ريال سعودي · الاستبدال عبر شركاء ولاء ون</div>
+              {summary &&
+                (summary.nextTier ? (
+                  <div className="spp-tier-max">
+                    يفصلك <b>{fmt(summary.pointsToNext)}</b> نقطة عن فئة «{summary.nextTier.nameAr}»
+                  </div>
+                ) : (
+                  <div className="spp-tier-max">وصلت لأعلى فئة — يُحتسب مضاعف السفير على كل مكافآت التوقعات</div>
+                ))}
+            </div>
+            <aside className="spp-mc-side">
+              {summary && (
+                <>
+                  <span className="spp-tier-pill">
+                    <span className="spp-dot" style={{ background: summary.tier.color, boxShadow: `0 0 8px ${summary.tier.color}` }} />
+                    {summary.tier.nameAr} · الفئة {["", "الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة"][summary.tier.level]}
+                  </span>
+                  <div className="spp-tier-dots" title="رحلة الفئات الخمس">
+                    {LOYALTY_TIERS.map((t) => (
+                      <i
+                        key={t.level}
+                        className={t.level <= summary.tier.level ? "" : "spp-off"}
+                        style={
+                          t.level <= summary.tier.level
+                            ? {
+                                background: t.color,
+                                ...(t.level === summary.tier.level
+                                  ? { boxShadow: `0 0 10px ${t.color}`, width: 13, height: 13 }
+                                  : {}),
+                              }
+                            : undefined
+                        }
+                      />
+                    ))}
+                    <span className="spp-tier-dots-lbl">
+                      {summary.tier.level === 5 ? "اكتملت الرحلة 5/5" : `الرحلة ${summary.tier.level}/5`}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="spp-mc-meta">
+                <div>
+                  نقاط مدى الحياة<b>{summary ? fmt(summary.lifetimePoints) : "…"}</b>
+                </div>
+                <div>
+                  نقاط هذا الشهر<b>{summary ? `+${fmt(summary.monthPoints)}` : "…"}</b>
+                </div>
+                <div>
+                  مضاعف التوقعات<b>×{summary?.predictionMultiplier ?? "…"}</b>
+                </div>
+              </div>
+            </aside>
+          </div>
         </section>
 
         {/* كيف تكسب */}
@@ -587,32 +613,63 @@ const PAGE_CSS = `
   border-radius: 999px; padding: 5px 14px; font-variant-numeric: tabular-nums; direction: ltr;
 }
 .spp-member-card {
-  background: var(--card-hero); color: #EAF3FB; border-radius: 22px; padding: 30px 34px;
-  box-shadow: var(--shadow); position: relative; overflow: hidden;
+  background:
+    radial-gradient(560px 340px at 12% 118%, rgba(23,147,232,.32), transparent 65%),
+    radial-gradient(500px 320px at 90% -14%, rgba(124,58,237,.30), transparent 62%),
+    linear-gradient(120deg, #10233A 0%, #0B1624 48%, #17294A 100%);
+  color: #EAF3FB; border-radius: 24px; padding: 32px 36px;
+  position: relative; overflow: hidden;
+  border: 1px solid rgba(140, 180, 220, .14);
+  box-shadow: 0 18px 44px rgba(8, 20, 36, .35), inset 0 1px 0 rgba(255, 255, 255, .07);
+}
+.spp-member-card::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
 }
 .spp-member-card::after {
-  content: ""; position: absolute; inset: auto -120px -160px auto; width: 340px; height: 340px;
-  border-radius: 50%; background: radial-gradient(circle, rgba(23,147,232,.35), transparent 70%);
+  content: "+"; position: absolute; left: -14px; bottom: -110px; font-size: 320px; font-weight: 900;
+  color: rgba(23, 147, 232, .09); line-height: 1; pointer-events: none;
 }
-.spp-mc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-.spp-mc-name { font-size: 21px; font-weight: 800; margin: 0; }
+.spp-mc-grid { display: grid; grid-template-columns: 1fr auto; gap: 22px 48px; align-items: stretch; position: relative; z-index: 1; }
+.spp-mc-name { font-size: 22px; font-weight: 800; margin: 0; }
 .spp-mc-role { font-size: 13px; color: #9DB6CC; margin-top: 2px; }
 .spp-tier-pill {
-  display: inline-flex; align-items: center; gap: 8px; background: rgba(124, 58, 237, .25);
-  border: 1px solid rgba(167, 122, 250, .6); color: #D9C7FF; font-weight: 800; font-size: 14px;
+  display: inline-flex; align-items: center; gap: 8px; background: rgba(124, 58, 237, .22);
+  border: 1px solid rgba(167, 122, 250, .55); color: #D9C7FF; font-weight: 800; font-size: 13.5px;
   border-radius: 999px; padding: 7px 16px;
 }
 .spp-dot { width: 9px; height: 9px; border-radius: 50%; }
-.spp-mc-balance { margin: 26px 0 6px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.spp-sar { font-size: 52px; font-weight: 900; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1; }
-.spp-sar small { font-size: 22px; font-weight: 700; color: #8FB8D8; }
+.spp-tier-dots { display: flex; gap: 7px; align-items: center; margin: 12px 2px 0; }
+.spp-tier-dots i { width: 11px; height: 11px; border-radius: 50%; opacity: .95; }
+.spp-tier-dots i.spp-off { background: rgba(255,255,255,.14); }
+.spp-tier-dots-lbl { font-size: 11.5px; color: #9DB6CC; margin-right: 6px; }
+.spp-mc-balance { margin: 24px 0 6px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.spp-sar {
+  font-size: 56px; font-weight: 900; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; line-height: 1;
+  background: linear-gradient(180deg, #FFFFFF 30%, #A9D6FF); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.spp-sar small {
+  font-size: 22px; font-weight: 700;
+  background: none; -webkit-text-fill-color: #8FB8D8; color: #8FB8D8;
+}
 .spp-pts { font-size: 15px; color: #A8C2D8; font-variant-numeric: tabular-nums; }
 .spp-mc-rate { font-size: 12.5px; color: #7FA1BC; }
-.spp-mc-meta { display: flex; gap: 26px; margin-top: 22px; flex-wrap: wrap; }
-.spp-mc-meta > div { font-size: 13px; color: #9DB6CC; }
-.spp-mc-meta b { display: block; color: #EAF3FB; font-size: 16px; font-variant-numeric: tabular-nums; }
+.spp-mc-side {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+  background: rgba(255, 255, 255, .045); border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 16px; padding: 18px 22px; min-width: 220px;
+}
+.spp-mc-meta { display: flex; flex-direction: column; margin-top: 16px; width: 100%; }
+.spp-mc-meta > div {
+  font-size: 12.5px; color: #9DB6CC; display: flex; justify-content: space-between; align-items: baseline;
+  padding: 9px 0; border-top: 1px solid rgba(255,255,255,.08); gap: 18px;
+}
+.spp-mc-meta > div:first-child { border-top: 0; padding-top: 2px; }
+.spp-mc-meta b { color: #EAF3FB; font-size: 15.5px; font-variant-numeric: tabular-nums; }
 .spp-tier-max {
-  margin-top: 20px; font-size: 12.5px; color: #C9B8F5; background: rgba(124,58,237,.16);
+  margin-top: 18px; font-size: 12.5px; color: #C9B8F5; background: rgba(124,58,237,.16);
+  border: 1px solid rgba(124,58,237,.25);
   border-radius: 10px; padding: 8px 14px; display: inline-block; position: relative; z-index: 1;
 }
 .spp-earn-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 18px; }
@@ -790,6 +847,10 @@ const PAGE_CSS = `
 .spp-confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
 .spp-note { margin-top: 60px; color: var(--ink-3); font-size: 12.5px; text-align: center; }
 @media (prefers-reduced-motion: reduce) { .spp * { transition: none !important; } }
+@media (max-width: 720px) {
+  .spp-mc-grid { grid-template-columns: 1fr; gap: 18px; }
+  .spp-mc-side { min-width: 0; width: 100%; }
+}
 @media (max-width: 560px) {
   .spp-site { flex-direction: column; align-items: flex-start; gap: 10px; padding: 18px 0 12px; }
   .spp-brand { flex-direction: column; align-items: flex-start; gap: 2px; }
