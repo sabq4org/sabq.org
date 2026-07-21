@@ -220,7 +220,7 @@ export function StaffProfileForm({
     <nav
       className={
         mode === "page"
-          ? "sticky top-2 z-10 flex gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 shadow-sm"
+          ? "sticky top-2 z-10 flex flex-nowrap gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 shadow-sm [-webkit-overflow-scrolling:touch]"
           : "flex flex-col gap-1 rounded-xl border bg-card p-1.5 min-w-[190px]"
       }
     >
@@ -232,7 +232,7 @@ export function StaffProfileForm({
             key={s.id}
             type="button"
             onClick={() => setActiveSection(s.id)}
-            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-bold transition-colors ${
+            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-bold transition-colors ${
               active ? "bg-sky-500/10 text-sky-600" : "text-muted-foreground hover:bg-muted"
             }`}
           >
