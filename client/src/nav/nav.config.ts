@@ -65,6 +65,7 @@ import {
   Inbox,
   Radar,
   HeartPulse,
+  Headphones,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -224,6 +225,17 @@ export const navConfig: NavItem[] = [
     // المراسل له لوحة مخصّصة؛ مركز المهام العام يزدحم قائمته بلا فائدة مباشرة.
     excludeRoles: ["opinion_author", "reporter"],
     permissions: ["tasks.view_all", "tasks.view_own", "tasks.create"],
+  },
+
+  // ===== الاجتماعات / Meetings =====
+  {
+    id: "meetings",
+    labelKey: "nav.meetings",
+    labelAr: "الاجتماعات",
+    path: "/dashboard/meetings",
+    icon: Headphones,
+    roles: ["admin", "editor", "content_manager", "reporter", "opinion_author", "hr"],
+    permissions: ["meetings.view"],
   },
 
   // ===== المحتوى / Content =====

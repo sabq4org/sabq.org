@@ -40,6 +40,8 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/sports5',
   // صفحات الاستطلاعات برابط شخصي (توكن لكل مدعو) — لا فهرسة ولا تخزين على الحافة.
   '/survey',
+  // روابط دعوة الاجتماعات (توكن سري لكل اجتماع) — لا فهرسة ولا تخزين على الحافة.
+  '/meet',
 ];
 
 export function isNoindexPath(pathname: string): boolean {

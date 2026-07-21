@@ -278,6 +278,9 @@ const MediaStoreOrders = lazy(() => retryImport(() => import("@/pages/admin/Medi
 const StaffMembers = lazy(() => retryImport(() => import("@/pages/admin/StaffMembers")));
 const StaffProfilesDirectory = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilesDirectory")));
 const StaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilePage")));
+const MeetingsHub = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingsHub")));
+const MeetingRoomPage = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingRoom")));
+const MeetingInvite = lazy(() => retryImport(() => import("@/pages/MeetingInvite")));
 const AccessibilityInsights = lazy(() => retryImport(() => import("@/pages/admin/AccessibilityInsights")));
 const CorrespondentApplications = lazy(() => retryImport(() => import("@/pages/admin/CorrespondentApplications")));
 const OpinionAuthorApplications = lazy(() => retryImport(() => import("@/pages/admin/OpinionAuthorApplications")));
@@ -945,6 +948,8 @@ function Router() {
         <Route path="/dashboard/staff">{() => <LazyRoute component={StaffMembers} />}</Route>
         <Route path="/dashboard/staff-profiles">{() => <LazyRoute component={StaffProfilesDirectory} />}</Route>
         <Route path="/dashboard/staff-profiles/:userId">{() => <LazyRoute component={StaffProfilePage} />}</Route>
+        <Route path="/dashboard/meetings">{() => <LazyRoute component={MeetingsHub} />}</Route>
+        <Route path="/dashboard/meetings/room/:id">{() => <LazyRoute component={MeetingRoomPage} />}</Route>
         <Route path="/dashboard/roles">{() => <LazyRoute component={RolesManagement} />}</Route>
         <Route path="/dashboard/push-notifications">{() => <LazyRoute component={PushNotifications} />}</Route>
         
@@ -1055,6 +1060,8 @@ function Router() {
         <Route path="/moment-by-moment">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/live">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/gulf-live">{() => <LazyRoute component={GulfLiveCoverage} />}</Route>
+        {/* رابط دعوة اجتماعات سبق — عام: الضيوف يدخلون بلا حساب بعد موافقة المضيف */}
+        <Route path="/meet/:token">{() => <LazyRoute component={MeetingInvite} />}</Route>
         {/* عقل سبق — التعريف بمنظومة الذكاء الاصطناعي؛ /about-ai تحويلة إليه */}
         <Route path="/sabq-ai">{() => <LazyRoute component={SabqAI} />}</Route>
         <Route path="/about-ai">{() => <Redirect to="/sabq-ai" />}</Route>

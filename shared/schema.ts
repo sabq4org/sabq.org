@@ -14711,3 +14711,66 @@ export const staffProfiles = pgTable("staff_profiles", {
 export type StaffProfile = typeof staffProfiles.$inferSelect;
 export type StaffDepartment = typeof staffDepartments.$inferSelect;
 export type StaffJobTitle = typeof staffJobTitles.$inferSelect;
+
+// ============================================================================
+// اجتماعات سبق — اجتماعات صوتية مع مشاركة شاشة داخل لوحة التحكم
+// الوسائط عبر LiveKit؛ هذه الجداول تحكم الوصول والحضور وسجل التدقيق فقط
+// ============================================================================
+
+export const meetings = pgTable("meetings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  hostUserId: varchar("host_user_id").notNull().references(() => users.id),
+  // all: جميع المنسوبين · department: إدارة محددة · selected: أعضاء محددون · link: رابط دعوة
+  accessType: text("access_type").default("selected").notNull(),
+  departmentId: varchar("department_id").references(() => staffDepartments.id),
+  inviteToken: varchar("invite_token", { length: 64 }).unique(),
+  requireApproval: boolean("require_approval").default(true).notNull(),
+  muteOnJoin: boolean("mute_on_join").default(true).notNull(),
+  status: text("status").default("scheduled").notNull(), // scheduled | live | ended | cancelled
+  isLocked: boolean("is_locked").default(false).notNull(),
+  roomName: varchar("room_name", { length: 80 }).notNull().unique(),
+  scheduledAt: timestamp("scheduled_at"),
+  startedAt: timestamp("started_at"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("meetings_status_idx").on(table.status),
+  index("meetings_host_idx").on(table.hostUserId),
+]);
+
+export const meetingParticipants = pgTable("meeting_participants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  meetingId: varchar("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  // ضيف عبر رابط الدعوة: بلا حساب، يُعرَّف باسمه + مفتاح عشوائي يحمله متصفحه
+  guestName: text("guest_name"),
+  guestKey: varchar("guest_key", { length: 64 }),
+  role: text("role").default("member").notNull(), // host | member
+  status: text("status").default("invited").notNull(), // invited | pending | admitted | denied | removed
+  joinedAt: timestamp("joined_at"),
+  leftAt: timestamp("left_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("meeting_participants_meeting_idx").on(table.meetingId),
+  index("meeting_participants_user_idx").on(table.userId),
+]);
+
+export const meetingEvents = pgTable("meeting_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  meetingId: varchar("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+  actorUserId: varchar("actor_user_id").references(() => users.id),
+  targetUserId: varchar("target_user_id").references(() => users.id),
+  // created | started | join_requested | admitted | denied | joined | left
+  // | muted | removed | locked | unlocked | ended
+  eventType: text("event_type").notNull(),
+  detail: jsonb("detail").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("meeting_events_meeting_idx").on(table.meetingId),
+]);
+
+export type Meeting = typeof meetings.$inferSelect;
+export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
+export type MeetingEvent = typeof meetingEvents.$inferSelect;
