@@ -5,49 +5,82 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { renderPressCardStrip } from './PressCardImageRenderer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** Arabic Wallet fields: right-aligned for RTL legibility on white generic passes. */
+/** Arabic Wallet fields: right-aligned for RTL legibility. */
 const RTL_FIELD = { textAlignment: 'PKTextAlignmentRight' as const };
 
+// ────────────────────────────────────────────────────────────────────
+// 2026-07-21 redesign (نمط Blinq المعتمد من المالك):
+// بطاقة Generic زرقاء صافية بلون سبق — الاسم كبيراً مع صورة شخصية
+// دائرية على الجهة المقابلة، المسمى الوظيفي والجهة تحته كحقول أصلية،
+// وQR مربع كبير أسفل الوسط (نمط generic يرسمه هكذا تلقائياً).
+// لا strip بعد اليوم: نمط generic لا يدعمه أصلاً، وحقول Apple الأصلية
+// تعطي Dynamic Type نظيفاً كما في بطاقة المرجع.
+// ────────────────────────────────────────────────────────────────────
+
 /**
- * Render the Sabq brand mark at the three densities Apple Wallet
- * requires for the `logo.png` slot.
+ * شعار سبق مبيّضاً بالكامل لخانة اللوقو أعلى-يسار البطاقة (أزرق داكن
+ * على أزرق لا يُقرأ): قناع الشفافية من الأصل + تعبئة بيضاء.
  *
- * The logo slot is what shows in the TOP-LEFT of every pass — and
- * crucially, it's the only piece of the card that's visible in
- * Apple Wallet's stack view (when the user scrolls passes from
- * the home screen). Without it, the card reads as "a white
- * rectangle" in the stack, which the editor flagged on rev 11.
- *
- * Apple's hard limits for logo.png:
- *   1x: max 160 × 50 pt
- *   2x: max 320 × 100 pt
- *   3x: max 480 × 150 pt
- *
- * The source brand mark in public/branding/sabq-logo.png is
- * roughly square (751 × 661). At height = 50 the rendered width
- * would be ~57 — fine; the brand mark stays distinctive at that
- * size thanks to the bold blue "س" shapes.
+ * Apple's hard limits for logo.png: 1x 160×50, 2x 320×100, 3x 480×150.
  */
-async function buildSabqLogoBuffers(): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer } | null> {
+async function buildWhiteSabqLogoBuffers(): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer } | null> {
   const src = path.resolve(process.cwd(), 'public/branding/sabq-logo.png');
   if (!fs.existsSync(src)) {
     console.warn('[PressPassBuilder] logo source missing at', src);
     return null;
   }
   try {
-    const [x1, x2, x3] = await Promise.all([
-      sharp(src).resize({ height: 50, withoutEnlargement: true }).png().toBuffer(),
-      sharp(src).resize({ height: 100, withoutEnlargement: true }).png().toBuffer(),
-      sharp(src).resize({ height: 150, withoutEnlargement: true }).png().toBuffer(),
-    ]);
+    const whiten = async (height: number): Promise<Buffer> => {
+      const resized = await sharp(src).resize({ height, withoutEnlargement: true }).png().toBuffer();
+      const meta = await sharp(resized).metadata();
+      const alpha = await sharp(resized).ensureAlpha().extractChannel('alpha').toBuffer();
+      return sharp({
+        create: {
+          width: meta.width ?? height,
+          height: meta.height ?? height,
+          channels: 3,
+          background: { r: 255, g: 255, b: 255 },
+        },
+      })
+        .joinChannel(alpha)
+        .png()
+        .toBuffer();
+    };
+    const [x1, x2, x3] = await Promise.all([whiten(44), whiten(88), whiten(132)]);
     return { x1, x2, x3 };
   } catch (e) {
-    console.warn('[PressPassBuilder] sharp resize failed:', e);
+    console.warn('[PressPassBuilder] sharp logo whitening failed:', e);
+    return null;
+  }
+}
+
+/**
+ * الصورة الشخصية دائرية لخانة thumbnail (يمين البطاقة في نمط generic) —
+ * الاستدارة تُخبز في الصورة نفسها بقناع SVG لأن Wallet يعرض المصغرة
+ * بزوايا خفيفة فقط. مقاس Apple: حتى 90×90pt.
+ */
+async function buildCircularThumbnail(imageUrl: string): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer } | null> {
+  try {
+    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    const source = Buffer.from(await response.arrayBuffer());
+
+    const circle = async (size: number): Promise<Buffer> => {
+      const resized = await sharp(source).resize(size, size, { fit: 'cover' }).png().toBuffer();
+      const mask = Buffer.from(
+        `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
+      );
+      return sharp(resized).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
+    };
+
+    const [x1, x2, x3] = await Promise.all([circle(88), circle(176), circle(264)]);
+    return { x1, x2, x3 };
+  } catch (e) {
+    console.warn('[PressPassBuilder] thumbnail build failed:', e);
     return null;
   }
 }
@@ -70,37 +103,23 @@ export class PressPassBuilder extends PassBuilder {
     return 'سبق الذكية';
   }
 
-  // 2026-05-19 redesign (revision 5): clean white card, Sabq sky-blue
-  // labels, navy values. Sabq's official brand color isn't red — it's
-  // the azure derived from the web primary HSL(203.89,88.28%,53.14%)
-  // (~#1CA4F0). The strip image carries the journalist's name as the
-  // dominant visual (rev 4's "name in primaryField + tagline in strip"
-  // approach made the name nearly invisible). Secondary metadata
-  // (المنصب, الجهة, رقم البطاقة, تاريخ الانتهاء) flows through
-  // native Wallet fields so Apple renders them at proper Dynamic
-  // Type sizes. The "الدور" field is intentionally omitted per
-  // editorial direction — only the public-facing job title appears.
+  // أزرق سبق الرسمي المشتق من primary الويب HSL(203.89, 88.28%, 53.14%).
   protected getBackgroundColor(): string {
-    return 'rgb(255, 255, 255)';
-  }
-
-  protected getForegroundColor(): string {
-    return 'rgb(15, 23, 42)';
-  }
-
-  protected getLabelColor(): string {
     return 'rgb(28, 164, 240)';
   }
 
+  protected getForegroundColor(): string {
+    return 'rgb(255, 255, 255)';
+  }
+
+  protected getLabelColor(): string {
+    return 'rgb(219, 240, 254)';
+  }
+
   async configurePassFields(pass: PKPass, data: PressPassData): Promise<void> {
-    // Inject the Sabq brand mark into the header logo slot. The
-    // template ships 1×1 placeholders for logo.png/logo@2x.png so
-    // every issued pass needs to override them with the real
-    // brand mark. This is what makes the card identifiable in
-    // Apple Wallet's stack view (editor: "أشوف بطاقة بيضاء بين
-    // البطاقات الأخرى لأن اللوقو لا يظهر").
+    // شعار سبق الأبيض أعلى-يسار (المكافئ لشعار Blinq في المرجع).
     try {
-      const logos = await buildSabqLogoBuffers();
+      const logos = await buildWhiteSabqLogoBuffers();
       if (logos) {
         pass.addBuffer('logo.png', logos.x1);
         pass.addBuffer('logo@2x.png', logos.x2);
@@ -110,40 +129,73 @@ export class PressPassBuilder extends PassBuilder {
       console.warn('[PressPassBuilder] logo injection failed, continuing without:', e);
     }
 
-    // Strip image carries the visible CARD CONTENT — name +
-    // المنصب + الجهة | رقم البطاقة | تاريخ الانتهاء. Best-effort:
-    // if canvas/font registration fails in a fresh container we
-    // still ship a valid pass via the back fields below.
-    try {
-      const strips = await renderPressCardStrip({
-        userName: data.userName,
-        jobTitle: data.jobTitle,
-        department: data.department,
-        pressIdNumber: data.pressIdNumber,
-        validUntil: data.validUntil,
-      });
-      pass.addBuffer('strip.png', strips.x1);
-      pass.addBuffer('strip@2x.png', strips.x2);
-      pass.addBuffer('strip@3x.png', strips.x3);
-    } catch (e) {
-      console.warn('[PressPassBuilder] strip render failed, continuing with fields only:', e);
+    // الصورة الشخصية الدائرية يمين البطاقة (thumbnail في نمط generic).
+    if (data.profileImageUrl) {
+      try {
+        const thumbs = await buildCircularThumbnail(data.profileImageUrl);
+        if (thumbs) {
+          pass.addBuffer('thumbnail.png', thumbs.x1);
+          pass.addBuffer('thumbnail@2x.png', thumbs.x2);
+          pass.addBuffer('thumbnail@3x.png', thumbs.x3);
+        }
+      } catch (e) {
+        console.warn('[PressPassBuilder] thumbnail injection failed, continuing without:', e);
+      }
     }
 
-    // ── Native Wallet fields ─────────────────────────────────────
-    // Everything that's visible on the front of the card is baked
-    // into the strip image — that's the only way to control
-    // typography (Apple Wallet's native fields auto-size and can't
-    // be shrunk via pass.json). The strip carries:
-    //   1. Sabq logo + "بطاقة صحفية رسمية" tagline (header)
-    //   2. Name + المنصب (centered block)
-    //   3. الجهة | رقم البطاقة | تاريخ الانتهاء (small row at bottom)
-    //
-    // The back of the card (visible after tapping the (i) icon)
-    // gets a couple of native fields with the "official info"
-    // copy and the website. Apple Wallet renders backFields as
-    // a vertical list, which is fine for textual content.
+    // أعلى-يمين: هوية البطاقة (المكافئ لـ "MUBASHER / Blinq Card").
+    pass.headerFields.push({
+      key: 'card_kind',
+      label: 'صحيفة سبق',
+      value: 'بطاقة صحفية',
+      ...RTL_FIELD,
+    });
 
-    // Back-of-card details (visible after tapping the (i) on the pass).
+    // الاسم — البطل البصري (label صغير وvalue ضخم في نمط generic).
+    pass.primaryFields.push({
+      key: 'name',
+      label: 'الاسم',
+      value: data.userName,
+    });
+
+    // المسمى الوظيفي ثم الجهة — صفان كما في المرجع.
+    if (data.jobTitle) {
+      pass.secondaryFields.push({
+        key: 'job_title',
+        label: 'المسمى الوظيفي',
+        value: data.jobTitle,
+      });
+    }
+
+    pass.auxiliaryFields.push({
+      key: 'company',
+      label: 'الجهة',
+      value: data.department || 'صحيفة سبق الإلكترونية',
+    });
+
+    // وجه البطاقة نظيف كالمرجع — رقم البطاقة والصلاحية في الخلف.
+    if (data.pressIdNumber) {
+      pass.backFields.push({
+        key: 'press_id',
+        label: 'رقم البطاقة',
+        value: data.pressIdNumber,
+        ...RTL_FIELD,
+      });
+    }
+
+    if (data.validUntil) {
+      pass.backFields.push({
+        key: 'valid_until',
+        label: 'صالحة حتى',
+        value: data.validUntil.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+        ...RTL_FIELD,
+      });
+    }
+
     pass.backFields.push(
       {
         key: 'description',
@@ -156,8 +208,7 @@ export class PressPassBuilder extends PassBuilder {
         label: 'الموقع الإلكتروني',
         value: 'https://sabq.org',
         ...RTL_FIELD,
-      }
+      },
     );
   }
-
 }
