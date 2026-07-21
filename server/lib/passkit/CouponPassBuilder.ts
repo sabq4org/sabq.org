@@ -2,7 +2,11 @@ import { PassBuilder, PassData } from './PassBuilder';
 import { PKPass } from 'passkit-generator';
 import path from 'path';
 import { buildCouponLogoBuffers } from './CouponPassAssets';
-import { renderCouponPassStrip } from './CouponPassStripRenderer';
+import { renderCouponPassStrip, renderCouponWordmark } from './CouponPassStripRenderer';
+
+// "1.50 ر.س" المختلطة تتقلب مع bidi (تظهر ر.س قبل المبلغ) — علامة RTL
+// في أول السلسلة تثبّت الفقرة عربية فيبقى المبلغ يميناً يُقرأ أولاً.
+const rtl = (s: string) => `‏${s}`;
 
 // بطاقة قسيمة «سبق بلس × ولاء ون» — نمط Coupon في Apple Wallet.
 // تُوقَّع بنفس شهادة الولاء (passTypeId واحد يصلح لأي نمط بطاقة)؛
@@ -42,16 +46,17 @@ export class CouponPassBuilder extends PassBuilder {
   }
 
   protected getBackgroundColor(): string {
-    // نفس تدرّج بطاقة العضوية في /plus-preview — هوية سبق بلس لا بنفسجي ولاء ون.
-    return 'rgb(13, 27, 42)';
+    // بنفسجي ولاء ون — مطابق لبطاقة القسيمة المعتمدة على /plus-preview
+    // (القسيمة منتج الشريك؛ الكحلي محفوظ لبطاقة العضوية).
+    return 'rgb(95, 79, 209)';
   }
 
   protected getForegroundColor(): string {
-    return 'rgb(234, 243, 251)';
+    return 'rgb(255, 255, 255)';
   }
 
   protected getLabelColor(): string {
-    return 'rgb(143, 184, 216)';
+    return 'rgb(228, 222, 255)';
   }
 
   protected getBarcodeMessage(data: CouponPassData): string {
@@ -61,16 +66,25 @@ export class CouponPassBuilder extends PassBuilder {
   async configurePassFields(pass: PKPass, data: CouponPassData): Promise<void> {
     pass.setExpirationDate(data.voucherExpiresAt);
 
-    // لوقو بمقاس صحيح + نزول عن الحد العلوي + علامة سبق يمين الخانة.
+    // شعار نصي «سبق بلس+» أبيض — شعار الصحيفة الأزرق كان ينشز على
+    // البنفسجي؛ شعار الصورة يبقى fallback ثم قالب الملفات.
     try {
-      const logos = await buildCouponLogoBuffers();
-      if (logos) {
-        pass.addBuffer('logo.png', logos.x1);
-        pass.addBuffer('logo@2x.png', logos.x2);
-        pass.addBuffer('logo@3x.png', logos.x3);
-      }
+      const logos = await renderCouponWordmark();
+      pass.addBuffer('logo.png', logos.x1);
+      pass.addBuffer('logo@2x.png', logos.x2);
+      pass.addBuffer('logo@3x.png', logos.x3);
     } catch (e) {
-      console.warn('[CouponPassBuilder] logo injection failed, using template logos:', e);
+      console.warn('[CouponPassBuilder] wordmark render failed, trying image logo:', e);
+      try {
+        const logos = await buildCouponLogoBuffers();
+        if (logos) {
+          pass.addBuffer('logo.png', logos.x1);
+          pass.addBuffer('logo@2x.png', logos.x2);
+          pass.addBuffer('logo@3x.png', logos.x3);
+        }
+      } catch (e2) {
+        console.warn('[CouponPassBuilder] logo injection failed, using template logos:', e2);
+      }
     }
 
     // البطل البصري: القيمة + الشريك داخل الـ strip — لا يعتمد على primary الضخم.
@@ -88,7 +102,7 @@ export class CouponPassBuilder extends PassBuilder {
       pass.headerFields.push({
         key: 'value',
         label: 'القيمة',
-        value: data.valueLabel,
+        value: rtl(data.valueLabel),
         ...RTL,
       });
       pass.secondaryFields.push({
@@ -105,7 +119,7 @@ export class CouponPassBuilder extends PassBuilder {
       pass.headerFields.push({
         key: 'value',
         label: 'القيمة',
-        value: data.valueLabel,
+        value: rtl(data.valueLabel),
         ...RTL,
       });
     }
