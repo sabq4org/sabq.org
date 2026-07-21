@@ -34,25 +34,53 @@ export function mediaLicenseExpiryRejection(
   return { expiresAt };
 }
 
-function resolveLicenseEnd(
+/**
+ * يحوّل قيمة انتهاء الترخيص إلى Date صالح، أو null إن كانت ناقصة/فاسدة.
+ * التواريخ بنصف ليلة UTC (شائع من عمود date) تُفسَّر كنهاية يوم الرياض لذلك التقويم.
+ */
+export function resolveMediaLicenseEnd(
   expiresAt: Date | string | null | undefined,
 ): Date | null {
   if (!expiresAt) return null;
+
   if (expiresAt instanceof Date) {
-    return Number.isNaN(expiresAt.getTime()) ? null : expiresAt;
+    if (Number.isNaN(expiresAt.getTime())) return null;
+    return normalizeLicenseEndOfDay(expiresAt);
   }
-  return parseMediaLicenseExpiry(expiresAt.slice(0, 10)) ?? (() => {
-    const d = new Date(expiresAt);
-    return Number.isNaN(d.getTime()) ? null : d;
-  })();
+
+  const trimmed = String(expiresAt).trim();
+  if (!trimmed) return null;
+
+  const fromYmd = parseMediaLicenseExpiry(trimmed.slice(0, 10));
+  if (fromYmd) return fromYmd;
+
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return null;
+  return normalizeLicenseEndOfDay(d);
 }
 
+/** منتصف ليل UTC → نهاية نفس اليوم التقويمي في الرياض (حتى لا يُحسب منتهياً صباحاً). */
+function normalizeLicenseEndOfDay(d: Date): Date {
+  const utcH = d.getUTCHours();
+  const utcM = d.getUTCMinutes();
+  const utcS = d.getUTCSeconds();
+  const utcMs = d.getUTCMilliseconds();
+  if (utcH === 0 && utcM === 0 && utcS === 0 && utcMs === 0) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return new Date(`${y}-${m}-${day}T23:59:59+03:00`);
+  }
+  return d;
+}
+
+/** ناقص أو فاسد = منتهٍ — لا يُعامل كساري. */
 export function isMediaLicenseExpired(
   expiresAt: Date | string | null | undefined,
   now: Date = new Date(),
 ): boolean {
-  const end = resolveLicenseEnd(expiresAt);
-  if (!end) return false;
+  const end = resolveMediaLicenseEnd(expiresAt);
+  if (!end) return true;
   return end.getTime() < now.getTime();
 }
 
@@ -60,9 +88,31 @@ export function isMediaLicenseExpiringSoon(
   expiresAt: Date | string | null | undefined,
   now: Date = new Date(),
 ): boolean {
-  const end = resolveLicenseEnd(expiresAt);
+  const end = resolveMediaLicenseEnd(expiresAt);
   if (!end || end.getTime() < now.getTime()) return false;
   return end.getTime() - now.getTime() <= MEDIA_LICENSE_RENEWAL_WARN_MS;
+}
+
+/** أعلام الترخيص للقوائم (كتّاب / مراسلون) بعد التحقق من تاريخ صالح. */
+export function mediaLicenseFlags(
+  submitted: boolean,
+  expiresAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): {
+  hasLicense: boolean;
+  expired: boolean;
+  expiringSoon: boolean;
+  expiresAtIso: string | null;
+} {
+  const end = resolveMediaLicenseEnd(expiresAt);
+  const expired = submitted && (!end || end.getTime() < now.getTime());
+  const hasLicense = Boolean(submitted && end && end.getTime() >= now.getTime());
+  return {
+    hasLicense,
+    expired,
+    expiringSoon: hasLicense && isMediaLicenseExpiringSoon(end, now),
+    expiresAtIso: end ? end.toISOString() : null,
+  };
 }
 
 export type MediaLicenseStatus = {
@@ -88,17 +138,20 @@ export function toMediaLicenseStatus(row: {
   const submitted = Boolean(
     row?.mediaLicenseNumber && row?.mediaLicenseFileKey && row?.mediaLicenseSubmittedAt,
   );
-  const expiresAt = row?.mediaLicenseExpiresAt ?? null;
-  const expired = submitted && (!expiresAt || isMediaLicenseExpired(expiresAt));
-  const valid = submitted && Boolean(expiresAt) && !isMediaLicenseExpired(expiresAt);
+  const flags = mediaLicenseFlags(submitted, row?.mediaLicenseExpiresAt ?? null);
+  const submittedAt = row?.mediaLicenseSubmittedAt;
+  let submittedAtIso: string | null = null;
+  if (submittedAt && !Number.isNaN(submittedAt.getTime())) {
+    submittedAtIso = submittedAt.toISOString();
+  }
   return {
     submitted,
-    valid,
-    expired,
-    expiringSoon: valid && isMediaLicenseExpiringSoon(expiresAt),
+    valid: flags.hasLicense,
+    expired: flags.expired,
+    expiringSoon: flags.expiringSoon,
     licenseNumber: submitted ? (row?.mediaLicenseNumber ?? null) : null,
-    submittedAt: row?.mediaLicenseSubmittedAt?.toISOString() ?? null,
-    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    submittedAt: submittedAtIso,
+    expiresAt: flags.expiresAtIso,
     deadline: MEDIA_LICENSE_DEADLINE,
     gmediaRegisterUrl: GMEDIA_REGISTER_URL,
   };

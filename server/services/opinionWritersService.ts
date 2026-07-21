@@ -13,8 +13,7 @@ import {
 } from "@shared/schema";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
-  isMediaLicenseExpired,
-  isMediaLicenseExpiringSoon,
+  mediaLicenseFlags,
 } from "./mediaLicenseService";
 
 export { OPINION_WRITERS_PER_DAY_CAP };
@@ -296,10 +295,7 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
     const submitted = Boolean(
       w.mediaLicenseNumber && w.mediaLicenseFileKey && w.mediaLicenseSubmittedAt,
     );
-    const expiresAt = w.mediaLicenseExpiresAt ?? null;
-    const expired = submitted && (!expiresAt || isMediaLicenseExpired(expiresAt, now));
-    const hasLicense = submitted && Boolean(expiresAt) && !isMediaLicenseExpired(expiresAt, now);
-    const expiringSoon = hasLicense && isMediaLicenseExpiringSoon(expiresAt, now);
+    const licenseFlags = mediaLicenseFlags(submitted, w.mediaLicenseExpiresAt ?? null, now);
 
     return {
       id: w.id,
@@ -334,12 +330,12 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       nextSlot: toIsoOrNull(nextSlot),
       commitment,
       mediaLicense: {
-        hasLicense,
-        expired,
-        expiringSoon,
+        hasLicense: licenseFlags.hasLicense,
+        expired: licenseFlags.expired,
+        expiringSoon: licenseFlags.expiringSoon,
         number: w.mediaLicenseNumber ?? null,
         submittedAt: toIsoOrNull(w.mediaLicenseSubmittedAt),
-        expiresAt: toIsoOrNull(expiresAt),
+        expiresAt: licenseFlags.expiresAtIso,
         hasFile: Boolean(w.mediaLicenseFileKey),
       },
     };

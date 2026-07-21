@@ -3,8 +3,7 @@ import { and, asc, desc, eq, exists, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, roles, userRoles, users } from "@shared/schema";
 import {
-  isMediaLicenseExpired,
-  isMediaLicenseExpiringSoon,
+  mediaLicenseFlags,
   getMediaLicenseFileKey,
 } from "./mediaLicenseService";
 
@@ -70,10 +69,10 @@ export async function listReporters(): Promise<ReporterSummary[]> {
     const submitted = Boolean(
       r.mediaLicenseNumber && r.mediaLicenseFileKey && r.mediaLicenseSubmittedAt,
     );
-    const expiresAt = r.mediaLicenseExpiresAt ?? null;
-    const expired = submitted && (!expiresAt || isMediaLicenseExpired(expiresAt, now));
-    const hasLicense = submitted && Boolean(expiresAt) && !isMediaLicenseExpired(expiresAt, now);
-    const expiringSoon = hasLicense && isMediaLicenseExpiringSoon(expiresAt, now);
+    const licenseFlags = mediaLicenseFlags(submitted, r.mediaLicenseExpiresAt ?? null, now);
+    const submittedAt = r.mediaLicenseSubmittedAt;
+    const submittedAtIso =
+      submittedAt && !Number.isNaN(submittedAt.getTime()) ? submittedAt.toISOString() : null;
 
     return {
       id: r.id,
@@ -84,12 +83,12 @@ export async function listReporters(): Promise<ReporterSummary[]> {
       city: r.city,
       lastLoginAt: r.lastLoginAt ? r.lastLoginAt.toISOString() : null,
       mediaLicense: {
-        hasLicense,
-        expired,
-        expiringSoon,
+        hasLicense: licenseFlags.hasLicense,
+        expired: licenseFlags.expired,
+        expiringSoon: licenseFlags.expiringSoon,
         number: r.mediaLicenseNumber ?? null,
-        submittedAt: r.mediaLicenseSubmittedAt?.toISOString() ?? null,
-        expiresAt: expiresAt ? expiresAt.toISOString() : null,
+        submittedAt: submittedAtIso,
+        expiresAt: licenseFlags.expiresAtIso,
         hasFile: Boolean(r.mediaLicenseFileKey),
       },
     };

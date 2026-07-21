@@ -684,19 +684,20 @@ export default function OpinionWritersPage() {
                                     </Button>
                                   )}
                                 </div>
-                                {license.expiresAt && (
-                                  <div
-                                    className={cn(
-                                      "text-[11px] tabular-nums leading-none",
-                                      license.expiringSoon || license.expired
-                                        ? "font-semibold text-red-700 dark:text-red-300"
-                                        : "text-muted-foreground",
-                                    )}
-                                  >
-                                    حتى{" "}
-                                    {format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}
-                                  </div>
-                                )}
+                                <div
+                                  className={cn(
+                                    "text-[11px] tabular-nums leading-none",
+                                    !license.expiresAt ||
+                                      license.expiringSoon ||
+                                      license.expired
+                                      ? "font-semibold text-red-700 dark:text-red-300"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  {license.expiresAt
+                                    ? `حتى ${format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}`
+                                    : "بلا تاريخ انتهاء"}
+                                </div>
                                 {license.number && (
                                   <div
                                     className="truncate text-[11px] tabular-nums text-muted-foreground leading-none"
