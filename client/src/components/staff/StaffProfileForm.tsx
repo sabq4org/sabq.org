@@ -99,7 +99,12 @@ export function StaffProfileForm({
 
   useEffect(() => {
     if (!data) return;
-    const base: Record<string, unknown> = data.profile ? { ...data.profile } : {};
+    // إسقاط قيم null القادمة من الملفات المرحّلة — إرسالها كما هي كان
+    // يفشل الحفظ («Expected string, received null»)
+    const base: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data.profile ?? {})) {
+      if (value !== null && value !== undefined) base[key] = value;
+    }
     // سحب الصورة الرسمية تلقائياً من صورة الحساب إن لم تُرفع صورة مستقلة
     if (!base.officialPhotoUrl && data.user.profileImageUrl) {
       base.officialPhotoUrl = data.user.profileImageUrl;
