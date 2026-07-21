@@ -390,7 +390,9 @@ export function MeetingRoomView({
   }
 
   return (
-    <div dir="rtl" className="flex h-full min-h-[calc(100vh-0px)] flex-col bg-[#101820] text-[#e8eef4]">
+    // h-full من الحاوية fixed inset-0 — لا نستخدم 100vh لأن سفاري الجوال
+    // يحسبه أطول من المعروض فيدفن شريط التحكم تحت حافة الشاشة
+    <div dir="rtl" className="flex h-full flex-col overflow-hidden bg-[#101820] text-[#e8eef4]">
       {/* حاوية الصوت البعيد — غير مرئية */}
       <div ref={audioContainerRef} className="hidden" />
 
@@ -411,8 +413,8 @@ export function MeetingRoomView({
         </div>
       </div>
 
-      {/* الجسم */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row">
+      {/* الجسم — يتمرر داخلياً على الشاشات الصغيرة وشريط التحكم يبقى ثابتاً */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 lg:flex-row lg:overflow-hidden">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           {/* الشاشة المشاركة */}
           <div
@@ -608,8 +610,8 @@ export function MeetingRoomView({
         ) : null}
       </div>
 
-      {/* شريط التحكم */}
-      <div className="flex flex-wrap items-center justify-center gap-2 border-t border-[#2b3a48] px-3 py-3">
+      {/* شريط التحكم — ثابت أسفل الشاشة مع هامش أمان iOS */}
+      <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-[#2b3a48] px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         <ControlButton
           onClick={toggleMic}
           active={localMicOn}
