@@ -45,6 +45,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNav, trackNavClick } from "@/nav/useNav";
 import { AppBreadcrumbs } from "./AppBreadcrumbs";
 import { InternalAnnouncement } from "./InternalAnnouncement";
+import { MeetingCallAlert } from "./meetings/MeetingCallAlert";
 import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
@@ -648,6 +649,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           
           <InternalAnnouncement />
           <AutoPublishBanner />
+          <MeetingCallAlert />
 
           <div className="flex-1 overflow-auto p-3 md:p-6">
             <AppBreadcrumbs
