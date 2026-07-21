@@ -5,6 +5,13 @@
 // card: bake the hero typography into strip.png so we control size
 // and hierarchy. Native fields below the strip stay minimal
 // (code + expiry) so the barcode has room.
+//
+// الهوية: بنفسجي ولاء ون المعتمد في بطاقة القسيمة على /plus-preview
+// (تدرج wala-deep → wala + علامة W صفراء) — لا كحلي العضوية؛ القسيمة
+// «منتج الشريك» والعضوية «منتج سبق».
+//
+// المبلغ: يُرسم رقماً وعملةً كسلسلتين منفصلتين بمواضع صريحة — ترك
+// "1.50 ر.س" لخوارزمية bidi كان يعرض ر.س قبل المبلغ.
 
 import { GlobalFonts, createCanvas } from "@napi-rs/canvas";
 import fs from "fs";
@@ -50,15 +57,17 @@ type RenderInput = {
 const W = 1125;
 const H = 432;
 
-const NAVY = "#0D1B2A";
-const NAVY_MID = "#14344E";
-const ACCENT = "#1793E8";
-const INK = "#EAF3FB";
-const INK_SOFT = "#8FB8D8";
+// بنفسجي ولاء ون — مطابق لـ .spp-pass في صفحة المعاينة.
+const WALA_DEEP = "#4A3BC0";
+const WALA = "#5F4FD1";
+const WALA_LIGHT = "#7B6CE0";
+const ACCENT_Y = "#FFC933";
+const INK = "#FFFFFF";
+const INK_SOFT = "#E4DEFF";
 const LINE_HEIGHT = 1.3;
 
-function arabicFont(sizePx: number, bold = false): string {
-  return `${bold ? "bold " : ""}${sizePx}px "${arabicFontFamily}", sans-serif`;
+function arabicFont(sizePx: number, bold = false, italic = false): string {
+  return `${italic ? "italic " : ""}${bold ? "bold " : ""}${sizePx}px "${arabicFontFamily}", sans-serif`;
 }
 
 function fitFontSize(
@@ -79,51 +88,46 @@ function fitFontSize(
 }
 
 function drawAtmosphere(ctx: ReturnType<ReturnType<typeof createCanvas>["getContext"]>) {
-  // Deep navy base + soft Sabq-blue glow — brand atmosphere without
-  // competing with the value text (no photos, no stickers).
-  ctx.fillStyle = NAVY;
+  // تدرج بنفسجي قطري كما في بطاقة القسيمة على الويب.
+  const base = ctx.createLinearGradient(0, 0, W, H);
+  base.addColorStop(0, WALA_DEEP);
+  base.addColorStop(0.7, WALA);
+  base.addColorStop(1, WALA_LIGHT);
+  ctx.fillStyle = base;
   ctx.fillRect(0, 0, W, H);
 
-  const glow = ctx.createRadialGradient(W * 0.78, H * 0.2, 20, W * 0.78, H * 0.2, W * 0.55);
-  glow.addColorStop(0, "rgba(23, 147, 232, 0.34)");
-  glow.addColorStop(0.55, "rgba(20, 52, 78, 0.45)");
-  glow.addColorStop(1, "rgba(13, 27, 42, 0)");
+  // توهج أصفر خافت أعلى اليسار (موضع علامة W).
+  const glow = ctx.createRadialGradient(W * 0.12, H * 0.1, 10, W * 0.12, H * 0.1, W * 0.45);
+  glow.addColorStop(0, "rgba(255, 201, 51, 0.14)");
+  glow.addColorStop(1, "rgba(255, 201, 51, 0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  const glow2 = ctx.createRadialGradient(W * 0.12, H * 0.9, 10, W * 0.12, H * 0.9, W * 0.4);
-  glow2.addColorStop(0, "rgba(23, 147, 232, 0.16)");
-  glow2.addColorStop(1, "rgba(13, 27, 42, 0)");
-  ctx.fillStyle = glow2;
-  ctx.fillRect(0, 0, W, H);
-
-  // Faint overlapping circles — quiet depth, not a collage.
+  // علامة W الصفراء الشبحية — بصمة ولاء ون كما على بطاقة الويب.
   ctx.save();
-  ctx.strokeStyle = "rgba(143, 184, 216, 0.12)";
-  ctx.lineWidth = 2;
-  const rings = [
-    { x: W * 0.9, y: H * 0.15, r: 160 },
-    { x: W * 0.9, y: H * 0.15, r: 240 },
-    { x: W * 0.08, y: H * 0.85, r: 120 },
-    { x: W * 0.08, y: H * 0.85, r: 190 },
-  ];
-  for (const { x, y, r } of rings) {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  ctx.font = arabicFont(360, true, true);
+  ctx.fillStyle = "rgba(255, 201, 51, 0.16)";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("W", -18, H * 0.92);
   ctx.restore();
 
-  // Thin top accent rule in Sabq blue.
-  ctx.fillStyle = ACCENT;
+  // خط علوي أصفر رفيع.
+  ctx.fillStyle = ACCENT_Y;
   ctx.fillRect(0, 0, W, 6);
 
-  // Soft bottom fade into the field/barcode zone.
+  // تلاشٍ سفلي إلى لون خلفية البطاقة نفسه ليلتحم الشريط بالجسم.
   const fade = ctx.createLinearGradient(0, H - 48, 0, H);
-  fade.addColorStop(0, "rgba(13, 27, 42, 0)");
-  fade.addColorStop(1, NAVY_MID);
+  fade.addColorStop(0, "rgba(95, 79, 209, 0)");
+  fade.addColorStop(1, WALA);
   ctx.fillStyle = fade;
   ctx.fillRect(0, H - 48, W, 48);
+}
+
+// "5.00 ر.س" → { amount: "5.00", unit: "ر.س" } — وإلا null (خصم 10% مثلاً).
+function splitMoney(value: string): { amount: string; unit: string } | null {
+  const m = value.match(/^(\d+(?:[.,]\d+)?)\s*(ر\.س)$/);
+  return m ? { amount: m[1], unit: m[2] } : null;
 }
 
 export async function renderCouponPassStrip(input: RenderInput): Promise<{
@@ -137,41 +141,76 @@ export async function renderCouponPassStrip(input: RenderInput): Promise<{
   const ctx = canvas.getContext("2d");
   drawAtmosphere(ctx);
 
-  try {
-    (ctx as { direction?: string }).direction = "rtl";
-  } catch {
-    /* canvas direction is best-effort */
-  }
-
   const padX = 64;
   const maxW = W - padX * 2;
   const value = (input.valueLabel || "").trim() || "—";
   const partner = (input.partnerName || "").trim() || "شريك سبق بلس";
 
-  // Tagline — small, not competing with the value.
+  // السطر الصغير أعلى القيمة.
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const tagSize = 26;
   ctx.font = arabicFont(tagSize, false);
   ctx.fillStyle = INK_SOFT;
-  ctx.fillText("قسيمة سبق بلس", W / 2, 36);
+  ctx.fillText("قسيمة سبق بلس", W / 2, 34);
 
-  // Hero value — the reason the pass exists (10% / 5.00 ر.س).
-  const valueSize = fitFontSize(ctx, value, maxW, 118, 64, true);
+  const money = splitMoney(value);
+  const valueSize = money
+    ? 118
+    : fitFontSize(ctx, value, maxW, 118, 64, true);
   const valueLineH = valueSize * LINE_HEIGHT;
   const partnerSize = fitFontSize(ctx, partner, maxW, 42, 28, true);
   const partnerLineH = partnerSize * LINE_HEIGHT;
-  const blockGap = 18;
+  const blockGap = 16;
   const blockH = valueLineH + blockGap + partnerLineH;
 
-  const contentTop = 36 + tagSize * LINE_HEIGHT + 28;
-  const contentBottom = H - 36;
+  const contentTop = 34 + tagSize * LINE_HEIGHT + 26;
+  const contentBottom = H - 34;
   const blockTop = contentTop + Math.max(0, (contentBottom - contentTop - blockH) / 2);
 
-  ctx.font = arabicFont(valueSize, true);
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillText(value, W / 2, blockTop, maxW);
+  if (money) {
+    // رسم صريح: المبلغ يميناً (يُقرأ أولاً) والعملة أصغر على يساره —
+    // لا نترك السلسلة المختلطة لتقلبات bidi.
+    const unitSize = Math.round(valueSize * 0.4);
+    ctx.font = arabicFont(valueSize, true);
+    const amountW = ctx.measureText(money.amount).width;
+    ctx.font = arabicFont(unitSize, true);
+    const unitW = ctx.measureText(money.unit).width;
+    const gap = 18;
+    const total = amountW + gap + unitW;
+    const rightX = W / 2 + total / 2;
+    const baseline = blockTop + valueSize;
 
+    ctx.textAlign = "right";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = arabicFont(valueSize, true);
+    ctx.fillStyle = INK;
+    ctx.fillText(money.amount, rightX, baseline);
+
+    ctx.font = arabicFont(unitSize, true);
+    ctx.fillStyle = INK_SOFT;
+    ctx.fillText(money.unit, rightX - amountW - gap, baseline);
+  } else {
+    // نص مختلط (خصم 10% مثلاً): تخطيط يدوي كلمةً كلمة من اليمين لليسار —
+    // كل كلمة أحادية الاتجاه داخلياً فلا يقلب bidi شيئاً.
+    const tokens = value.split(/\s+/).filter(Boolean);
+    ctx.font = arabicFont(valueSize, true);
+    const spaceW = valueSize * 0.28;
+    const widths = tokens.map((t) => ctx.measureText(t).width);
+    const total = widths.reduce((a, b) => a + b, 0) + spaceW * (tokens.length - 1);
+    let xRight = W / 2 + total / 2;
+    const baseline = blockTop + valueSize;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = INK;
+    tokens.forEach((t, i) => {
+      ctx.fillText(t, xRight, baseline);
+      xRight -= widths[i] + spaceW;
+    });
+  }
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
   ctx.font = arabicFont(partnerSize, true);
   ctx.fillStyle = INK;
   ctx.fillText(partner, W / 2, blockTop + valueLineH + blockGap, maxW);
@@ -181,6 +220,54 @@ export async function renderCouponPassStrip(input: RenderInput): Promise<{
   c2.getContext("2d").drawImage(canvas, 0, 0, c2.width, c2.height);
   const x2 = c2.toBuffer("image/png");
   const c1 = createCanvas(Math.round(W / 3), Math.round(H / 3));
+  c1.getContext("2d").drawImage(canvas, 0, 0, c1.width, c1.height);
+  const x1 = c1.toBuffer("image/png");
+
+  return { x1, x2, x3 };
+}
+
+// شعار نصي «سبق بلس+» أبيض/أصفر على شفاف — بدل شعار الصحيفة الأزرق
+// (بإنجليزيته) الذي كان ينشز على البنفسجي. يُرسم بثلاث سلاسل منفصلة
+// موضوعة يدوياً كي لا يقلب bidi موضع علامة +.
+export async function renderCouponWordmark(): Promise<{
+  x1: Buffer;
+  x2: Buffer;
+  x3: Buffer;
+}> {
+  registerFontsOnce();
+
+  const LW = 480;
+  const LH = 150;
+  const topPad = 24;
+  const rightPad = 10;
+
+  const canvas = createCanvas(LW, LH);
+  const ctx = canvas.getContext("2d");
+
+  const size = 88;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "right";
+  const midY = topPad + (LH - topPad) / 2;
+
+  ctx.font = arabicFont(size, true);
+  const gap = 20;
+  const w1 = ctx.measureText("سبق").width;
+  const w2 = ctx.measureText("بلس").width;
+
+  let x = LW - rightPad;
+  ctx.fillStyle = INK;
+  ctx.fillText("سبق", x, midY);
+  x -= w1 + gap;
+  ctx.fillStyle = ACCENT_Y;
+  ctx.fillText("بلس", x, midY);
+  x -= w2 + 6;
+  ctx.fillText("+", x, midY);
+
+  const x3 = canvas.toBuffer("image/png");
+  const c2 = createCanvas(Math.round((LW * 2) / 3), Math.round((LH * 2) / 3));
+  c2.getContext("2d").drawImage(canvas, 0, 0, c2.width, c2.height);
+  const x2 = c2.toBuffer("image/png");
+  const c1 = createCanvas(Math.round(LW / 3), Math.round(LH / 3));
   c1.getContext("2d").drawImage(canvas, 0, 0, c1.width, c1.height);
   const x1 = c1.toBuffer("image/png");
 
