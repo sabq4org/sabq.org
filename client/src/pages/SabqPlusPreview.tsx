@@ -6,14 +6,53 @@
 // ويصدر قسيمة برمز QR حقيقي. التصميم منقول من النموذج المعتمد.
 // ----------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  BookOpen,
+  CalendarDays,
+  Car,
+  Clapperboard,
+  Coffee,
+  Gift,
+  HeartPulse,
+  MessageCircle,
+  Shirt,
+  ShoppingBag,
+  Smartphone,
+  Sparkles,
+  Trophy,
+  UtensilsCrossed,
+  type LucideProps,
+} from "lucide-react";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { LOYALTY_TIERS } from "@shared/loyalty";
 import NotFound from "@/pages/not-found";
+
+type LucideIcon = ComponentType<LucideProps>;
+
+/** أيقونات الفئات — بديل حرف الشريك؛ أقرب لبطاقة المكافأة في التطبيق. */
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  "مقاهٍ": Coffee,
+  صحة: HeartPulse,
+  مطاعم: UtensilsCrossed,
+  توصيل: Car,
+  ترفيه: Clapperboard,
+  تسوق: ShoppingBag,
+  اتصالات: Smartphone,
+  أزياء: Shirt,
+};
+
+const EARN_WAYS: { icon: LucideIcon; label: string; value: string; tint: string }[] = [
+  { icon: BookOpen, label: "قراءة مقال", value: "+2", tint: "#1793E8" },
+  { icon: Sparkles, label: "قراءة عميقة", value: "+3", tint: "#7B6CE0" },
+  { icon: MessageCircle, label: "تعليق", value: "+1", tint: "#17A26B" },
+  { icon: CalendarDays, label: "دخول يومي", value: "+5 × السلسلة", tint: "#E8A317" },
+  { icon: Trophy, label: "فوز توقّع رياضي", value: "حسب البركة", tint: "#C24A4A" },
+];
 
 type PlusSummary = {
   totalPoints: number;
@@ -263,25 +302,21 @@ export default function SabqPlusPreview() {
         <h2 className="spp-sec">كيف تكسب النقاط</h2>
         <p className="spp-sec-sub">تُمنح النقاط تلقائيًا أثناء استخدامك سبق — لا حاجة لأي خطوة إضافية.</p>
         <div className="spp-earn-strip">
-          {[
-            ["📖", "قراءة مقال", "+2"],
-            ["📕", "قراءة عميقة", "+3"],
-            ["💬", "تعليق", "+1"],
-            ["↪", "دخول يومي", "+5 × السلسلة"],
-            ["🏆", "فوز توقّع رياضي", "حسب البركة"],
-          ].map(([ico, lbl, val]) => (
-            <div className="spp-earn" key={lbl}>
-              <span className="spp-ico">{ico}</span>
+          {EARN_WAYS.map(({ icon: Icon, label, value, tint }) => (
+            <div className="spp-earn" key={label}>
+              <span className="spp-ico" style={{ background: `${tint}1a`, color: tint }}>
+                <Icon size={18} strokeWidth={2.25} aria-hidden />
+              </span>
               <div>
-                <div className="spp-lbl">{lbl}</div>
-                <div className="spp-val">{val}</div>
+                <div className="spp-lbl">{label}</div>
+                <div className="spp-val">{value}</div>
               </div>
             </div>
           ))}
         </div>
         <div className="spp-earn-note">القيم الحالية للإنتاج — جدول الاكتساب الجديد (المكافئ للريال) قيد الاعتماد.</div>
 
-        {/* الكتالوج */}
+        {/* الكتالوج — بطاقات بعرض عمودين وأيقونة فئة (مطابقة منطق بطاقة التطبيق) */}
         <h2 className="spp-sec">
           استبدل نقاطك{" "}
           <span className="spp-wala-tag">
@@ -295,21 +330,31 @@ export default function SabqPlusPreview() {
         <div className="spp-grid">
           {(catalog?.rewards ?? []).map((v) => {
             const can = (catalog?.balance ?? 0) >= v.pointsCost;
+            const Icon = CATEGORY_ICONS[v.category] ?? Gift;
             return (
               <div className="spp-voucher" key={v.id}>
                 <div className="spp-v-head">
-                  <div className="spp-v-logo" style={{ background: v.brandColor }}>
-                    {v.partnerName.slice(0, 1)}
+                  <div
+                    className="spp-v-thumb"
+                    style={{
+                      background: `linear-gradient(135deg, ${v.brandColor}33 0%, ${v.brandColor}0d 100%)`,
+                    }}
+                  >
+                    <Icon size={28} strokeWidth={1.75} style={{ color: v.brandColor }} aria-hidden />
                   </div>
-                  <div>
+                  <div className="spp-v-meta">
                     <div className="spp-v-brand">{v.partnerName}</div>
+                    <div className="spp-v-offer">{v.offer}</div>
                     <div className="spp-v-cat">{v.category} · شريك ولاء ون</div>
                   </div>
                 </div>
-                <div className="spp-v-offer">{v.offer}</div>
                 <div className="spp-v-foot">
-                  <div className="spp-v-cost">
-                    {fmt(v.pointsCost)} نقطة<small>≈ {v.sarValue.toFixed(2)} ر.س</small>
+                  <div className="spp-v-cost-chip">
+                    <Sparkles size={12} strokeWidth={2.5} aria-hidden />
+                    <span>
+                      {fmt(v.pointsCost)} نقطة
+                      <small>≈ {v.sarValue.toFixed(2)} ر.س</small>
+                    </span>
                   </div>
                   <button
                     className="spp-btn spp-btn-redeem"
@@ -319,7 +364,13 @@ export default function SabqPlusPreview() {
                       setConfirmFor(v);
                     }}
                   >
-                    {can ? "استبدل" : "رصيدك لا يكفي"}
+                    {can ? (
+                      <>
+                        <Gift size={14} strokeWidth={2.5} aria-hidden /> استبدل
+                      </>
+                    ) : (
+                      "رصيدك لا يكفي"
+                    )}
                   </button>
                 </div>
               </div>
@@ -672,12 +723,16 @@ const PAGE_CSS = `
   border: 1px solid rgba(124,58,237,.25);
   border-radius: 10px; padding: 8px 14px; display: inline-block; position: relative; z-index: 1;
 }
-.spp-earn-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 18px; }
+.spp-earn-strip {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px;
+}
 .spp-earn {
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
 }
-.spp-ico { font-size: 20px; }
+.spp-ico {
+  width: 38px; height: 38px; border-radius: 999px; display: grid; place-items: center; flex-shrink: 0;
+}
 .spp-lbl { font-size: 13px; color: var(--ink-2); font-weight: 600; }
 .spp-val { font-size: 13px; font-weight: 800; color: var(--sabq); font-variant-numeric: tabular-nums; }
 .spp-earn-note { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
@@ -689,26 +744,38 @@ const PAGE_CSS = `
   border: 1px solid color-mix(in srgb, var(--wala) 30%, transparent);
 }
 .spp-w { color: var(--wala-y); font-weight: 900; font-size: 15px; }
-.spp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.spp-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+}
+@media (max-width: 640px) {
+  .spp-grid, .spp-earn-strip { grid-template-columns: 1fr; }
+}
 .spp-voucher {
-  background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px;
-  display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); transition: transform .15s ease;
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); transition: transform .15s ease;
 }
 .spp-voucher:hover { transform: translateY(-2px); }
-.spp-v-head { display: flex; align-items: center; gap: 12px; }
-.spp-v-logo {
-  width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
-  color: #fff; font-weight: 900; font-size: 19px; flex-shrink: 0;
+.spp-v-head { display: flex; align-items: flex-start; gap: 12px; }
+.spp-v-thumb {
+  width: 80px; height: 80px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0;
 }
-.spp-v-brand { font-weight: 800; font-size: 15.5px; }
+.spp-v-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.spp-v-brand {
+  font-weight: 900; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3);
+}
+.spp-v-offer { font-weight: 800; font-size: 15px; color: var(--ink); line-height: 1.35; }
 .spp-v-cat { font-size: 12px; color: var(--ink-3); }
-.spp-v-offer { font-size: 14px; color: var(--ink-2); min-height: 44px; }
-.spp-v-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; gap: 8px; }
-.spp-v-cost { font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
-.spp-v-cost small { display: block; font-weight: 600; color: var(--ink-3); font-size: 11.5px; }
+.spp-v-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; gap: 8px; flex-wrap: wrap; }
+.spp-v-cost-chip {
+  display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--sabq) 12%, transparent);
+  color: var(--sabq); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.spp-v-cost-chip small { display: block; font-weight: 600; color: var(--ink-3); font-size: 11px; }
 .spp-btn {
-  border: 0; cursor: pointer; font-family: inherit; font-weight: 800; border-radius: 12px;
-  padding: 10px 20px; font-size: 14px; transition: filter .15s ease;
+  border: 0; cursor: pointer; font-family: inherit; font-weight: 800; border-radius: 999px;
+  padding: 8px 16px; font-size: 13px; transition: filter .15s ease;
+  display: inline-flex; align-items: center; gap: 6px;
 }
 .spp-btn:focus-visible { outline: 3px solid var(--sabq); outline-offset: 2px; }
 .spp-btn-redeem { background: var(--wala); color: #fff; }
