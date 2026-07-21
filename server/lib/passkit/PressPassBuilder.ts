@@ -62,6 +62,9 @@ async function buildWhiteSabqLogoBuffers(): Promise<{ x1: Buffer; x2: Buffer; x3
  * الصورة الشخصية دائرية لخانة thumbnail (يمين البطاقة في نمط generic) —
  * الاستدارة تُخبز في الصورة نفسها بقناع SVG لأن Wallet يعرض المصغرة
  * بزوايا خفيفة فقط. مقاس Apple: حتى 90×90pt.
+ *
+ * الإطار (بطلب المالك): الصورة → فراغ بسيط → حلقة بيضاء رفيعة →
+ * حلقة عريضة بأبيض شفيف — نفس لمسة بطاقة المرجع.
  */
 async function buildCircularThumbnail(imageUrl: string): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer } | null> {
   try {
@@ -70,11 +73,36 @@ async function buildCircularThumbnail(imageUrl: string): Promise<{ x1: Buffer; x
     const source = Buffer.from(await response.arrayBuffer());
 
     const circle = async (size: number): Promise<Buffer> => {
-      const resized = await sharp(source).resize(size, size, { fit: 'cover' }).png().toBuffer();
+      const photoD = Math.round(size * 0.72);
+      const resized = await sharp(source).resize(photoD, photoD, { fit: 'cover' }).png().toBuffer();
       const mask = Buffer.from(
-        `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
+        `<svg width="${photoD}" height="${photoD}"><circle cx="${photoD / 2}" cy="${photoD / 2}" r="${photoD / 2}" fill="#fff"/></svg>`,
       );
-      return sharp(resized).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
+      const circled = await sharp(resized).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
+
+      const c = size / 2;
+      const gap = size * 0.02;
+      const thinW = size * 0.028;
+      const wideW = size * 0.065;
+      const thinR = photoD / 2 + gap + thinW / 2;
+      const wideR = photoD / 2 + gap + thinW + wideW / 2;
+      const rings = Buffer.from(
+        `<svg width="${size}" height="${size}">` +
+          `<circle cx="${c}" cy="${c}" r="${wideR}" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="${wideW}"/>` +
+          `<circle cx="${c}" cy="${c}" r="${thinR}" fill="none" stroke="#ffffff" stroke-width="${thinW}"/>` +
+          `</svg>`,
+      );
+
+      const offset = Math.round((size - photoD) / 2);
+      return sharp({
+        create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+      })
+        .composite([
+          { input: circled, left: offset, top: offset },
+          { input: rings, left: 0, top: 0 },
+        ])
+        .png()
+        .toBuffer();
     };
 
     const [x1, x2, x3] = await Promise.all([circle(88), circle(176), circle(264)]);
