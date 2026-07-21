@@ -327,7 +327,9 @@ struct SabqPlusView: View {
                 .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            // صفوف بعرض كامل لا شبكة: عمودان بالعربية على عرض الجوال
+            // يشوّهان المحاذاة (ارتفاعات متفاوتة بحسب التفاف نص العرض).
+            VStack(spacing: 10) {
                 ForEach(loader.catalog?.rewards ?? []) { reward in
                     rewardCard(reward)
                 }
@@ -339,75 +341,64 @@ struct SabqPlusView: View {
         let balance = loader.catalog?.balance ?? 0
         let affordable = balance >= reward.pointsCost
         let brand = Color(plusHex: reward.brandColor)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                partnerBadge(category: reward.category, brand: brand, size: 46, iconSize: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(reward.partnerName)
+        return HStack(alignment: .center, spacing: 12) {
+            partnerBadge(category: reward.category, brand: brand, size: 48, iconSize: 21)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(reward.partnerName)
+                    .font(SabqFonts.app(size: 14.5, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(1)
+                Text(reward.offer)
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(reward.category + " · ولاء ون")
+                    .font(SabqFonts.app(size: 10, weight: .semibold))
+                    .foregroundStyle(brand)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .center, spacing: 6) {
+                VStack(spacing: 0) {
+                    Text("\(formatPoints(reward.pointsCost))")
                         .font(SabqFonts.app(size: 14, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text(reward.category + " · ولاء ون")
-                        .font(SabqFonts.app(size: 10.5, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-                Spacer(minLength: 0)
-            }
-
-            Text(reward.valueLabel)
-                .font(SabqFonts.app(size: 12, weight: .heavy))
-                .foregroundStyle(brand)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 10)
-                .background(brand.opacity(0.12), in: Capsule())
-
-            Text(reward.offer)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .lineLimit(2)
-                .frame(minHeight: 32, alignment: .top)
-
-            Divider().opacity(0.5)
-
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("\(formatPoints(reward.pointsCost)) نقطة")
-                        .font(SabqFonts.app(size: 12.5, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
                         .monospacedDigit()
-                    Text("≈ \(String(format: "%.2f", reward.sarValue)) ر.س")
-                        .font(SabqFonts.app(size: 10, weight: .semibold))
+                    Text("نقطة ≈ \(reward.sarValue.clean) ر.س")
+                        .font(SabqFonts.app(size: 9.5, weight: .semibold))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .monospacedDigit()
                 }
-                Spacer()
                 Button {
                     agreedToTerms = false
                     confirmReward = reward
                 } label: {
                     Text(affordable ? "استبدل" : "لا يكفي")
-                        .font(SabqFonts.app(size: 12.5, weight: .heavy))
+                        .font(SabqFonts.app(size: 12, weight: .heavy))
                         .foregroundStyle(.white)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 14)
                         .background(
                             affordable
                                 ? AnyShapeStyle(LinearGradient(colors: [walaPurple, walaDeep], startPoint: .top, endPoint: .bottom))
                                 : AnyShapeStyle(SabqTheme.outline),
-                            in: RoundedRectangle(cornerRadius: 11)
+                            in: Capsule()
                         )
                 }
                 .disabled(!affordable || isRedeeming)
             }
+            .frame(width: 92)
         }
-        .padding(14)
+        .padding(.vertical, 13)
+        .padding(.horizontal, 14)
         .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(brand.opacity(0.18), lineWidth: 1)
+                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.05), radius: 8, y: 3)
+        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 2)
     }
 
     /// «شعار» الشريك: أيقونة الفئة داخل مربع متدرج بلون العلامة —
