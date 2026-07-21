@@ -376,6 +376,17 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW,
   ],
 
+  // الموارد البشرية — ملفات المنسوبين ووثائقهم فقط (قرار المالك 2026-07-21).
+  // الأكواد نصية لأن hr غير معرف في PERMISSION_CODES بعد؛ getPermissionsForRoles
+  // يمررها كما هي والواجهة تتحقق بالنص.
+  hr: [
+    "staff_profiles.view",
+    "staff_profiles.manage",
+    "staff_documents.view",
+    "users.view",
+    "dashboard.view",
+  ],
+
   [ROLE_NAMES.READER]: [],
 };
 

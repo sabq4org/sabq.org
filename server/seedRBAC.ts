@@ -52,6 +52,11 @@ export async function seedRBAC() {
     { code: "staff.update", label: "Update Staff", labelAr: "تعديل الكادر", module: "staff" },
     { code: "staff.delete", label: "Delete Staff", labelAr: "حذف أعضاء الكادر", module: "staff" },
 
+    // Staff profiles (ملف المنسوب الموحد) — admin + دور الموارد البشرية
+    { code: "staff_profiles.view", label: "View Staff Profiles", labelAr: "عرض ملفات المنسوبين", module: "hr" },
+    { code: "staff_profiles.manage", label: "Manage Staff Profiles", labelAr: "إدارة ملفات المنسوبين", module: "hr" },
+    { code: "staff_documents.view", label: "View Staff Documents & National ID", labelAr: "الاطلاع على وثائق المنسوبين والهوية", module: "hr" },
+
     // System permissions
     { code: "system.manage_roles", label: "Manage Roles", labelAr: "إدارة الأدوار", module: "system" },
     { code: "system.manage_settings", label: "Manage Settings", labelAr: "إدارة الإعدادات", module: "system" },
@@ -156,6 +161,12 @@ export async function seedRBAC() {
       isSystem: false,
     },
     {
+      name: "hr",
+      nameAr: "موارد بشرية",
+      description: "Staff profiles and documents only (ملفات المنسوبين فقط)",
+      isSystem: false,
+    },
+    {
       name: "reader",
       nameAr: "قارئ",
       description: "Basic reader access",
@@ -185,6 +196,7 @@ export async function seedRBAC() {
       "users.view", "users.update", "users.suspend", "users.change_role",
       "comments.view", "comments.approve", "comments.reject", "comments.delete",
       "staff.view", "staff.create", "staff.update", "staff.delete",
+      "staff_profiles.view", "staff_profiles.manage", "staff_documents.view",
       "system.view_logs", "system.manage_themes",
       "muqtarab.manage", "muqtarab.publish",
       "shorts:view", "shorts:create", "shorts:edit", "shorts:delete", "shorts:manage",
@@ -238,6 +250,14 @@ export async function seedRBAC() {
       "muqtarab.own.topic.create",
       "muqtarab.own.topic.edit",
       "muqtarab.own.topic.submit",
+    ],
+
+    // الموارد البشرية: ملفات المنسوبين ووثائقهم فقط (قرار المالك 2026-07-21)
+    hr: [
+      "staff_profiles.view",
+      "staff_profiles.manage",
+      "staff_documents.view",
+      "users.view",
     ],
 
     reader: [
