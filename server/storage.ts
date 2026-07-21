@@ -15882,7 +15882,14 @@ export class DatabaseStorage implements IStorage {
       })
       .from(tasks)
       .where(whereClause)
-      .orderBy(desc(tasks.createdAt))
+      // مفتوح أولاً → متأخر → أولوية → أقرب استحقاق → الأحدث
+      .orderBy(
+        sql`CASE WHEN ${tasks.status} IN ('completed', 'archived') THEN 1 ELSE 0 END`,
+        sql`CASE WHEN ${tasks.status} NOT IN ('completed', 'archived') AND ${tasks.dueDate} IS NOT NULL AND ${tasks.dueDate} < NOW() THEN 0 ELSE 1 END`,
+        sql`CASE ${tasks.priority} WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END`,
+        sql`${tasks.dueDate} ASC NULLS LAST`,
+        desc(tasks.createdAt),
+      )
       .limit(limit)
       .offset(offset);
 
