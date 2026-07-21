@@ -49,6 +49,7 @@ import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 import { MemoryCache, CACHE_TTL } from "../memoryCache";
 import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
 import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService";
+import { getMeetingByInviteToken } from "../services/meetingsService";
 import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
 
 const router = Router();
@@ -1472,6 +1473,36 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         robots: indexable ? "index,follow" : "noindex, follow",
         type: "article",
         locale: "ar_SA",
+      };
+    },
+  },
+  // دعوات اجتماعات سبق: /meet/:token — معاينة لائقة عند مشاركة الرابط
+  // (عنوان الاجتماع + اسم الصحيفة) في واتساب وأمثاله، مع noindex دائماً
+  // لأن الرابط سري لحامليه ولا يُفهرس.
+  {
+    pattern: /^\/meet\/([^/?#]+)/,
+    handle: async (m) => {
+      const token = safeDecode(m[1]);
+      const meeting = await getMeetingByInviteToken(token);
+      // رابط غير صالح أو ملغى → يسقط للميتا الافتراضية بـ noindex
+      if (!meeting || meeting.status === "cancelled") return null;
+      const stateLabel =
+        meeting.status === "live"
+          ? "اجتماع مباشر الآن"
+          : meeting.status === "ended"
+            ? "اجتماع منتهٍ"
+            : "دعوة اجتماع";
+      return {
+        title: `${meeting.title} — اجتماعات صحيفة سبق`,
+        description: meeting.description
+          ? trunc(meeting.description, 220)
+          : `${stateLabel} عبر منصة سبق — افتح الرابط للانضمام بالصوت ومشاركة الشاشة.`,
+        image: BRAND_OG_IMAGE,
+        canonical: `${SITE_URL}/meet/${encodeURIComponent(token)}`,
+        robots: "noindex, follow",
+        type: "website",
+        locale: "ar_SA",
+        siteName: "صحيفة سبق الإلكترونية",
       };
     },
   },

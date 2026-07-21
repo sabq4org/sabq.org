@@ -183,13 +183,18 @@ export function MeetingRoomView({
         const pub = p.getTrackPublication(Track.Source.ScreenShare);
         if (pub?.track && !pub.isMuted) {
           const meta = parseMeta(p);
+          const isLocal = p === room.localParticipant;
           setScreenShareInfo({
             trackSid: pub.trackSid,
             ownerName: meta.name || p.name || p.identity,
-            isLocal: p === room.localParticipant,
+            isLocal,
           });
-          const el = screenVideoRef.current;
-          if (el) pub.track.attach(el);
+          // من يشارك لا يشاهد بث شاشته (وإلا ظهرت المرايا اللانهائية) —
+          // يرى لوحة تأكيد بدلاً منه، والبث يُعرض للبقية فقط
+          if (!isLocal) {
+            const el = screenVideoRef.current;
+            if (el) pub.track.attach(el);
+          }
           return;
         }
       }
@@ -265,6 +270,15 @@ export function MeetingRoomView({
   const participants: Participant[] = room
     ? [room.localParticipant, ...Array.from(room.remoteParticipants.values())]
     : [];
+
+  // مصدر الحقيقة للحضور هو غرفة LiveKit — من غادر أو انقطع يختفي فوراً،
+  // فلا تتراكم أسماء «غير متصل» في القائمة
+  const connectedRoster = roster.filter(
+    (r) =>
+      r.status === "admitted" &&
+      r.identity &&
+      participants.some((p) => p.identity === r.identity),
+  );
 
   // ── إجراءات ──
 
@@ -409,15 +423,28 @@ export function MeetingRoomView({
           >
             <video
               ref={screenVideoRef}
-              className={cn("h-full w-full object-contain", !screenShareInfo && "hidden")}
+              className={cn(
+                "h-full w-full object-contain",
+                (!screenShareInfo || screenShareInfo.isLocal) && "hidden",
+              )}
               autoPlay
               playsInline
               muted
             />
-            {screenShareInfo ? (
+            {screenShareInfo?.isLocal ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/15">
+                  <ScreenShare className="h-7 w-7 text-sky-400" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold">أنت تشارك شاشتك الآن</p>
+                  <p className="mt-1 text-xs text-[#8ba1b4]">المشاركون يرونها مباشرة — أوقفها من «إيقاف المشاركة» بالأسفل</p>
+                </div>
+              </div>
+            ) : screenShareInfo ? (
               <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1 text-[11px]">
                 <ScreenShare className="h-3 w-3 text-sky-400" />
-                {screenShareInfo.isLocal ? "أنت تشارك شاشتك" : `${screenShareInfo.ownerName} يشارك الشاشة`}
+                {`${screenShareInfo.ownerName} يشارك الشاشة`}
               </div>
             ) : (
               <div className="hidden flex-col items-center gap-2 text-[#8ba1b4] lg:flex">
@@ -480,7 +507,7 @@ export function MeetingRoomView({
               <span className="text-xs font-bold">
                 المشاركون
                 <span className="mr-1.5 rounded-full bg-[#2b3a48] px-1.5 text-[10px] tabular-nums">
-                  {roster.filter((r) => r.status === "admitted").length}
+                  {connectedRoster.length}
                 </span>
               </span>
               <button onClick={() => setPanelOpen(false)} className="text-[#8ba1b4] hover:text-white" aria-label="إغلاق اللوحة">
@@ -531,50 +558,51 @@ export function MeetingRoomView({
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              {roster
-                .filter((r) => r.status === "admitted")
-                .map((r) => {
-                  const live = r.identity
-                    ? participants.find((p) => p.identity === r.identity)
-                    : undefined;
-                  return (
-                    <div key={r.participantId} className="flex items-center gap-2 px-1 py-1.5">
-                      <Avatar className="h-7 w-7">
-                        {r.avatarUrl ? <AvatarImage src={r.avatarUrl} alt="" /> : null}
-                        <AvatarFallback className="bg-[#2e8f7a] text-[10px] font-bold text-white">
-                          {initialsOf(r.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium">
-                          {r.name}
-                          {r.role === "host" ? <span className="mr-1 text-[9px] text-sky-400">· المضيف</span> : null}
-                        </div>
-                        <div className="truncate text-[10px] text-[#8ba1b4]">
-                          {live ? (live.isMicrophoneEnabled ? "متصل" : "متصل · مكتوم") : "غير متصل"}
-                        </div>
+              {connectedRoster.map((r) => {
+                const live = participants.find((p) => p.identity === r.identity)!;
+                return (
+                  <div key={r.participantId} className="flex items-center gap-2 px-1 py-1.5">
+                    <Avatar className="h-7 w-7">
+                      {r.avatarUrl ? <AvatarImage src={r.avatarUrl} alt="" /> : null}
+                      <AvatarFallback className="bg-[#2e8f7a] text-[10px] font-bold text-white">
+                        {initialsOf(r.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-medium">
+                        {r.name}
+                        {r.role === "host" ? <span className="mr-1 text-[9px] text-sky-400">· المضيف</span> : null}
                       </div>
-                      {isHost && r.role !== "host" && live ? (
-                        <>
-                          {live.isMicrophoneEnabled ? (
-                            <button
-                              onClick={() => muteParticipant(r.identity!)}
-                              className="rounded-md border border-[#2b3a48] px-2 py-1 text-[10px] text-[#8ba1b4] hover:text-white"
-                            >
-                              كتم
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={() => removeParticipant(r.participantId)}
-                            className="rounded-md border border-red-900/60 px-2 py-1 text-[10px] text-red-400 hover:bg-red-950"
-                          >
-                            إخراج
-                          </button>
-                        </>
-                      ) : null}
+                      <div className="truncate text-[10px] text-[#8ba1b4]">
+                        {live.isMicrophoneEnabled ? "متصل" : "متصل · مكتوم"}
+                      </div>
                     </div>
-                  );
-                })}
+                    {isHost && r.role !== "host" ? (
+                      <>
+                        {live.isMicrophoneEnabled ? (
+                          <button
+                            onClick={() => muteParticipant(r.identity!)}
+                            className="rounded-md border border-[#2b3a48] px-2 py-1 text-[10px] text-[#8ba1b4] hover:text-white"
+                          >
+                            كتم
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => removeParticipant(r.participantId)}
+                          className="rounded-md border border-red-900/60 px-2 py-1 text-[10px] text-red-400 hover:bg-red-950"
+                        >
+                          إخراج
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {connectedRoster.length === 0 ? (
+                <div className="px-2 py-6 text-center text-[11px] text-[#8ba1b4]">
+                  لا مشاركين متصلين بعد
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

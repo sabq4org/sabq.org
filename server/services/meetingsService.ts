@@ -312,10 +312,16 @@ export interface MeetingListItem {
 async function meetingVisibilityFilter(userId: string, canManage: boolean) {
   if (canManage) return undefined;
   const deptId = await getUserDepartmentId(userId);
+  // المرفوض والمُخرَج لا يبقى الاجتماع ظاهراً له في المركز
   const myMeetingIds = db
     .select({ meetingId: meetingParticipants.meetingId })
     .from(meetingParticipants)
-    .where(eq(meetingParticipants.userId, userId));
+    .where(
+      and(
+        eq(meetingParticipants.userId, userId),
+        inArray(meetingParticipants.status, ["invited", "pending", "admitted"]),
+      ),
+    );
   return or(
     eq(meetings.hostUserId, userId),
     eq(meetings.accessType, "all"),
@@ -383,8 +389,13 @@ export async function listMeetingsForUser(
   const [live, upcoming, recent] = await Promise.all([
     fetchList(and(eq(meetings.status, "live")), "started"),
     fetchList(and(eq(meetings.status, "scheduled")), "scheduled", 20),
+    // أرشيف المنتهية للمضيف والإدارة فقط — بقية المنسوبين لا يحتاجون سجل العناوين
     fetchList(
-      and(eq(meetings.status, "ended"), gt(meetings.endedAt, sql`now() - interval '7 days'`)),
+      and(
+        eq(meetings.status, "ended"),
+        gt(meetings.endedAt, sql`now() - interval '7 days'`),
+        canManage ? undefined : eq(meetings.hostUserId, userId),
+      ),
       "ended",
       10,
     ),
@@ -498,15 +509,17 @@ export async function requestJoin(
   if (!identityBase) return { error: "تعذر جلب بيانات المستخدم", code: 500 };
   const ident: MeetingIdentity = { ...identityBase, isHost };
 
-  // من أخرجه المضيف لا يعود تلقائياً حتى في اجتماع بلا موافقة — يمر بغرفة الانتظار
+  // من أخرجه المضيف لا يعود تلقائياً حتى في اجتماع بلا موافقة — يمر بغرفة الانتظار.
+  // ومن سبق قبوله (ثم انقطع أو غادر) يعود مباشرة دون موافقة ثانية — كسلوك Meet.
   const [existingRow] = await db
     .select({ status: meetingParticipants.status })
     .from(meetingParticipants)
     .where(and(eq(meetingParticipants.meetingId, meeting.id), eq(meetingParticipants.userId, userId)))
     .limit(1);
   const wasRemoved = existingRow?.status === "removed" || existingRow?.status === "denied";
+  const wasAdmitted = existingRow?.status === "admitted";
 
-  if (isHost || (!meeting.requireApproval && !wasRemoved)) {
+  if (isHost || wasAdmitted || (!meeting.requireApproval && !wasRemoved)) {
     if (meeting.isLocked && !isHost) return { error: "الغرفة مقفلة أمام الدخول الجديد", code: 423 };
     const participant = await upsertUserParticipant(
       meeting.id,
