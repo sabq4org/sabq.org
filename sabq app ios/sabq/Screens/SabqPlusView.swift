@@ -27,6 +27,9 @@ struct SabqPlusView: View {
     @State private var pendingPass: PKPass?
     @State private var showAddPassSheet = false
     @State private var walletBusyId: String?
+    /// أرقام البطاقات المثبّتة فعلاً في Wallet (عبر PKPassLibrary + entitlement
+    /// pass-type-identifiers) — تتيح حالة «مضافة ✓» والحذف من داخل التطبيق.
+    @State private var installedSerials: Set<String> = []
 
     // إزالة قسيمة
     @State private var removalTarget: PlusRedemption?
@@ -55,8 +58,14 @@ struct SabqPlusView: View {
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("سبق بلس")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await loader.load() }
-        .refreshable { await loader.load() }
+        .task {
+            await loader.load()
+            refreshInstalledPasses()
+        }
+        .refreshable {
+            await loader.load()
+            refreshInstalledPasses()
+        }
         .environment(\.layoutDirection, .rightToLeft)
         .sheet(item: $confirmReward) { reward in
             redeemConfirmSheet(reward)
@@ -72,6 +81,7 @@ struct SabqPlusView: View {
                 PKAddPassesRepresentable(pass: pass) { _ in
                     showAddPassSheet = false
                     pendingPass = nil
+                    refreshInstalledPasses()
                 }
             }
         }
@@ -84,7 +94,7 @@ struct SabqPlusView: View {
             }
             Button("إلغاء", role: .cancel) { removalTarget = nil }
         } message: {
-            Text("ستُرجع \(removalTarget.map { formatPoints($0.pointsSpent) } ?? "") نقطة إلى رصيدك. بطاقة Apple Wallet على جهازك لا تُحذف تلقائياً.")
+            Text("ستُرجع \(removalTarget.map { formatPoints($0.pointsSpent) } ?? "") نقطة إلى رصيدك، وستُحذف بطاقتها من Apple Wallet إن كانت مضافة.")
         }
         .alert("تنبيه", isPresented: Binding(
             get: { errorMessage != nil },
@@ -510,6 +520,17 @@ struct SabqPlusView: View {
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .environment(\.layoutDirection, .rightToLeft)
+        // نافذة PassKit تُعلَّق هنا داخل الغطاء الكامل — تعليقها على الشاشة
+        // الأساسية المغطاة يفشل صامتاً (الزر يرمش) ثم تنبثق فجأة بعد
+        // إغلاق التهنئة.
+        .sheet(isPresented: $showAddPassSheet) {
+            if let pass = pendingPass {
+                PKAddPassesRepresentable(pass: pass) { _ in
+                    showAddPassSheet = false
+                    pendingPass = nil
+                }
+            }
+        }
     }
 
     private func voucherPassCard(_ voucher: PlusVoucher) -> some View {
@@ -563,7 +584,22 @@ struct SabqPlusView: View {
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("سجل استبدالاتي")
+            HStack {
+                sectionTitle("سجل استبدالاتي")
+                Spacer()
+                if !installedSerials.isEmpty {
+                    Button {
+                        cleanupWalletPasses()
+                    } label: {
+                        Label("تنظيف Wallet (\(installedSerials.count))", systemImage: "wallet.pass")
+                            .font(SabqFonts.app(size: 11.5, weight: .bold))
+                            .foregroundStyle(walaPurple)
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            .background(walaPurple.opacity(0.10), in: Capsule())
+                    }
+                }
+            }
             if loader.redemptions.isEmpty {
                 Text("لا توجد استبدالات بعد — جرّب استبدال أول قسيمة ✨")
                     .font(SabqFonts.app(size: 13, weight: .medium))
@@ -606,15 +642,16 @@ struct SabqPlusView: View {
                 .foregroundStyle(Color(red: 0.840, green: 0.271, blue: 0.271))
                 .monospacedDigit()
             if item.code != nil {
+                let installed = installedSerials.contains(walletSerial(for: item.id))
                 Button {
                     Task { await addToWallet(redemptionId: item.id) }
                 } label: {
                     if walletBusyId == item.id {
                         ProgressView().frame(width: 26, height: 26)
                     } else {
-                        Image(systemName: "wallet.pass")
+                        Image(systemName: installed ? "wallet.pass.fill" : "wallet.pass")
                             .font(.system(size: 15))
-                            .foregroundStyle(walaPurple)
+                            .foregroundStyle(installed ? Color(red: 0.09, green: 0.64, blue: 0.42) : walaPurple)
                             .frame(width: 26, height: 26)
                     }
                 }
@@ -719,11 +756,51 @@ struct SabqPlusView: View {
         do {
             try await APIClient.shared.removePlusRedemption(id: item.id)
             removalTarget = nil
+            removeWalletPass(serial: walletSerial(for: item.id))
             await loader.load()
         } catch {
             removalTarget = nil
             errorMessage = "تعذر إزالة القسيمة."
         }
+    }
+
+    // MARK: - إدارة بطاقات Wallet من داخل التطبيق (PKPassLibrary)
+    //
+    // بفضل entitlement pass-type-identifiers يستطيع التطبيق قراءة وحذف
+    // البطاقات الصادرة بمعرّفات فريق سبق — فلا يحتاج المستخدم مطاردة زر
+    // «إزالة البطاقة» في تطبيق Wallet.
+
+    /// الرقم التسلسلي المطبوع في البطاقة — نفس الاشتقاق في الخادم.
+    private func walletSerial(for redemptionId: String) -> String {
+        "SABQ-PLUS-" + redemptionId.replacingOccurrences(of: "-", with: "").prefix(10).uppercased()
+    }
+
+    private func refreshInstalledPasses() {
+        let library = PKPassLibrary()
+        installedSerials = Set(
+            library.passes()
+                .filter { $0.serialNumber.hasPrefix("SABQ-PLUS-") }
+                .map(\.serialNumber)
+        )
+    }
+
+    private func removeWalletPass(serial: String) {
+        let library = PKPassLibrary()
+        if let pass = library.passes().first(where: { $0.serialNumber == serial }) {
+            library.removePass(pass)
+        }
+        refreshInstalledPasses()
+    }
+
+    /// حذف كل بطاقات قسائم سبق بلس المتراكمة من Wallet دفعة واحدة.
+    private func cleanupWalletPasses() {
+        let library = PKPassLibrary()
+        let plusPasses = library.passes().filter { $0.serialNumber.hasPrefix("SABQ-PLUS-") }
+        for pass in plusPasses {
+            library.removePass(pass)
+        }
+        refreshInstalledPasses()
+        errorMessage = "أُزيلت \(plusPasses.count) بطاقة من Apple Wallet."
     }
 
     // MARK: - أدوات
