@@ -1,11 +1,12 @@
 // دليل المنسوبين — /dashboard/staff-profiles
-// جدول بالبحث والفلاتر ونسب الاكتمال؛ فتح الملف صفحةً أو بوب أب للتعديل السريع.
+// بهوية لوحة التحكم (DashboardPageShell / Header / شريط إحصاء / فلاتر بطاقات).
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { DashboardH1WithFavorite } from "@/components/dashboard/DashboardH1WithFavorite";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { StaffProfileForm } from "@/components/staff/StaffProfileForm";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,20 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import { IdCard, Pencil, ExternalLink, Loader2 } from "lucide-react";
+  AlertTriangle,
+  Briefcase,
+  ExternalLink,
+  IdCard,
+  Loader2,
+  Mic2,
+  Pencil,
+  PenLine,
+  Search,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 
 type StaffRow = {
   userId: string;
@@ -40,65 +51,84 @@ type StaffRow = {
   mediaLicenseExpiresAt: string | null;
 };
 
-const EMPLOYMENT_LABELS: Record<string, string> = {
-  employee: "موظف",
-  collaborator: "متعاون",
-  field_reporter: "مراسل صحفي",
-  opinion_writer: "كاتب رأي",
-};
-
 const ALL = "__all__";
 
-function completionTone(percent: number): string {
-  if (percent >= 80) return "bg-emerald-500";
-  if (percent >= 40) return "bg-sky-500";
-  if (percent > 0) return "bg-amber-500";
-  return "bg-transparent";
+const EMPLOYMENT_META: Record<
+  string,
+  { label: string; icon: LucideIcon; className: string; ring: string; fill: string }
+> = {
+  employee: {
+    label: "موظف",
+    icon: Briefcase,
+    className: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    ring: "border-sky-200/70 dark:border-sky-900/40",
+    fill: "from-sky-500/10",
+  },
+  collaborator: {
+    label: "متعاون",
+    icon: Users,
+    className: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    ring: "border-violet-200/70 dark:border-violet-900/40",
+    fill: "from-violet-500/10",
+  },
+  field_reporter: {
+    label: "مراسل صحفي",
+    icon: Mic2,
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    ring: "border-emerald-200/70 dark:border-emerald-900/40",
+    fill: "from-emerald-500/10",
+  },
+  opinion_writer: {
+    label: "كاتب رأي",
+    icon: PenLine,
+    className: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    ring: "border-amber-200/70 dark:border-amber-900/40",
+    fill: "from-amber-500/10",
+  },
+};
+
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  return Math.floor((new Date(iso).getTime() - Date.now()) / 86400000);
+}
+
+function hasExpiringAlert(row: StaffRow): boolean {
+  for (const iso of [row.pressCardValidUntil, row.mediaLicenseExpiresAt]) {
+    const d = daysUntil(iso);
+    if (d !== null && d <= 30) return true;
+  }
+  return false;
 }
 
 function expiryBadge(label: string, iso: string | null) {
-  if (!iso) return null;
-  const days = Math.floor((new Date(iso).getTime() - Date.now()) / 86400000);
+  const days = daysUntil(iso);
+  if (days === null) return null;
   if (days < 0) {
     return (
-      <Badge variant="outline" className="border-red-500/40 bg-red-500/10 text-red-600 text-[10px]">
+      <Badge variant="outline" className="border-red-500/40 bg-red-500/10 text-[10px] text-red-600">
         {label} منتهية
       </Badge>
     );
   }
   if (days <= 30) {
     return (
-      <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 text-[10px]">
-        {label} تنتهي خلال {days} يوماً
+      <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300">
+        {label} · {days}ي
       </Badge>
     );
   }
   return null;
 }
 
-function CompletionCell({ percent, hasProfile }: { percent: number | null; hasProfile: boolean }) {
-  if (!hasProfile) {
-    return <Badge variant="outline" className="text-[10px] text-muted-foreground">بلا ملف</Badge>;
-  }
-  const value = percent ?? 0;
-  return (
-    <div className="flex min-w-[7.5rem] items-center gap-2">
-      <Progress
-        value={value}
-        className="h-1.5 w-16 bg-muted"
-        indicatorClassName={completionTone(value)}
-      />
-      <span
-        className={cn(
-          "w-8 text-left text-xs tabular-nums",
-          value === 0 ? "text-muted-foreground" : "font-semibold text-foreground",
-        )}
-        dir="ltr"
-      >
-        {value}%
-      </span>
-    </div>
-  );
+function completionTone(percent: number): string {
+  if (percent >= 80) return "bg-emerald-500";
+  if (percent >= 40) return "bg-primary";
+  if (percent > 0) return "bg-amber-500";
+  return "bg-transparent";
+}
+
+function displayName(row: StaffRow): string {
+  return [row.firstName, row.lastName].filter(Boolean).join(" ") || row.email;
 }
 
 export default function StaffProfilesDirectory() {
@@ -107,173 +137,279 @@ export default function StaffProfilesDirectory() {
   const [employmentType, setEmploymentType] = useState(ALL);
   const [quickEditUserId, setQuickEditUserId] = useState<string | null>(null);
 
+  // النوع يُفلتر محلياً حتى تبقى أعداد بطاقات الأنواع صحيحة مع البحث/الإدارة.
   const params = new URLSearchParams();
   if (q.trim()) params.set("q", q.trim());
   if (departmentId !== ALL) params.set("departmentId", departmentId);
-  if (employmentType !== ALL) params.set("employmentType", employmentType);
   const listKey = `/api/staff-profiles${params.toString() ? `?${params}` : ""}`;
 
   const { data: listRaw, isLoading } = useQuery({ queryKey: [listKey] });
   const { data: lookupsRaw } = useQuery({ queryKey: ["/api/staff-profiles/lookups"] });
-  const items = ((listRaw as { items?: StaffRow[] } | undefined)?.items ?? []) as StaffRow[];
+  const allItems = ((listRaw as { items?: StaffRow[] } | undefined)?.items ?? []) as StaffRow[];
   const lookups = (lookupsRaw ?? null) as { departments: { id: string; nameAr: string }[] } | null;
+
+  const items = useMemo(
+    () => (employmentType === ALL ? allItems : allItems.filter((r) => r.employmentType === employmentType)),
+    [allItems, employmentType],
+  );
+
+  const stats = useMemo(() => {
+    const byType = Object.fromEntries(
+      Object.keys(EMPLOYMENT_META).map((k) => [k, allItems.filter((r) => r.employmentType === k).length]),
+    ) as Record<string, number>;
+    return {
+      total: items.length,
+      withProfile: items.filter((r) => r.hasProfile).length,
+      complete: items.filter((r) => (r.completionPercent ?? 0) >= 80).length,
+      alerts: items.filter(hasExpiringAlert).length,
+      byType,
+      pool: allItems.length,
+    };
+  }, [allItems, items]);
 
   return (
     <DashboardLayout>
-      <div dir="rtl" className="space-y-5 p-1">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-600">
-            <IdCard className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <DashboardH1WithFavorite className="text-xl font-bold tracking-tight">
-              المنسوبون
-            </DashboardH1WithFavorite>
-            <p className="text-xs text-muted-foreground">
-              ملف المنسوب الموحد — المصدر المرجعي للبطاقة الصحفية وكل الأسطح
-            </p>
+      <DashboardPageShell maxWidthClassName="max-w-[1400px]" contentClassName="px-4 pb-16 sm:px-6">
+        <DashboardPageHeader
+          icon={IdCard}
+          title="ملفات المنسوبين"
+          description="الملف الموحد للمنسوب — المرجع للبطاقة الصحفية وكل أسطح سبق"
+          titleTestId="text-staff-profiles-title"
+        />
+
+        {/* شريط الحالة */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: "الإجمالي", value: stats.total, tone: "text-foreground", icon: Users },
+            { label: "لديهم ملف", value: stats.withProfile, tone: "text-sky-700 dark:text-sky-300", icon: UserRound },
+            { label: "مكتمل ≥ 80٪", value: stats.complete, tone: "text-emerald-700 dark:text-emerald-300", icon: IdCard },
+            { label: "تنبيهات قريبة", value: stats.alerts, tone: "text-amber-700 dark:text-amber-300", icon: AlertTriangle },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} className="rounded-xl border bg-card px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                  <Icon className="h-3.5 w-3.5 text-muted-foreground/70" aria-hidden />
+                </div>
+                <p className={cn("mt-0.5 text-xl font-bold tabular-nums tracking-tight", item.tone)}>
+                  {isLoading ? "—" : item.value}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* بطاقات الأنواع — فلتر سريع بهوية سبق */}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {Object.entries(EMPLOYMENT_META).map(([key, meta]) => {
+            const Icon = meta.icon;
+            const count = stats.byType[key] ?? 0;
+            const selected = employmentType === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setEmploymentType(selected ? ALL : key)}
+                className={cn(
+                  "rounded-2xl border bg-gradient-to-bl to-card p-3.5 text-start transition-all",
+                  meta.ring,
+                  meta.fill,
+                  selected && "ring-2 ring-primary/40",
+                  !selected && "hover:bg-muted/30",
+                )}
+                data-testid={`staff-type-${key}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium", meta.className)}>
+                    <Icon className="h-3.5 w-3.5" />
+                    {meta.label}
+                  </span>
+                  <span className="text-2xl font-bold tabular-nums">{isLoading ? "—" : count}</span>
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {selected ? "فلتر نشط — اضغط لإلغاء التحديد" : "عرض هذا النوع فقط"}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* فلاتر مضغوطة */}
+        <div className="space-y-3 rounded-2xl border bg-card p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="بحث بالاسم أو البريد أو الرقم الوظيفي…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="h-10 pr-9"
+                data-testid="input-staff-search"
+              />
+            </div>
+            <Select value={departmentId} onValueChange={setDepartmentId}>
+              <SelectTrigger className="h-10 w-44">
+                <SelectValue placeholder="كل الإدارات" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>كل الإدارات</SelectItem>
+                {(lookups?.departments ?? []).map((d) => (
+                  <SelectItem key={d.id} value={d.id}>{d.nameAr}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(q || departmentId !== ALL || employmentType !== ALL) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => {
+                  setQ("");
+                  setDepartmentId(ALL);
+                  setEmploymentType(ALL);
+                }}
+              >
+                مسح الفلاتر
+              </Button>
+            )}
+            <span className="ms-auto text-xs tabular-nums text-muted-foreground">
+              {isLoading
+                ? "…"
+                : employmentType === ALL
+                  ? `${stats.total} منسوب`
+                  : `${stats.total} من ${stats.pool}`}
+            </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="بحث بالاسم أو البريد أو الرقم الوظيفي…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="h-9 max-w-sm"
-          />
-          <Select value={departmentId} onValueChange={setDepartmentId}>
-            <SelectTrigger className="h-9 w-44">
-              <SelectValue placeholder="كل الإدارات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>كل الإدارات</SelectItem>
-              {(lookups?.departments ?? []).map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.nameAr}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={employmentType} onValueChange={setEmploymentType}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="كل الأنواع" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>كل الأنواع</SelectItem>
-              {Object.entries(EMPLOYMENT_LABELS).map(([v, l]) => (
-                <SelectItem key={v} value={v}>{l}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="ms-auto text-xs text-muted-foreground tabular-nums">
-            {isLoading ? "…" : `${items.length} منسوب`}
-          </span>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border bg-card">
+        {/* القائمة */}
+        <div className="overflow-hidden rounded-2xl border bg-card">
           {isLoading ? (
-            <div className="flex justify-center py-16">
+            <div className="flex justify-center py-20">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <IdCard className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-semibold">لا نتائج مطابقة</p>
+              <p className="text-xs text-muted-foreground">جرّب تعديل البحث أو الفلاتر</p>
+            </div>
           ) : (
-            <Table className="table-fixed">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[26%]">المنسوب</TableHead>
-                  <TableHead className="w-[12%]">الرقم</TableHead>
-                  <TableHead className="w-[18%]">المسمى / الإدارة</TableHead>
-                  <TableHead className="w-[12%]">النوع</TableHead>
-                  <TableHead className="w-[14%]">اكتمال الملف</TableHead>
-                  <TableHead className="w-[12%]">تنبيهات</TableHead>
-                  <TableHead className="w-[6%] text-left">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((row) => {
-                  const alerts = [
-                    expiryBadge("البطاقة", row.pressCardValidUntil),
-                    expiryBadge("الترخيص", row.mediaLicenseExpiresAt),
-                  ].filter(Boolean);
+            <ul className="divide-y divide-border">
+              {items.map((row) => {
+                const meta = row.employmentType ? EMPLOYMENT_META[row.employmentType] : null;
+                const TypeIcon = meta?.icon ?? UserRound;
+                const percent = row.completionPercent ?? 0;
+                const alerts = [
+                  expiryBadge("البطاقة", row.pressCardValidUntil),
+                  expiryBadge("الترخيص", row.mediaLicenseExpiresAt),
+                ].filter(Boolean);
 
-                  return (
-                    <TableRow key={row.userId}>
-                      <TableCell className="py-3">
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          {row.profileImageUrl ? (
-                            <img
-                              src={row.profileImageUrl}
-                              alt=""
-                              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border"
-                            />
-                          ) : (
-                            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sky-500/10 text-xs font-semibold text-sky-600">
-                              {(row.firstName ?? row.email).slice(0, 1)}
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold">
-                              {[row.firstName, row.lastName].filter(Boolean).join(" ") || row.email}
-                            </div>
-                            <div className="truncate text-[11px] text-muted-foreground" dir="ltr">
-                              {row.email}
-                            </div>
-                          </div>
+                return (
+                  <li
+                    key={row.userId}
+                    className="flex flex-col gap-3 px-3 py-3.5 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-4 sm:px-4"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      {row.profileImageUrl ? (
+                        <img
+                          src={row.profileImageUrl}
+                          alt=""
+                          className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-primary/15"
+                        />
+                      ) : (
+                        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          {displayName(row).slice(0, 1)}
                         </div>
-                      </TableCell>
-                      <TableCell className="py-3 font-mono text-xs text-muted-foreground" dir="ltr">
-                        {row.employeeNumber ?? "—"}
-                      </TableCell>
-                      <TableCell className="py-3 text-xs">
-                        <div className="truncate font-medium">{row.jobTitleName ?? "—"}</div>
-                        <div className="truncate text-muted-foreground">{row.departmentName ?? "—"}</div>
-                      </TableCell>
-                      <TableCell className="py-3 text-xs text-muted-foreground">
-                        {EMPLOYMENT_LABELS[row.employmentType ?? ""] ?? "—"}
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <CompletionCell percent={row.completionPercent} hasProfile={row.hasProfile} />
-                      </TableCell>
-                      <TableCell className="py-3">
-                        {alerts.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">{alerts}</div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-bold">{displayName(row)}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <span className="truncate" dir="ltr">{row.email}</span>
+                          {row.employeeNumber && (
+                            <>
+                              <span className="opacity-40">·</span>
+                              <span className="font-mono tabular-nums" dir="ltr">{row.employeeNumber}</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {meta ? (
+                            <span className={cn("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium", meta.className)}>
+                              <TypeIcon className="h-3 w-3" />
+                              {meta.label}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">بلا نوع</span>
+                          )}
+                          {(row.jobTitleName || row.departmentName) && (
+                            <span className="truncate text-[11px] text-muted-foreground">
+                              {[row.jobTitleName, row.departmentName].filter(Boolean).join(" · ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-4">
+                      <div className="min-w-[7.5rem]">
+                        {row.hasProfile ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-2 text-[11px]">
+                              <span className="text-muted-foreground">اكتمال</span>
+                              <span className={cn("font-bold tabular-nums", percent === 0 && "text-muted-foreground")}>
+                                {percent}%
+                              </span>
+                            </div>
+                            <Progress
+                              value={percent}
+                              className="h-1.5 bg-muted"
+                              indicatorClassName={completionTone(percent)}
+                            />
+                          </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground/50">—</span>
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">بلا ملف</Badge>
                         )}
-                      </TableCell>
-                      <TableCell className="py-3 text-left">
-                        <div className="flex items-center justify-end gap-0.5">
+                      </div>
+
+                      <div className="flex min-w-[5.5rem] flex-wrap gap-1">
+                        {alerts.length > 0 ? alerts : (
+                          <span className="text-[11px] text-muted-foreground/45">—</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-muted-foreground"
+                          onClick={() => setQuickEditUserId(row.userId)}
+                          title="تعديل سريع"
+                          data-testid={`staff-quick-edit-${row.userId}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Link href={`/dashboard/staff-profiles/${row.userId}`}>
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-muted-foreground"
-                            onClick={() => setQuickEditUserId(row.userId)}
-                            title="تعديل سريع"
+                            className="h-9 w-9 text-muted-foreground"
+                            title="فتح الملف"
+                            data-testid={`staff-open-${row.userId}`}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <ExternalLink className="h-4 w-4" />
                           </Button>
-                          <Link href={`/dashboard/staff-profiles/${row.userId}`}>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground"
-                              title="فتح الملف"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                          </Link>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {items.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
-                      لا نتائج مطابقة
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                        </Link>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 
@@ -287,7 +423,7 @@ export default function StaffProfilesDirectory() {
             )}
           </DialogContent>
         </Dialog>
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }
