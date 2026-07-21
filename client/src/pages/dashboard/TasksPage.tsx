@@ -58,11 +58,7 @@ import {
   FileText,
   Rocket,
   Palette,
-  LucideIcon,
-  CheckCheck,
-  RefreshCw,
-  X,
-  Plus
+  LucideIcon
 } from "lucide-react";
 import { isPast } from "date-fns";
 import type { Task, InsertTask } from "@shared/schema";
@@ -207,11 +203,9 @@ interface SubtaskRowProps {
   onView: (taskId: string) => void;
   onEdit: (taskId: string) => void;
   onComplete: (taskId: string, completed: boolean) => void;
-  isSelected?: boolean;
-  onToggleSelect?: (id: string) => void;
 }
 
-function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEdit, onComplete, isSelected = false, onToggleSelect }: SubtaskRowProps) {
+function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEdit, onComplete }: SubtaskRowProps) {
   const { data: subtasks } = useQuery<Task[]>({
     queryKey: ['/api/tasks', 'subtasks', parentTask.id],
     queryFn: async () => {
@@ -240,24 +234,19 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
         const taskIsOverdue = dueDateValue && dueDateValue < new Date() && subtask.status !== 'completed';
         
         return (
-          <TableRow key={subtask.id} data-testid={`row-subtask-${subtask.id}`} className="bg-muted/30 hover:bg-muted/50 transition-colors">
+          <TableRow key={subtask.id} data-testid={`row-subtask-${subtask.id}`} className="bg-muted/30">
             <TableCell>
-              {onToggleSelect && (
-                <Checkbox
-                  checked={isSelected}
-                  onCheckedChange={() => onToggleSelect(subtask.id)}
-                  aria-label={`تحديد ${subtask.title}`}
-                  data-testid={`checkbox-select-${subtask.id}`}
-                />
-              )}
+              <Checkbox
+                checked={subtask.status === 'completed'}
+                onCheckedChange={(checked) => onComplete(subtask.id, checked as boolean)}
+                data-testid={`checkbox-complete-${subtask.id}`}
+              />
             </TableCell>
             <TableCell className="font-medium pr-12" data-testid={`text-title-${subtask.id}`}>
               <div className="flex items-center gap-2">
                 <div className="h-px w-6 bg-border" />
                 <div>
-                  <div className={cn(subtask.status === "completed" && "line-through text-muted-foreground")}>
-                    {subtask.title}
-                  </div>
+                  <div>{subtask.title}</div>
                   {subtask.description && (
                     <div className="text-sm text-muted-foreground line-clamp-1">
                       {subtask.description}
@@ -282,7 +271,7 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
             <TableCell data-testid={`text-due-date-${subtask.id}`}>
               {dueDateValue ? (
                 <div className="flex items-center gap-2">
-                  <span className={taskIsOverdue ? 'text-red-600 font-medium' : ''}>
+                  <span className={taskIsOverdue ? 'text-red-600' : ''}>
                     {formatTaskDate(dueDateValue)}
                   </span>
                   {taskIsOverdue && (
@@ -294,12 +283,11 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
               )}
             </TableCell>
             <TableCell>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => onView(subtask.id)}
-                  title="عرض التفاصيل"
                   data-testid={`button-view-${subtask.id}`}
                 >
                   <Eye className="h-4 w-4" />
@@ -308,7 +296,6 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
                   variant="ghost"
                   size="icon"
                   onClick={() => onEdit(subtask.id)}
-                  title="تعديل المهمة"
                   data-testid={`button-edit-${subtask.id}`}
                 >
                   <Edit className="h-4 w-4" />
@@ -316,17 +303,7 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => onComplete(subtask.id, subtask.status !== 'completed')}
-                  title={subtask.status === 'completed' ? "إلغاء الإتمام" : "إتمام المهمة"}
-                  data-testid={`button-complete-${subtask.id}`}
-                >
-                  <CheckCircle2 className={cn("h-4 w-4", subtask.status === 'completed' ? "text-emerald-600" : "")} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
                   onClick={() => onDelete(subtask.id)}
-                  title="حذف المهمة"
                   data-testid={`button-delete-${subtask.id}`}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
@@ -346,12 +323,10 @@ interface TaskRowWithSubtasksProps {
   dueDateValue: Date | null;
   taskIsOverdue: boolean;
   isExpanded: boolean;
-  isSelected: boolean;
   CategoryIcon: LucideIcon;
   users: User[];
   completeMutation: any;
   toggleExpand: (taskId: string) => void;
-  toggleSelect: (taskId: string) => void;
   setViewTaskId: (id: string) => void;
   setEditTaskId: (id: string) => void;
   setDeleteId: (id: string) => void;
@@ -363,12 +338,10 @@ function TaskRowWithSubtasks({
   dueDateValue,
   taskIsOverdue,
   isExpanded,
-  isSelected,
   CategoryIcon,
   users,
   completeMutation,
   toggleExpand,
-  toggleSelect,
   setViewTaskId,
   setEditTaskId,
   setDeleteId,
@@ -390,18 +363,17 @@ function TaskRowWithSubtasks({
       <TableRow 
         key={task.id} 
         data-testid={`row-task-${task.id}`}
-        className={cn(
-          "border transition-colors hover:bg-muted/40",
-          isSelected && "bg-sky-50/80 dark:bg-sky-950/30 border-sky-300 dark:border-sky-800",
-          !isSelected && getTaskRowBackground(task.priority, task.status)
-        )}
+        className={`group border rounded-lg p-3 ${getTaskRowBackground(task.priority, task.status)}`}
       >
         <TableCell>
           <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => toggleSelect(task.id)}
-            aria-label={`تحديد ${task.title}`}
-            data-testid={`checkbox-select-${task.id}`}
+            checked={task.status === 'completed'}
+            onCheckedChange={(checked) => completeMutation.mutate({ 
+              taskId: task.id, 
+              completed: checked as boolean
+            })}
+            disabled={completeMutation.isPending}
+            data-testid={`checkbox-complete-${task.id}`}
           />
         </TableCell>
         <TableCell data-testid={`text-title-${task.id}`}>
@@ -409,7 +381,7 @@ function TaskRowWithSubtasks({
             {hasSubtasks && (
               <button
                 onClick={() => toggleExpand(task.id)}
-                className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                className="flex-shrink-0"
                 data-testid={`button-expand-task-${task.id}`}
               >
                 <ChevronDown 
@@ -422,11 +394,11 @@ function TaskRowWithSubtasks({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={cn(
                   "text-base font-semibold",
-                  task.status === "completed" && "text-muted-foreground line-through",
+                  task.status === "completed" && "text-muted-foreground",
                 )}>{task.title}</span>
                 {hasSubtasks && (
                   <Badge variant="outline" className="text-xs">
-                    {subtasksCount} مهام فرعية
+                    {subtasksCount}
                   </Badge>
                 )}
               </div>
@@ -454,7 +426,7 @@ function TaskRowWithSubtasks({
         <TableCell data-testid={`text-due-date-${task.id}`}>
           {dueDateValue ? (
             <div className="flex items-center gap-2">
-              <span className={taskIsOverdue ? 'text-red-600 font-medium' : ''}>
+              <span className={taskIsOverdue ? 'text-red-600' : ''}>
                 {formatTaskDate(dueDateValue)}
               </span>
               {taskIsOverdue && (
@@ -466,12 +438,11 @@ function TaskRowWithSubtasks({
           )}
         </TableCell>
         <TableCell>
-          <div className="flex items-center gap-1">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setViewTaskId(task.id)}
-              title="عرض التفاصيل"
               data-testid={`button-view-${task.id}`}
             >
               <Eye className="h-4 w-4" />
@@ -480,7 +451,6 @@ function TaskRowWithSubtasks({
               variant="ghost"
               size="icon"
               onClick={() => setEditTaskId(task.id)}
-              title="تعديل المهمة"
               data-testid={`button-edit-${task.id}`}
             >
               <Edit className="h-4 w-4" />
@@ -493,16 +463,14 @@ function TaskRowWithSubtasks({
                 completed: task.status !== 'completed'
               })}
               disabled={completeMutation.isPending}
-              title={task.status === 'completed' ? "إلغاء الإتمام" : "إتمام المهمة"}
               data-testid={`button-complete-${task.id}`}
             >
-              <CheckCircle2 className={cn("h-4 w-4", task.status === 'completed' ? "text-emerald-600" : "")} />
+              <CheckCircle2 className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setDeleteId(task.id)}
-              title="حذف المهمة"
               data-testid={`button-delete-${task.id}`}
             >
               <Trash2 className="h-4 w-4 text-destructive" />
@@ -530,15 +498,13 @@ function TaskRowWithSubtasks({
 interface MobileTaskCardProps {
   task: Task;
   users: User[];
-  isSelected: boolean;
-  onToggleSelect: (id: string) => void;
   onView: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onComplete: (id: string, completed: boolean) => void;
 }
 
-function MobileTaskCard({ task, users, isSelected, onToggleSelect, onView, onEdit, onDelete, onComplete }: MobileTaskCardProps) {
+function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: MobileTaskCardProps) {
   const Icon = getCategoryIcon(task.department, task.category);
   const bgClass = getTaskRowBackground(task.priority, task.status);
   
@@ -550,26 +516,15 @@ function MobileTaskCard({ task, users, isSelected, onToggleSelect, onView, onEdi
   };
   
   return (
-    <Card className={cn(
-      bgClass,
-      "border rounded-lg p-4 mb-3 transition-colors",
-      isSelected && "ring-2 ring-sky-500 bg-sky-50/90 dark:bg-sky-950/40"
-    )} data-testid={`card-mobile-task-${task.id}`}>
-      {/* Header: Select + Icon + Title + Priority Badge */}
+    <Card className={`${bgClass} border rounded-lg p-4 mb-3`} data-testid={`card-mobile-task-${task.id}`}>
+      {/* Header: Icon + Title + Priority Badge */}
       <div className="flex items-start gap-3 mb-2">
-        <Checkbox
-          checked={isSelected}
-          onCheckedChange={() => onToggleSelect(task.id)}
-          aria-label={`تحديد ${task.title}`}
-          className="mt-1 flex-shrink-0"
-          data-testid={`checkbox-select-${task.id}`}
-        />
         <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-1" />
         <div className="flex-1 min-w-0">
           <h3
             className={cn(
               "font-semibold text-base line-clamp-2",
-              task.status === "completed" && "text-muted-foreground line-through",
+              task.status === "completed" && "text-muted-foreground",
             )}
             data-testid={`text-title-${task.id}`}
           >
@@ -608,31 +563,31 @@ function MobileTaskCard({ task, users, isSelected, onToggleSelect, onView, onEdi
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-2 pt-2 border-t justify-between">
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={() => onView(task.id)} data-testid={`button-view-${task.id}`}>
-            <Eye className="h-4 w-4 ml-1" />
-            عرض
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => onEdit(task.id)} data-testid={`button-edit-${task.id}`}>
-            <Edit className="h-4 w-4 ml-1" />
-            تعديل
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => onDelete(task.id)} data-testid={`button-delete-${task.id}`}>
-            <Trash2 className="h-4 w-4 text-destructive ml-1" />
-            حذف
-          </Button>
-        </div>
-        <Button
-          size="sm"
-          variant={task.status === 'completed' ? "outline" : "default"}
+      {/* Action Buttons - ALWAYS VISIBLE */}
+      <div className="flex items-center gap-2 pt-2 border-t">
+        <Button size="sm" variant="ghost" onClick={() => onView(task.id)} data-testid={`button-view-${task.id}`}>
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => onEdit(task.id)} data-testid={`button-edit-${task.id}`}>
+          <Edit className="h-4 w-4" />
+        </Button>
+        <Button 
+          size="sm" 
+          variant="ghost" 
           onClick={() => onComplete(task.id, task.status !== 'completed')}
           data-testid={`button-complete-${task.id}`}
         >
-          <CheckCircle2 className="h-4 w-4 ml-1" />
-          {task.status === 'completed' ? "إلغاء الإتمام" : "إتمام"}
+          <CheckCircle2 className="h-4 w-4" />
         </Button>
+        <Button size="sm" variant="ghost" onClick={() => onDelete(task.id)} data-testid={`button-delete-${task.id}`}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+        <div className="flex-1"></div>
+        <Checkbox
+          checked={task.status === 'completed'}
+          onCheckedChange={(checked) => onComplete(task.id, checked as boolean)}
+          data-testid={`checkbox-complete-${task.id}`}
+        />
       </div>
     </Card>
   );
@@ -651,11 +606,6 @@ export default function TasksPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
-
-  // Bulk action states
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [confirmCompleteAllOpen, setConfirmCompleteAllOpen] = useState(false);
   
   const limit = 20;
 
@@ -697,6 +647,8 @@ export default function TasksPage() {
       if (!res.ok) throw new Error('Failed to fetch users');
       return await res.json();
     },
+    // /api/users requires admin.manage_settings; only fetch for users who can,
+    // so non-admins don't generate (retry-amplified) 403s on page load.
     enabled: hasPermission(user, 'admin.manage_settings'),
     retry: false,
   });
@@ -719,6 +671,10 @@ export default function TasksPage() {
         title: "تم الإنشاء",
         description: isSubtask ? "تم إنشاء المهمة الفرعية بنجاح" : "تم إنشاء المهمة بنجاح",
       });
+      
+      // Hybrid mode: Don't clear creatingSubtaskFor here
+      // Let "إنهاء" button handle exit from subtask mode
+      // This allows creating multiple subtasks in sequence
     },
     onError: () => {
       toast({
@@ -736,7 +692,6 @@ export default function TasksPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
       queryClient.invalidateQueries({ queryKey: ['/api/tasks/statistics'] });
-      setSelectedTaskIds(prev => prev.filter(taskId => taskId !== deleteId));
       toast({
         title: "تم الحذف",
         description: "تم حذف المهمة بنجاح",
@@ -772,82 +727,6 @@ export default function TasksPage() {
     },
   });
 
-  const bulkCompleteMutation = useMutation({
-    mutationFn: async ({ taskIds, allOpen }: { taskIds?: string[]; allOpen?: boolean }) => {
-      return await apiRequest('/api/tasks/bulk-complete', {
-        method: 'POST',
-        body: JSON.stringify({ taskIds, allOpen }),
-      });
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks/statistics'] });
-      setSelectedTaskIds([]);
-      setConfirmCompleteAllOpen(false);
-      toast({
-        title: "تم الإتمام بنجاح",
-        description: data.message || "تم تحديث المهام بنجاح",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "خطأ",
-        description: "فشل إتمام المهام الجماعي",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: async (taskIds: string[]) => {
-      return await apiRequest('/api/tasks/bulk-delete', {
-        method: 'POST',
-        body: JSON.stringify({ taskIds }),
-      });
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks/statistics'] });
-      setSelectedTaskIds([]);
-      setConfirmBulkDelete(false);
-      toast({
-        title: "تم الحذف بنجاح",
-        description: data.message || "تم حذف المهام المحددة بنجاح",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "خطأ",
-        description: "فشل حذف المهام الجماعي",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const toggleSelectTask = (taskId: string) => {
-    setSelectedTaskIds(prev => {
-      if (prev.includes(taskId)) {
-        return prev.filter(id => id !== taskId);
-      } else {
-        return [...prev, taskId];
-      }
-    });
-  };
-
-  const currentVisibleTasks = tasksData?.tasks || [];
-  const isAllVisibleSelected = currentVisibleTasks.length > 0 && currentVisibleTasks.every(t => selectedTaskIds.includes(t.id));
-
-  const toggleSelectAllVisible = () => {
-    if (isAllVisibleSelected) {
-      const visibleIds = currentVisibleTasks.map(t => t.id);
-      setSelectedTaskIds(prev => prev.filter(id => !visibleIds.includes(id)));
-    } else {
-      const visibleIds = currentVisibleTasks.map(t => t.id);
-      const newSet = new Set([...selectedTaskIds, ...visibleIds]);
-      setSelectedTaskIds(Array.from(newSet));
-    }
-  };
-
   const toggleExpand = (taskId: string) => {
     setExpandedTasks(prev => {
       const newSet = new Set(prev);
@@ -862,94 +741,39 @@ export default function TasksPage() {
 
   const handleCreateSubtask = (parentId: string) => {
     setCreatingSubtaskFor(parentId);
+    // Scroll to top to show AddTaskQuickPane
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
   };
 
+  const getParentTaskName = (parentId: string | null) => {
+    if (!parentId) return null;
+    const parentTask = tasksData?.tasks.find(t => t.id === parentId);
+    return parentTask?.title || null;
+  };
+
+  const getUserName = (userId: string | null) => {
+    if (!userId) return 'غير مسند';
+    const user = users.find(u => u.id === userId);
+    if (!user) return 'غير معروف';
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+  };
+
+  const isOverdue = (dueDate: Date | null, status: string) => {
+    if (!dueDate || status === 'completed') return false;
+    return isPast(dueDate);
+  };
+
   return (
     <DashboardLayout>
       <DashboardPageShell>
-        {/* Header & Main Control Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <DashboardPageHeader
-            icon={ListTodo}
-            title="مركز المهام"
-            description="إدارة ومتابعة المهام التحريرية والتقنية"
-            titleTestId="heading-tasks"
-          />
-          
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              className="gap-1.5"
-              data-testid="button-refresh-tasks"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>تحديث</span>
-            </Button>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setConfirmCompleteAllOpen(true)}
-              className="gap-1.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/80 border-emerald-200 dark:border-emerald-800"
-              data-testid="button-complete-all-open"
-            >
-              <CheckCheck className="h-4 w-4" />
-              <span>إتمام كل المهام المفتوحة</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Floating / Sticky Selection Action Bar */}
-        {selectedTaskIds.length > 0 && (
-          <div className="sticky top-4 z-20 flex items-center justify-between p-3.5 bg-card/95 backdrop-blur border-2 border-sky-500/80 shadow-lg rounded-xl transition-all animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center gap-3">
-              <Badge className="bg-sky-600 text-white text-sm px-2.5 py-0.5">
-                تم تحديد {selectedTaskIds.length.toLocaleString("en-US")} مهمة
-              </Badge>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => bulkCompleteMutation.mutate({ taskIds: selectedTaskIds })}
-                disabled={bulkCompleteMutation.isPending}
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                data-testid="button-bulk-complete-selected"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                <span>إتمام المحددة ({selectedTaskIds.length})</span>
-              </Button>
-
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setConfirmBulkDelete(true)}
-                disabled={bulkDeleteMutation.isPending}
-                className="gap-1.5"
-                data-testid="button-bulk-delete-selected"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>حذف المحددة ({selectedTaskIds.length})</span>
-              </Button>
-
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSelectedTaskIds([])}
-                data-testid="button-clear-selection"
-              >
-                <X className="h-4 w-4 ml-1" />
-                إلغاء التحديد
-              </Button>
-            </div>
-          </div>
-        )}
+        <DashboardPageHeader
+          icon={ListTodo}
+          title="مركز المهام"
+          description="إدارة المهام والمتابعة"
+          titleTestId="heading-tasks"
+        />
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1044,10 +868,11 @@ export default function TasksPage() {
           data-testid="card-filters"
         >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <Filter className="h-5 w-5 text-sky-600 dark:text-sky-400" />
-              تصفية المهام
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              الفلاتر
             </CardTitle>
+            <CardDescription>تصفية المهام حسب المعايير</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-4">
@@ -1144,42 +969,22 @@ export default function TasksPage() {
         {/* Tasks Table */}
         {!isError && (
           <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">جدول المهام</CardTitle>
-                <CardDescription className="tabular-nums">
-                  عرض ({(tasksData?.tasks?.length ?? 0).toLocaleString("en-US")}) من ({(tasksData?.total ?? 0).toLocaleString("en-US")}) مهمة
-                </CardDescription>
-              </div>
-
-              {currentVisibleTasks.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleSelectAllVisible}
-                    className="text-xs gap-1.5"
-                  >
-                    <Checkbox
-                      checked={isAllVisibleSelected}
-                      onCheckedChange={toggleSelectAllVisible}
-                      className="pointer-events-none"
-                    />
-                    <span>{isAllVisibleSelected ? "إلغاء تحديد المعروض" : "تحديد المعروض بالكامل"}</span>
-                  </Button>
-                </div>
-              )}
+            <CardHeader>
+              <CardTitle>جميع المهام</CardTitle>
+              <CardDescription className="tabular-nums">
+                عرض ({(tasksData?.tasks?.length ?? 0).toLocaleString("en-US")}) من ({(tasksData?.total ?? 0).toLocaleString("en-US")}) مهمة
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-center py-8 text-muted-foreground">
                   جاري التحميل...
                 </div>
               ) : !tasksData?.tasks || tasksData.tasks.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-50 text-sky-500" />
-                  <p className="font-medium text-base">لا توجد مهام مطابقة</p>
-                  <p className="text-sm text-muted-foreground mt-1">اكتب المهمة في شريط "إضافة مهمة" للبدء</p>
+                  <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>لا توجد مهام</p>
+                  <p className="text-sm">انقر على "مهمة جديدة" للبدء</p>
                 </div>
               ) : (
                 <>
@@ -1190,8 +995,6 @@ export default function TasksPage() {
                         key={task.id}
                         task={task}
                         users={users}
-                        isSelected={selectedTaskIds.includes(task.id)}
-                        onToggleSelect={toggleSelectTask}
                         onView={setViewTaskId}
                         onEdit={setEditTaskId}
                         onDelete={(id) => { setDeleteId(id); }}
@@ -1202,64 +1005,54 @@ export default function TasksPage() {
                     ))}
                   </div>
 
-                  {/* Desktop View - Table */}
+                  {/* Desktop View - Table (hidden on mobile) */}
                   <div className="hidden md:block overflow-x-auto -mx-4 sm:mx-0">
                     <div className="inline-block min-w-full align-middle">
                       <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-right w-12">
-                              <Checkbox
-                                checked={isAllVisibleSelected}
-                                onCheckedChange={toggleSelectAllVisible}
-                                aria-label="تحديد كل المهام المعروضة"
-                                data-testid="checkbox-select-all"
-                              />
-                            </TableHead>
-                            <TableHead className="text-right font-semibold">العنوان والوصف</TableHead>
-                            <TableHead className="text-right font-semibold">الحالة</TableHead>
-                            <TableHead className="text-right font-semibold">الأولوية</TableHead>
-                            <TableHead className="text-right font-semibold">المسؤول</TableHead>
-                            <TableHead className="text-right font-semibold">تاريخ الاستحقاق</TableHead>
-                            <TableHead className="text-right font-semibold">الإجراءات</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {tasksData.tasks.map((task) => {
-                            const dueDateValue = task.dueDate ? new Date(task.dueDate) : null;
-                            const taskIsOverdue = !!(dueDateValue && dueDateValue < new Date() && task.status !== 'completed');
-                            const isExpanded = expandedTasks.has(task.id);
-                            const CategoryIcon = getCategoryIcon(task.department, task.category);
-                            const isSelected = selectedTaskIds.includes(task.id);
-                            
-                            return (
-                              <TaskRowWithSubtasks
-                                key={task.id}
-                                task={task}
-                                dueDateValue={dueDateValue}
-                                taskIsOverdue={taskIsOverdue}
-                                isExpanded={isExpanded}
-                                isSelected={isSelected}
-                                CategoryIcon={CategoryIcon}
-                                users={users}
-                                completeMutation={completeMutation}
-                                toggleExpand={toggleExpand}
-                                toggleSelect={toggleSelectTask}
-                                setViewTaskId={setViewTaskId}
-                                setEditTaskId={setEditTaskId}
-                                setDeleteId={setDeleteId}
-                                handleCreateSubtask={handleCreateSubtask}
-                              />
-                            );
-                          })}
-                        </TableBody>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right w-12">إكمال</TableHead>
+                          <TableHead className="text-right">العنوان</TableHead>
+                          <TableHead className="text-right">الحالة</TableHead>
+                          <TableHead className="text-right">الأولوية</TableHead>
+                          <TableHead className="text-right">المسؤول</TableHead>
+                          <TableHead className="text-right">تاريخ الاستحقاق</TableHead>
+                          <TableHead className="text-right">الإجراءات</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                    <TableBody>
+                      {tasksData.tasks.map((task) => {
+                      const dueDateValue = task.dueDate ? new Date(task.dueDate) : null;
+                      const taskIsOverdue = !!(dueDateValue && dueDateValue < new Date() && task.status !== 'completed');
+                      const isExpanded = expandedTasks.has(task.id);
+                      const CategoryIcon = getCategoryIcon(task.department, task.category);
+                      
+                      return (
+                        <TaskRowWithSubtasks
+                          key={task.id}
+                          task={task}
+                          dueDateValue={dueDateValue}
+                          taskIsOverdue={taskIsOverdue}
+                          isExpanded={isExpanded}
+                          CategoryIcon={CategoryIcon}
+                          users={users}
+                          completeMutation={completeMutation}
+                          toggleExpand={toggleExpand}
+                          setViewTaskId={setViewTaskId}
+                          setEditTaskId={setEditTaskId}
+                          setDeleteId={setDeleteId}
+                          handleCreateSubtask={handleCreateSubtask}
+                        />
+                      );
+                    })}
+                    </TableBody>
                       </Table>
                     </div>
                   </div>
 
                   {/* Pagination */}
                   {tasksData && tasksData.totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <div className="flex items-center justify-between mt-4">
                       <div className="text-sm text-muted-foreground tabular-nums">
                         صفحة {page.toLocaleString("en-US")} من {tasksData.totalPages.toLocaleString("en-US")}
                       </div>
@@ -1312,13 +1105,13 @@ export default function TasksPage() {
           />
         )}
 
-        {/* Single Delete Confirmation Dialog */}
+        {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
           <AlertDialogContent dir="rtl">
             <AlertDialogHeader>
-              <AlertDialogTitle data-testid="dialog-title-delete">تأكيد حذف المهمة</AlertDialogTitle>
+              <AlertDialogTitle data-testid="dialog-title-delete">تأكيد الحذف</AlertDialogTitle>
               <AlertDialogDescription>
-                هل أنت متأكد من رغبتك في حذف هذه المهمة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
+                هل أنت متأكد من حذف هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1326,56 +1119,9 @@ export default function TasksPage() {
               <AlertDialogAction
                 onClick={() => deleteId && deleteMutation.mutate(deleteId)}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleteMutation.isPending}
                 data-testid="button-confirm-delete"
               >
-                حذف المهمة
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Bulk Delete Confirmation Dialog */}
-        <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
-          <AlertDialogContent dir="rtl">
-            <AlertDialogHeader>
-              <AlertDialogTitle data-testid="dialog-title-bulk-delete">تأكيد الحذف الجماعي</AlertDialogTitle>
-              <AlertDialogDescription>
-                هل أنت متأكد من رغبتك في حذف {selectedTaskIds.length.toLocaleString("en-US")} مهمة محددة؟ سيتم إزالتها كلياً من النظام ولن يمكن التراجع.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel data-testid="button-cancel-bulk-delete">إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => bulkDeleteMutation.mutate(selectedTaskIds)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={bulkDeleteMutation.isPending}
-                data-testid="button-confirm-bulk-delete"
-              >
-                حذف {selectedTaskIds.length.toLocaleString("en-US")} مهمة
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Complete All Open Confirmation Dialog */}
-        <AlertDialog open={confirmCompleteAllOpen} onOpenChange={setConfirmCompleteAllOpen}>
-          <AlertDialogContent dir="rtl">
-            <AlertDialogHeader>
-              <AlertDialogTitle data-testid="dialog-title-complete-all">تأكيد إتمام كل المهام المفتوحة</AlertDialogTitle>
-              <AlertDialogDescription>
-                هل أنت متأكد من نقل كل المهام المفتوحة إلى حالة "مكتملة"؟
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel data-testid="button-cancel-complete-all">إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => bulkCompleteMutation.mutate({ allOpen: true })}
-                className="bg-emerald-600 text-white hover:bg-emerald-700"
-                disabled={bulkCompleteMutation.isPending}
-                data-testid="button-confirm-complete-all"
-              >
-                إتمام الكل الآن
+                حذف
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
