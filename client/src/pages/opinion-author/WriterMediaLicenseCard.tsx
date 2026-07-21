@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
 
 type MediaLicenseStatus = {
   submitted: boolean;
@@ -196,6 +197,32 @@ export function WriterMediaLicenseCard({
     setPrefilled(true);
   }, [data, prefilled]);
 
+  /** من شارة الشريط (#writer-media-license): افتح النموذج ومرّر إليه */
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash !== `#${WRITER_MEDIA_LICENSE_ANCHOR}`) return;
+      setForceShowForm(true);
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById(WRITER_MEDIA_LICENSE_ANCHOR)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash !== `#${WRITER_MEDIA_LICENSE_ANCHOR}`) return;
+    if (isLoading) return;
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(WRITER_MEDIA_LICENSE_ANCHOR)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [isLoading, data, forceShowForm]);
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       if (!licenseNumber.trim() || licenseNumber.trim().length < 3) {
@@ -279,6 +306,19 @@ export function WriterMediaLicenseCard({
   const showThanks = useThanksStillVisible(data?.submittedAt ?? null);
 
   if (isLoading || !data) {
+    if (typeof window !== "undefined" && window.location.hash === `#${WRITER_MEDIA_LICENSE_ANCHOR}`) {
+      return (
+        <section
+          id={WRITER_MEDIA_LICENSE_ANCHOR}
+          className="rounded-xl border border-border bg-card p-4"
+          dir="rtl"
+          aria-busy="true"
+          data-testid="writer-media-license-loading"
+        >
+          <div className="h-20 animate-pulse rounded-lg bg-muted" />
+        </section>
+      );
+    }
     return null;
   }
 
@@ -287,6 +327,7 @@ export function WriterMediaLicenseCard({
     if (data.expiringSoon) {
       return (
         <section
+          id={WRITER_MEDIA_LICENSE_ANCHOR}
           className="rounded-xl border border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/40"
           dir="rtl"
           data-testid="writer-media-license-renewal-warn"
@@ -338,6 +379,7 @@ export function WriterMediaLicenseCard({
     if (!showThanks) {
       return (
         <section
+          id={WRITER_MEDIA_LICENSE_ANCHOR}
           className="rounded-xl border border-emerald-200 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/30"
           dir="rtl"
           data-testid="writer-media-license-active"
@@ -364,6 +406,7 @@ export function WriterMediaLicenseCard({
     }
     return (
       <section
+        id={WRITER_MEDIA_LICENSE_ANCHOR}
         className="rounded-xl border border-border bg-card"
         dir="rtl"
         data-testid="writer-media-license-thanks"
@@ -403,6 +446,7 @@ export function WriterMediaLicenseCard({
 
   return (
     <section
+      id={WRITER_MEDIA_LICENSE_ANCHOR}
       className="rounded-xl border border-border bg-card"
       dir="rtl"
       data-testid="writer-media-license-card"

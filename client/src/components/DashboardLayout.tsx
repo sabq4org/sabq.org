@@ -51,6 +51,7 @@ import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
 import { cn } from "@/lib/utils";
+import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -196,6 +197,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     mediaLicenseFetched &&
     !mediaLicense?.submitted &&
     !mediaLicense?.valid;
+
+  const mediaLicenseFormPath =
+    role === "opinion_author"
+      ? "/dashboard/opinion-author"
+      : role === "reporter"
+        ? "/dashboard/reporter/articles"
+        : null;
+
+  const openMediaLicenseForm = () => {
+    if (!mediaLicenseFormPath) return;
+    const hash = `#${WRITER_MEDIA_LICENSE_ANCHOR}`;
+    const basePath = location.split("?")[0].split("#")[0];
+    if (basePath === mediaLicenseFormPath) {
+      if (window.location.hash !== hash) {
+        window.location.hash = WRITER_MEDIA_LICENSE_ANCHOR;
+      } else {
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
+      }
+      document
+        .getElementById(WRITER_MEDIA_LICENSE_ANCHOR)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    navigate(`${mediaLicenseFormPath}${hash}`);
+  };
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
@@ -436,7 +462,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         )}
                         {showExpiringSoonBadge && (
                           <Badge
-                            className="gap-1 border-0 bg-red-600 text-white hover:bg-red-600 dark:bg-red-700 dark:text-white dark:hover:bg-red-700"
+                            role="button"
+                            tabIndex={0}
+                            title="اضغط لتحديث بيانات الترخيص"
+                            className="cursor-pointer gap-1 border-0 bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:text-white dark:hover:bg-red-600"
+                            onClick={openMediaLicenseForm}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openMediaLicenseForm();
+                              }
+                            }}
                             data-testid="sidebar-identity-expiring-license-badge"
                           >
                             <BadgeAlert className="h-3 w-3" />
@@ -445,7 +481,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         )}
                         {showExpiredBadge && (
                           <Badge
-                            className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200 dark:hover:bg-rose-900/40"
+                            role="button"
+                            tabIndex={0}
+                            title="اضغط لتحديث الترخيص المنتهي"
+                            className="cursor-pointer gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-200 dark:hover:bg-rose-900/60"
+                            onClick={openMediaLicenseForm}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openMediaLicenseForm();
+                              }
+                            }}
                             data-testid="sidebar-identity-expired-license-badge"
                           >
                             <BadgeAlert className="h-3 w-3" />
@@ -454,7 +500,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         )}
                         {showUnlicensedBadge && (
                           <Badge
-                            className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                            role="button"
+                            tabIndex={0}
+                            title="اضغط لإرسال الترخيص المهني"
+                            className="cursor-pointer gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                            onClick={openMediaLicenseForm}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openMediaLicenseForm();
+                              }
+                            }}
                             data-testid="sidebar-identity-unlicensed-badge"
                           >
                             <BadgeAlert className="h-3 w-3" />
