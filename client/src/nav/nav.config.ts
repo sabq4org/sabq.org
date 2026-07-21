@@ -6,6 +6,7 @@ import {
   Users,
   PlusCircle,
   Shield,
+  IdCard,
   Palette,
   Rss,
   MessageSquare,
@@ -716,9 +717,18 @@ export const navConfig: NavItem[] = [
     labelKey: "nav.users_and_roles",
     labelAr: "المستخدمون والأدوار",
     icon: Users,
-    roles: ["admin"],
+    roles: ["admin", "hr"],
     excludeRoles: ["opinion_author", "reporter"],
     children: [
+      {
+        id: "staff_profiles",
+        labelKey: "nav.staff_profiles",
+        labelAr: "ملفات المنسوبين",
+        path: "/dashboard/staff-profiles",
+        icon: IdCard,
+        roles: ["admin", "hr"],
+        permissions: ["staff_profiles.view"],
+      },
       {
         id: "staff",
         labelKey: "nav.staff",

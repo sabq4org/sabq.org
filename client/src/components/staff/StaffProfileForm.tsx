@@ -1,0 +1,433 @@
+// ----------------------------------------------------------------------------
+// فورم ملف المنسوب الموحّد — التصميم المعتمد (2026-07-21)
+//
+// وضعان بنفس المكوّن:
+//   mode="page"   → تبويبات أفقية لاصقة (داخل اللوحة، لا تزاحم قائمتها)
+//   mode="dialog" → تبويبات جانبية عمودية (البوب أب يغطي الشاشة فلا مزاحمة)
+//
+// الحقول الملزمة تُعلَّم بنجمة وتُبرز حمراء عند النقص، وشريط الحفظ يعدّد
+// النواقص بالاسم. الهوية الوطنية مقنّعة وكشفها عبر صلاحية الوثائق.
+// ----------------------------------------------------------------------------
+
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { ImageUpload } from "@/components/ImageUpload";
+import {
+  IdCard, Briefcase, Newspaper, Phone, Globe, FolderLock, Eye, Loader2, Plus, Upload, ExternalLink,
+} from "lucide-react";
+
+type Lookups = {
+  departments: { id: string; nameAr: string }[];
+  jobTitles: { id: string; nameAr: string }[];
+  employmentTypes: { value: string; labelAr: string }[];
+};
+
+type ProfileResponse = {
+  user: {
+    id: string; firstName: string | null; lastName: string | null;
+    email: string; phoneNumber: string | null; profileImageUrl: string | null; role: string;
+  };
+  profile: (Record<string, unknown> & {
+    employeeNumber?: string | null;
+    completionPercent?: number;
+    missingFields?: string[];
+    nationalIdLast4?: string | null;
+    hasNationalId?: boolean;
+  }) | null;
+  requiredFields: { key: string; labelAr: string }[];
+};
+
+const SECTIONS = [
+  { id: "identity", labelAr: "الهوية الرسمية", icon: IdCard },
+  { id: "job", labelAr: "الوظيفة", icon: Briefcase },
+  { id: "press", labelAr: "الاعتماد الصحفي", icon: Newspaper },
+  { id: "contact", labelAr: "التواصل والطوارئ", icon: Phone },
+  { id: "public", labelAr: "الحضور العام", icon: Globe },
+  { id: "docs", labelAr: "الوثائق", icon: FolderLock },
+] as const;
+
+const SECTION_FIELDS: Record<string, string[]> = {
+  identity: ["nationalId", "nationality", "officialBirthDate", "officialPhotoUrl"],
+  job: ["jobTitleId", "departmentId", "employmentType", "joinedAt", "workRegion"],
+  press: ["pressIdNumber", "pressCardValidUntil", "mediaLicenseNumber", "mediaLicenseExpiresAt"],
+  contact: ["officialPhone", "officialEmail", "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "bloodType"],
+  public: ["bioAr", "specializations", "yearsOfExperience", "socialX", "socialLinkedin", "personalWebsite", "previousEmployers"],
+  docs: [],
+};
+
+const DOC_KINDS = [
+  { kind: "cv", labelAr: "السيرة الذاتية", keyField: "cvFileKey", icon: "📄" },
+  { kind: "nationalId", labelAr: "صورة الهوية", keyField: "nationalIdFileKey", icon: "🪪" },
+  { kind: "license", labelAr: "الترخيص المهني", keyField: "mediaLicenseFileKey", icon: "📜" },
+  { kind: "contract", labelAr: "العقد", keyField: "contractFileKey", icon: "📑" },
+] as const;
+
+const dateInput = (value: unknown): string =>
+  typeof value === "string" && value ? value.slice(0, 10) : "";
+
+export function StaffProfileForm({
+  userId,
+  mode,
+  onSaved,
+}: {
+  userId: string;
+  mode: "page" | "dialog";
+  onSaved?: () => void;
+}) {
+  const { toast } = useToast();
+  const [activeSection, setActiveSection] = useState<string>("identity");
+  const [form, setForm] = useState<Record<string, unknown>>({});
+  const [nationalIdInput, setNationalIdInput] = useState("");
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+
+  const { data: dataRaw, isLoading } = useQuery({ queryKey: [`/api/staff-profiles/${userId}`] });
+  const { data: lookupsRaw } = useQuery({ queryKey: ["/api/staff-profiles/lookups"] });
+  const data = (dataRaw ?? null) as ProfileResponse | null;
+  const lookups = (lookupsRaw ?? null) as Lookups | null;
+
+  useEffect(() => {
+    if (data?.profile) setForm(data.profile);
+  }, [data?.profile]);
+
+  const set = (key: string, value: unknown) => setForm((f) => ({ ...f, [key]: value }));
+
+  const missingKeys = useMemo(() => {
+    const fromServer = (data?.profile?.missingFields ?? []) as string[];
+    return new Set(fromServer);
+  }, [data?.profile?.missingFields]);
+
+  const requiredLabelByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const rule of data?.requiredFields ?? []) map.set(rule.key, rule.labelAr);
+    return map;
+  }, [data?.requiredFields]);
+
+  const sectionMissingCount = (sectionId: string) =>
+    SECTION_FIELDS[sectionId].filter((k) => missingKeys.has(k)).length;
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, unknown> = {};
+      const editable = Object.values(SECTION_FIELDS).flat();
+      for (const key of editable) {
+        if (key === "nationalId") continue;
+        if (form[key] !== undefined) {
+          payload[key] = key === "yearsOfExperience"
+            ? (form[key] === "" || form[key] === null ? undefined : Number(form[key]))
+            : form[key];
+        }
+      }
+      if (nationalIdInput.trim()) payload.nationalId = nationalIdInput.trim();
+      return apiRequest(`/api/staff-profiles/${userId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: (result: { completionPercent: number; missingFields: { labelAr: string }[] }) => {
+      setNationalIdInput("");
+      queryClient.invalidateQueries({ queryKey: [`/api/staff-profiles/${userId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff-profiles"] });
+      const remaining = result.missingFields?.length ?? 0;
+      toast({
+        title: `حُفظ الملف — الاكتمال ${result.completionPercent}%`,
+        description: remaining ? `النواقص المتبقية: ${result.missingFields.map((m) => m.labelAr).join("، ")}` : "الملف مكتمل ✓",
+      });
+      onSaved?.();
+    },
+    onError: (err: Error) =>
+      toast({ title: "تعذر الحفظ", description: err.message, variant: "destructive" }),
+  });
+
+  const reveal = async () => {
+    try {
+      const res = await apiRequest(`/api/staff-profiles/${userId}/national-id`, { method: "GET" });
+      setRevealedId(res.nationalId);
+    } catch (err: unknown) {
+      toast({ title: "غير مصرح", description: err instanceof Error ? err.message : "صلاحية الوثائق مطلوبة", variant: "destructive" });
+    }
+  };
+
+  const uploadDoc = async (kind: string, file: File) => {
+    setUploadingDoc(kind);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await apiRequest(`/api/staff-profiles/${userId}/documents/${kind}`, { method: "POST", body: fd, isFormData: true });
+      queryClient.invalidateQueries({ queryKey: [`/api/staff-profiles/${userId}`] });
+      toast({ title: "رُفعت الوثيقة بنجاح" });
+    } catch (err: unknown) {
+      toast({ title: "تعذر رفع الوثيقة", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  const addLookup = async (type: "departments" | "job-titles") => {
+    const nameAr = window.prompt(type === "departments" ? "اسم الإدارة الجديدة:" : "المسمى الوظيفي الجديد:");
+    if (!nameAr?.trim()) return;
+    await apiRequest(`/api/staff-profiles/${type}`, {
+      method: "POST",
+      body: JSON.stringify({ nameAr: nameAr.trim() }),
+      headers: { "Content-Type": "application/json" },
+    });
+    queryClient.invalidateQueries({ queryKey: ["/api/staff-profiles/lookups"] });
+  };
+
+  if (isLoading || !data) {
+    return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  }
+
+  const missingLabels = (data.profile?.missingFields ?? [])
+    .map((k) => requiredLabelByKey.get(k) ?? k);
+
+  const field = (
+    key: string,
+    label: string,
+    input: React.ReactNode,
+    opts?: { required?: boolean; hint?: string; wide?: boolean },
+  ) => (
+    <div className={opts?.wide ? "sm:col-span-2 flex flex-col gap-1.5" : "flex flex-col gap-1.5"}>
+      <label className="text-xs font-bold text-muted-foreground">
+        {label} {opts?.required && <span className="text-red-500">*</span>}
+      </label>
+      {input}
+      {opts?.hint && <span className="text-[10px] text-muted-foreground">{opts.hint}</span>}
+    </div>
+  );
+
+  const missingClass = (key: string) => (missingKeys.has(key) ? "border-red-400" : "");
+
+  const tabs = (
+    <nav
+      className={
+        mode === "page"
+          ? "sticky top-2 z-10 flex gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 shadow-sm"
+          : "flex flex-col gap-1 rounded-xl border bg-card p-1.5 min-w-[190px]"
+      }
+    >
+      {SECTIONS.map((s) => {
+        const missing = sectionMissingCount(s.id);
+        const active = activeSection === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setActiveSection(s.id)}
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-bold transition-colors ${
+              active ? "bg-sky-500/10 text-sky-600" : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <s.icon className="h-4 w-4" />
+            {s.labelAr}
+            {missing > 0 ? (
+              <span className="rounded-full bg-red-500/10 px-1.5 text-[10px] font-extrabold text-red-500">{missing}</span>
+            ) : (
+              <span className="text-[10px] font-extrabold text-emerald-600">✓</span>
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+
+  const panels = (
+    <div className="flex-1 rounded-xl border bg-card p-5">
+      {activeSection === "identity" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field("nationalId", "الهوية الوطنية / الإقامة",
+            <div className="flex gap-2">
+              <Input
+                dir="ltr"
+                className={`tracking-[3px] ${missingClass("nationalId")}`}
+                placeholder={data.profile?.hasNationalId ? `•••••• ${data.profile?.nationalIdLast4 ?? ""}` : "10 أرقام"}
+                value={revealedId ?? nationalIdInput}
+                onChange={(e) => { setRevealedId(null); setNationalIdInput(e.target.value.replace(/\D/g, "").slice(0, 10)); }}
+              />
+              {data.profile?.hasNationalId && !revealedId && (
+                <Button type="button" variant="outline" size="sm" onClick={reveal}><Eye className="h-4 w-4" /></Button>
+              )}
+            </div>,
+            { required: true, hint: "مشفّرة — الكشف لصلاحية الموارد البشرية ويُسجَّل" })}
+          {field("nationality", "الجنسية",
+            <Input value={String(form.nationality ?? "")} onChange={(e) => set("nationality", e.target.value)} />)}
+          {field("officialBirthDate", "تاريخ الميلاد الرسمي",
+            <Input type="date" value={dateInput(form.officialBirthDate)} onChange={(e) => set("officialBirthDate", e.target.value)} />)}
+          {field("officialPhotoUrl", "الصورة الرسمية",
+            <ImageUpload value={(form.officialPhotoUrl as string) ?? null} onChange={(url) => set("officialPhotoUrl", url)} />,
+            { required: true, hint: "تُستخدم في البطاقة الصحفية", wide: true })}
+        </div>
+      )}
+
+      {activeSection === "job" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field("jobTitleId", "المسمى الوظيفي",
+            <div className="flex gap-2">
+              <Select value={(form.jobTitleId as string) ?? ""} onValueChange={(v) => set("jobTitleId", v)}>
+                <SelectTrigger className={`flex-1 ${missingClass("jobTitleId")}`}><SelectValue placeholder="— اختر —" /></SelectTrigger>
+                <SelectContent>{(lookups?.jobTitles ?? []).map((t) => <SelectItem key={t.id} value={t.id}>{t.nameAr}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button type="button" variant="outline" size="icon" onClick={() => addLookup("job-titles")}><Plus className="h-4 w-4" /></Button>
+            </div>, { required: true })}
+          {field("departmentId", "الإدارة",
+            <div className="flex gap-2">
+              <Select value={(form.departmentId as string) ?? ""} onValueChange={(v) => set("departmentId", v)}>
+                <SelectTrigger className={`flex-1 ${missingClass("departmentId")}`}><SelectValue placeholder="— اختر —" /></SelectTrigger>
+                <SelectContent>{(lookups?.departments ?? []).map((d) => <SelectItem key={d.id} value={d.id}>{d.nameAr}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button type="button" variant="outline" size="icon" onClick={() => addLookup("departments")}><Plus className="h-4 w-4" /></Button>
+            </div>, { required: true })}
+          {field("employmentType", "نوع العلاقة",
+            <Select value={(form.employmentType as string) ?? ""} onValueChange={(v) => set("employmentType", v)}>
+              <SelectTrigger className={missingClass("employmentType")}><SelectValue placeholder="— اختر —" /></SelectTrigger>
+              <SelectContent>{(lookups?.employmentTypes ?? []).map((t) => <SelectItem key={t.value} value={t.value}>{t.labelAr}</SelectItem>)}</SelectContent>
+            </Select>, { required: true })}
+          {field("joinedAt", "تاريخ الالتحاق",
+            <Input type="date" className={missingClass("joinedAt")} value={dateInput(form.joinedAt)} onChange={(e) => set("joinedAt", e.target.value)} />,
+            { required: true })}
+          {field("workRegion", "مقر العمل / المنطقة",
+            <Input className={missingClass("workRegion")} value={String(form.workRegion ?? "")} onChange={(e) => set("workRegion", e.target.value)} />,
+            { hint: "ملزم للمراسل الميداني" })}
+        </div>
+      )}
+
+      {activeSection === "press" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
+            هذه الحقول تغذي بطاقة Apple Wallet الصحفية مباشرة، وتُزامَن تلقائياً مع النظام القديم.
+          </p>
+          {field("pressIdNumber", "رقم البطاقة الصحفية",
+            <Input className={missingClass("pressIdNumber")} value={String(form.pressIdNumber ?? "")} onChange={(e) => set("pressIdNumber", e.target.value)} />)}
+          {field("pressCardValidUntil", "صلاحية البطاقة",
+            <Input type="date" value={dateInput(form.pressCardValidUntil)} onChange={(e) => set("pressCardValidUntil", e.target.value)} />)}
+          {field("mediaLicenseNumber", "رقم الترخيص المهني",
+            <Input className={missingClass("mediaLicenseNumber")} value={String(form.mediaLicenseNumber ?? "")} onChange={(e) => set("mediaLicenseNumber", e.target.value)} />,
+            { hint: "ملزم للمراسل الميداني وكاتب الرأي" })}
+          {field("mediaLicenseExpiresAt", "انتهاء الترخيص",
+            <Input type="date" className={missingClass("mediaLicenseExpiresAt")} value={dateInput(form.mediaLicenseExpiresAt)} onChange={(e) => set("mediaLicenseExpiresAt", e.target.value)} />)}
+        </div>
+      )}
+
+      {activeSection === "contact" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field("officialPhone", "الجوال الرسمي",
+            <Input dir="ltr" value={String(form.officialPhone ?? "")} onChange={(e) => set("officialPhone", e.target.value)} />)}
+          {field("officialEmail", "البريد الرسمي",
+            <Input dir="ltr" value={String(form.officialEmail ?? "")} onChange={(e) => set("officialEmail", e.target.value)} />)}
+          {field("emergencyContactName", "اسم جهة الطوارئ",
+            <Input className={missingClass("emergencyContactName")} value={String(form.emergencyContactName ?? "")} onChange={(e) => set("emergencyContactName", e.target.value)} />,
+            { required: true })}
+          {field("emergencyContactRelation", "صلة القرابة",
+            <Input value={String(form.emergencyContactRelation ?? "")} onChange={(e) => set("emergencyContactRelation", e.target.value)} />)}
+          {field("emergencyContactPhone", "جوال الطوارئ",
+            <Input dir="ltr" className={missingClass("emergencyContactPhone")} value={String(form.emergencyContactPhone ?? "")} onChange={(e) => set("emergencyContactPhone", e.target.value)} />,
+            { required: true })}
+          {field("bloodType", "فصيلة الدم",
+            <Select value={(form.bloodType as string) ?? ""} onValueChange={(v) => set("bloodType", v)}>
+              <SelectTrigger><SelectValue placeholder="اختياري" /></SelectTrigger>
+              <SelectContent>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+            </Select>)}
+        </div>
+      )}
+
+      {activeSection === "public" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field("bioAr", "نبذة عربية",
+            <Textarea rows={3} value={String(form.bioAr ?? "")} onChange={(e) => set("bioAr", e.target.value)} />, { wide: true })}
+          {field("specializations", "التخصصات",
+            <Input
+              placeholder="افصل بفاصلة: شؤون محلية، تقنية"
+              value={Array.isArray(form.specializations) ? (form.specializations as string[]).join("، ") : ""}
+              onChange={(e) => set("specializations", e.target.value.split(/[،,]/).map((s) => s.trim()).filter(Boolean))}
+            />)}
+          {field("yearsOfExperience", "سنوات الخبرة",
+            <Input type="number" min={0} value={form.yearsOfExperience == null ? "" : String(form.yearsOfExperience)} onChange={(e) => set("yearsOfExperience", e.target.value)} />)}
+          {field("socialX", "حساب X",
+            <Input dir="ltr" placeholder="@handle" value={String(form.socialX ?? "")} onChange={(e) => set("socialX", e.target.value)} />)}
+          {field("socialLinkedin", "LinkedIn",
+            <Input dir="ltr" value={String(form.socialLinkedin ?? "")} onChange={(e) => set("socialLinkedin", e.target.value)} />)}
+          {field("personalWebsite", "موقع شخصي",
+            <Input dir="ltr" value={String(form.personalWebsite ?? "")} onChange={(e) => set("personalWebsite", e.target.value)} />)}
+          {field("previousEmployers", "جهات العمل السابقة",
+            <Textarea rows={2} value={String(form.previousEmployers ?? "")} onChange={(e) => set("previousEmployers", e.target.value)} />, { wide: true })}
+        </div>
+      )}
+
+      {activeSection === "docs" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
+            تخزين خاص — الاطلاع لصلاحية الموارد البشرية فقط، والتنزيل برابط موقّت.
+          </p>
+          {DOC_KINDS.map((doc) => {
+            const filled = Boolean(form[doc.keyField]);
+            return (
+              <div key={doc.kind} className={`rounded-xl border-2 p-4 text-center ${filled ? "border-emerald-500/40" : "border-dashed"}`}>
+                <div className="text-xl">{doc.icon}</div>
+                <div className="mt-1 text-sm font-bold">{doc.labelAr}</div>
+                <div className={`text-[11px] ${filled ? "font-semibold text-emerald-600" : "text-muted-foreground"}`}>
+                  {filled ? "✓ مرفوعة" : "لم تُرفع بعد"}
+                </div>
+                <div className="mt-2 flex justify-center gap-2">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => e.target.files?.[0] && uploadDoc(doc.kind, e.target.files[0])}
+                    />
+                    <span className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold text-sky-600">
+                      {uploadingDoc === doc.kind ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                      {filled ? "استبدال" : "رفع"}
+                    </span>
+                  </label>
+                  {filled && (
+                    <a
+                      href={apiUrl(`/api/staff-profiles/${userId}/documents/${doc.kind}`)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold text-muted-foreground"
+                    >
+                      <ExternalLink className="h-3 w-3" /> عرض
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div dir="rtl" className="flex flex-col gap-3">
+      <div className={mode === "dialog" ? "flex gap-3 items-start" : "flex flex-col gap-3"}>
+        {tabs}
+        {panels}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+        {missingLabels.length > 0 ? (
+          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600">
+            ⚠ {missingLabels.length} نواقص ملزمة: {missingLabels.slice(0, 4).join("، ")}{missingLabels.length > 4 ? "…" : ""}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600">✓ الملف مكتمل</Badge>
+        )}
+        <Button className="mr-auto" disabled={save.isPending} onClick={() => save.mutate()}>
+          {save.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />} حفظ الملف
+        </Button>
+      </div>
+    </div>
+  );
+}

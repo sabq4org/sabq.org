@@ -331,6 +331,39 @@ export async function revealNationalId(userId: string, actorId: string): Promise
 // إنشاء/تحديث الملف + جسر التوافق مع أعمدة users القديمة
 // ────────────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────────────
+// وثائق المنسوب — مفاتيح التخزين الخاص (نفس بنية وثائق المراسلين)
+// ────────────────────────────────────────────────────────────────────
+
+export const STAFF_DOC_KINDS = {
+  cv: "cvFileKey",
+  nationalId: "nationalIdFileKey",
+  contract: "contractFileKey",
+  license: "mediaLicenseFileKey",
+} as const;
+
+export type StaffDocKind = keyof typeof STAFF_DOC_KINDS;
+
+export async function setStaffDocumentKey(userId: string, kind: StaffDocKind, fileKey: string, actorId: string) {
+  const column = STAFF_DOC_KINDS[kind];
+  return await db.transaction(async (tx) => {
+    const [existing] = await tx.select({ id: staffProfiles.id }).from(staffProfiles).where(eq(staffProfiles.userId, userId)).limit(1);
+    if (!existing) {
+      const employeeNumber = await generateEmployeeNumber(tx as unknown as typeof db);
+      await tx.insert(staffProfiles).values({ userId, employeeNumber, [column]: fileKey, updatedBy: actorId });
+    } else {
+      await tx.update(staffProfiles).set({ [column]: fileKey, updatedBy: actorId, updatedAt: new Date() }).where(eq(staffProfiles.userId, userId));
+    }
+    return { success: true as const };
+  });
+}
+
+export async function getStaffDocumentKey(userId: string, kind: StaffDocKind): Promise<string | null> {
+  const [row] = await db.select().from(staffProfiles).where(eq(staffProfiles.userId, userId)).limit(1);
+  if (!row) return null;
+  return (row as Record<string, unknown>)[STAFF_DOC_KINDS[kind]] as string | null;
+}
+
 export type StaffProfilePatch = Partial<{
   nationalId: string;
   nationality: string;
