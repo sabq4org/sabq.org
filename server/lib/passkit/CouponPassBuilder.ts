@@ -2,7 +2,7 @@ import { PassBuilder, PassData } from './PassBuilder';
 import { PKPass } from 'passkit-generator';
 import path from 'path';
 import { buildCouponLogoBuffers } from './CouponPassAssets';
-import { renderCouponPassStrip, renderCouponWordmark } from './CouponPassStripRenderer';
+import { renderCouponPassStrip } from './CouponPassStripRenderer';
 
 // "1.50 ر.س" المختلطة تتقلب مع bidi (تظهر ر.س قبل المبلغ) — علامة RTL
 // في أول السلسلة تثبّت الفقرة عربية فيبقى المبلغ يميناً يُقرأ أولاً.
@@ -66,25 +66,17 @@ export class CouponPassBuilder extends PassBuilder {
   async configurePassFields(pass: PKPass, data: CouponPassData): Promise<void> {
     pass.setExpirationDate(data.voucherExpiresAt);
 
-    // شعار نصي «سبق بلس+» أبيض — شعار الصحيفة الأزرق كان ينشز على
-    // البنفسجي؛ شعار الصورة يبقى fallback ثم قالب الملفات.
+    // شعار سبق الرسمي مبيّضاً بالكامل (بطلب المالك) — محاذاة يسار خانة
+    // اللوقو بهوامش مريحة؛ قالب الملفات fallback عند فشل sharp.
     try {
-      const logos = await renderCouponWordmark();
-      pass.addBuffer('logo.png', logos.x1);
-      pass.addBuffer('logo@2x.png', logos.x2);
-      pass.addBuffer('logo@3x.png', logos.x3);
-    } catch (e) {
-      console.warn('[CouponPassBuilder] wordmark render failed, trying image logo:', e);
-      try {
-        const logos = await buildCouponLogoBuffers();
-        if (logos) {
-          pass.addBuffer('logo.png', logos.x1);
-          pass.addBuffer('logo@2x.png', logos.x2);
-          pass.addBuffer('logo@3x.png', logos.x3);
-        }
-      } catch (e2) {
-        console.warn('[CouponPassBuilder] logo injection failed, using template logos:', e2);
+      const logos = await buildCouponLogoBuffers();
+      if (logos) {
+        pass.addBuffer('logo.png', logos.x1);
+        pass.addBuffer('logo@2x.png', logos.x2);
+        pass.addBuffer('logo@3x.png', logos.x3);
       }
+    } catch (e) {
+      console.warn('[CouponPassBuilder] logo injection failed, using template logos:', e);
     }
 
     // البطل البصري: القيمة + الشريك داخل الـ strip — لا يعتمد على primary الضخم.

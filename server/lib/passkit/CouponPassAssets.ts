@@ -1,10 +1,9 @@
 // أصول بطاقة قسيمة سبق بلس في Apple Wallet.
 //
-// PassKit يثبّت خانة اللوقو في أعلى-يسار البطاقة ولا يوفّر RTL حقيقياً.
-// نقرّب الشكل العربي عبر:
-//   1) حشوة علوية شفافة داخل صورة اللوقو حتى لا يلاصق الحد المسنّن
-//   2) رسم علامة سبق على يمين خانة اللوقو (اتجاه «الجهة الأخرى»)
-//   3) مقاسات Apple الرسمية (لا مربّع 751×661 الذي كان في القالب)
+// شعار سبق أبيض بالكامل (بطلب المالك): نستخرج قناة الشفافية من الشعار
+// الأصلي ونملأ صورته بالأبيض — فيظهر نقياً على البنفسجي مهما كانت
+// ألوان المصدر. المحاذاة يسار خانة اللوقو (موضع Apple الأصلي) مع هوامش
+// مريحة كي لا يلتصق بالحد المسنّن ولا بالإطار.
 
 import fs from "fs";
 import path from "path";
@@ -12,11 +11,11 @@ import sharp from "sharp";
 
 const LOGO_SRC = () => path.resolve(process.cwd(), "public/branding/sabq-logo.png");
 
-/** مقاسات خانة اللوقو في Wallet + حشوة علوية داخل الصورة. */
+/** مقاسات خانة اللوقو في Wallet + هوامش داخل الصورة. */
 const LOGO_SIZES = [
-  { name: "x1" as const, w: 160, h: 50, topPad: 8 },
-  { name: "x2" as const, w: 320, h: 100, topPad: 16 },
-  { name: "x3" as const, w: 480, h: 150, topPad: 24 },
+  { name: "x1" as const, w: 160, h: 50, topPad: 8, sidePad: 10 },
+  { name: "x2" as const, w: 320, h: 100, topPad: 16, sidePad: 20 },
+  { name: "x3" as const, w: 480, h: 150, topPad: 24, sidePad: 30 },
 ];
 
 export async function buildCouponLogoBuffers(): Promise<{
@@ -32,10 +31,9 @@ export async function buildCouponLogoBuffers(): Promise<{
 
   try {
     const buffers = await Promise.all(
-      LOGO_SIZES.map(async ({ w, h, topPad }) => {
-        const contentH = h - topPad;
-        // هامش يمين صغير + المحاذاة لليمين داخل الخانة اليسرى.
-        const sidePad = Math.round(w * 0.04);
+      LOGO_SIZES.map(async ({ w, h, topPad, sidePad }) => {
+        const bottomPad = Math.round(topPad / 2);
+        const contentH = h - topPad - bottomPad;
         const resized = await sharp(src)
           .resize({
             height: contentH,
@@ -49,7 +47,23 @@ export async function buildCouponLogoBuffers(): Promise<{
         const meta = await sharp(resized).metadata();
         const markW = meta.width ?? contentH;
         const markH = meta.height ?? contentH;
-        const left = w - sidePad - markW;
+
+        // تبييض الشعار: قناع الشفافية من الأصل + تعبئة بيضاء.
+        const alpha = await sharp(resized).ensureAlpha().extractChannel("alpha").toBuffer();
+        const whiteMark = await sharp({
+          create: {
+            width: markW,
+            height: markH,
+            channels: 3,
+            background: { r: 255, g: 255, b: 255 },
+          },
+        })
+          .joinChannel(alpha)
+          .png()
+          .toBuffer();
+
+        // محاذاة يسار الخانة (موضع Apple الأصلي) بهامش جانبي.
+        const left = sidePad;
         const top = topPad + Math.max(0, Math.floor((contentH - markH) / 2));
 
         return sharp({
@@ -60,7 +74,7 @@ export async function buildCouponLogoBuffers(): Promise<{
             background: { r: 0, g: 0, b: 0, alpha: 0 },
           },
         })
-          .composite([{ input: resized, left, top }])
+          .composite([{ input: whiteMark, left, top }])
           .png()
           .toBuffer();
       }),
