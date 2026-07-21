@@ -6960,6 +6960,179 @@ router.get("/loyalty/redemptions/me", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// سبق بلس — المعاينة الداخلية /api/v1/plus/* (مسؤول النظام فقط)
+//
+// مرآة موبايل لمسارات الويب /api/plus-preview/*: نفس خدمات
+// sabqPlusPreviewService، لكن المصادقة بجلسة Bearer العضوية بدل
+// كوكي الويب. غير المسؤول يرى 404 (لا 403) كي لا يُكشف وجود السطح —
+// نفس سياسة الويب. الاستبدال حقيقي: خصم فعلي من محفظة العضو.
+// ==========================================
+
+async function verifyPlusAdminSession(req: Request): Promise<{ userId: string } | "unauthenticated" | "forbidden"> {
+  const session = await verifyMemberSession(req);
+  if (!session) return "unauthenticated";
+  const { isPlusPreviewAdmin } = await import("../services/sabqPlusPreviewService");
+  const [userRow] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .limit(1);
+  const ok = await isPlusPreviewAdmin({ id: session.userId, role: userRow?.role ?? null });
+  return ok ? session : "forbidden";
+}
+
+function plusGateResponse(res: Response, gate: "unauthenticated" | "forbidden") {
+  if (gate === "unauthenticated") {
+    return res.status(401).json({ success: false, message: "غير مسجل" });
+  }
+  return res.status(404).json({ success: false, message: "غير موجود" });
+}
+
+router.get("/plus/summary", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getPlusSummary } = await import("../services/sabqPlusPreviewService");
+    const summary = await getPlusSummary(gate.userId);
+    res.json({ success: true, ...summary });
+  } catch (error) {
+    console.error("[Mobile API] GET /plus/summary error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الملخص" });
+  }
+});
+
+router.get("/plus/catalog", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getPlusCatalog } = await import("../services/sabqPlusPreviewService");
+    const catalog = await getPlusCatalog(gate.userId);
+    res.json({ success: true, ...catalog });
+  } catch (error) {
+    console.error("[Mobile API] GET /plus/catalog error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الكتالوج" });
+  }
+});
+
+router.post("/plus/redeem/:id", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    if (req.body?.termsAccepted !== true) {
+      return res.status(400).json({
+        success: false,
+        message: "يجب الموافقة على شروط الاستخدام وشروط ولاء ون قبل الاستبدال",
+      });
+    }
+    const { redeemPreviewReward } = await import("../services/sabqPlusPreviewService");
+    const result = await redeemPreviewReward(gate.userId, req.params.id);
+    if (!result.success) {
+      const statusByCode: Record<string, number> = {
+        NOT_FOUND: 404,
+        INACTIVE: 404,
+        EXPIRED: 410,
+        OUT_OF_STOCK: 409,
+        MAX_REDEMPTIONS: 409,
+        INSUFFICIENT_POINTS: 402,
+      };
+      return res
+        .status(statusByCode[result.code] ?? 400)
+        .json({ success: false, message: result.message });
+    }
+    res.json({
+      success: true,
+      message: "تم الاستبدال بنجاح ✨",
+      remainingBalance: result.remainingBalance,
+      voucher: result.voucher,
+    });
+  } catch (error) {
+    console.error("[Mobile API] POST /plus/redeem error:", error);
+    res.status(500).json({ success: false, message: "تعذر إتمام الاستبدال" });
+  }
+});
+
+router.get("/plus/redemptions", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getPlusRedemptions } = await import("../services/sabqPlusPreviewService");
+    const redemptions = await getPlusRedemptions(gate.userId);
+    res.json({ success: true, redemptions });
+  } catch (error) {
+    console.error("[Mobile API] GET /plus/redemptions error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب السجل" });
+  }
+});
+
+router.delete("/plus/redemptions/:id", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { removePreviewRedemption } = await import("../services/sabqPlusPreviewService");
+    const result = await removePreviewRedemption(gate.userId, req.params.id);
+    if (!result.success) {
+      const status = result.code === "NOT_FOUND" ? 404 : 409;
+      return res.status(status).json({ success: false, message: result.message });
+    }
+    res.json({
+      success: true,
+      refundedPoints: result.refundedPoints,
+      remainingBalance: result.remainingBalance,
+    });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /plus/redemptions error:", error);
+    res.status(500).json({ success: false, message: "تعذر إزالة القسيمة" });
+  }
+});
+
+// بطاقة Apple Wallet للقسيمة — نفس نمط /wallet/press/issue: بث .pkpass
+// مباشرة؛ iOS ينزّلها بـ URLSession (مع الـ Bearer) ثم يعرضها عبر
+// PKAddPassesViewController. الأخطاء JSON لا HTML (لا متصفح هنا).
+router.get("/plus/voucher/:redemptionId/wallet-pass", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getVoucherPassData } = await import("../services/sabqPlusPreviewService");
+    const voucher = await getVoucherPassData(gate.userId, req.params.redemptionId);
+    if (!voucher) {
+      return res.status(404).json({ success: false, message: "القسيمة غير موجودة" });
+    }
+
+    const [me] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName, email: users.email, role: users.role })
+      .from(users)
+      .where(eq(users.id, gate.userId))
+      .limit(1);
+
+    const { passKitService } = await import("../lib/passkit/PassKitService");
+    const passBuffer = await passKitService.generateCouponPass({
+      userId: gate.userId,
+      serialNumber: `SABQ-PLUS-${req.params.redemptionId.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      authToken: passKitService.generateAuthToken(),
+      userName: `${me?.firstName || ""} ${me?.lastName || ""}`.trim() || me?.email || "عضو سبق",
+      userEmail: me?.email ?? "",
+      userRole: me?.role ?? "reader",
+      partnerName: voucher.partnerName,
+      offer: voucher.offer,
+      valueLabel: voucher.valueLabel,
+      couponCode: voucher.couponCode,
+      voucherExpiresAt: voucher.voucherExpiresAt,
+    });
+
+    res.set({
+      "Content-Type": "application/vnd.apple.pkpass",
+      "Content-Disposition": `attachment; filename="sabq-plus-voucher-${voucher.couponCode}.pkpass"`,
+      "Content-Length": String(passBuffer.length),
+      "Cache-Control": "private, no-store",
+    });
+    res.send(passBuffer);
+  } catch (error: any) {
+    console.error("[Mobile API] GET /plus/voucher wallet-pass error:", error);
+    res.status(400).json({ success: false, message: error?.message ?? "تعذر إنشاء بطاقة المحفظة" });
+  }
+});
+
+// ==========================================
 // Bookmarks — server-synced per user
 //
 // Previously bookmarks were local-only on iOS (UserDefaults) and

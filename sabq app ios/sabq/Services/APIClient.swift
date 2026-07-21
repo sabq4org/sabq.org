@@ -1435,6 +1435,24 @@ actor APIClient {
         }
     }
 
+    // بطاقة Apple Wallet لقسيمة «سبق بلس» (معاينة داخلية — مسؤول النظام).
+    // تعيش هنا لا في SabqPlusAPI.swift لأنها تحتاج session/buildURL الخاصة.
+    func downloadPlusVoucherPass(redemptionId: String) async throws -> Data {
+        let url = try buildURL(path: "/plus/voucher/\(redemptionId)/wallet-pass")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        applyHeaders(&request)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.noResponse }
+        switch http.statusCode {
+        case 200..<300: return data
+        case 401: throw APIError.unauthorized
+        default:
+            let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            throw APIError.apiMessage(msg ?? "تعذر إنشاء بطاقة المحفظة")
+        }
+    }
+
     // MARK: - Loyalty (Phase 3)
     //
     // `/api/v1/loyalty/me` returns the same shape the web profile reads
