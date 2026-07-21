@@ -152,6 +152,9 @@ struct ContentView: View {
                 .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
                     LoyaltyAccountView()
                 }
+                .navigationDestination(for: SabqPlusRoute.self) { _ in
+                    SabqPlusView()
+                }
                 .navigationDestination(for: PressCardRoute.self) { _ in
                     PressCardActivationView()
                 }

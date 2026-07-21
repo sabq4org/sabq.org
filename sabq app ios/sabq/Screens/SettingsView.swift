@@ -731,6 +731,15 @@ struct SettingsView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                NavigationLink(value: SabqPlusRoute()) {
+                    accountShortcutTile(
+                        title: "سبق بلس (معاينة)",
+                        subtitle: "محاكاة الاستبدال عبر ولاء ون",
+                        icon: "plus.diamond.fill",
+                        tint: Color(red: 0.48, green: 0.42, blue: 0.88)
+                    )
+                }
+                .buttonStyle(.plain)
             }
             if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
                 NavigationLink(value: ContributorDashboardRoute()) {
