@@ -134,6 +134,40 @@ function toDateInputValue(iso: string | null | undefined): string {
   return y && m && day ? `${y}-${m}-${day}` : "";
 }
 
+/** بطاقة الشكر بعد الإرسال تختفي بعد هذه المدة من submittedAt */
+const THANKS_VISIBLE_MS = 10 * 60 * 1000; // 10 دقائق
+
+function useThanksStillVisible(submittedAt: string | null): boolean {
+  const [visible, setVisible] = useState(() => {
+    if (!submittedAt) return false;
+    const age = Date.now() - new Date(submittedAt).getTime();
+    return Number.isFinite(age) && age >= 0 && age < THANKS_VISIBLE_MS;
+  });
+
+  useEffect(() => {
+    if (!submittedAt) {
+      setVisible(false);
+      return;
+    }
+    const submittedMs = new Date(submittedAt).getTime();
+    if (!Number.isFinite(submittedMs)) {
+      setVisible(false);
+      return;
+    }
+    const hideAt = submittedMs + THANKS_VISIBLE_MS;
+    const remaining = hideAt - Date.now();
+    if (remaining <= 0) {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    const id = window.setTimeout(() => setVisible(false), remaining);
+    return () => window.clearTimeout(id);
+  }, [submittedAt]);
+
+  return visible;
+}
+
 type WriterMediaLicenseCardProps = {
   /** مسار API للترخيص — افتراضي لكتّاب الرأي */
   endpoint?: string;
@@ -242,6 +276,8 @@ export function WriterMediaLicenseCard({
     setLicenseFile(file);
   };
 
+  const showThanks = useThanksStillVisible(data?.submittedAt ?? null);
+
   if (isLoading || !data) {
     return null;
   }
@@ -298,6 +334,8 @@ export function WriterMediaLicenseCard({
         </section>
       );
     }
+    // بعد الإرسال تظهر بطاقة الشكر لفترة قصيرة ثم تختفي — الترخيص محفوظ ولا حاجة لإبقاء الرسالة.
+    if (!showThanks) return null;
     return (
       <section
         className="rounded-xl border border-border bg-card"
