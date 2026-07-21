@@ -3,6 +3,7 @@
 // 2026-06-10 (Milestone-2 extraction #5, audit T2.2). ADR-001-compliant:
 // storage-only data access. taskLimiter moved here with the routes; its
 // shared building blocks live in ../utils/rateLimiting.
+// 2026-07-22: POST /api/tasks/complete-all — إتمام جماعي للمهام الجذر غير المكتملة.
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
@@ -169,7 +170,119 @@ export function registerTaskRoutes(app: Express) {
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
+  // POST /api/tasks/complete-all — إتمام المهام الجذر غير المكتملة ضمن نطاق المستخدم
+  app.post(
+    "/api/tasks/complete-all",
+    taskLimiter,
+    requireAuth,
+    requireAnyPermission("tasks.edit_any", "tasks.edit_own"),
+    async (req, res) => {
+      try {
+        const userId = (req.user as any).id;
+        const userPermissions = await storage.getUserPermissions(userId);
+        const canEditAny = userPermissions.includes("tasks.edit_any");
+
+        const bodySchema = z.object({
+          search: z.string().optional(),
+          priority: z.string().optional(),
+          assignedToId: z.string().optional(),
+          department: z.string().optional(),
+          status: z
+            .enum(["todo", "in_progress", "review", "completed", "archived", "all"])
+            .optional(),
+        });
+        const body = bodySchema.parse(req.body ?? {});
+
+        if (body.status === "completed" || body.status === "archived") {
+          return res.json({ completedCount: 0, skippedCount: 0 });
+        }
+
+        const filters: {
+          status?: string;
+          priority?: string;
+          assignedToId?: string;
+          department?: string;
+          parentTaskId: null;
+          search?: string;
+          limit: number;
+          offset: number;
+          userIdForOwn?: string;
+        } = {
+          parentTaskId: null,
+          limit: 200,
+          offset: 0,
+        };
+
+        if (body.status && body.status !== "all") {
+          filters.status = body.status;
+        }
+        if (body.priority && body.priority !== "all") {
+          filters.priority = body.priority;
+        }
+        if (body.assignedToId && body.assignedToId !== "all") {
+          filters.assignedToId = body.assignedToId;
+        }
+        if (body.department) {
+          filters.department = body.department;
+        }
+        if (body.search?.trim()) {
+          filters.search = body.search.trim();
+        }
+
+        // نفس نطاق العرض: view_own يقيّد القائمة حتى مع edit_own
+        if (!userPermissions.includes("tasks.view_all")) {
+          filters.userIdForOwn = userId;
+        }
+
+        const { tasks: candidates } = await storage.getTasks(filters);
+        const incomplete = candidates.filter(
+          (t) => t.status !== "completed" && t.status !== "archived",
+        );
+
+        let completedCount = 0;
+        let skippedCount = 0;
+        const completedAt = new Date();
+
+        for (const task of incomplete) {
+          if (
+            !canEditAny &&
+            task.createdById !== userId &&
+            task.assignedToId !== userId
+          ) {
+            skippedCount += 1;
+            continue;
+          }
+
+          const updatedTask = await storage.updateTask(task.id, {
+            status: "completed",
+            completedAt,
+            progress: 100,
+          });
+
+          await storage.logTaskActivity({
+            taskId: task.id,
+            userId,
+            action: "status_changed",
+            changes: {
+              field: "status",
+              oldValue: { status: task.status },
+              newValue: { status: updatedTask.status },
+              description: "تم إتمام المهمة عبر «إتمام الكل»",
+            },
+          });
+          completedCount += 1;
+        }
+
+        res.json({ completedCount, skippedCount });
+      } catch (error: any) {
+        console.error("Error completing all tasks:", error);
+        if (error.name === "ZodError") {
+          return res.status(400).json({ error: "بيانات غير صالحة" });
+        }
+        res.status(500).json({ error: "فشل في إتمام المهام" });
+      }
+    },
+  );
 
   // GET /api/tasks/:id - Get task details
   app.get("/api/tasks/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
@@ -337,7 +450,10 @@ export function registerTaskRoutes(app: Express) {
       // Check permissions
       if (!userPermissions.includes('tasks.delete_any')) {
         if (task.createdById !== userId) {
-          return res.status(403).json({ error: 'غير مصرح لك بحذف هذه المهمة' });
+          return res.status(403).json({
+            error: "غير مصرح لك بحذف هذه المهمة",
+            message: "غير مصرح لك بحذف هذه المهمة",
+          });
         }
       }
       
@@ -346,7 +462,10 @@ export function registerTaskRoutes(app: Express) {
       res.json({ success: true, message: 'تم حذف المهمة بنجاح' });
     } catch (error: any) {
       console.error('Error deleting task:', error);
-      res.status(500).json({ error: 'فشل في حذف المهمة' });
+      res.status(500).json({
+        error: "فشل في حذف المهمة",
+        message: "فشل في حذف المهمة",
+      });
     }
   });
 
