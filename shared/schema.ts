@@ -14621,3 +14621,93 @@ export type InsertSurveyQuestion = z.infer<typeof insertSurveyQuestionSchema>;
 export type SurveyInvitation = typeof surveyInvitations.$inferSelect;
 export type SurveyResponse = typeof surveyResponses.$inferSelect;
 export type SurveyAnalysis = typeof surveyAnalyses.$inferSelect;
+
+// ============================================================================
+// ملف المنسوب الموحّد — المصدر المرجعي لبيانات منسوبي سبق
+// (إدارة، هيئة تحرير، مراسلون، كتّاب رأي). يغذي البطاقة الصحفية وكل
+// الأسطح. الهوية الوطنية تُخزن مشفّرة AES-256-GCM ولا تُعرض إلا
+// لصلاحية staff_documents.view (admin + دور الموارد البشرية).
+// ============================================================================
+
+export const staffDepartments = pgTable("staff_departments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nameAr: text("name_ar").notNull().unique(),
+  nameEn: text("name_en"),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const staffJobTitles = pgTable("staff_job_titles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nameAr: text("name_ar").notNull().unique(),
+  nameEn: text("name_en"),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const staffProfiles = pgTable("staff_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  // SBQ-0001 — يُولَّد تسلسلياً ولا يتغير
+  employeeNumber: varchar("employee_number", { length: 16 }).unique(),
+
+  // أ · الهوية الرسمية
+  nationalIdEncrypted: text("national_id_encrypted"),
+  nationalIdLast4: varchar("national_id_last4", { length: 4 }),
+  nationality: text("nationality"),
+  officialBirthDate: timestamp("official_birth_date"),
+  officialPhotoUrl: text("official_photo_url"),
+
+  // ب · الوظيفة
+  jobTitleId: varchar("job_title_id").references(() => staffJobTitles.id),
+  departmentId: varchar("department_id").references(() => staffDepartments.id),
+  employmentType: text("employment_type"), // employee | collaborator | field_reporter | opinion_writer
+  joinedAt: timestamp("joined_at"),
+  managerUserId: varchar("manager_user_id").references(() => users.id),
+  workRegion: text("work_region"),
+
+  // ج · الاعتماد الصحفي (يُزامَن مع أعمدة users القديمة كجسر توافق)
+  pressIdNumber: text("press_id_number"),
+  pressCardValidUntil: timestamp("press_card_valid_until"),
+  mediaLicenseNumber: text("media_license_number"),
+  mediaLicenseExpiresAt: timestamp("media_license_expires_at"),
+  mediaLicenseFileKey: text("media_license_file_key"),
+
+  // د · التواصل والطوارئ
+  officialPhone: text("official_phone"),
+  officialEmail: text("official_email"),
+  emergencyContactName: text("emergency_contact_name"),
+  emergencyContactRelation: text("emergency_contact_relation"),
+  emergencyContactPhone: text("emergency_contact_phone"),
+  bloodType: varchar("blood_type", { length: 3 }),
+
+  // هـ · الحضور العام
+  bioAr: text("bio_ar"),
+  bioEn: text("bio_en"),
+  specializations: text("specializations").array(),
+  socialX: text("social_x"),
+  socialLinkedin: text("social_linkedin"),
+  personalWebsite: text("personal_website"),
+  yearsOfExperience: integer("years_of_experience"),
+  previousEmployers: text("previous_employers"),
+
+  // و · الوثائق والحوكمة (مفاتيح تخزين خاص — نفس نمط ملفات الترخيص)
+  cvFileKey: text("cv_file_key"),
+  nationalIdFileKey: text("national_id_file_key"),
+  contractFileKey: text("contract_file_key"),
+  completionPercent: integer("completion_percent").default(0).notNull(),
+  missingFields: jsonb("missing_fields").$type<string[]>(),
+  notes: text("notes"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("staff_profiles_department_idx").on(table.departmentId),
+  index("staff_profiles_employment_type_idx").on(table.employmentType),
+]);
+
+export type StaffProfile = typeof staffProfiles.$inferSelect;
+export type StaffDepartment = typeof staffDepartments.$inferSelect;
+export type StaffJobTitle = typeof staffJobTitles.$inferSelect;
