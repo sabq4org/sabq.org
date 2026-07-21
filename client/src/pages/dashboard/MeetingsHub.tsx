@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -371,14 +371,22 @@ function CreateMeetingDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]" dir="rtl">
-        <DialogHeader>
+      {/* على الجوال: ورقة سفلية + تذييل ثابت فوق شريط المتصفح (safe-area) */}
+      <DialogContent
+        className={cn(
+          "flex max-h-[min(92dvh,920px)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]",
+          "left-0 right-0 top-auto bottom-0 translate-x-0 translate-y-0 rounded-t-2xl",
+          "sm:left-[50%] sm:right-auto sm:top-[50%] sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg",
+        )}
+        dir="rtl"
+      >
+        <DialogHeader className="shrink-0 space-y-0 border-b border-border px-5 pb-3 pt-5 text-right sm:px-6">
           <DialogTitle className="flex items-center gap-2">
             <Headphones className="h-5 w-5 text-primary" /> اجتماع جديد
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
           <div className="space-y-1.5">
             <label className="text-xs font-bold">عنوان الاجتماع</label>
             <Input
@@ -529,19 +537,27 @@ function CreateMeetingDialog({
               </div>
             ) : null}
           </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              onClick={() => createMutation.mutate()}
-              disabled={!valid || createMutation.isPending}
-              data-testid="button-create-meeting"
-            >
-              {createMutation.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Mic className="ml-1 h-4 w-4" />}
-              {schedule ? "جدولة الاجتماع" : "إنشاء وبدء الاجتماع"}
-            </Button>
-            <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          </div>
         </div>
+
+        <DialogFooter
+          className={cn(
+            "shrink-0 gap-2 border-t border-border bg-background px-5 pt-3",
+            "pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-start sm:space-x-0 sm:px-6",
+          )}
+        >
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => createMutation.mutate()}
+            disabled={!valid || createMutation.isPending}
+            data-testid="button-create-meeting"
+          >
+            {createMutation.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Mic className="ml-1 h-4 w-4" />}
+            {schedule ? "جدولة الاجتماع" : "إنشاء وبدء الاجتماع"}
+          </Button>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={onClose}>
+            إلغاء
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
