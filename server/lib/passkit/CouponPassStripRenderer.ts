@@ -96,22 +96,6 @@ function drawAtmosphere(ctx: ReturnType<ReturnType<typeof createCanvas>["getCont
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, W, H);
 
-  // توهج أصفر خافت أعلى اليسار (موضع علامة W).
-  const glow = ctx.createRadialGradient(W * 0.12, H * 0.1, 10, W * 0.12, H * 0.1, W * 0.45);
-  glow.addColorStop(0, "rgba(255, 201, 51, 0.14)");
-  glow.addColorStop(1, "rgba(255, 201, 51, 0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, W, H);
-
-  // علامة W الصفراء الشبحية — بصمة ولاء ون كما على بطاقة الويب.
-  ctx.save();
-  ctx.font = arabicFont(360, true, true);
-  ctx.fillStyle = "rgba(255, 201, 51, 0.16)";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText("W", -18, H * 0.92);
-  ctx.restore();
-
   // خط علوي أصفر رفيع.
   ctx.fillStyle = ACCENT_Y;
   ctx.fillRect(0, 0, W, 6);
