@@ -307,6 +307,10 @@ export interface MeetingListItem {
   departmentName: string | null;
   participantCount: number;
   inviteToken: string | null; // للمضيف فقط — تُصفَّر لغيره في المسار
+  // تأكيد الحضور للمجدولة
+  rsvpYesCount: number;
+  rsvpNoCount: number;
+  myRsvp: string | null;
 }
 
 async function meetingVisibilityFilter(userId: string, canManage: boolean) {
@@ -366,6 +370,19 @@ export async function listMeetingsForUser(
         participantCount: sql<number>`(
           select count(*)::int from ${meetingParticipants} mp
           where mp.meeting_id = ${meetings.id} and mp.status = 'admitted' and mp.joined_at is not null and mp.left_at is null
+        )`,
+        rsvpYesCount: sql<number>`(
+          select count(*)::int from ${meetingParticipants} mp
+          where mp.meeting_id = ${meetings.id} and mp.rsvp = 'yes'
+        )`,
+        rsvpNoCount: sql<number>`(
+          select count(*)::int from ${meetingParticipants} mp
+          where mp.meeting_id = ${meetings.id} and mp.rsvp = 'no'
+        )`,
+        myRsvp: sql<string | null>`(
+          select mp.rsvp from ${meetingParticipants} mp
+          where mp.meeting_id = ${meetings.id} and mp.user_id = ${userId}
+          limit 1
         )`,
       })
       .from(meetings)
@@ -656,6 +673,80 @@ export async function resolveJoinRequest(
     payload: { participantId: p.id, approved: approve },
   });
   return p;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// تأكيد الحضور (RSVP) للاجتماعات المجدولة — الدعوة تبقى قائمة بالحالين،
+// الهدف أن يتكوّن عند المضيف تصور مسبق: من سيحضر ومن اعتذر
+// ────────────────────────────────────────────────────────────────────
+
+export async function setRsvp(
+  meeting: Meeting,
+  userId: string,
+  response: "yes" | "no",
+): Promise<void> {
+  const [existing] = await db
+    .select({ id: meetingParticipants.id })
+    .from(meetingParticipants)
+    .where(and(eq(meetingParticipants.meetingId, meeting.id), eq(meetingParticipants.userId, userId)))
+    .limit(1);
+  if (existing) {
+    await db
+      .update(meetingParticipants)
+      .set({ rsvp: response, rsvpAt: new Date() })
+      .where(eq(meetingParticipants.id, existing.id));
+  } else {
+    // مؤهل عبر «الكل/الإدارة» بلا صف دعوة — ننشئ صفاً يحمل رده
+    await db.insert(meetingParticipants).values({
+      meetingId: meeting.id,
+      userId,
+      status: "invited",
+      rsvp: response,
+      rsvpAt: new Date(),
+    });
+  }
+  logMeetingEvent(meeting.id, response === "yes" ? "rsvp_yes" : "rsvp_no", { actorUserId: userId });
+}
+
+export interface RsvpEntry {
+  name: string;
+  avatarUrl: string | null;
+  department: string | null;
+  rsvp: string;
+  rsvpAt: Date | null;
+}
+
+export async function getMeetingRsvps(meeting: Meeting): Promise<RsvpEntry[]> {
+  const rows = await db
+    .select({
+      rsvp: meetingParticipants.rsvp,
+      rsvpAt: meetingParticipants.rsvpAt,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      profileImageUrl: users.profileImageUrl,
+      officialPhotoUrl: staffProfiles.officialPhotoUrl,
+      departmentName: staffDepartments.nameAr,
+    })
+    .from(meetingParticipants)
+    .innerJoin(users, eq(users.id, meetingParticipants.userId))
+    .leftJoin(staffProfiles, eq(staffProfiles.userId, meetingParticipants.userId))
+    .leftJoin(staffDepartments, eq(staffDepartments.id, staffProfiles.departmentId))
+    .where(
+      and(
+        eq(meetingParticipants.meetingId, meeting.id),
+        inArray(meetingParticipants.rsvp, ["yes", "no"]),
+      ),
+    )
+    .orderBy(meetingParticipants.rsvpAt);
+
+  return rows.map((r) => ({
+    name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email,
+    avatarUrl: r.officialPhotoUrl || r.profileImageUrl || null,
+    department: r.departmentName || null,
+    rsvp: r.rsvp!,
+    rsvpAt: r.rsvpAt,
+  }));
 }
 
 // ────────────────────────────────────────────────────────────────────

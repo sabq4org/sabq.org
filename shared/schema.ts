@@ -14749,6 +14749,9 @@ export const meetingParticipants = pgTable("meeting_participants", {
   guestKey: varchar("guest_key", { length: 64 }),
   role: text("role").default("member").notNull(), // host | member
   status: text("status").default("invited").notNull(), // invited | pending | admitted | denied | removed
+  // رد الدعوة للاجتماع المجدول: yes سأحضر · no معتذر — الدعوة تبقى قائمة بالحالين
+  rsvp: varchar("rsvp", { length: 8 }),
+  rsvpAt: timestamp("rsvp_at"),
   joinedAt: timestamp("joined_at"),
   leftAt: timestamp("left_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
