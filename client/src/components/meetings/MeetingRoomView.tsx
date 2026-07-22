@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ParticipantKind,
   Room,
   RoomEvent,
   Track,
@@ -22,7 +23,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
   Check, Link2, Loader2, Lock, LockOpen, LogOut, Mic, MicOff,
-  MonitorUp, MonitorX, PhoneOff, Radio, ScreenShare, Users, X,
+  MonitorUp, MonitorX, NotebookPen, PhoneOff, Radio, ScreenShare, Users, X,
 } from "lucide-react";
 
 type ParticipantMeta = {
@@ -74,6 +75,12 @@ function parseMeta(p: Participant): ParticipantMeta {
 
 function initialsOf(name: string): string {
   return name.trim().slice(0, 2) || "؟";
+}
+
+// عامل «أمين المحضر» ينضم عبر Agent Dispatch بهوية تقنية (agent-xxx) بلا
+// metadata — يُعرض باسمه الوظيفي بدل الهوية الخام
+function isAgentParticipant(p: Participant): boolean {
+  return p.kind === ParticipantKind.AGENT || p.identity.startsWith("agent-");
 }
 
 function formatElapsed(fromIso: string | null | undefined, now: number): string {
@@ -471,8 +478,9 @@ export function MeetingRoomView({
           <div className="grid shrink-0 grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {participants.map((p) => {
               const meta = parseMeta(p);
-              const name = meta.name || p.name || p.identity;
-              const speaking = p.isSpeaking;
+              const isAgent = isAgentParticipant(p);
+              const name = isAgent ? "أمين المحضر" : meta.name || p.name || p.identity;
+              const speaking = !isAgent && p.isSpeaking;
               const micOn = p.isMicrophoneEnabled;
               const isLocal = room ? p === room.localParticipant : false;
               return (
@@ -481,10 +489,11 @@ export function MeetingRoomView({
                   className={cn(
                     "relative rounded-xl border bg-[#1a2530] px-2 pb-2.5 pt-3.5 text-center",
                     speaking ? "border-emerald-500 shadow-[0_0_0_1px_#10b981]" : "border-[#2b3a48]",
+                    isAgent && "border-sky-500/30",
                   )}
                   data-testid={`tile-participant-${p.identity}`}
                 >
-                  {!micOn ? (
+                  {!micOn && !isAgent ? (
                     <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#3a2528] text-red-400">
                       <MicOff className="h-3 w-3" />
                     </span>
@@ -496,8 +505,8 @@ export function MeetingRoomView({
                   ) : null}
                   <Avatar className={cn("mx-auto h-12 w-12", speaking && "ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-[#1a2530]")}>
                     {meta.avatarUrl ? <AvatarImage src={meta.avatarUrl} alt="" /> : null}
-                    <AvatarFallback className="bg-[#3d6fa8] text-sm font-bold text-white">
-                      {initialsOf(name)}
+                    <AvatarFallback className={cn("text-sm font-bold text-white", isAgent ? "bg-sky-600/80" : "bg-[#3d6fa8]")}>
+                      {isAgent ? <NotebookPen className="h-5 w-5" /> : initialsOf(name)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="mt-1.5 truncate text-xs font-medium">
@@ -505,7 +514,9 @@ export function MeetingRoomView({
                     {isLocal ? <span className="text-[#8ba1b4]"> (أنت)</span> : null}
                   </div>
                   <div className="truncate text-[10px] text-[#8ba1b4]">
-                    {meta.isHost ? "المضيف" : meta.department || meta.jobTitle || (meta.isGuest ? "ضيف" : "")}
+                    {isAgent
+                      ? "يدوّن المحضر آلياً"
+                      : meta.isHost ? "المضيف" : meta.department || meta.jobTitle || (meta.isGuest ? "ضيف" : "")}
                   </div>
                 </div>
               );
