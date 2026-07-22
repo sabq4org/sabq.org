@@ -1009,6 +1009,12 @@ export const articles = pgTable("articles", {
   index("idx_articles_breaking").on(table.status, table.hideFromHomepage, table.newsType, table.publishedAt.desc()),
   index("idx_articles_ai_generated").on(table.aiGenerated, table.status),
   index("idx_articles_legacy_slug").on(table.legacySlug),
+  // فهارس trigram لبحث اللوحة (ILIKE %..%) — بدونها يمسح الجدول كاملاً (6.9GB):
+  // شرط OR يتطلب فهرساً صالحاً لكل طرف، والفهرس القديم على lower(title) الجزئي
+  // لا يطابق title ILIKE. أُنشئت يدوياً CONCURRENTLY في الإنتاج 2026-07-23.
+  index("idx_articles_title_trgm_raw").using("gin", table.title.op("gin_trgm_ops")),
+  index("idx_articles_excerpt_trgm").using("gin", table.excerpt.op("gin_trgm_ops")),
+  index("idx_articles_subtitle_trgm").using("gin", table.subtitle.op("gin_trgm_ops")),
 ]);
 
 // Article Events (سجل أحداث المقالات - Timeline/Audit events)
