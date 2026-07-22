@@ -26944,7 +26944,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           isNotNull(spec.title),
           ne(spec.title, ""),
           lte(spec.publishedAt, new Date()),
-          sql`abs(hashtext(${spec.id}::text)) % ${totalBuckets} = ${bucket - 1}`,
+          // المقسوم حرفي (raw) لا باراميتر — شرط مطابقة فهرس التعبير
+          // idx_articles_sitemap_bucket؛ لو صار $N يعود المسح الكامل للجدول
+          sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
         ),
       )
       .orderBy(desc(spec.publishedAt))
@@ -27011,9 +27013,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const now = Date.now();
         const cacheKey = `${cachePrefix}_${bucket}`;
         const cache = (app as any)[cacheKey];
-        if (cache && now - cache.ts < 30 * 60 * 1000) {
+        // كاش 6 ساعات: الـ buckets أرشيفية — اكتشاف الجديد مسؤولية
+        // sitemap-news.xml (آخر 48 ساعة، كاش 3 دقائق) لا هذه الملفات
+        if (cache && now - cache.ts < 6 * 60 * 60 * 1000) {
           res.header('Content-Type', 'application/xml; charset=utf-8');
-          res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
+          res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
           return res.send(cache.xml);
         }
 
@@ -27022,7 +27026,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
         (app as any)[cacheKey] = { xml, ts: now };
         res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
         res.send(xml);
       } catch (error) {
         console.error(`Error generating ${cachePrefix} sitemap:`, error);
