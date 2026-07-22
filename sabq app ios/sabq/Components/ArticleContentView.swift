@@ -51,8 +51,8 @@ struct ArticleContentView: View {
             paragraph(runs)
         case .list(let ordered, let items):
             listView(ordered: ordered, items: items)
-        case .blockquote(let runs):
-            quoteView(runs)
+        case .blockquote(let runs, let attribution):
+            quoteView(runs, attribution: attribution)
         case .image(let url, let alt, let caption):
             imageBlock(url: url, alt: alt, caption: caption)
         case .imageGallery(let images):
@@ -160,7 +160,7 @@ struct ArticleContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func quoteView(_ runs: [InlineRun]) -> some View {
+    private func quoteView(_ runs: [InlineRun], attribution: [InlineRun]?) -> some View {
         HStack(alignment: .top, spacing: 14) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(SabqTheme.primaryEnd)
@@ -177,6 +177,16 @@ struct ArticleContentView: View {
                     .multilineTextAlignment(.leading)
                     .lineSpacing(CGFloat(lineSpacing) + 4)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // القائل في سطر مفرد بخط أصغر
+                if let attribution {
+                    (Text("— ").font(SabqFonts.app(size: CGFloat(fontSize - 2), weight: .semibold))
+                        + renderText(runs: attribution, baseSize: CGFloat(fontSize - 2), baseWeight: .semibold))
+                        .foregroundStyle(SabqTheme.ink.opacity(0.6))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
             }
         }
         .padding(16)

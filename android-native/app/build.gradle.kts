@@ -15,7 +15,7 @@ android {
     // (com.sabqorg.sabq) is independent — Android Gradle Plugin
     // supports this split without renaming source folders.
     namespace = "com.sabq.smart"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // Play Store published bundles for com.sabqorg.sabq:
@@ -34,7 +34,7 @@ android {
         // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 144
         versionName = "10.1.3"
 

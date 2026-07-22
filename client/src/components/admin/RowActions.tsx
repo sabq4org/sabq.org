@@ -68,15 +68,15 @@ export function RowActions({
   const handleSendNotification = async () => {
     setIsSendingNotification(true);
     try {
-      await apiRequest(`/api/admin/push/quick-send`, {
+      const data = await apiRequest<{ message?: string }>(`/api/admin/push/quick-send`, {
         method: "POST",
         body: JSON.stringify({ articleId }),
         headers: { "Content-Type": "application/json" },
       });
-      
+
       toast({
-        title: "تم الإرسال",
-        description: "تم إرسال الإشعار للمستخدمين بنجاح",
+        title: "بدأ الإرسال",
+        description: data?.message || "جارٍ إرسال الإشعار للمستخدمين في الخلفية",
       });
       setNotifyDialogOpen(false);
     } catch (error: any) {

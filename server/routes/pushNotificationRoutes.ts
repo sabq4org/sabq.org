@@ -55,6 +55,7 @@ router.get("/status", async (req: Request, res: Response) => {
 // POST /api/admin/push/quick-send
 // إرسال سريع للإشعار من صفحة المقالات - يرسل مباشرة لجميع الأجهزة
 // Hybrid: APNs for iOS + FCM for Android
+// يردّ فورًا (202) ويبثّ في الخلفية — البث الكامل يتجاوز مهلة Cloudflare (100 ثانية)
 // ==========================================
 router.post("/quick-send", async (req: Request, res: Response) => {
   try {
@@ -88,9 +89,35 @@ router.post("/quick-send", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "المقال غير موجود" });
     }
 
+    // Duplicate guard: a 524 in the browser doesn't mean the broadcast failed —
+    // the editor retrying would push the same notification to everyone twice.
+    const recentWindow = new Date(Date.now() - 10 * 60 * 1000);
+    const [recentCampaign] = await db
+      .select({ id: pushCampaigns.id, status: pushCampaigns.status })
+      .from(pushCampaigns)
+      .where(
+        and(
+          eq(pushCampaigns.articleId, articleId),
+          eq(pushCampaigns.targetAll, true),
+          gte(pushCampaigns.createdAt, recentWindow),
+        )
+      )
+      .orderBy(desc(pushCampaigns.createdAt))
+      .limit(1);
+
+    if (recentCampaign) {
+      // `message` is what the client's throwIfResNotOk surfaces to the editor
+      return res.status(409).json({
+        error: "duplicate_quick_send",
+        message: "تم إرسال إشعار لهذا المقال خلال الدقائق الماضية — لن يُعاد الإرسال لتجنّب التكرار",
+        campaignId: recentCampaign.id,
+        campaignStatus: recentCampaign.status,
+      });
+    }
+
     // Get all active devices split by platform
     const allDevices = await db
-      .select({ 
+      .select({
         deviceToken: pushDevices.deviceToken,
         platform: pushDevices.platform
       })
@@ -103,60 +130,11 @@ router.post("/quick-send", async (req: Request, res: Response) => {
 
     const iosDevices = allDevices.filter(d => d.platform === 'ios');
     const androidDevices = allDevices.filter(d => d.platform === 'android');
+    const deeplink = `/article/${article.slug}`;
 
     console.log(`[Push API] Quick-send: ${iosDevices.length} iOS + ${androidDevices.length} Android devices`);
 
-    let totalSuccess = 0;
-    let totalFailed = 0;
-    const deeplink = `/article/${article.slug}`;
-
-    // Send to iOS via APNs
-    if (iosDevices.length > 0 && apnsEnabled) {
-      const apnsPayload = createCustomNotificationPayload(
-        "خبر جديد من سبق",
-        article.title,
-        {
-          imageUrl: article.imageUrl || undefined,
-          deeplink,
-          articleId: String(article.id),
-          type: "article",
-        }
-      );
-      
-      const iosTokens = iosDevices.map(d => d.deviceToken);
-      const apnsResults = await sendApnsBatch(iosTokens, apnsPayload);
-      console.log(`[Push API] APNs (iOS): ${apnsResults.success}/${iosDevices.length}`);
-      totalSuccess += apnsResults.success;
-      totalFailed += apnsResults.failed;
-    } else if (iosDevices.length > 0) {
-      console.log(`[Push API] APNs not configured - skipping ${iosDevices.length} iOS devices`);
-      totalFailed += iosDevices.length;
-    }
-
-    // Send to Android via FCM
-    if (androidDevices.length > 0 && fcmEnabled) {
-      const androidTokens = androidDevices.map(d => d.deviceToken);
-      const fcmResults = await sendToMultipleDevices(androidTokens, {
-        title: "خبر جديد من سبق",
-        body: article.title,
-        imageUrl: article.imageUrl || undefined,
-        data: {
-          type: "article",
-          articleId: String(article.id),
-          deeplink,
-        },
-      });
-      console.log(`[Push API] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
-      totalSuccess += fcmResults.successCount;
-      totalFailed += fcmResults.failureCount;
-    } else if (androidDevices.length > 0) {
-      console.log(`[Push API] FCM not configured - skipping ${androidDevices.length} Android devices`);
-      totalFailed += androidDevices.length;
-    }
-
-    console.log(`[Push API] Quick notification sent for article: ${article.id} (${totalSuccess}/${allDevices.length} devices)`);
-    
-    // Create a campaign record for tracking
+    // Create the campaign record up front so the broadcast is trackable
     const now = new Date();
     const [campaign] = await db
       .insert(pushCampaigns)
@@ -171,30 +149,99 @@ router.post("/quick-send", async (req: Request, res: Response) => {
         deeplink,
         articleId: article.id,
         targetAll: true,
-        status: "sent",
+        status: "sending",
         scheduledAt: now,
-        sentAt: now,
         totalDevices: allDevices.length,
-        sentCount: totalSuccess,
-        failedCount: totalFailed,
         createdBy: (req as any).user?.id || null,
       })
       .returning();
-    
-    console.log(`[Push API] Campaign record created: ${campaign.id}`);
-    
-    res.json({ 
-      success: true, 
-      message: `تم إرسال الإشعار إلى ${totalSuccess} جهاز`,
+
+    res.status(202).json({
+      success: true,
+      message: `بدأ إرسال الإشعار إلى ${allDevices.length} جهاز في الخلفية`,
       campaignId: campaign.id,
       stats: {
         total: allDevices.length,
-        success: totalSuccess,
-        failed: totalFailed,
         ios: iosDevices.length,
         android: androidDevices.length,
       }
     });
+
+    // Background broadcast — deliberately not awaited by the request
+    void (async () => {
+      let totalSuccess = 0;
+      let totalFailed = 0;
+      try {
+        // Send to iOS via APNs
+        if (iosDevices.length > 0 && apnsEnabled) {
+          const apnsPayload = createCustomNotificationPayload(
+            "خبر جديد من سبق",
+            article.title,
+            {
+              imageUrl: article.imageUrl || undefined,
+              deeplink,
+              articleId: String(article.id),
+              type: "article",
+            }
+          );
+
+          const iosTokens = iosDevices.map(d => d.deviceToken);
+          const apnsResults = await sendApnsBatch(iosTokens, apnsPayload, campaign.id);
+          console.log(`[Push API] APNs (iOS): ${apnsResults.success}/${iosDevices.length}`);
+          totalSuccess += apnsResults.success;
+          totalFailed += apnsResults.failed;
+        } else if (iosDevices.length > 0) {
+          console.log(`[Push API] APNs not configured - skipping ${iosDevices.length} iOS devices`);
+          totalFailed += iosDevices.length;
+        }
+
+        // Send to Android via FCM
+        if (androidDevices.length > 0 && fcmEnabled) {
+          const androidTokens = androidDevices.map(d => d.deviceToken);
+          const fcmResults = await sendToMultipleDevices(androidTokens, {
+            title: "خبر جديد من سبق",
+            body: article.title,
+            imageUrl: article.imageUrl || undefined,
+            data: {
+              type: "article",
+              articleId: String(article.id),
+              deeplink,
+            },
+          });
+          console.log(`[Push API] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
+          totalSuccess += fcmResults.successCount;
+          totalFailed += fcmResults.failureCount;
+        } else if (androidDevices.length > 0) {
+          console.log(`[Push API] FCM not configured - skipping ${androidDevices.length} Android devices`);
+          totalFailed += androidDevices.length;
+        }
+
+        await db
+          .update(pushCampaigns)
+          .set({
+            status: "sent",
+            sentAt: new Date(),
+            sentCount: totalSuccess,
+            failedCount: totalFailed,
+            updatedAt: new Date(),
+          })
+          .where(eq(pushCampaigns.id, campaign.id));
+
+        console.log(`[Push API] Quick notification sent for article: ${article.id} (${totalSuccess}/${allDevices.length} devices, campaign: ${campaign.id})`);
+      } catch (err) {
+        console.error(`[Push API] quick-send background error (campaign: ${campaign.id}):`, err);
+        await db
+          .update(pushCampaigns)
+          .set({
+            status: "failed",
+            sentCount: totalSuccess,
+            failedCount: allDevices.length - totalSuccess,
+            updatedAt: new Date(),
+          })
+          .where(eq(pushCampaigns.id, campaign.id))
+          .catch((updateErr) => console.error("[Push API] Failed to mark campaign as failed:", updateErr));
+      }
+    })();
   } catch (error) {
     console.error("[Push API] quick-send error:", error);
     res.status(500).json({ error: "Server error" });

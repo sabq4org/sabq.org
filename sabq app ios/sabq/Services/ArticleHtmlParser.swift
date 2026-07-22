@@ -95,7 +95,9 @@ enum ArticleHtmlParser {
             }
             let inner = scanner.consumeContainer()
             let runs = parseInlineRuns(inner)
-            return runsAreEmpty(runs) ? nil : .blockquote(runs: runs)
+            if runsAreEmpty(runs) { return nil }
+            let split = splitQuoteAttribution(runs)
+            return .blockquote(runs: split.quote, attribution: split.attribution)
         }
 
         if let level = headingLevel(tag.name) {
@@ -225,7 +227,8 @@ enum ArticleHtmlParser {
     private static func parseTwitterEmbedFromBlockquote(scanner: inout HTMLScanner) -> ArticleBlock {
         let inner = scanner.consumeContainer()
         if let url = extractTweetURL(from: inner) { return .twitterEmbed(tweetURL: url) }
-        return .blockquote(runs: parseInlineRuns(inner))
+        let split = splitQuoteAttribution(parseInlineRuns(inner))
+        return .blockquote(runs: split.quote, attribution: split.attribution)
     }
 
     private static func extractTweetURL(from html: String) -> URL? {
@@ -366,6 +369,66 @@ enum ArticleHtmlParser {
             } else {
                 out.append(run)
             }
+        }
+        return out
+    }
+
+    /// يفصل القائل عن نص المقولة عندما يأتيان في فقرة واحدة داخل blockquote:
+    /// «المقولة» — فلان، صفته. النمط المعتمد في التحرير هو قفل الاقتباس «»»
+    /// (أو سطر جديد من <br>) متبوعًا بشرطة ثم اسم القائل. لا فصل عند الشك —
+    /// الشرطات داخل الجمل العادية لا تطابق لأن الفصل يشترط «»» أو \n قبلها.
+    static func splitQuoteAttribution(
+        _ runs: [InlineRun]
+    ) -> (quote: [InlineRun], attribution: [InlineRun]?) {
+        let full = runs.map(\.text).joined()
+        // (نمط، هل تبقى علامة «»» ضمن المقولة)
+        let separators: [(pattern: String, keepMark: Bool)] = [
+            ("»\\s*[—–-]+\\s*", true),
+            ("\\n\\s*[—–]+\\s*", false),
+        ]
+        for sep in separators {
+            guard let regex = HTMLRegexCache.regex(sep.pattern) else { continue }
+            let matches = regex.matches(in: full, range: NSRange(full.startIndex..., in: full))
+            guard let last = matches.last, let match = Range(last.range, in: full) else { continue }
+            let attributionText = String(full[match.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // قائل معقول: غير فارغ، قصير، وليس بداية اقتباس آخر
+            guard !attributionText.isEmpty, attributionText.count <= 140,
+                  !attributionText.contains("«"), !attributionText.contains("»") else { continue }
+            let quoteEnd = sep.keepMark ? full.index(after: match.lowerBound) : match.lowerBound
+            let quote = sliceRuns(runs, from: 0, to: full.distance(from: full.startIndex, to: quoteEnd))
+            let attribution = sliceRuns(
+                runs,
+                from: full.distance(from: full.startIndex, to: match.upperBound),
+                to: full.count
+            )
+            if runsAreEmpty(quote) || runsAreEmpty(attribution) { continue }
+            return (quote, attribution)
+        }
+        return (runs, nil)
+    }
+
+    /// يقصّ [InlineRun] على مدى حرفي [from, to) مع الحفاظ على تنسيقات كل run.
+    private static func sliceRuns(_ runs: [InlineRun], from: Int, to: Int) -> [InlineRun] {
+        var out: [InlineRun] = []
+        var pos = 0
+        for run in runs {
+            let len = run.text.count
+            defer { pos += len }
+            let start = max(from - pos, 0)
+            let end = min(to - pos, len)
+            guard start < end else { continue }
+            let s = run.text.index(run.text.startIndex, offsetBy: start)
+            let e = run.text.index(run.text.startIndex, offsetBy: end)
+            out.append(InlineRun(
+                text: String(run.text[s..<e]),
+                bold: run.bold,
+                italic: run.italic,
+                underline: run.underline,
+                strikethrough: run.strikethrough,
+                colorHex: run.colorHex,
+                link: run.link
+            ))
         }
         return out
     }

@@ -329,7 +329,8 @@ export default function ArticleEditor() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [imageToolsOpen, setImageToolsOpen] = useState(false);
-  const [autoImageOpen, setAutoImageOpen] = useState(false);
+  const [autoImageOpen, setAutoImageOpen] = useState(true);
+  const [albumOpen, setAlbumOpen] = useState(false);
   const [titleCardOpen, setTitleCardOpen] = useState(true);
 
   // على الديسكتوب أبقِ بطاقة العنوان مفتوحة دائماً
@@ -3187,7 +3188,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
             
-            {/* Auto Image Generation — مطوي افتراضياً حتى لا يزاحم مسار الكتابة */}
+            {/* Auto Image Generation — موسّع افتراضياً */}
             {!isOpinionAuthor && canGenerateImages && articleType !== "infographic" && (
               <Collapsible open={autoImageOpen} onOpenChange={setAutoImageOpen}>
                 {!autoImageOpen ? (
@@ -3376,22 +3377,29 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
             {!isNewArticle && !isOpinionAuthor && (
+              <Collapsible open={albumOpen} onOpenChange={setAlbumOpen}>
               <Card data-testid="card-media-album">
-                <CardHeader>
+                <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-media-album">
                   <CardTitle className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <LayoutGrid className="h-4 w-4 text-primary" />
                       ألبوم الصور
                     </span>
-                    <Badge variant="outline" className="text-xs">
-                      {albumImages.length} صورة
-                    </Badge>
+                    <span className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {albumImages.length} صورة
+                      </Badge>
+                      <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${albumOpen ? 'rotate-180' : ''}`} />
+                    </span>
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     صور إضافية تظهر داخل المقال
                   </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                <CardContent className="space-y-4 pt-0">
                   <div className="flex justify-end">
                     <Button
                       variant="outline"
@@ -3530,7 +3538,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     )}
                   </div>
                 </CardContent>
+                </CollapsibleContent>
               </Card>
+              </Collapsible>
             )}
 
             </div>

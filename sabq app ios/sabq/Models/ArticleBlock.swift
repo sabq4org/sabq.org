@@ -15,7 +15,8 @@ enum ArticleBlock {
     case heading(level: Int, runs: [InlineRun])
     case paragraph(runs: [InlineRun])
     case list(ordered: Bool, items: [[InlineRun]])
-    case blockquote(runs: [InlineRun])
+    // attribution: القائل («— فلان، صفته») عندما يُفصل عن نص المقولة
+    case blockquote(runs: [InlineRun], attribution: [InlineRun]?)
     case image(url: URL, alt: String?, caption: String?)
     case imageGallery(images: [GalleryImage])
     case twitterEmbed(tweetURL: URL)

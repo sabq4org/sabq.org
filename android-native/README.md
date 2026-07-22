@@ -44,7 +44,7 @@ android-native/
 المتطلبات:
 
 - JDK 17
-- Android SDK 35
+- Android SDK 36
 - Android Studio Ladybug (2024.2.1) أو أحدث
 
 ```bash
