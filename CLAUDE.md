@@ -11,13 +11,18 @@ npm run build:client # Vite build only (frontend → dist/public/) — used by V
 npm run build:server # esbuild server bundle only (→ dist/index.js) — used by Railway
 npm start            # Production: NODE_ENV=production node dist/index.js
 npm run check        # TypeScript typecheck (tsc, noEmit)
-npm run db:push      # Local: explicit shell URL wins; otherwise NEON_DATABASE_URL then DATABASE_URL
+npm run db:up        # Start local Docker Postgres + Redis (docker-compose.yml)
+npm run db:down      # Stop them; volumes keep data
+npm run db:push:local # Schema push to localhost only (rejects neon.tech / remote hosts)
+npm run db:push      # Raw drizzle-kit push — prefer db:push:local for dev; prod via push-to-production.sh
 ./push-to-production.sh <PROD_DATABASE_URL>   # Push schema to production (interactive confirm)
 ```
 
+Local dev DB (matches `docker-compose.yml`): `postgresql://sabq:sabq_password@localhost:5432/sabq_db` with `DB_DRIVER=pg`. Do **not** set `NEON_DATABASE_URL` locally — runtime prefers it over `DATABASE_URL`. Guide: [`docs/setup/LOCAL_POSTGRES_AR.md`](docs/setup/LOCAL_POSTGRES_AR.md).
+
 `npm run lint` exists (ESLint "stop the bleeding" config — blocks NEW debt only, see `eslint.config.js`; CI lints changed files per PR). The only automated tests are Playwright e2e specs under `e2e/` (`npm run test:smoke`, `npm run test:e2e`); there is still no Jest/Vitest unit-test setup. CI workflows in `.github/workflows/`: typecheck + lint on PRs, read-only smoke against sabq.org every 6h and after pushes to main.
 
-Required env vars (full list in `replit.md`; dev template in `.env.example`): `DATABASE_URL` (or `NEON_DATABASE_URL`, which runtime prefers when both exist), `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, transactional email via `MAILERSEND_API_KEY` or `SENDGRID_API_KEY`, `TWILIO_*`, `GCS_*`, `CLOUDFLARE_IMAGES_*`, `FCM_SERVER_KEY`, `MAILERLITE_API_KEY`, `MAILERLITE_WEBHOOK_SECRET`. `REDIS_URL` is optional (falls back to in-memory). Runtime keeps the existing `.env.local`-over-`.env` convention; the Drizzle schema tool separately preserves explicit shell values, and production pushes use `SCHEMA_DATABASE_URL`. Since 2026-06-10 `APNS_KEY_ID`, `APNS_TEAM_ID`, and `INDEXNOW_KEY` are env-only (hardcoded fallbacks removed) — unset means APNs push / IndexNow pings are disabled with a startup warning.
+Required env vars (full list in `replit.md`; dev template in `.env.example`): for **local** use `DATABASE_URL` + `DB_DRIVER=pg` against Docker Postgres; on **Railway** `NEON_DATABASE_URL` (preferred when set) or `DATABASE_URL` with `DB_DRIVER=pg`. Also: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, transactional email via `MAILERSEND_API_KEY` or `SENDGRID_API_KEY`, `TWILIO_*`, `GCS_*`, `CLOUDFLARE_IMAGES_*`, `FCM_SERVER_KEY`, `MAILERLITE_API_KEY`, `MAILERLITE_WEBHOOK_SECRET`. `REDIS_URL` is optional locally (falls back to in-memory). Runtime keeps `.env.local`-over-`.env`; Drizzle preserves explicit shell/`SCHEMA_DATABASE_URL` values. Since 2026-06-10 `APNS_KEY_ID`, `APNS_TEAM_ID`, and `INDEXNOW_KEY` are env-only — unset means APNs / IndexNow disabled with a startup warning.
 
 ## Architecture
 
@@ -67,10 +72,12 @@ The legacy R2/Cloudflare-Images URL migrations that predate the dedicated news-i
 
 ### Database driver is selectable
 [server/db.ts](server/db.ts) supports two drivers via the `DB_DRIVER` env var:
-- `neon` (default, Replit-safe): `@neondatabase/serverless` over WebSocket. Required by Replit's bundled DB and external Neon.
-- `pg`: standard `node-postgres` TCP. Required for Railway PG (Railway's PG endpoint doesn't speak Neon's wsproxy protocol — `verifyConnection()` will hang forever otherwise, leaving the server listening but with no routes registered because the async init never completes). Set this on Railway.
+- `neon` (default when unset): `@neondatabase/serverless` over WebSocket — Neon/legacy Replit.
+- `pg`: standard `node-postgres` TCP — **required for local Docker Postgres** and for Railway when talking plain TCP. Wrong driver against non-Neon PG makes `verifyConnection()` hang and leaves the server with no routes.
 
-The two seed scripts ([scripts/seed-rbac.ts](scripts/seed-rbac.ts), [scripts/create-admin.ts](scripts/create-admin.ts), [scripts/create-reporter.ts](scripts/create-reporter.ts)) honor `DB_DRIVER` the same way.
+Local development: `DB_DRIVER=pg` + Docker `postgres` service. Production on Railway typically uses Neon with `DB_DRIVER=pg` (TCP) or `neon` depending on the URL/protocol — see Railway vars; do not change prod from this local-dev work.
+
+Seed scripts ([scripts/seed-rbac.ts](scripts/seed-rbac.ts), [scripts/create-admin.ts](scripts/create-admin.ts), [scripts/create-reporter.ts](scripts/create-reporter.ts)) honor `DB_DRIVER` the same way.
 
 ### RBAC has two layers and a superuser shortcut
 1. **Database (authoritative)**: `roles`, `permissions`, `role_permissions`, `user_roles`, `user_permission_overrides`. Seeded from [scripts/seed-data/roles_and_permissions.sql](scripts/seed-data/) (gitignored — personal data). 9 roles, 164 permissions, 344 mappings.
