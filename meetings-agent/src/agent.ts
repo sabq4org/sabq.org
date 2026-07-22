@@ -56,6 +56,9 @@ class TranscriptUploader {
     if (this.queue.length >= MAX_BATCH) void this.flush();
   }
 
+  /** إجمالي ما رُفع بنجاح — يُطبع عند الإغلاق ليجيب اللوج مباشرة: هل وصل التفريغ؟ */
+  uploaded = 0;
+
   async flush(): Promise<void> {
     if (!this.queue.length) return;
     const batch = this.queue.splice(0, this.queue.length);
@@ -74,6 +77,9 @@ class TranscriptUploader {
       if (!res.ok) {
         console.error(`[Agent] upload failed ${res.status} — requeueing ${batch.length}`);
         this.queue.unshift(...batch);
+      } else {
+        this.uploaded += batch.length;
+        console.log(`[Agent] uploaded ${batch.length} segments (total ${this.uploaded})`);
       }
     } catch (e) {
       console.error("[Agent] upload error:", (e as Error).message);
@@ -110,12 +116,18 @@ export default defineAgent({
     const startedAt = Date.now();
     const uploader = new TranscriptUploader(meetingId);
     const activeStreams = new Set<Promise<void>>();
+    // مسار قد يصلنا مرتين (حدث الاشتراك + مسح المسارات القائمة) — تفريغ واحد فقط
+    const seenTracks = new Set<string>();
 
     // تفريغ مسار صوتي واحد: STT بثّي، والمقاطع النهائية فقط تُرفع
     const transcribeTrack = (
       track: RemoteTrack,
       participant: RemoteParticipant,
     ): void => {
+      const sid = track.sid || `${participant.identity}:${track.name}`;
+      if (seenTracks.has(sid)) return;
+      seenTracks.add(sid);
+      console.log(`[Agent] transcribing audio of ${participant.identity}`);
       const speakerName = (() => {
         try {
           const m = JSON.parse(participant.metadata || "{}");
@@ -163,6 +175,16 @@ export default defineAgent({
       },
     );
 
+    // المسارات المشترَك بها قبل تركيب المستمع (مشاركون سبقونا للغرفة أو سباق
+    // أثناء الاتصال) لا يصلها الحدث — مسح صريح يلتقطها، وseenTracks يمنع التكرار
+    for (const participant of ctx.room.remoteParticipants.values()) {
+      for (const pub of participant.trackPublications.values()) {
+        if (pub.kind === TrackKind.KIND_AUDIO && pub.track) {
+          transcribeTrack(pub.track as RemoteTrack, participant);
+        }
+      }
+    }
+
     // البقاء حتى تُغلق الغرفة (ينهي الخادم الاجتماع → تُحذف الغرفة)
     await new Promise<void>((resolve) => {
       ctx.room.on("disconnected", () => resolve());
@@ -171,6 +193,9 @@ export default defineAgent({
     console.log(`[Agent] room closed — flushing transcript for ${meetingId}`);
     await Promise.allSettled([...activeStreams]);
     await uploader.close();
+    console.log(
+      `[Agent] done — meeting ${meetingId}: ${uploader.uploaded} segments uploaded, ${seenTracks.size} audio tracks seen`,
+    );
   },
 });
 
