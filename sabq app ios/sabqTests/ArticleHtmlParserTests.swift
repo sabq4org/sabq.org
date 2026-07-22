@@ -48,11 +48,37 @@ struct ArticleHtmlParserTests {
 
     @Test func parsesBlockquote() {
         let blocks = ArticleHtmlParser.parse("<blockquote>اقتباس مهم</blockquote>")
-        guard case .blockquote(let runs) = blocks.first else {
+        guard case .blockquote(let runs, let attribution) = blocks.first else {
             Issue.record("لم يُنتج blockquote: \(blocks)")
             return
         }
         #expect(runs.map(\.text).joined() == "اقتباس مهم")
+        #expect(attribution == nil)
+    }
+
+    /// «المقولة» — القائل في فقرة واحدة: يُفصل القائل عن النص.
+    @Test func splitsQuoteAttribution() {
+        let blocks = ArticleHtmlParser.parse(
+            "<blockquote><p>«الاتفاق يسهم في إنعاش الصناعة النووية» — روبرت أينهورن، المسؤول السابق في الخارجية الأمريكية</p></blockquote>"
+        )
+        guard case .blockquote(let runs, let attribution) = blocks.first else {
+            Issue.record("لم يُنتج blockquote: \(blocks)")
+            return
+        }
+        #expect(runs.map(\.text).joined() == "«الاتفاق يسهم في إنعاش الصناعة النووية»")
+        #expect(attribution?.map(\.text).joined() == "روبرت أينهورن، المسؤول السابق في الخارجية الأمريكية")
+    }
+
+    /// شرطة داخل المقولة نفسها (قبل قفل «») لا تُفصل كقائل.
+    @Test func doesNotSplitDashInsideQuote() {
+        let blocks = ArticleHtmlParser.parse(
+            "<blockquote><p>«العلاقات الأمريكية - السعودية تتعزز»</p></blockquote>"
+        )
+        guard case .blockquote(_, let attribution) = blocks.first else {
+            Issue.record("لم يُنتج blockquote: \(blocks)")
+            return
+        }
+        #expect(attribution == nil)
     }
 
     @Test func skipsEmptyParagraphs() {
