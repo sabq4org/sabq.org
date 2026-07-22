@@ -15,6 +15,7 @@ import { isAuthenticated } from "../auth";
 import { userHasPermission } from "../rbac";
 import {
   createMeeting,
+  deleteMeeting,
   endMeeting,
   getMeeting,
   getMeetingByInviteToken,
@@ -28,6 +29,7 @@ import {
   markParticipantLeft,
   meetingsDisabledMessage,
   muteParticipantMic,
+  purgeAllMeetings,
   removeParticipantFromRoom,
   requestGuestJoin,
   requestJoin,
@@ -182,6 +184,25 @@ router.get(
     } catch (error) {
       console.error("[Meetings] list error:", error);
       res.status(500).json({ message: "تعذر جلب الاجتماعات" });
+    }
+  },
+);
+
+// مسح كل الاجتماعات — قبل /:id حتى لا يُلتقط المسار كمعرّف؛ meetings.manage فقط
+router.delete(
+  "/api/meetings",
+  isAuthenticated,
+  async (req: Request, res: Response) => {
+    try {
+      if (!(await hasPerm(req, "meetings.manage"))) {
+        return res.status(403).json({ message: "مسح الكل يحتاج صلاحية إدارة الاجتماعات" });
+      }
+      const userId = (req.user as { id: string }).id;
+      const result = await purgeAllMeetings(userId);
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("[Meetings] purge error:", error);
+      res.status(500).json({ message: "تعذر مسح الاجتماعات" });
     }
   },
 );
@@ -508,6 +529,23 @@ router.post(
     } catch (error) {
       console.error("[Meetings] end error:", error);
       res.status(500).json({ message: "تعذر إنهاء الاجتماع" });
+    }
+  },
+);
+
+// حذف اجتماع واحد — المضيف أو meetings.manage (لا يحتاج LiveKit؛ يحذف الصف حتى لو النظام غير مفعّل)
+router.delete(
+  "/api/meetings/:id",
+  isAuthenticated,
+  async (req: Request, res: Response) => {
+    try {
+      const loaded = await loadMeetingAsHost(req, res);
+      if (!loaded) return;
+      await deleteMeeting(loaded.meeting, loaded.userId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Meetings] delete error:", error);
+      res.status(500).json({ message: "تعذر حذف الاجتماع" });
     }
   },
 );
