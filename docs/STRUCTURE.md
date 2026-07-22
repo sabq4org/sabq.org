@@ -33,7 +33,8 @@
 - `design_guidelines.md` — إرشادات التصميم
 
 ## docs/setup/ — الإعداد والتشغيل
-- `DATABASE_SETUP_INSTRUCTIONS_AR.md`
+- `LOCAL_POSTGRES_AR.md` — PostgreSQL المحلي عبر Docker للتطوير (`DB_DRIVER=pg`)
+- `DATABASE_SETUP_INSTRUCTIONS_AR.md` — نقطة دخول لإعداد القاعدة (تحيل للمحلي)
 - `OBJECT-STORAGE-SETUP.md`
 - `R2_NEWS_IMAGES_ROLLOUT.md` — تشغيل صور الأخبار على R2، التدرج، الكاش، والتراجع
 - `SECRETS-UPDATE-GUIDE.md`

@@ -1,6 +1,6 @@
 # حالة النشر الحالية — sabq.org
 
-> **آخر تحديث:** 2026-07-19
+> **آخر تحديث:** 2026-07-22
 >
 > **ملاحظة تشغيلية:** انتقل الإنتاج الرسمي من **Replit** إلى **Cloudflare Pages** (الواجهة) + **Railway** (الـ API) في **منتصف مايو 2026** (~أسبوعين قبل هذا التاريخ). Replit لم يعد مسار النشر الحالي.
 
@@ -85,19 +85,35 @@
 
 ### محلي
 
-`docker-compose.yml` يشغّل Redis (`redis://redis:6379`). `npm run dev` بدون Docker لا يحتاج Redis — الجلسات تذهب لـ Postgres المحلي أو in-memory حسب الإعداد.
+التطوير يستخدم **PostgreSQL في Docker** (`DB_DRIVER=pg`) وليس فرع Neon للتطوير:
+
+```bash
+npm run db:up                                          # postgres + redis
+# .env.local: DATABASE_URL=postgresql://sabq:sabq_password@localhost:5432/sabq_db
+#             DB_DRIVER=pg  — وبدون NEON_DATABASE_URL
+npm run db:push:local                                  # schema على localhost فقط
+npm run dev
+npm run db:down                                        # إيقاف مع الإبقاء على الـ volume
+```
+
+الدليل: [`docs/setup/LOCAL_POSTGRES_AR.md`](setup/LOCAL_POSTGRES_AR.md).  
+`REDIS_URL=redis://localhost:6379` اختياري؛ بدونها الجلسات على Postgres المحلي أو ذاكرة العملية.
+
+**الإنتاج على Neon لم يتغير** — لا تلمس متغيرات Railway ولا فرع Neon من هذا المسار.
 
 ---
 
 ## أوامر وقواعد سلامة
 
 ```bash
-npm run dev      # محلي: Express + Vite على منفذ واحد (مثل Replit القديم)
-npm run build    # بناء كامل
-npm run check    # TypeScript
+npm run dev           # محلي: Express + Vite على منفذ واحد
+npm run db:up         # Postgres + Redis محليان
+npm run db:push:local # مخطط → localhost فقط (يرفض Neon)
+npm run build         # بناء كامل
+npm run check         # TypeScript
 ```
 
-- **لا** `db:push` مباشرة على رابط الإنتاج — استخدم `./push-to-production.sh` مع رابط الاتصال الفعلي الذي يختاره Railway (`NEON_DATABASE_URL` أولًا). السكربت يمرره كـ`SCHEMA_DATABASE_URL` حتى لا تستبدله `.env.local`.
+- **لا** `db:push` / `db:push:local` على رابط الإنتاج أو Neon — للتطوير المحلي فقط `db:push:local`. للإنتاج: `./push-to-production.sh` مع رابط Railway الفعلي (`NEON_DATABASE_URL` أولًا) عبر `SCHEMA_DATABASE_URL`.
 - **لا** تفترض أن الوثائق القديمة التي تذكر «Replit = production» ما زالت صحيحة — راجع هذا الملف أولاً
 - عند تعديل الـ proxy أو SEO على الحافة: **`functions/_middleware.js`** على Pages، وليس `server/seoInjector.ts` وحده (الـ injector يخدم وضع single-process فقط)
 - صيانة قاعدة البيانات عند إقلاع الخادم **متوقفة افتراضياً**. لا تعمل إلا مع `RUN_DB_STARTUP_MAINTENANCE=true`، ويظل `SKIP_DB_MAINTENANCE=true` مانعاً أعلى أولوية. لا تفعّلها على Railway مع رابط Neon pooled؛ نفّذ أعمال الصيانة كعملية تشغيلية مقصودة وباتصال admin مباشر.

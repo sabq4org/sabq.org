@@ -18,6 +18,9 @@
     "test:smoke": "playwright test e2e/smoke.spec.ts",
     "test:e2e": "playwright test",
     "db:push": "drizzle-kit push",
+    "db:push:local": "bash scripts/db-push-local.sh",
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose stop postgres redis",
     "systems:inventory": "node scripts/systems-inventory.mjs --write-snapshot"
   },
   "dependencies": {
