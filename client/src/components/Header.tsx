@@ -95,6 +95,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "مقالات", href: "/opinion" },
     { name: "مُقترب", href: "/muqtarab" },
     { name: "لحظة بلحظة", href: "/moment-by-moment" },
+    { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
   ];
 
   return (
@@ -206,7 +207,12 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                     data-testid={`link-section-${section.name}`}
                     aria-current={location === section.href ? "page" : undefined}
                   >
-                    {section.icon && <section.icon className="h-3.5 w-3.5" />}
+                    {section.icon && (
+                      <section.icon
+                        className={`h-3.5 w-3.5 ${section.href === "/sabq-ai" ? "text-primary" : ""}`}
+                        aria-hidden="true"
+                      />
+                    )}
                     {section.name}
                   </span>
                 </Link>
@@ -417,6 +423,16 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   >
                     <Boxes className="h-5 w-5 text-primary" aria-hidden="true" />
                     مُقترب
+                  </span>
+                </Link>
+                <Link href="/sabq-ai">
+                  <span
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid="link-mobile-sabq-ai"
+                  >
+                    <Brain className="h-5 w-5 text-primary" aria-hidden="true" />
+                    عقل سبق
                   </span>
                 </Link>
                 <Link href="/lite">
