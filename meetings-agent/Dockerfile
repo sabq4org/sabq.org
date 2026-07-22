@@ -3,7 +3,8 @@ FROM node:22-slim
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev=false
+# devDependencies مطلوبة للبناء (tsc)
+RUN npm install
 
 COPY tsconfig.json ./
 COPY src ./src
