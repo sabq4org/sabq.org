@@ -55,6 +55,8 @@ export interface MeetingRoomViewProps {
   token: string;
   muteOnJoin: boolean;
   isHost: boolean;
+  /** «أمين المحضر» مفعّل — تظهر لافتة تنبيه بأن الاجتماع يُفرَّغ آلياً */
+  minutesEnabled?: boolean;
   isLockedInitial?: boolean;
   startedAt?: string | null;
   inviteToken?: string | null;
@@ -93,6 +95,7 @@ export function MeetingRoomView({
   token,
   muteOnJoin,
   isHost,
+  minutesEnabled = false,
   isLockedInitial = false,
   startedAt,
   inviteToken,
@@ -404,6 +407,14 @@ export function MeetingRoomView({
           </span>
           <h1 className="truncate text-sm font-bold">{meetingTitle}</h1>
           {isLocked ? <Lock className="h-3.5 w-3.5 shrink-0 text-amber-400" /> : null}
+          {minutesEnabled ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-300"
+              title="يُفرَّغ هذا الاجتماع آلياً وسيصدر محضر معتمد من المضيف"
+            >
+              ● يُفرَّغ آلياً
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs tabular-nums text-[#8ba1b4]" dir="ltr">

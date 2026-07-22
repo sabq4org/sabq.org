@@ -106,6 +106,7 @@ router.get("/api/meetings/invite/:token", requireConfigured, async (req, res) =>
       status: meeting.status,
       scheduledAt: meeting.scheduledAt,
       isLocked: meeting.isLocked,
+      minutesEnabled: meeting.minutesEnabled,
       isAuthenticated: Boolean(authedUserId),
     });
   } catch (error) {
@@ -208,6 +209,7 @@ const createMeetingSchema = z
     memberIds: z.array(z.string()).max(200).optional(),
     requireApproval: z.boolean().default(true),
     muteOnJoin: z.boolean().default(true),
+    minutesEnabled: z.boolean().default(false),
     scheduledAt: z.coerce.date().nullable().optional(),
   })
   .refine((v) => v.accessType !== "department" || Boolean(v.departmentId), {

@@ -18,6 +18,7 @@ type MeetingDetail = {
   isLocked: boolean;
   requireApproval: boolean;
   muteOnJoin: boolean;
+  minutesEnabled: boolean;
   startedAt: string | null;
   inviteToken: string | null;
 };
@@ -191,6 +192,7 @@ export default function MeetingRoom() {
             token={phase.token}
             muteOnJoin={phase.muteOnJoin}
             isHost={meeting.isHost}
+            minutesEnabled={meeting.minutesEnabled}
             isLockedInitial={meeting.isLocked}
             startedAt={meeting.startedAt ?? new Date().toISOString()}
             inviteToken={meeting.inviteToken}

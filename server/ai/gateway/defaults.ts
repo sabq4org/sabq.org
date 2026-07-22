@@ -99,6 +99,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "ifox-strategy", displayName: "iFox — الاستراتيجية", category: "editorial", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
 
   // ── Analysis & classification ──
+  { featureKey: "meeting-minutes", displayName: "أمين المحضر — محضر الاجتماعات", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 4000 },
   { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: SONNET, fallbackChain: CHAIN_AFTER_SONNET },
   { featureKey: "sentiment-analysis", displayName: "تحليل المشاعر", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "content-analyzer", displayName: "محلل الجودة التحريرية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
