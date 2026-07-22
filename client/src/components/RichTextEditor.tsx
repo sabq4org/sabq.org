@@ -62,7 +62,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import EmojiPicker, { EmojiClickData, Theme as EmojiPickerTheme } from 'emoji-picker-react';
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { AIImageGeneratorDialog } from "./AIImageGeneratorDialog";
@@ -146,6 +146,13 @@ export function RichTextEditor({
   // Check if user is a reporter - reporters have restricted AI features
   const isReporter = user?.role === 'reporter' || (user?.roles && user.roles.some((r: any) => r.name === 'reporter' || r === 'reporter'));
 
+  // آخر HTML بثّه onUpdate — يميّز صدى تغييراتنا عن محتوى خارجي جديد.
+  // بدونه: مع ألبوم صور، updateHtmlWithGalleryData يعيد كتابة وسم الألبوم
+  // بصيغة تختلف عن editor.getHTML()، فمقارنة أثر المزامنة تفشل دائمًا
+  // ويُعاد ضبط المستند بعد كل حركة — يضيع المؤشر ويُدرج الاقتباس في
+  // نهاية المقال بدل موضع الكتابة.
+  const lastEmittedHtmlRef = useRef<string | null>(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -194,12 +201,16 @@ export function RichTextEditor({
         const match = html.match(/data-images="([^"]*)"/);
         console.log('[RichTextEditor] Gallery data-images after update:', match ? match[1].substring(0, 200) : 'not found');
       }
+      lastEmittedHtmlRef.current = html;
       onChange(html);
     },
   });
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (!editor) return;
+    // صدى تغيير صادر من المحرر نفسه — لا تعد ضبط المستند
+    if (content === lastEmittedHtmlRef.current) return;
+    if (content !== editor.getHTML()) {
       editor.commands.setContent(content);
     }
   }, [content, editor]);
