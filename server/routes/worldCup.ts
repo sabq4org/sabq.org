@@ -292,26 +292,10 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      // إعدادات البلوك من لوحة التحكم — الإخفاء (بالمفتاح أو خارج نافذة
-      // التوقيت) يعمل على الويب والتطبيقات المثبّتة معًا لأن الجميع يقرأ من
-      // overview: نُرجع حمولة صالحة فارغة فتختفي الواجهات دون تحديث متجر.
+      // إعدادات البلوك من لوحة التحكم — `hidden: true` يُخفي ستريب الرئيسية
+      // والتطبيقات (تتحقق من الحقل صراحةً). صفحة /world-cup تبقى أرشيفًا حيًّا
+      // بالبطل والشجرة؛ لا نفرّغ الحمولة (كانت تُظهر «تنطلق قريبًا» بالغلط بعد الختام).
       const settings = await getTournamentBlockSettings("world-cup");
-      if (isBlockHidden(settings)) {
-        // s-maxage=30: إعادة تفعيل المفتاح من اللوحة تصل الواجهات خلال ≤30ث
-        res.set("Cache-Control", "public, max-age=0, s-maxage=30, stale-while-revalidate=60");
-        return res.json({
-          hidden: true,
-          live: [],
-          today: [],
-          matchOfTheDay: null,
-          matchOfDayPeers: [],
-          predictions: {},
-          saudi: { next: null, fixtures: [], group: null },
-          champion: null,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
       const ov = await getOverview();
 
       // البطل اليدوي من اللوحة يتقدّم على المكتشف تلقائيًا — إلا إذا تطابقا
@@ -323,6 +307,13 @@ export function registerWorldCupRoutes(app: Express) {
         }
       }
       ov.champion = champion;
+
+      if (isBlockHidden(settings)) {
+        // s-maxage=30: إعادة تفعيل المفتاح من اللوحة تصل الواجهات خلال ≤30ث
+        res.set("Cache-Control", "public, max-age=0, s-maxage=30, stale-while-revalidate=60");
+        return res.json({ ...ov, hidden: true });
+      }
+
       // تركيب النتيجة اللحظية على كل المباريات الحيّة في النظرة العامة
       const [live, today, saudiFixtures] = await Promise.all([
         overlayLiveList(ov.live),
