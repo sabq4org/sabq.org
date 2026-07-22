@@ -25,7 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
-  Building2, CalendarClock, Check, Headphones, Link2, ListChecks, Loader2,
+  Building2, CalendarClock, Check, FileText, Headphones, Link2, ListChecks, Loader2,
   Lock, Mic, Plus, Radio, Search, Users, UsersRound, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -38,6 +38,8 @@ type MeetingListItem = {
   status: string;
   requireApproval: boolean;
   isLocked: boolean;
+  minutesEnabled: boolean;
+  minutesStatus: string;
   scheduledAt: string | null;
   startedAt: string | null;
   endedAt: string | null;
@@ -92,6 +94,7 @@ export default function MeetingsHub() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [minutesMeeting, setMinutesMeeting] = useState<MeetingListItem | null>(null);
 
   const { data: dataRaw, isLoading } = useQuery({
     queryKey: ["/api/meetings"],
@@ -233,8 +236,22 @@ export default function MeetingsHub() {
                   items={recent}
                   muted
                   right={(m) => (
-                    <span className="min-w-[70px] text-xs tabular-nums text-muted-foreground">
-                      {formatTime(m.endedAt)}
+                    <span className="flex items-center gap-2">
+                      {m.minutesEnabled ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => setMinutesMeeting(m)}
+                          data-testid={`button-minutes-${m.id}`}
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          المحضر
+                        </Button>
+                      ) : null}
+                      <span className="min-w-[70px] text-xs tabular-nums text-muted-foreground">
+                        {formatTime(m.endedAt)}
+                      </span>
                     </span>
                   )}
                 />
@@ -243,6 +260,10 @@ export default function MeetingsHub() {
           )}
         </div>
       </DashboardPageShell>
+
+      {minutesMeeting ? (
+        <MinutesDialog meeting={minutesMeeting} onClose={() => setMinutesMeeting(null)} />
+      ) : null}
 
       {createOpen ? (
         <CreateMeetingDialog
@@ -496,6 +517,7 @@ function CreateMeetingDialog({
   const [memberSearch, setMemberSearch] = useState("");
   const [requireApproval, setRequireApproval] = useState(true);
   const [muteOnJoin, setMuteOnJoin] = useState(true);
+  const [minutesEnabled, setMinutesEnabled] = useState(false);
   const [schedule, setSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
 
@@ -522,6 +544,7 @@ function CreateMeetingDialog({
           memberIds: accessType === "selected" ? memberIds : undefined,
           requireApproval,
           muteOnJoin,
+          minutesEnabled,
           scheduledAt: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         }),
       }),
@@ -684,6 +707,13 @@ function CreateMeetingDialog({
               testId="switch-mute-on-join"
             />
             <ToggleRow
+              title="أمين المحضر (تفريغ آلي)"
+              subtitle="يُفرَّغ الحديث آلياً ويصلك محضر منظم للمراجعة بعد الاجتماع — يظهر تنبيه للمشاركين"
+              checked={minutesEnabled}
+              onChange={setMinutesEnabled}
+              testId="switch-minutes"
+            />
+            <ToggleRow
               title="جدولة لوقت لاحق"
               subtitle="اتركه مغلقاً لبدء الاجتماع فوراً"
               checked={schedule}
@@ -746,5 +776,233 @@ function ToggleRow({
       </div>
       <Switch checked={checked} onCheckedChange={onChange} data-testid={testId} />
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// حوار المحضر — المضيف يراجع المسودة ويحررها ويعتمدها؛ المشارك يرى
+// المحضر المعتمد فقط (سياسة معتمدة: التفريغ الخام للمضيف حصراً)
+// ────────────────────────────────────────────────────────────────────
+
+type MinutesData = {
+  summary: string;
+  decisions: string[];
+  actionItems: Array<{ task: string; owner: string | null; due: string | null }>;
+  deferred: string[];
+};
+
+type MinutesResponse = {
+  minutesEnabled: boolean;
+  minutesStatus: string;
+  minutes: MinutesData | null;
+  isHost: boolean;
+  stats?: { segments: number; speakers: number };
+};
+
+function MinutesDialog({ meeting, onClose }: { meeting: MeetingListItem; onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<MinutesData | null>(null);
+
+  const { data: dataRaw, isLoading } = useQuery({
+    queryKey: [`/api/meetings/${meeting.id}/minutes`],
+  });
+  const data = (dataRaw ?? null) as MinutesResponse | null;
+  const minutes = draft ?? data?.minutes ?? null;
+  const status = data?.minutesStatus ?? "none";
+  const isHost = Boolean(data?.isHost);
+  const editable = isHost && status === "draft";
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meeting.id}/minutes`] });
+    queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+  };
+
+  const regenerate = useMutation({
+    mutationFn: () => apiRequest(`/api/meetings/${meeting.id}/minutes/regenerate`, { method: "POST" }),
+    onSuccess: () => {
+      setDraft(null);
+      invalidate();
+      toast({ title: "تم توليد المحضر" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "تعذر التوليد", description: e.message, variant: "destructive" }),
+  });
+
+  const approve = useMutation({
+    mutationFn: async () => {
+      if (draft) {
+        await apiRequest(`/api/meetings/${meeting.id}/minutes`, {
+          method: "PATCH",
+          body: JSON.stringify(draft),
+        });
+      }
+      return apiRequest<{ emailsSent: number }>(`/api/meetings/${meeting.id}/minutes/approve`, {
+        method: "POST",
+      });
+    },
+    onSuccess: (r) => {
+      invalidate();
+      toast({ title: "اعتُمد المحضر", description: `أُرسل بالبريد إلى ${r?.emailsSent ?? 0} مشارك` });
+    },
+    onError: (e: Error) =>
+      toast({ title: "تعذر الاعتماد", description: e.message, variant: "destructive" }),
+  });
+
+  const statusLine = (() => {
+    if (!data?.minutesEnabled) return "لم يُفعَّل أمين المحضر لهذا الاجتماع";
+    switch (status) {
+      case "recording":
+        return "جارٍ التفريغ…";
+      case "generating":
+        return "جارٍ توليد المحضر…";
+      case "failed":
+        return "تعذر توليد المحضر — جرّب إعادة التوليد";
+      case "none":
+        return "لم يبدأ التفريغ بعد";
+      case "draft":
+        return isHost ? "مسودة بانتظار مراجعتك واعتمادك" : "المحضر قيد المراجعة لدى المضيف";
+      case "approved":
+        return "محضر معتمد";
+      default:
+        return status;
+    }
+  })();
+
+  const editList = (key: "decisions" | "deferred", value: string) => {
+    if (!minutes) return;
+    setDraft({ ...minutes, [key]: value.split("\n").map((s) => s.trim()).filter(Boolean) });
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-[640px]" dir="rtl">
+        <DialogHeader className="text-right">
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            محضر: {meeting.title}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge variant={status === "approved" ? "default" : "secondary"}>{statusLine}</Badge>
+              {isHost && data?.stats ? (
+                <span className="text-xs text-muted-foreground">
+                  {data.stats.segments} مقطع تفريغ · {data.stats.speakers} متحدث
+                </span>
+              ) : null}
+            </div>
+
+            {minutes && (isHost || status === "approved") ? (
+              <>
+                <div className="space-y-1.5">
+                  <div className="text-sm font-semibold">الملخص</div>
+                  {editable ? (
+                    <Textarea
+                      value={minutes.summary}
+                      onChange={(e) => setDraft({ ...minutes, summary: e.target.value })}
+                      rows={4}
+                    />
+                  ) : (
+                    <p className="text-sm leading-7 text-muted-foreground">{minutes.summary || "—"}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="text-sm font-semibold">القرارات {editable ? "(سطر لكل قرار)" : ""}</div>
+                  {editable ? (
+                    <Textarea
+                      value={minutes.decisions.join("\n")}
+                      onChange={(e) => editList("decisions", e.target.value)}
+                      rows={Math.max(3, minutes.decisions.length + 1)}
+                    />
+                  ) : minutes.decisions.length ? (
+                    <ul className="list-disc space-y-1 pr-5 text-sm text-muted-foreground">
+                      {minutes.decisions.map((d, i) => (
+                        <li key={i}>{d}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">—</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="text-sm font-semibold">المهام</div>
+                  {minutes.actionItems.length ? (
+                    <ul className="space-y-1.5 text-sm">
+                      {minutes.actionItems.map((a, i) => (
+                        <li key={i} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                          {a.task}
+                          {a.owner ? <span className="font-semibold"> — {a.owner}</span> : null}
+                          {a.due ? (
+                            <span className="text-xs text-muted-foreground"> (الموعد: {a.due})</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">—</p>
+                  )}
+                </div>
+
+                {minutes.deferred.length || editable ? (
+                  <div className="space-y-1.5">
+                    <div className="text-sm font-semibold">نقاط مؤجلة {editable ? "(سطر لكل نقطة)" : ""}</div>
+                    {editable ? (
+                      <Textarea
+                        value={minutes.deferred.join("\n")}
+                        onChange={(e) => editList("deferred", e.target.value)}
+                        rows={Math.max(2, minutes.deferred.length + 1)}
+                      />
+                    ) : (
+                      <ul className="list-disc space-y-1 pr-5 text-sm text-muted-foreground">
+                        {minutes.deferred.map((d, i) => (
+                          <li key={i}>{d}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {isHost && data?.minutesEnabled ? (
+              <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-3">
+                {(status === "failed" || status === "draft") ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={regenerate.isPending}
+                    onClick={() => regenerate.mutate()}
+                    data-testid="button-minutes-regenerate"
+                  >
+                    {regenerate.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
+                    إعادة التوليد
+                  </Button>
+                ) : null}
+                {status === "draft" ? (
+                  <Button
+                    size="sm"
+                    disabled={approve.isPending}
+                    onClick={() => approve.mutate()}
+                    data-testid="button-minutes-approve"
+                  >
+                    {approve.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
+                    اعتماد وتوزيع بالبريد
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

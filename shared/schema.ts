@@ -14731,6 +14731,13 @@ export const meetings = pgTable("meetings", {
   status: text("status").default("scheduled").notNull(), // scheduled | live | ended | cancelled
   isLocked: boolean("is_locked").default(false).notNull(),
   roomName: varchar("room_name", { length: 80 }).notNull().unique(),
+  // «أمين المحضر»: تفريغ آلي + محضر منظم — تفعيل اختياري عند الإنشاء
+  minutesEnabled: boolean("minutes_enabled").default(false).notNull(),
+  // none | recording | generating | draft | approved | failed
+  minutesStatus: text("minutes_status").default("none").notNull(),
+  minutes: jsonb("minutes").$type<MeetingMinutes>(),
+  minutesGeneratedAt: timestamp("minutes_generated_at"),
+  minutesApprovedAt: timestamp("minutes_approved_at"),
   scheduledAt: timestamp("scheduled_at"),
   startedAt: timestamp("started_at"),
   endedAt: timestamp("ended_at"),
@@ -14738,6 +14745,31 @@ export const meetings = pgTable("meetings", {
 }, (table) => [
   index("meetings_status_idx").on(table.status),
   index("meetings_host_idx").on(table.hostUserId),
+]);
+
+/** بنية المحضر المولّد — تُخزن jsonb وتُحرر من المضيف قبل الاعتماد */
+export interface MeetingMinutes {
+  summary: string;
+  decisions: string[];
+  actionItems: Array<{ task: string; owner: string | null; due: string | null }>;
+  deferred: string[];
+}
+
+// مقاطع التفريغ الخام — يكتبها عامل «أمين المحضر» أثناء الاجتماع.
+// نص حساس: يُحذف آلياً بعد ٣٠ يوماً (المحضر المعتمد يبقى في meetings.minutes)
+export const meetingTranscripts = pgTable("meeting_transcripts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  meetingId: varchar("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+  // هوية LiveKit للمتحدث (تطابق identity في التذكرة) + الاسم المعروض وقتها
+  speakerIdentity: varchar("speaker_identity", { length: 120 }).notNull(),
+  speakerName: text("speaker_name").notNull(),
+  text: text("text").notNull(),
+  // إزاحة بداية المقطع بالميلي ثانية من بداية تسجيل الوكيل
+  startMs: integer("start_ms").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("meeting_transcripts_meeting_idx").on(table.meetingId, table.startMs),
+  index("meeting_transcripts_created_idx").on(table.createdAt),
 ]);
 
 export const meetingParticipants = pgTable("meeting_participants", {
@@ -14777,3 +14809,4 @@ export const meetingEvents = pgTable("meeting_events", {
 export type Meeting = typeof meetings.$inferSelect;
 export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
 export type MeetingEvent = typeof meetingEvents.$inferSelect;
+export type MeetingTranscript = typeof meetingTranscripts.$inferSelect;

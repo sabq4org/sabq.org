@@ -247,6 +247,17 @@ export interface CreateMeetingInput {
   requireApproval: boolean;
   muteOnJoin: boolean;
   scheduledAt?: Date | null;
+  /** «أمين المحضر»: تفريغ آلي + محضر بعد الاجتماع */
+  minutesEnabled?: boolean;
+}
+
+// استدعاء عامل «أمين المحضر» عند صيرورة الاجتماع مباشراً — استيراد ديناميكي
+// لتفادي دورة استيراد مع meetingMinutesService (الذي يستورد logMeetingEvent)
+function fireMinutesDispatch(meeting: Meeting): void {
+  if (!meeting.minutesEnabled) return;
+  import("./meetingMinutesService")
+    .then((m) => m.dispatchMinutesAgent(meeting))
+    .catch((e) => console.error("[Meetings] minutes dispatch failed:", (e as Error).message));
 }
 
 export async function createMeeting(hostUserId: string, input: CreateMeetingInput): Promise<Meeting> {
@@ -264,10 +275,13 @@ export async function createMeeting(hostUserId: string, input: CreateMeetingInpu
       muteOnJoin: input.muteOnJoin,
       status: isScheduled ? "scheduled" : "live",
       roomName: `sbq-${crypto.randomBytes(8).toString("hex")}`,
+      minutesEnabled: Boolean(input.minutesEnabled),
       scheduledAt: input.scheduledAt ?? null,
       startedAt: isScheduled ? null : new Date(),
     })
     .returning();
+
+  if (!isScheduled) fireMinutesDispatch(meeting);
 
   await db.insert(meetingParticipants).values({
     meetingId: meeting.id,
@@ -298,6 +312,8 @@ export interface MeetingListItem {
   status: string;
   requireApproval: boolean;
   isLocked: boolean;
+  minutesEnabled: boolean;
+  minutesStatus: string;
   scheduledAt: Date | null;
   startedAt: Date | null;
   endedAt: Date | null;
@@ -357,6 +373,8 @@ export async function listMeetingsForUser(
         status: meetings.status,
         requireApproval: meetings.requireApproval,
         isLocked: meetings.isLocked,
+        minutesEnabled: meetings.minutesEnabled,
+        minutesStatus: meetings.minutesStatus,
         scheduledAt: meetings.scheduledAt,
         startedAt: meetings.startedAt,
         endedAt: meetings.endedAt,
@@ -522,6 +540,7 @@ export async function requestJoin(
     meeting = { ...meeting, status: "live" };
     logMeetingEvent(meeting.id, "started", { actorUserId: userId });
     publishMeetingEvent({ type: "meeting_started", meetingId: meeting.id });
+    fireMinutesDispatch(meeting);
   }
 
   const identityBase = await getStaffIdentity(userId);
@@ -908,6 +927,16 @@ export async function endMeeting(
     detail: opts.auto ? { auto: true } : undefined,
   });
   publishMeetingEvent({ type: "meeting_ended", meetingId: meeting.id });
+
+  // توليد المحضر بالخلفية بعد الإنهاء (استيراد ديناميكي — انظر fireMinutesDispatch)
+  if (meeting.minutesEnabled) {
+    import("./meetingMinutesService")
+      .then(async (m) => {
+        await m.generateMinutes(meeting.id);
+        await m.cleanupOldTranscripts();
+      })
+      .catch((e) => console.error("[Meetings] minutes generation failed:", (e as Error).message));
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────

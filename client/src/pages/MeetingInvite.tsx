@@ -18,6 +18,7 @@ type InviteInfo = {
   status: string;
   scheduledAt: string | null;
   isLocked: boolean;
+  minutesEnabled: boolean;
   isAuthenticated: boolean;
 };
 
@@ -116,6 +117,7 @@ export default function MeetingInvite() {
           token={phase.token}
           muteOnJoin={phase.muteOnJoin}
           isHost={false}
+          minutesEnabled={info.minutesEnabled}
           startedAt={null}
           onLeft={() => setPhase({ name: "ended" })}
         />
