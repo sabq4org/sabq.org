@@ -191,9 +191,6 @@ fun SettingsScreen(
             LoyaltyEntryRow(onClick = onLoyaltyClick)
         }
 
-        // 4-ب) مركز التوقّعات — المنصة المركزية (متاح للجميع، الإرسال للمسجّلين)
-        PredictionsEntryRow(onClick = onPredictionsClick)
-
         // 4) Press card entry — DEFERRED (editorial direction 2026-05-19)
 
         // 5) Display
