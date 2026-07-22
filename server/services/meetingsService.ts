@@ -939,6 +939,48 @@ export async function endMeeting(
   }
 }
 
+/**
+ * حذف نهائي للاجتماع — المشاركون/الأحداث/التفريغ تُحذف cascade.
+ * يُغلق غرفة LiveKit إن وُجدت ثم يحذف الصف.
+ */
+export async function deleteMeeting(meeting: Meeting, actorUserId: string): Promise<void> {
+  if (meeting.status === "live" && isMeetingsConfigured()) {
+    try {
+      await roomService().deleteRoom(meeting.roomName);
+    } catch {
+      /* الغرفة قد تكون فارغة أصلاً */
+    }
+  }
+  publishMeetingEvent({ type: "meeting_ended", meetingId: meeting.id, payload: { deleted: true } });
+  await db.delete(meetings).where(eq(meetings.id, meeting.id));
+  // لا logMeetingEvent بعد الحذف — صف الأحداث يُ cascade مع الاجتماع
+  console.info(`[Meetings] deleted meeting ${meeting.id} by ${actorUserId}`);
+}
+
+/** مسح كل الاجتماعات (تنظيف تجريبي) — للمخوّلين بـ meetings.manage فقط عبر المسار */
+export async function purgeAllMeetings(actorUserId: string): Promise<{ deleted: number }> {
+  const rows = await db.select({ id: meetings.id, roomName: meetings.roomName, status: meetings.status }).from(meetings);
+  if (isMeetingsConfigured()) {
+    await Promise.all(
+      rows
+        .filter((r) => r.status === "live")
+        .map(async (r) => {
+          try {
+            await roomService().deleteRoom(r.roomName);
+          } catch {
+            /* تجاهل */
+          }
+        }),
+    );
+  }
+  for (const r of rows) {
+    publishMeetingEvent({ type: "meeting_ended", meetingId: r.id, payload: { deleted: true } });
+  }
+  await db.delete(meetings);
+  console.info(`[Meetings] purged ${rows.length} meetings by ${actorUserId}`);
+  return { deleted: rows.length };
+}
+
 // ────────────────────────────────────────────────────────────────────
 // المصالحة التلقائية — الاجتماع «المباشر» الذي فرغت غرفته على LiveKit
 // (غادر الجميع أو انقطعوا) يُقفل تلقائياً بدل بقائه «مباشراً» للأبد.

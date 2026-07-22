@@ -18,6 +18,16 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -26,7 +36,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
   Building2, CalendarClock, Check, FileText, Headphones, Link2, ListChecks, Loader2,
-  Lock, Mic, Plus, Radio, Search, Users, UsersRound, X,
+  Lock, Mic, Plus, Radio, Search, Trash2, UsersRound, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -95,6 +105,8 @@ export default function MeetingsHub() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [minutesMeeting, setMinutesMeeting] = useState<MeetingListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MeetingListItem | null>(null);
+  const [purgeOpen, setPurgeOpen] = useState(false);
 
   const { data: dataRaw, isLoading } = useQuery({
     queryKey: ["/api/meetings"],
@@ -104,17 +116,46 @@ export default function MeetingsHub() {
   const live = Array.isArray(data?.live) ? data.live : [];
   const upcoming = Array.isArray(data?.upcoming) ? data.upcoming : [];
   const recent = Array.isArray(data?.recent) ? data.recent : [];
+  const totalCount = live.length + upcoming.length + recent.length;
 
   const canCreate =
     user?.permissions?.includes("*") ||
     user?.permissions?.includes("meetings.create") ||
     user?.permissions?.includes("meetings.manage");
+  const canManage =
+    user?.permissions?.includes("*") ||
+    user?.permissions?.includes("meetings.manage");
+  const canDeleteMeeting = (m: MeetingListItem) =>
+    canManage || m.hostUserId === user?.id;
 
   const weekCount = live.length + upcoming.length;
   const todayCount = upcoming.filter((m) => {
     if (!m.scheduledAt) return false;
     return new Date(m.scheduledAt).toDateString() === new Date().toDateString();
   }).length;
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/meetings/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      setDeleteTarget(null);
+      toast({ title: "تم حذف الاجتماع" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "تعذر الحذف", description: e.message, variant: "destructive" }),
+  });
+
+  const purgeMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<{ deleted: number }>("/api/meetings", { method: "DELETE" }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      setPurgeOpen(false);
+      toast({ title: "تم مسح الاجتماعات", description: `حُذف ${r?.deleted ?? 0} اجتماعاً` });
+    },
+    onError: (e: Error) =>
+      toast({ title: "تعذر المسح", description: e.message, variant: "destructive" }),
+  });
 
   return (
     <DashboardLayout>
@@ -126,11 +167,26 @@ export default function MeetingsHub() {
             description="اجتماعات صوتية مع مشاركة شاشة — بهوية دليل المنسوبين وتحكم كامل بالدخول"
             titleTestId="text-meetings-title"
             actions={
-              canCreate ? (
-                <Button onClick={() => setCreateOpen(true)} data-testid="button-new-meeting">
-                  <Plus className="ml-1 h-4 w-4" />
-                  اجتماع جديد
-                </Button>
+              canCreate || (canManage && totalCount > 0) ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {canManage && totalCount > 0 ? (
+                    <Button
+                      variant="outline"
+                      className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                      onClick={() => setPurgeOpen(true)}
+                      data-testid="button-purge-meetings"
+                    >
+                      <Trash2 className="ml-1 h-4 w-4" />
+                      مسح الكل
+                    </Button>
+                  ) : null}
+                  {canCreate ? (
+                    <Button onClick={() => setCreateOpen(true)} data-testid="button-new-meeting">
+                      <Plus className="ml-1 h-4 w-4" />
+                      اجتماع جديد
+                    </Button>
+                  ) : null}
+                </div>
               ) : undefined
             }
           />
@@ -190,13 +246,27 @@ export default function MeetingsHub() {
                     </div>
                   </div>
                   <AccessBadge type={m.accessType} departmentName={m.departmentName} />
-                  <Button
-                    onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
-                    disabled={data ? !data.configured : false}
-                    data-testid={`button-join-${m.id}`}
-                  >
-                    انضمام
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {canDeleteMeeting(m) ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteTarget(m)}
+                        data-testid={`button-delete-${m.id}`}
+                        aria-label="حذف الاجتماع"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                    <Button
+                      onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
+                      disabled={data ? !data.configured : false}
+                      data-testid={`button-join-${m.id}`}
+                    >
+                      انضمام
+                    </Button>
+                  </div>
                 </div>
               ))}
 
@@ -210,22 +280,36 @@ export default function MeetingsHub() {
                     {formatTime(m.scheduledAt)}
                   </span>
                 )}
-                action={(m) =>
-                  m.hostUserId === user?.id ? (
-                    <div className="flex items-center gap-2">
-                      <HostRsvpSummary meeting={m} />
+                action={(m) => (
+                  <div className="flex items-center gap-2">
+                    {m.hostUserId === user?.id ? (
+                      <>
+                        <HostRsvpSummary meeting={m} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
+                        >
+                          بدء الآن
+                        </Button>
+                      </>
+                    ) : (
+                      <RsvpButtons meeting={m} />
+                    )}
+                    {canDeleteMeeting(m) ? (
                       <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteTarget(m)}
+                        data-testid={`button-delete-${m.id}`}
+                        aria-label="حذف الاجتماع"
                       >
-                        بدء الآن
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
-                  ) : (
-                    <RsvpButtons meeting={m} />
-                  )
-                }
+                    ) : null}
+                  </div>
+                )}
               />
 
               {/* المنتهية حديثاً */}
@@ -254,12 +338,78 @@ export default function MeetingsHub() {
                       </span>
                     </span>
                   )}
+                  action={(m) =>
+                    canDeleteMeeting(m) ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteTarget(m)}
+                        data-testid={`button-delete-${m.id}`}
+                        aria-label="حذف الاجتماع"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : null
+                  }
                 />
               ) : null}
             </>
           )}
         </div>
       </DashboardPageShell>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف الاجتماع؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيُحذف «{deleteTarget?.title}» نهائياً مع المشاركين والمحضر إن وُجد. لا يمكن التراجع.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:flex-row-reverse sm:justify-start">
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+              }}
+              data-testid="button-confirm-delete-meeting"
+            >
+              {deleteMutation.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={purgeOpen} onOpenChange={setPurgeOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>مسح كل الاجتماعات؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيُحذف جميع الاجتماعات ({totalCount}) من النظام نهائياً — مناسب لتنظيف البيانات التجريبية.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:flex-row-reverse sm:justify-start">
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={purgeMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                purgeMutation.mutate();
+              }}
+              data-testid="button-confirm-purge-meetings"
+            >
+              {purgeMutation.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
+              مسح الكل
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {minutesMeeting ? (
         <MinutesDialog meeting={minutesMeeting} onClose={() => setMinutesMeeting(null)} />
