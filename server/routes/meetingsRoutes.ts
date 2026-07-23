@@ -18,8 +18,10 @@ import {
   deleteMeeting,
   endMeeting,
   getMeeting,
+  getMeetingAttendance,
   getMeetingByInviteToken,
   getMeetingFormOptions,
+  getMeetingHost,
   getMeetingRsvps,
   getRequestStatus,
   getRoster,
@@ -37,6 +39,7 @@ import {
   setRsvp,
   setMeetingLocked,
   subscribeMeetingEvents,
+  updateMeeting,
 } from "../services/meetingsService";
 import type { Meeting as MeetingRow } from "@shared/schema";
 
@@ -101,12 +104,16 @@ router.get("/api/meetings/invite/:token", requireConfigured, async (req, res) =>
       return res.status(404).json({ message: "رابط الدعوة غير صالح" });
     }
     const authedUserId = (req.user as { id: string } | undefined)?.id ?? null;
+    const host = await getMeetingHost(meeting);
     res.json({
       meetingId: meeting.id,
       title: meeting.title,
       description: meeting.description,
       status: meeting.status,
       scheduledAt: meeting.scheduledAt,
+      durationMinutes: meeting.durationMinutes,
+      agenda: Array.isArray(meeting.agenda) ? meeting.agenda : [],
+      hostName: host.name,
       isLocked: meeting.isLocked,
       minutesEnabled: meeting.minutesEnabled,
       isAuthenticated: Boolean(authedUserId),
@@ -221,6 +228,13 @@ router.get(
   },
 );
 
+const agendaItemSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().trim().min(1).max(200),
+  durationMinutes: z.number().int().positive().max(480).nullable().optional(),
+  done: z.boolean().optional(),
+});
+
 const createMeetingSchema = z
   .object({
     title: z.string().trim().min(3, "العنوان قصير").max(120),
@@ -232,6 +246,8 @@ const createMeetingSchema = z
     muteOnJoin: z.boolean().default(true),
     minutesEnabled: z.boolean().default(false),
     scheduledAt: z.coerce.date().nullable().optional(),
+    durationMinutes: z.number().int().positive().max(480).nullable().optional(),
+    agenda: z.array(agendaItemSchema).max(40).optional(),
   })
   .refine((v) => v.accessType !== "department" || Boolean(v.departmentId), {
     message: "اختر الإدارة المستهدفة",
@@ -239,6 +255,18 @@ const createMeetingSchema = z
   .refine((v) => v.accessType !== "selected" || (v.memberIds?.length ?? 0) > 0, {
     message: "اختر عضواً واحداً على الأقل",
   });
+
+const updateMeetingSchema = z.object({
+  title: z.string().trim().min(3, "العنوان قصير").max(120).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  scheduledAt: z.coerce.date().nullable().optional(),
+  durationMinutes: z.number().int().positive().max(480).nullable().optional(),
+  agenda: z.array(agendaItemSchema).max(40).optional(),
+  requireApproval: z.boolean().optional(),
+  muteOnJoin: z.boolean().optional(),
+  minutesEnabled: z.boolean().optional(),
+  cancel: z.boolean().optional(),
+});
 
 router.post(
   "/api/meetings",
@@ -275,14 +303,85 @@ router.get(
         return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
       }
       const isHost = meeting.hostUserId === userId || canManage;
+      const [host, attendance] = await Promise.all([
+        getMeetingHost(meeting),
+        getMeetingAttendance(meeting),
+      ]);
+      const myRow = attendance.attendees.find((a) => a.userId === userId);
       res.json({
         ...meeting,
+        agenda: Array.isArray(meeting.agenda) ? meeting.agenda : [],
         inviteToken: isHost ? meeting.inviteToken : null,
         isHost,
+        host,
+        attendance: {
+          counts: attendance.counts,
+          // الحضور التفصيلي للمضيف؛ الباقون يرون الملخص + صفّهم
+          attendees: isHost
+            ? attendance.attendees
+            : attendance.attendees.filter(
+                (a) => a.rsvp === "yes" || a.rsvp === "no" || a.userId === userId || a.role === "host",
+              ),
+        },
+        myRsvp: myRow?.rsvp ?? null,
+        configured: isMeetingsConfigured(),
       });
     } catch (error) {
       console.error("[Meetings] get error:", error);
       res.status(500).json({ message: "تعذر جلب الاجتماع" });
+    }
+  },
+);
+
+router.patch(
+  "/api/meetings/:id",
+  isAuthenticated,
+  requirePermission("meetings.view"),
+  async (req: Request, res: Response) => {
+    try {
+      const loaded = await loadMeetingAsHost(req, res);
+      if (!loaded) return;
+      const parsed = updateMeetingSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات غير صالحة" });
+      }
+      const result = await updateMeeting(loaded.meeting, loaded.userId, parsed.data);
+      if ("error" in result) return res.status(result.code).json({ message: result.error });
+      res.json(result);
+    } catch (error) {
+      console.error("[Meetings] update error:", error);
+      res.status(500).json({ message: "تعذر تحديث الاجتماع" });
+    }
+  },
+);
+
+router.get(
+  "/api/meetings/:id/attendance",
+  isAuthenticated,
+  requirePermission("meetings.view"),
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as { id: string }).id;
+      const meeting = await getMeeting(req.params.id);
+      if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
+      const canManage = await hasPerm(req, "meetings.manage");
+      if (!(await isUserEligible(meeting, userId, canManage))) {
+        return res.status(403).json({ message: "هذا الاجتماع غير متاح لك" });
+      }
+      const isHost = meeting.hostUserId === userId || canManage;
+      const attendance = await getMeetingAttendance(meeting);
+      res.json({
+        counts: attendance.counts,
+        attendees: isHost
+          ? attendance.attendees
+          : attendance.attendees.filter(
+              (a) => a.rsvp === "yes" || a.rsvp === "no" || a.userId === userId || a.role === "host",
+            ),
+        isHost,
+      });
+    } catch (error) {
+      console.error("[Meetings] attendance error:", error);
+      res.status(500).json({ message: "تعذر جلب الحضور" });
     }
   },
 );

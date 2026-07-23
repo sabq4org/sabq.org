@@ -17,6 +17,9 @@ type InviteInfo = {
   description: string | null;
   status: string;
   scheduledAt: string | null;
+  durationMinutes: number | null;
+  agenda: Array<{ id: string; title: string; durationMinutes: number | null; done: boolean }>;
+  hostName: string;
   isLocked: boolean;
   minutesEnabled: boolean;
   isAuthenticated: boolean;
@@ -153,6 +156,16 @@ export default function MeetingInvite() {
   // صفحة الهبوط
   const scheduled = info.status === "scheduled";
   const ended = info.status === "ended" || info.status === "cancelled";
+  const agenda = Array.isArray(info.agenda) ? info.agenda : [];
+  const whenLabel = info.scheduledAt
+    ? new Date(info.scheduledAt).toLocaleString("ar", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
   return (
     <InviteShell
       icon={
@@ -173,6 +186,29 @@ export default function MeetingInvite() {
             : info.description || "اجتماع صوتي مباشر عبر سبق"
       }
     >
+      <div className="w-full max-w-sm space-y-3 text-sm">
+        {info.hostName ? (
+          <p className="text-muted-foreground">يستضيفه <span className="font-medium text-foreground">{info.hostName}</span></p>
+        ) : null}
+        {whenLabel ? (
+          <p className="text-muted-foreground">
+            الموعد: <span className="font-medium text-foreground">{whenLabel}</span>
+            {info.durationMinutes ? ` · ${info.durationMinutes} دقيقة` : ""}
+          </p>
+        ) : null}
+        {agenda.length > 0 ? (
+          <div className="rounded-xl border border-border bg-card/60 px-4 py-3 text-right">
+            <div className="mb-2 text-xs font-bold text-foreground">الأجندة</div>
+            <ol className="space-y-1.5 text-xs text-muted-foreground">
+              {agenda.map((item, i) => (
+                <li key={item.id || i}>
+                  <span className="font-medium text-foreground">{i + 1}. {item.title}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+      </div>
       {!ended && !scheduled ? (
         <div className="w-full max-w-xs space-y-3">
           {!info.isAuthenticated ? (

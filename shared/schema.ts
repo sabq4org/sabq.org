@@ -14748,6 +14748,10 @@ export const meetings = pgTable("meetings", {
   minutes: jsonb("minutes").$type<MeetingMinutes>(),
   minutesGeneratedAt: timestamp("minutes_generated_at"),
   minutesApprovedAt: timestamp("minutes_approved_at"),
+  /** مدة متوقعة بالدقائق (للجدولة وصفحة التفاصيل) */
+  durationMinutes: integer("duration_minutes"),
+  /** أجندة الاجتماع — بنود مرتّبة يراها المدعوون قبل الجلسة */
+  agenda: jsonb("agenda").$type<MeetingAgendaItem[]>().default(sql`'[]'::jsonb`),
   scheduledAt: timestamp("scheduled_at"),
   startedAt: timestamp("started_at"),
   endedAt: timestamp("ended_at"),
@@ -14756,6 +14760,14 @@ export const meetings = pgTable("meetings", {
   index("meetings_status_idx").on(table.status),
   index("meetings_host_idx").on(table.hostUserId),
 ]);
+
+/** بند أجندة — يُنشأ عند الجدولة ويُحدَّث من صفحة التفاصيل */
+export interface MeetingAgendaItem {
+  id: string;
+  title: string;
+  durationMinutes: number | null;
+  done: boolean;
+}
 
 /** بنية المحضر المولّد — تُخزن jsonb وتُحرر من المضيف قبل الاعتماد */
 export interface MeetingMinutes {

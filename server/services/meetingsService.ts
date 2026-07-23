@@ -25,6 +25,7 @@ import {
   staffProfiles,
   users,
   type Meeting,
+  type MeetingAgendaItem,
   type MeetingParticipant,
 } from "@shared/schema";
 
@@ -73,7 +74,9 @@ export interface MeetingBusEvent {
     | "participant_removed"
     | "meeting_started"
     | "meeting_ended"
-    | "meeting_locked";
+    | "meeting_locked"
+    | "meeting_updated"
+    | "rsvp_updated";
   meetingId: string;
   /** حمولة خفيفة للعرض فقط — لا أسرار هنا، القناة تصل لكل مشارك مؤهل */
   payload?: Record<string, unknown>;
@@ -247,8 +250,43 @@ export interface CreateMeetingInput {
   requireApproval: boolean;
   muteOnJoin: boolean;
   scheduledAt?: Date | null;
+  /** مدة متوقعة بالدقائق */
+  durationMinutes?: number | null;
+  /** بنود أجندة (عناوين)؛ تُحوَّل إلى MeetingAgendaItem مع معرّفات */
+  agenda?: Array<{ title: string; durationMinutes?: number | null }>;
   /** «أمين المحضر»: تفريغ آلي + محضر بعد الاجتماع */
   minutesEnabled?: boolean;
+}
+
+export interface UpdateMeetingInput {
+  title?: string;
+  description?: string | null;
+  scheduledAt?: Date | null;
+  durationMinutes?: number | null;
+  agenda?: Array<{ id?: string; title: string; durationMinutes?: number | null; done?: boolean }>;
+  requireApproval?: boolean;
+  muteOnJoin?: boolean;
+  minutesEnabled?: boolean;
+  /** إلغاء اجتماع مجدول */
+  cancel?: boolean;
+}
+
+function normalizeAgenda(
+  items: Array<{ id?: string; title: string; durationMinutes?: number | null; done?: boolean }> | undefined,
+): MeetingAgendaItem[] {
+  if (!items?.length) return [];
+  return items
+    .map((item) => ({
+      id: item.id && item.id.length > 0 ? item.id : crypto.randomUUID(),
+      title: item.title.trim().slice(0, 200),
+      durationMinutes:
+        typeof item.durationMinutes === "number" && item.durationMinutes > 0
+          ? Math.min(Math.round(item.durationMinutes), 480)
+          : null,
+      done: Boolean(item.done),
+    }))
+    .filter((item) => item.title.length > 0)
+    .slice(0, 40);
 }
 
 // استدعاء عامل «أمين المحضر» عند صيرورة الاجتماع مباشراً — استيراد ديناميكي
@@ -276,6 +314,11 @@ export async function createMeeting(hostUserId: string, input: CreateMeetingInpu
       status: isScheduled ? "scheduled" : "live",
       roomName: `sbq-${crypto.randomBytes(8).toString("hex")}`,
       minutesEnabled: Boolean(input.minutesEnabled),
+      durationMinutes:
+        typeof input.durationMinutes === "number" && input.durationMinutes > 0
+          ? Math.min(Math.round(input.durationMinutes), 480)
+          : null,
+      agenda: normalizeAgenda(input.agenda),
       scheduledAt: input.scheduledAt ?? null,
       startedAt: isScheduled ? null : new Date(),
     })
@@ -314,6 +357,8 @@ export interface MeetingListItem {
   isLocked: boolean;
   minutesEnabled: boolean;
   minutesStatus: string;
+  durationMinutes: number | null;
+  agendaCount: number;
   scheduledAt: Date | null;
   startedAt: Date | null;
   endedAt: Date | null;
@@ -375,6 +420,8 @@ export async function listMeetingsForUser(
         isLocked: meetings.isLocked,
         minutesEnabled: meetings.minutesEnabled,
         minutesStatus: meetings.minutesStatus,
+        durationMinutes: meetings.durationMinutes,
+        agenda: meetings.agenda,
         scheduledAt: meetings.scheduledAt,
         startedAt: meetings.startedAt,
         endedAt: meetings.endedAt,
@@ -415,12 +462,16 @@ export async function listMeetingsForUser(
             : desc(meetings.endedAt),
       );
     const rows = limit ? await q.limit(limit) : await q;
-    return rows.map((r) => ({
-      ...r,
-      hostName:
-        [r.hostFirstName, r.hostLastName].filter(Boolean).join(" ").trim() || r.hostEmail || "غير معروف",
-      inviteToken: r.hostUserId === userId || canManage ? r.inviteToken : null,
-    }));
+    return rows.map((r) => {
+      const { agenda, hostFirstName, hostLastName, hostEmail, ...rest } = r;
+      return {
+        ...rest,
+        agendaCount: Array.isArray(agenda) ? agenda.length : 0,
+        hostName:
+          [hostFirstName, hostLastName].filter(Boolean).join(" ").trim() || hostEmail || "غير معروف",
+        inviteToken: r.hostUserId === userId || canManage ? r.inviteToken : null,
+      };
+    });
   };
 
   const [live, upcoming, recent] = await Promise.all([
@@ -444,6 +495,203 @@ export async function listMeetingsForUser(
 export async function getMeeting(meetingId: string): Promise<Meeting | null> {
   const [m] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
   return m ?? null;
+}
+
+export async function updateMeeting(
+  meeting: Meeting,
+  actorUserId: string,
+  input: UpdateMeetingInput,
+): Promise<Meeting | { error: string; code: number }> {
+  if (meeting.status === "ended" || meeting.status === "cancelled") {
+    return { error: "لا يمكن تعديل اجتماع منتهٍ أو ملغى", code: 409 };
+  }
+
+  if (input.cancel) {
+    if (meeting.status !== "scheduled") {
+      return { error: "الإلغاء للاجتماعات المجدولة فقط — أنهِ الاجتماع المباشر بدل ذلك", code: 409 };
+    }
+    const [cancelled] = await db
+      .update(meetings)
+      .set({ status: "cancelled", endedAt: new Date() })
+      .where(eq(meetings.id, meeting.id))
+      .returning();
+    logMeetingEvent(meeting.id, "cancelled", { actorUserId });
+    publishMeetingEvent({ type: "meeting_ended", meetingId: meeting.id, payload: { cancelled: true } });
+    return cancelled;
+  }
+
+  const patch: Partial<typeof meetings.$inferInsert> = {};
+  if (input.title !== undefined) {
+    const title = input.title.trim();
+    if (title.length < 3) return { error: "العنوان قصير", code: 400 };
+    patch.title = title.slice(0, 120);
+  }
+  if (input.description !== undefined) {
+    patch.description = input.description?.trim().slice(0, 500) || null;
+  }
+  if (input.durationMinutes !== undefined) {
+    patch.durationMinutes =
+      typeof input.durationMinutes === "number" && input.durationMinutes > 0
+        ? Math.min(Math.round(input.durationMinutes), 480)
+        : null;
+  }
+  if (input.agenda !== undefined) {
+    patch.agenda = normalizeAgenda(input.agenda);
+  }
+  if (input.requireApproval !== undefined) patch.requireApproval = input.requireApproval;
+  if (input.muteOnJoin !== undefined) patch.muteOnJoin = input.muteOnJoin;
+  if (input.minutesEnabled !== undefined && meeting.status === "scheduled") {
+    patch.minutesEnabled = input.minutesEnabled;
+  }
+  if (input.scheduledAt !== undefined) {
+    if (meeting.status !== "scheduled") {
+      return { error: "إعادة الجدولة للاجتماعات المجدولة فقط", code: 409 };
+    }
+    if (input.scheduledAt && input.scheduledAt.getTime() <= Date.now()) {
+      return { error: "موعد الجدولة يجب أن يكون في المستقبل", code: 400 };
+    }
+    patch.scheduledAt = input.scheduledAt;
+  }
+
+  if (Object.keys(patch).length === 0) return meeting;
+
+  const [updated] = await db
+    .update(meetings)
+    .set(patch)
+    .where(eq(meetings.id, meeting.id))
+    .returning();
+  logMeetingEvent(meeting.id, "updated", { actorUserId, detail: { fields: Object.keys(patch) } });
+  publishMeetingEvent({ type: "meeting_updated", meetingId: meeting.id, payload: { fields: Object.keys(patch) } });
+  return updated;
+}
+
+export interface MeetingHostInfo {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  department: string | null;
+  jobTitle: string | null;
+}
+
+export interface AttendanceCounts {
+  invited: number;
+  rsvpYes: number;
+  rsvpNo: number;
+  rsvpPending: number;
+  waiting: number;
+  inRoom: number;
+}
+
+export interface AttendanceEntry {
+  participantId: string;
+  userId: string | null;
+  name: string;
+  avatarUrl: string | null;
+  department: string | null;
+  role: string;
+  status: string;
+  rsvp: string | null;
+  rsvpAt: Date | null;
+  isGuest: boolean;
+  joinedAt: Date | null;
+  leftAt: Date | null;
+}
+
+export async function getMeetingHost(meeting: Meeting): Promise<MeetingHostInfo> {
+  const identity = await getStaffIdentity(meeting.hostUserId);
+  if (identity) {
+    return {
+      userId: meeting.hostUserId,
+      name: identity.name,
+      avatarUrl: identity.avatarUrl,
+      department: identity.department,
+      jobTitle: identity.jobTitle,
+    };
+  }
+  const [u] = await db
+    .select({
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      profileImageUrl: users.profileImageUrl,
+    })
+    .from(users)
+    .where(eq(users.id, meeting.hostUserId))
+    .limit(1);
+  return {
+    userId: meeting.hostUserId,
+    name: [u?.firstName, u?.lastName].filter(Boolean).join(" ").trim() || u?.email || "المضيف",
+    avatarUrl: u?.profileImageUrl || null,
+    department: null,
+    jobTitle: null,
+  };
+}
+
+export async function getMeetingAttendance(meeting: Meeting): Promise<{
+  counts: AttendanceCounts;
+  attendees: AttendanceEntry[];
+}> {
+  const rows = await db
+    .select({
+      participantId: meetingParticipants.id,
+      userId: meetingParticipants.userId,
+      guestName: meetingParticipants.guestName,
+      role: meetingParticipants.role,
+      status: meetingParticipants.status,
+      rsvp: meetingParticipants.rsvp,
+      rsvpAt: meetingParticipants.rsvpAt,
+      joinedAt: meetingParticipants.joinedAt,
+      leftAt: meetingParticipants.leftAt,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      profileImageUrl: users.profileImageUrl,
+      officialPhotoUrl: staffProfiles.officialPhotoUrl,
+      departmentName: staffDepartments.nameAr,
+    })
+    .from(meetingParticipants)
+    .leftJoin(users, eq(users.id, meetingParticipants.userId))
+    .leftJoin(staffProfiles, eq(staffProfiles.userId, meetingParticipants.userId))
+    .leftJoin(staffDepartments, eq(staffDepartments.id, staffProfiles.departmentId))
+    .where(
+      and(
+        eq(meetingParticipants.meetingId, meeting.id),
+        inArray(meetingParticipants.status, ["invited", "pending", "admitted"]),
+      ),
+    )
+    .orderBy(meetingParticipants.createdAt);
+
+  const attendees: AttendanceEntry[] = rows.map((r) => ({
+    participantId: r.participantId,
+    userId: r.userId,
+    name: r.userId
+      ? [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email || "منسوب"
+      : `${r.guestName || "ضيف"} (ضيف)`,
+    avatarUrl: r.officialPhotoUrl || r.profileImageUrl || null,
+    department: r.departmentName || null,
+    role: r.role,
+    status: r.status,
+    rsvp: r.rsvp,
+    rsvpAt: r.rsvpAt,
+    isGuest: !r.userId,
+    joinedAt: r.joinedAt,
+    leftAt: r.leftAt,
+  }));
+
+  const counts: AttendanceCounts = {
+    invited: attendees.filter((a) => a.role !== "host").length,
+    rsvpYes: attendees.filter((a) => a.rsvp === "yes").length,
+    rsvpNo: attendees.filter((a) => a.rsvp === "no").length,
+    rsvpPending: attendees.filter(
+      (a) => a.role !== "host" && !a.isGuest && a.rsvp !== "yes" && a.rsvp !== "no",
+    ).length,
+    waiting: attendees.filter((a) => a.status === "pending").length,
+    inRoom: attendees.filter(
+      (a) => a.status === "admitted" && a.joinedAt && !a.leftAt,
+    ).length,
+  };
+
+  return { counts, attendees };
 }
 
 export async function getMeetingByInviteToken(token: string): Promise<Meeting | null> {
@@ -725,6 +973,17 @@ export async function setRsvp(
     });
   }
   logMeetingEvent(meeting.id, response === "yes" ? "rsvp_yes" : "rsvp_no", { actorUserId: userId });
+  const identity = await getStaffIdentity(userId);
+  publishMeetingEvent({
+    type: "rsvp_updated",
+    meetingId: meeting.id,
+    payload: {
+      userId,
+      response,
+      name: identity?.name || "منسوب",
+      avatarUrl: identity?.avatarUrl || null,
+    },
+  });
 }
 
 export interface RsvpEntry {
