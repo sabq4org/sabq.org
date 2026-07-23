@@ -1,28 +1,23 @@
 // ----------------------------------------------------------------------------
 // سبق بلس — صفحة المعاينة الداخلية /plus-preview (admin فقط)
 //
-// محاكاة تجربة «سبق بلس × ولاء ون» على المحفظة الحقيقية: الرصيد يُعرض
-// بالريال أولاً، الكتالوج قسائم تجريبية، والاستبدال يخصم نقاطاً فعلية
-// ويصدر قسيمة برمز QR حقيقي. التصميم منقول من النموذج المعتمد.
+// نموذج المرحلة الأولى المعتمد (2026-07-23): محاكاة «أكواد شحن ولاء بلس» على
+// المحفظة الحقيقية — الرصيد بالريال أولاً، كتالوج قسائم متاجر (أقلها 50 ر.س)،
+// والاستبدال يخصم نقاطاً فعلية ويصدر كود شحن من 12 رقمًا يُنسخ ويُلصق في
+// شاشة «الشحن» بتطبيق ولاء بلس. التصميم منقول من النموذج المعتمد.
 // ----------------------------------------------------------------------------
 
-import { useEffect, useRef, useState, type ComponentType } from "react";
+import { useRef, useState, type ComponentType } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   CalendarDays,
-  Car,
-  Clapperboard,
-  Coffee,
-  Gift,
-  HeartPulse,
+  Check,
+  Copy,
+  ExternalLink,
   MessageCircle,
-  Shirt,
-  ShoppingBag,
-  Smartphone,
   Sparkles,
   Trophy,
-  UtensilsCrossed,
   type LucideProps,
 } from "lucide-react";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
@@ -34,17 +29,83 @@ import NotFound from "@/pages/not-found";
 
 type LucideIcon = ComponentType<LucideProps>;
 
-/** أيقونات الفئات — بديل حرف الشريك؛ أقرب لبطاقة المكافأة في التطبيق. */
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  "مقاهٍ": Coffee,
-  صحة: HeartPulse,
-  مطاعم: UtensilsCrossed,
-  توصيل: Car,
-  ترفيه: Clapperboard,
-  تسوق: ShoppingBag,
-  اتصالات: Smartphone,
-  أزياء: Shirt,
-};
+/** رابط ولاء بلس — يفتح التطبيق/الموقع لإدخال كود الشحن. */
+const WALAPLUS_URL = "https://walaplus.com";
+
+/** عرض الكود مجمّعًا 4-4-4؛ التخزين والنسخ يبقيان الأرقام متصلة. */
+const groupCode = (code: string) => code.replace(/(.{4})(?=.)/g, "$1 ");
+
+/**
+ * علامات المتاجر — رسوم مبسطة بألوان الهوية الرسمية (النموذج المعتمد).
+ * تُستبدل بملفات الشعارات الأصلية عندما يوفرها المالك.
+ */
+function BrandMark({ brandKey }: { brandKey: string }) {
+  switch (brandKey) {
+    case "panda":
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <circle cx="19" cy="23" r="12" fill="#E30613" />
+          <circle cx="19" cy="23" r="4.5" fill="#fff" />
+          <ellipse cx="27" cy="8.5" rx="6" ry="3.2" fill="#7AC143" transform="rotate(-28 27 8.5)" />
+        </svg>
+      );
+    case "othaim":
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <ellipse cx="22" cy="12" rx="13" ry="5.5" fill="#8DC63F" transform="rotate(-10 22 12)" />
+          <ellipse cx="19" cy="23" rx="15" ry="7" fill="#00A651" transform="rotate(-6 19 23)" />
+          <rect x="8" y="33" width="24" height="3.5" rx="1.75" fill="#E4002B" />
+        </svg>
+      );
+    case "farm":
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <rect x="4" y="6" width="22" height="7" rx="3.5" fill="#8DC63F" transform="rotate(-24 15 9.5)" />
+          <rect x="8" y="17" width="24" height="7" rx="3.5" fill="#ED4C4C" transform="rotate(-24 20 20.5)" />
+          <rect x="12" y="28" width="20" height="7" rx="3.5" fill="#8DC63F" transform="rotate(-24 22 31.5)" />
+        </svg>
+      );
+    case "tamimi":
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <rect width="40" height="40" rx="9" fill="#DD4A48" />
+          <rect x="7" y="14" width="26" height="2.4" rx="1.2" fill="#fff" />
+          <rect x="7" y="24" width="26" height="2.4" rx="1.2" fill="#fff" />
+          <path d="M20 17.5 c1.8 0 2.4 1.4 1.4 2.6 l-1.8 2.2" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />
+        </svg>
+      );
+    case "carrefour":
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <path d="M9 33 V18 a11 11 0 0 1 22 0 V33" fill="none" stroke="#1B3F8F" strokeWidth="7" />
+          <path d="M9 33 V18 a11 11 0 0 1 5.5 -9.5" fill="none" stroke="#E4002B" strokeWidth="7" />
+        </svg>
+      );
+    case "lulu":
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <defs>
+            <clipPath id="spp-lulu-clip">
+              <circle cx="20" cy="24" r="10" />
+            </clipPath>
+          </defs>
+          <circle cx="20" cy="24" r="10" fill="none" stroke="#00A651" strokeWidth="2" />
+          <g clipPath="url(#spp-lulu-clip)">
+            <rect x="8" y="19" width="24" height="2" fill="#00A651" />
+            <rect x="8" y="24" width="24" height="2" fill="#00A651" />
+            <rect x="8" y="29" width="24" height="2" fill="#00A651" />
+          </g>
+          <path d="M10 12 q10 -9 20 0" fill="none" stroke="#E4002B" strokeWidth="4" strokeLinecap="round" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <rect x="6" y="6" width="28" height="28" rx="9" fill="#7B6CE0" />
+        </svg>
+      );
+  }
+}
 
 const EARN_WAYS: { icon: LucideIcon; label: string; value: string; tint: string }[] = [
   { icon: BookOpen, label: "قراءة مقال", value: "+2", tint: "#1793E8" },
@@ -72,6 +133,8 @@ type PlusReward = {
   offer: string;
   pointsCost: number;
   sarValue: number;
+  sarAmount: number;
+  brandKey: string;
   category: string;
   brandColor: string;
   valueLabel: string;
@@ -90,6 +153,8 @@ type PlusRedemption = {
   code: string | null;
   voucherExpiresAt: string | null;
   brandColor: string;
+  brandKey: string;
+  sarAmount: number;
   valueLabel: string;
 };
 
@@ -100,9 +165,13 @@ type Voucher = {
   offer: string;
   valueLabel: string;
   brandColor: string;
+  brandKey: string;
+  sarAmount: number;
   pointsSpent: number;
   redemptionId: string;
 };
+
+type StoreGroup = { name: string; brandKey: string; rewards: PlusReward[] };
 
 const walletPassUrl = (redemptionId: string) => apiUrl(`/api/plus-preview/voucher/${redemptionId}/wallet-pass`);
 
@@ -138,8 +207,37 @@ export default function SabqPlusPreview() {
   const [confirmFor, setConfirmFor] = useState<PlusReward | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [voucher, setVoucher] = useState<Voucher | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const confettiRef = useRef<HTMLCanvasElement>(null);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const copyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(code);
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+      copyResetRef.current = setTimeout(() => setCopiedCode(null), 2200);
+      toast({ title: "نُسخ كود الشحن — ألصقه في شاشة «الشحن» بتطبيق ولاء بلس" });
+    } catch {
+      toast({ title: "تعذر النسخ", description: "انسخ الكود يدويًا", variant: "destructive" });
+    }
+  };
+
+  // تجميع الكتالوج متجرًا-متجرًا مع الحفاظ على ترتيب الخادم (بنده أولًا).
+  const storeGroups: StoreGroup[] = [];
+  {
+    const seen = new Map<string, StoreGroup>();
+    for (const r of catalog?.rewards ?? []) {
+      const key = r.brandKey || r.partnerName;
+      let group = seen.get(key);
+      if (!group) {
+        group = { name: r.partnerName, brandKey: r.brandKey, rewards: [] };
+        seen.set(key, group);
+        storeGroups.push(group);
+      }
+      group.rewards.push(r);
+    }
+  }
 
   const redeem = useMutation({
     mutationFn: async (rewardId: string) =>
@@ -189,23 +287,6 @@ export default function SabqPlusPreview() {
     if (ok) removeRedemption.mutate(redemptionId);
   };
 
-  // رمز QR حقيقي من رقم القسيمة
-  useEffect(() => {
-    if (!voucher) {
-      setQrDataUrl(null);
-      return;
-    }
-    let alive = true;
-    import("qrcode").then((QR) =>
-      QR.toDataURL(voucher.code, { margin: 1, width: 148 }).then((url: string) => {
-        if (alive) setQrDataUrl(url);
-      }),
-    );
-    return () => {
-      alive = false;
-    };
-  }, [voucher]);
-
   if (authLoading) return null;
   if (!isAdmin) return <NotFound />;
 
@@ -243,7 +324,7 @@ export default function SabqPlusPreview() {
                 </div>
                 <div className="spp-pts">{summary ? fmt(summary.totalPoints) : "…"} نقطة</div>
               </div>
-              <div className="spp-mc-rate">كل 500 نقطة = 1 ريال سعودي · الاستبدال عبر شركاء ولاء ون</div>
+              <div className="spp-mc-rate">كل 500 نقطة = 1 ريال سعودي · الاستبدال عبر شركاء ولاء بلس</div>
               {summary &&
                 (summary.nextTier ? (
                   <div className="spp-tier-max">
@@ -316,66 +397,57 @@ export default function SabqPlusPreview() {
         </div>
         <div className="spp-earn-note">القيم الحالية للإنتاج — جدول الاكتساب الجديد (المكافئ للريال) قيد الاعتماد.</div>
 
-        {/* الكتالوج — بطاقات بعرض عمودين وأيقونة فئة (مطابقة منطق بطاقة التطبيق) */}
+        {/* الكتالوج — قسائم متاجر بفئات ريالية (أقلها 50 ر.س، القرار المعتمد) */}
         <h2 className="spp-sec">
           استبدل نقاطك{" "}
           <span className="spp-wala-tag">
-            <span className="spp-w">W</span> بالتعاون مع ولاء ون
+            <span className="spp-w">W</span> بالتعاون مع ولاء بلس
           </span>
         </h2>
         <p className="spp-sec-sub">
-          قسائم وخصومات من شركاء ولاء ون. بعد تأكيد الاستبدال تصدر قسيمتك فورًا ببطاقة ورمز QR.{" "}
-          <b>أسماء الشركاء أدناه تجريبية للمحاكاة.</b>
+          اختر قيمة القسيمة من متجرك المفضّل — يصدر لك <b>كود شحن من 12 رقمًا</b> تنسخه وتلصقه في شاشة «الشحن»
+          بتطبيق ولاء بلس، ثم تشتري قسيمتك من هناك. <b>العلامات مبسطة — الشعارات الرسمية عند الإطلاق.</b>
         </p>
-        <div className="spp-grid">
-          {(catalog?.rewards ?? []).map((v) => {
-            const can = (catalog?.balance ?? 0) >= v.pointsCost;
-            const Icon = CATEGORY_ICONS[v.category] ?? Gift;
-            return (
-              <div className="spp-voucher" key={v.id}>
-                <div className="spp-v-head">
-                  <div
-                    className="spp-v-thumb"
-                    style={{
-                      background: `linear-gradient(135deg, ${v.brandColor}33 0%, ${v.brandColor}0d 100%)`,
-                    }}
-                  >
-                    <Icon size={28} strokeWidth={1.75} style={{ color: v.brandColor }} aria-hidden />
-                  </div>
-                  <div className="spp-v-meta">
-                    <div className="spp-v-brand">{v.partnerName}</div>
-                    <div className="spp-v-offer">{v.offer}</div>
-                    <div className="spp-v-cat">{v.category} · شريك ولاء ون</div>
-                  </div>
-                </div>
-                <div className="spp-v-foot">
-                  <div className="spp-v-cost-chip">
-                    <Sparkles size={12} strokeWidth={2.5} aria-hidden />
-                    <span>
-                      {fmt(v.pointsCost)} نقطة
-                      <small>≈ {v.sarValue.toFixed(2)} ر.س</small>
-                    </span>
-                  </div>
-                  <button
-                    className="spp-btn spp-btn-redeem"
-                    disabled={!can || redeem.isPending}
-                    onClick={() => {
-                      setAgreed(false);
-                      setConfirmFor(v);
-                    }}
-                  >
-                    {can ? (
-                      <>
-                        <Gift size={14} strokeWidth={2.5} aria-hidden /> استبدل
-                      </>
-                    ) : (
-                      "رصيدك لا يكفي"
-                    )}
-                  </button>
+        <div className="spp-stores">
+          {storeGroups.map((s) => (
+            <div className="spp-store" key={s.brandKey || s.name}>
+              <div className="spp-store-mark">
+                <BrandMark brandKey={s.brandKey} />
+              </div>
+              <div className="spp-store-info">
+                <div className="spp-store-name">{s.name}</div>
+                <div className="spp-store-sub">
+                  من {s.rewards[0]?.valueLabel ?? "50 ر.س"} = {fmt(s.rewards[0]?.pointsCost ?? 0)} نقطة
                 </div>
               </div>
-            );
-          })}
+              <div className="spp-store-chips">
+                {s.rewards.map((v) => {
+                  const inStock = v.remainingStock === null || v.remainingStock > 0;
+                  const can = (catalog?.balance ?? 0) >= v.pointsCost && inStock;
+                  return (
+                    <button
+                      key={v.id}
+                      className={`spp-den-chip${can ? "" : " spp-den-off"}`}
+                      disabled={!can || redeem.isPending}
+                      title={
+                        can
+                          ? `${fmt(v.pointsCost)} نقطة`
+                          : inStock
+                            ? `تحتاج ${fmt(v.pointsCost - (catalog?.balance ?? 0))} نقطة إضافية`
+                            : "نفدت الكمية"
+                      }
+                      onClick={() => {
+                        setAgreed(false);
+                        setConfirmFor(v);
+                      }}
+                    >
+                      {v.sarAmount || v.sarValue} ر.س
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* السجل */}
@@ -387,14 +459,32 @@ export default function SabqPlusPreview() {
             redemptions.map((r) => (
               <div className="spp-hist-row" key={r.id}>
                 <div>
-                  <div className="spp-h-brand">{r.partnerName}</div>
+                  <div className="spp-h-brand">
+                    {r.partnerName}
+                    {r.valueLabel ? ` — ${r.valueLabel}` : ""}
+                  </div>
                   <div className="spp-h-date">
                     {new Date(r.redeemedAt).toLocaleDateString("ar-SA-u-nu-latn", { month: "long", day: "numeric" })}
-                    {" · "}
-                    {r.code ?? ""}
+                    {r.code && (
+                      <>
+                        {" · "}
+                        <span className="spp-h-code">{groupCode(r.code)}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <span className="spp-h-status spp-h-ok">{r.status === "delivered" ? "صادرة" : r.status}</span>
+                {r.code && (
+                  <button
+                    type="button"
+                    className="spp-h-copy"
+                    onClick={() => copyCode(r.code!)}
+                    title="نسخ كود الشحن"
+                  >
+                    {copiedCode === r.code ? <Check size={13} strokeWidth={2.5} aria-hidden /> : <Copy size={13} strokeWidth={2.25} aria-hidden />}
+                    {copiedCode === r.code ? "نُسخ" : "نسخ"}
+                  </button>
+                )}
                 {r.code && (
                   <a className="spp-h-wallet" href={walletPassUrl(r.id)} title="أضفها إلى Apple Wallet">
                     🎟 Wallet
@@ -428,18 +518,18 @@ export default function SabqPlusPreview() {
             </p>
           </details>
           <details>
-            <summary>الاستبدال عبر ولاء ون</summary>
+            <summary>الاستبدال عبر ولاء بلس</summary>
             <p>
-              عند تأكيد الاستبدال تُخصم النقاط فورًا من رصيدك وتصدر القسيمة.{" "}
-              <b>بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.</b> استخدام القسيمة لدى الشريك
-              يخضع لشروط الشريك المعلنة وقت الاستخدام.
+              عند تأكيد الاستبدال تُخصم النقاط فورًا من رصيدك ويصدر كود الشحن.{" "}
+              <b>بعد التأكيد تسري شروط وأحكام ولاء بلس ولا يمكن التراجع أو استرداد النقاط.</b> شحن الكود وشراء
+              القسيمة واستخدامها لدى المتجر يخضع لشروط ولاء بلس والمتجر المعلنة وقت الاستخدام.
             </p>
           </details>
           <details>
             <summary>صلاحية النقاط والقسائم</summary>
             <ul>
               <li>نقاط سبق بلس في محفظتك لا تنتهي ما دام حسابك نشطًا.</li>
-              <li>القسائم الصادرة عبر ولاء ون تنتهي بعد 12 شهرًا من الإصدار ما لم يُذكر خلاف ذلك على القسيمة.</li>
+              <li>القسائم الصادرة عبر ولاء بلس تنتهي بعد 12 شهرًا من الإصدار ما لم يُذكر خلاف ذلك على القسيمة.</li>
               <li>العروض الترويجية قد تحمل مددًا أقصر تُوضّح قبل الاستبدال.</li>
             </ul>
           </details>
@@ -447,20 +537,21 @@ export default function SabqPlusPreview() {
             <summary>حدود المسؤولية</summary>
             <p>
               مسؤولية سبق تقتصر على صحة خصم النقاط وإصدار القسيمة. تأخر الشريك أو تغيير عروضه أو انتهاء مخزونه يخضع
-              لشروط ولاء ون والشريك، وفي حال تعذر إصدار القسيمة تُعاد النقاط كاملة إلى رصيدك ولا تُقدَّم تعويضات نقدية.
+              لشروط ولاء بلس والشريك، وفي حال تعذر إصدار القسيمة تُعاد النقاط كاملة إلى رصيدك ولا تُقدَّم تعويضات نقدية.
             </p>
           </details>
           <details>
             <summary>الدعم والنزاعات</summary>
             <p>
               لمشاكل النقاط والرصيد: تواصل مع دعم سبق من صفحة حسابك خلال 15 يومًا من العملية. لمشاكل استخدام القسيمة لدى
-              الشريك: تُحال للدعم المختص في ولاء ون مع تزويدك برقم المرجع.
+              الشريك: تُحال للدعم المختص في ولاء بلس مع تزويدك برقم المرجع.
             </p>
           </details>
         </div>
 
         <footer className="spp-note">
-          نموذج محاكاة داخلي لتجربة «سبق بلس × ولاء ون» — أسماء الشركاء تجريبية والخصم من رصيدك فعلي
+          نموذج محاكاة داخلي لتجربة «سبق بلس × ولاء بلس» — كود الشحن تجريبي (لا يعمل في تطبيق ولاء بلس بعد) والخصم
+          من رصيدك فعلي
         </footer>
       </div>
 
@@ -487,10 +578,10 @@ export default function SabqPlusPreview() {
                 {sar((catalog?.balance ?? 0) - confirmFor.pointsCost)} ر.س)
               </b>
             </div>
-            <div className="spp-m-warn">⚠ بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.</div>
+            <div className="spp-m-warn">⚠ بعد التأكيد تسري شروط وأحكام ولاء بلس ولا يمكن التراجع أو استرداد النقاط.</div>
             <label className="spp-m-agree">
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} /> أوافق على{" "}
-              <u>شروط استخدام سبق بلس</u> و<u>شروط وأحكام ولاء ون</u>
+              <u>شروط استخدام سبق بلس</u> و<u>شروط وأحكام ولاء بلس</u>
             </label>
             <div className="spp-m-actions">
               <button className="spp-btn spp-btn-ghost" onClick={() => setConfirmFor(null)}>
@@ -513,8 +604,10 @@ export default function SabqPlusPreview() {
         <div className="spp-overlay spp-show" role="dialog" aria-modal="true">
           <div className="spp-modal spp-celebrate">
             <div className="spp-big">🎉</div>
-            <h3>مبروك! تم الاستبدال</h3>
-            <p>قسيمتك من {voucher.partnerName} جاهزة — أبرِزها عند الشريك أو أضفها لمحفظتك</p>
+            <h3>كود الشحن جاهز</h3>
+            <p>
+              خُصمت نقاطك وصدر كود شحن قسيمة {voucher.partnerName} — انسخه واشحنه في تطبيق ولاء بلس
+            </p>
             <div className="spp-pass">
               <div className="spp-p-strip" aria-hidden="true" />
               <div className="spp-p-hero">
@@ -524,30 +617,42 @@ export default function SabqPlusPreview() {
                 <div className="spp-p-offer">{voucher.offer}</div>
               </div>
               <div className="spp-p-code">
-                {qrDataUrl ? (
-                  <img src={qrDataUrl} alt={`رمز QR للقسيمة ${voucher.code}`} width={148} height={148} />
-                ) : (
-                  <div style={{ height: 148 }} />
-                )}
-                <div className="spp-p-num">{voucher.code}</div>
+                <div className="spp-code-label">كود الشحن — صالح حتى{" "}
+                  {new Date(voucher.expiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </div>
+                <div className="spp-code-digits">{groupCode(voucher.code)}</div>
+                <button
+                  type="button"
+                  className={`spp-copy-btn${copiedCode === voucher.code ? " spp-copied" : ""}`}
+                  onClick={() => copyCode(voucher.code)}
+                >
+                  {copiedCode === voucher.code ? (
+                    <>
+                      <Check size={16} strokeWidth={2.5} aria-hidden /> تم النسخ
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={16} strokeWidth={2.25} aria-hidden /> نسخ الكود
+                    </>
+                  )}
+                </button>
               </div>
-              <div className="spp-p-meta">
-                <div className="spp-p-meta-item">
-                  <span className="spp-p-meta-label">صالحة حتى</span>
-                  <b>
-                    {new Date(voucher.expiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </b>
-                </div>
-                <div className="spp-p-meta-item spp-p-meta-via">
-                  <span className="spp-p-meta-label">عبر</span>
-                  <b>ولاء ون</b>
-                </div>
+              <div className="spp-howto">
+                <b>كيف تستخدم الكود؟</b>
+                <ol>
+                  <li>انسخ الكود بالزر أعلاه.</li>
+                  <li>افتح تطبيق ولاء بلس ← شاشة «الشحن».</li>
+                  <li>ألصق الكود — يُضاف الرصيد فورًا وتشتري قسيمتك.</li>
+                </ol>
               </div>
             </div>
+            <a className="spp-open-wala" href={WALAPLUS_URL} target="_blank" rel="noopener noreferrer">
+              فتح تطبيق ولاء بلس <ExternalLink size={14} strokeWidth={2.25} aria-hidden />
+            </a>
             <a className="spp-apple-wallet" href={walletPassUrl(voucher.redemptionId)}>
               <span className="spp-aw-icon">
                 <span className="spp-c1" />
@@ -744,43 +849,37 @@ const PAGE_CSS = `
   border: 1px solid color-mix(in srgb, var(--wala) 30%, transparent);
 }
 .spp-w { color: var(--wala-y); font-weight: 900; font-size: 15px; }
-.spp-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
-}
 @media (max-width: 640px) {
-  .spp-grid, .spp-earn-strip { grid-template-columns: 1fr; }
+  .spp-earn-strip { grid-template-columns: 1fr; }
 }
-.spp-voucher {
-  background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
-  display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); transition: transform .15s ease;
+.spp-stores { display: flex; flex-direction: column; gap: 10px; }
+.spp-store {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 12px 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow);
 }
-.spp-voucher:hover { transform: translateY(-2px); }
-.spp-v-head { display: flex; align-items: flex-start; gap: 12px; }
-.spp-v-thumb {
-  width: 80px; height: 80px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0;
+.spp-store-mark {
+  flex: none; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; border: 1px solid var(--line); overflow: hidden;
 }
-.spp-v-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.spp-v-brand {
-  font-weight: 900; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3);
+.spp-store-mark svg { width: 34px; height: 34px; display: block; }
+.spp-store-info { flex: 1; min-width: 0; }
+.spp-store-name { font-weight: 800; font-size: 15px; }
+.spp-store-sub { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.spp-store-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.spp-den-chip {
+  border: 0; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 13px;
+  font-variant-numeric: tabular-nums; border-radius: 999px; padding: 7px 14px;
+  background: var(--wala-deep); color: #fff; transition: filter .15s ease;
 }
-.spp-v-offer { font-weight: 800; font-size: 15px; color: var(--ink); line-height: 1.35; }
-.spp-v-cat { font-size: 12px; color: var(--ink-3); }
-.spp-v-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; gap: 8px; flex-wrap: wrap; }
-.spp-v-cost-chip {
-  display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--sabq) 12%, transparent);
-  color: var(--sabq); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.spp-v-cost-chip small { display: block; font-weight: 600; color: var(--ink-3); font-size: 11px; }
+.spp-den-chip:hover:not(:disabled) { filter: brightness(1.12); }
+.spp-den-chip:focus-visible { outline: 3px solid var(--sabq); outline-offset: 2px; }
+.spp-den-off, .spp-den-chip:disabled { background: var(--chip-bg); color: var(--ink-3); font-weight: 600; cursor: not-allowed; }
 .spp-btn {
   border: 0; cursor: pointer; font-family: inherit; font-weight: 800; border-radius: 999px;
   padding: 8px 16px; font-size: 13px; transition: filter .15s ease;
   display: inline-flex; align-items: center; gap: 6px;
 }
 .spp-btn:focus-visible { outline: 3px solid var(--sabq); outline-offset: 2px; }
-.spp-btn-redeem { background: var(--wala); color: #fff; }
-.spp-btn-redeem:hover:not(:disabled) { filter: brightness(1.08); }
-.spp-btn-redeem:disabled { background: var(--line); color: var(--ink-3); cursor: not-allowed; }
 .spp-hist { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
 .spp-hist-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -790,6 +889,13 @@ const PAGE_CSS = `
 .spp-h-brand { font-weight: 700; }
 .spp-h-date { color: var(--ink-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .spp-h-pts { color: var(--danger); font-weight: 800; font-variant-numeric: tabular-nums; }
+.spp-h-code { direction: ltr; unicode-bidi: embed; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.spp-h-copy {
+  font-size: 12px; font-weight: 800; color: var(--sabq); background: transparent; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--sabq) 35%, transparent); border-radius: 999px; padding: 4px 12px;
+  font-family: inherit; display: inline-flex; align-items: center; gap: 5px;
+}
+.spp-h-copy:hover { background: var(--chip-bg); }
 .spp-h-wallet {
   font-size: 12px; font-weight: 800; color: var(--wala); text-decoration: none;
   border: 1px solid color-mix(in srgb, var(--wala) 35%, transparent); border-radius: 999px; padding: 4px 12px;
@@ -880,15 +986,39 @@ const PAGE_CSS = `
   max-width: 28ch;
 }
 .spp-p-code {
-  background: #fff; border-radius: 14px; padding: 14px 16px 12px; color: #13202E;
+  background: #fff; border-radius: 14px; padding: 14px 16px; color: #13202E;
   text-align: center; position: relative; z-index: 1;
   margin: 0 18px;
 }
-.spp-p-code img { display: inline-block; border-radius: 6px; }
-.spp-p-num {
-  font-size: 13.5px; letter-spacing: 1.5px; font-weight: 800; margin-top: 8px;
-  font-variant-numeric: tabular-nums; direction: ltr; color: #0D1B2A;
+.spp-code-label { font-size: 11.5px; font-weight: 600; color: #7E8DA0; margin-bottom: 8px; }
+.spp-code-digits {
+  direction: ltr; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(20px, 5.4vw, 26px); font-weight: 700; letter-spacing: .06em;
+  font-variant-numeric: tabular-nums; color: #0D1B2A; word-spacing: .35em;
 }
+.spp-copy-btn {
+  margin-top: 12px; width: 100%; border: 0; cursor: pointer; border-radius: 11px; padding: 11px;
+  background: var(--sabq); color: #fff; font-size: 14px; font-weight: 800; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; gap: 8px; transition: filter .15s ease;
+}
+.spp-copy-btn:hover { filter: brightness(1.08); }
+.spp-copy-btn:focus-visible { outline: 3px solid var(--wala-y); outline-offset: 2px; }
+.spp-copy-btn.spp-copied { background: var(--ok); }
+.spp-howto {
+  position: relative; z-index: 1; margin: 12px 18px 0; text-align: right;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13);
+  border-radius: 12px; padding: 11px 14px; font-size: 12.5px; color: #C4D6E6;
+}
+.spp-howto b { display: block; color: #EAF3FB; margin-bottom: 5px; font-size: 12.5px; }
+.spp-howto ol { margin: 0; padding-right: 18px; }
+.spp-howto li { margin-bottom: 2px; }
+.spp-open-wala {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  border: 1.5px solid var(--wala-deep); color: var(--wala-deep); background: var(--wala-bg);
+  border-radius: 12px; padding: 11px; font-size: 14px; font-weight: 800; text-decoration: none;
+  margin-bottom: 10px;
+}
+.spp-open-wala:hover { filter: brightness(1.05); }
 .spp-p-meta {
   display: flex; justify-content: space-between; gap: 12px;
   padding: 14px 22px 0; position: relative; z-index: 1;
@@ -933,5 +1063,7 @@ const PAGE_CSS = `
   .spp-mc-meta b { font-size: 14px; }
   .spp-sec { font-size: 19px; }
   .spp-hist-row { flex-wrap: wrap; padding: 13px 16px; }
+  .spp-store { flex-wrap: wrap; }
+  .spp-store-chips { width: 100%; justify-content: flex-start; }
 }
 `;

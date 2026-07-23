@@ -1,15 +1,17 @@
 // ----------------------------------------------------------------------------
-// سبق بلس — خدمة المعاينة الداخلية (محاكاة استبدال ولاء ون)
+// سبق بلس — خدمة المعاينة الداخلية (محاكاة أكواد شحن ولاء بلس / WalaPlus)
 //
-// Powers /plus-preview (admin-only). Simulates the WalaOne redemption flow on
-// top of the REAL loyalty wallet: catalog rows live in loyalty_rewards marked
-// with rewardData.partnerApiData.previewOnly, points are debited for real via
-// storage.redeemReward, and each redemption issues a voucher code stored in
-// user_rewards_history.deliveryData. Public rewards listings (web + mobile)
-// exclude previewOnly rows, so members never see the simulation catalog.
+// Powers /plus-preview (admin-only). Phase-1 model (approved 2026-07-23):
+// the member redeems points for a 12-digit top-up code, pastes it in the
+// WalaPlus app's شحن screen, and buys the store voucher there. Catalog rows
+// live in loyalty_rewards marked rewardData.partnerApiData.previewOnly,
+// points are debited for real via storage.redeemReward, and each redemption
+// stores its code in user_rewards_history.deliveryData. Public rewards
+// listings (web + mobile) exclude previewOnly rows.
 //
-// When the real WalaOne API integration lands, redeemPreviewReward() is the
-// seam: the code-generation block gets replaced with a partner order call.
+// When the real WalaPlus top-up API lands, redeemPreviewReward() is the seam:
+// the code-generation block gets replaced with the partner issue call.
+// See docs/LOYALTY_WALAPLUS_B2B_SPEC_REVIEW.md.
 // ----------------------------------------------------------------------------
 
 import { randomBytes } from "crypto";
@@ -54,62 +56,69 @@ export async function isPlusPreviewAdmin(user: { id: string; role?: string | nul
 }
 
 // ----------------------------------------------------------------------------
-// Demo catalog — fictional partner brands (النموذج المعتمد). Real brand names
-// arrive from the WalaOne catalog API in the integration phase.
+// Demo catalog — قسائم شحن متاجر (نموذج المرحلة الأولى المعتمد 2026-07-23):
+// العضو يستبدل نقاطه بكود شحن يُدخل في شاشة «الشحن» بتطبيق ولاء بلس ثم يشتري
+// قسيمة المتجر هناك. عينات المتاجر معتمدة من المالك، وأقل قسيمة 50 ر.س.
 // ----------------------------------------------------------------------------
-type DemoReward = {
-  nameAr: string;
-  nameEn: string;
-  description: string;
-  pointsCost: number;
-  partnerName: string;
-  category: string;
-  brandColor: string;
-  valueLabel: string;
-};
+const CATALOG_VERSION = "topup-v2";
+const TOPUP_DENOMINATIONS_SAR = [50, 100, 200];
 
-const DEMO_CATALOG: DemoReward[] = [
-  { nameAr: "مشروب مجاني", nameEn: "Free drink", description: "مشروب مجاني من القائمة الكلاسيكية", pointsCost: 750, partnerName: "قهوة أثر", category: "مقاهٍ", brandColor: "#8C5A3B", valueLabel: "1.50 ر.س" },
-  { nameAr: "خصم 10% على العناية", nameEn: "10% off care products", description: "خصم 10% على منتجات العناية", pointsCost: 500, partnerName: "صيدلية عافية", category: "صحة", brandColor: "#2E9E7E", valueLabel: "خصم 10%" },
-  { nameAr: "خصم 15% على الفاتورة", nameEn: "15% off your bill", description: "خصم 15% على الفاتورة", pointsCost: 1000, partnerName: "مطاعم ضيافة", category: "مطاعم", brandColor: "#C24A4A", valueLabel: "خصم 15%" },
-  { nameAr: "خصم 3 ر.س على مشوارك", nameEn: "SAR 3 off your ride", description: "خصم 3 ر.س على مشوارك القادم", pointsCost: 1500, partnerName: "تطبيق مشوار", category: "توصيل", brandColor: "#3E6FD9", valueLabel: "3.00 ر.س" },
-  { nameAr: "خصم 4 ر.س على تذكرة", nameEn: "SAR 4 off a ticket", description: "خصم 4 ر.س على تذكرة سينما", pointsCost: 2000, partnerName: "سينما شاشة", category: "ترفيه", brandColor: "#6C4AB0", valueLabel: "4.00 ر.س" },
-  { nameAr: "قسيمة شراء 5 ر.س", nameEn: "SAR 5 voucher", description: "قسيمة شراء بقيمة 5 ر.س", pointsCost: 2500, partnerName: "مكتبة معرفة", category: "تسوق", brandColor: "#B87E1F", valueLabel: "5.00 ر.س" },
-  { nameAr: "باقة بيانات 2GB", nameEn: "2GB data pack", description: "باقة بيانات إضافية 2GB", pointsCost: 3000, partnerName: "اتصالات موجة", category: "اتصالات", brandColor: "#1793E8", valueLabel: "6.00 ر.س" },
-  { nameAr: "قسيمة شراء 10 ر.س", nameEn: "SAR 10 voucher", description: "قسيمة شراء بقيمة 10 ر.س", pointsCost: 5000, partnerName: "متجر وسم", category: "أزياء", brandColor: "#4A4A5A", valueLabel: "10.00 ر.س" },
+type DemoStore = { key: string; nameAr: string; nameEn: string; brandColor: string };
+
+const DEMO_STORES: DemoStore[] = [
+  { key: "panda", nameAr: "بنده", nameEn: "Panda", brandColor: "#E30613" },
+  { key: "othaim", nameAr: "أسواق العثيم", nameEn: "Othaim Markets", brandColor: "#00A651" },
+  { key: "farm", nameAr: "أسواق المزرعة", nameEn: "Farm Superstores", brandColor: "#8DC63F" },
+  { key: "tamimi", nameAr: "التميمي", nameEn: "Tamimi Markets", brandColor: "#DD4A48" },
+  { key: "carrefour", nameAr: "كارفور", nameEn: "Carrefour", brandColor: "#1B3F8F" },
+  { key: "lulu", nameAr: "لولو هايبر ماركت", nameEn: "LuLu Hypermarket", brandColor: "#009A44" },
 ];
+
+const isCurrentCatalog = sql`${loyaltyRewards.rewardData}->'partnerApiData'->>'catalog' = ${CATALOG_VERSION}`;
 
 async function ensureDemoCatalog(): Promise<void> {
   const [existing] = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(loyaltyRewards)
-    .where(isPreviewReward);
+    .where(and(isPreviewReward, isCurrentCatalog));
   if (Number(existing?.count ?? 0) > 0) return;
 
+  // كتالوج معاينة قديم (القسائم الوهمية) — يُعطَّل لا يُحذف: صفوف السجل
+  // user_rewards_history تشير إليه بمفتاح أجنبي.
+  await db
+    .update(loyaltyRewards)
+    .set({ isActive: false })
+    .where(and(isPreviewReward, sql`(${loyaltyRewards.rewardData}->'partnerApiData'->>'catalog') IS DISTINCT FROM ${CATALOG_VERSION}`));
+
   await db.insert(loyaltyRewards).values(
-    DEMO_CATALOG.map((r) => ({
-      nameAr: r.nameAr,
-      nameEn: r.nameEn,
-      description: r.description,
-      pointsCost: r.pointsCost,
-      rewardType: "PARTNER_REWARD",
-      partnerName: r.partnerName,
-      rewardData: {
-        partnerApiData: {
-          previewOnly: true,
-          provider: "walaone-sim",
-          category: r.category,
-          brandColor: r.brandColor,
-          valueLabel: r.valueLabel,
+    DEMO_STORES.flatMap((store) =>
+      TOPUP_DENOMINATIONS_SAR.map((sar) => ({
+        nameAr: `قسيمة ${store.nameAr} ${sar} ر.س`,
+        nameEn: `${store.nameEn} SAR ${sar} voucher`,
+        description: `قسيمة شراء بقيمة ${sar} ر.س من ${store.nameAr}`,
+        pointsCost: sar * POINTS_PER_SAR,
+        rewardType: "PARTNER_REWARD",
+        partnerName: store.nameAr,
+        rewardData: {
+          partnerApiData: {
+            previewOnly: true,
+            provider: "walaplus-sim",
+            catalog: CATALOG_VERSION,
+            brandKey: store.key,
+            brandColor: store.brandColor,
+            sarAmount: sar,
+            valueLabel: `${sar} ر.س`,
+            category: "أسواق",
+          },
         },
-      },
-      stock: 100,
-      remainingStock: 100,
-      maxRedemptionsPerUser: null,
-      isActive: true,
-    })),
+        stock: 100,
+        remainingStock: 100,
+        maxRedemptionsPerUser: null,
+        isActive: true,
+      })),
+    ),
   );
-  console.log(`[SabqPlusPreview] seeded ${DEMO_CATALOG.length} demo rewards`);
+  console.log(`[SabqPlusPreview] seeded ${DEMO_STORES.length * TOPUP_DENOMINATIONS_SAR.length} top-up rewards (${CATALOG_VERSION})`);
 }
 
 // ----------------------------------------------------------------------------
@@ -154,7 +163,7 @@ export async function getPlusCatalog(userId: string) {
   const rewards = await db
     .select()
     .from(loyaltyRewards)
-    .where(and(eq(loyaltyRewards.isActive, true), isPreviewReward))
+    .where(and(eq(loyaltyRewards.isActive, true), isPreviewReward, isCurrentCatalog))
     .orderBy(loyaltyRewards.pointsCost);
 
   const [points] = await db
@@ -163,23 +172,32 @@ export async function getPlusCatalog(userId: string) {
     .where(eq(userPointsTotal.userId, userId))
     .limit(1);
 
+  const storeOrder = new Map(DEMO_STORES.map((s, i) => [s.key, i]));
+  const mapped = rewards.map((r) => {
+    const meta = (r.rewardData as any)?.partnerApiData ?? {};
+    return {
+      id: r.id,
+      partnerName: r.partnerName,
+      offer: r.description,
+      pointsCost: Number(r.pointsCost),
+      sarValue: Number((Number(r.pointsCost) / POINTS_PER_SAR).toFixed(2)),
+      sarAmount: Number(meta.sarAmount ?? 0),
+      brandKey: meta.brandKey ?? "",
+      category: meta.category ?? "",
+      brandColor: meta.brandColor ?? "#4A4A5A",
+      valueLabel: meta.valueLabel ?? "",
+      remainingStock: r.remainingStock,
+    };
+  });
+  mapped.sort(
+    (a, b) =>
+      (storeOrder.get(a.brandKey) ?? 99) - (storeOrder.get(b.brandKey) ?? 99) || a.pointsCost - b.pointsCost,
+  );
+
   return {
     balance: Number(points?.totalPoints ?? 0),
     pointsPerSar: POINTS_PER_SAR,
-    rewards: rewards.map((r) => {
-      const meta = (r.rewardData as any)?.partnerApiData ?? {};
-      return {
-        id: r.id,
-        partnerName: r.partnerName,
-        offer: r.description,
-        pointsCost: Number(r.pointsCost),
-        sarValue: Number((Number(r.pointsCost) / POINTS_PER_SAR).toFixed(2)),
-        category: meta.category ?? "",
-        brandColor: meta.brandColor ?? "#4A4A5A",
-        valueLabel: meta.valueLabel ?? "",
-        remainingStock: r.remainingStock,
-      };
-    }),
+    rewards: mapped,
   };
 }
 
@@ -187,16 +205,16 @@ export async function getPlusCatalog(userId: string) {
 // Redemption — real points debit + simulated voucher issuance
 // ----------------------------------------------------------------------------
 function generateVoucherCode(): string {
-  // No 0/1/I/L/O — voucher codes get read aloud and typed at partner tills.
-  const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-  const bytes = randomBytes(8);
-  let raw = "";
-  for (let i = 0; i < 8; i++) raw += alphabet[bytes[i] % alphabet.length];
-  return `SBQ-${raw.slice(0, 4)}-${raw.slice(4)}`;
+  // كود شحن من 12 رقمًا (القرار المعتمد 2026-07-23): يُنسخ ويُلصق في شاشة
+  // «الشحن» بتطبيق ولاء بلس — أرقام فقط، يُخزَّن متصلًا والعرض يجمّعه 4-4-4.
+  const bytes = randomBytes(12);
+  let code = "";
+  for (let i = 0; i < 12; i++) code += (bytes[i] % 10).toString();
+  return code;
 }
 
 export async function redeemPreviewReward(userId: string, rewardId: string): Promise<
-  | { success: true; voucher: { code: string; expiresAt: string; partnerName: string | null; offer: string | null; valueLabel: string; brandColor: string; category: string; pointsSpent: number; redemptionId: string }; remainingBalance: number }
+  | { success: true; voucher: { code: string; expiresAt: string; partnerName: string | null; offer: string | null; valueLabel: string; brandColor: string; brandKey: string; sarAmount: number; category: string; pointsSpent: number; redemptionId: string }; remainingBalance: number }
   | { success: false; code: string; message: string }
 > {
   const [reward] = await db
@@ -245,6 +263,8 @@ export async function redeemPreviewReward(userId: string, rewardId: string): Pro
       offer: reward.description,
       valueLabel: meta.valueLabel ?? "",
       brandColor: meta.brandColor ?? "#4A4A5A",
+      brandKey: meta.brandKey ?? "",
+      sarAmount: Number(meta.sarAmount ?? 0),
       category: meta.category ?? "",
       pointsSpent: Number(reward.pointsCost),
       redemptionId: result.redemption.id,
@@ -325,6 +345,8 @@ export async function getPlusRedemptions(userId: string) {
       code: delivery.couponCode ?? null,
       voucherExpiresAt: delivery.voucherExpiresAt ?? null,
       brandColor: meta.brandColor ?? "#4A4A5A",
+      brandKey: meta.brandKey ?? "",
+      sarAmount: Number(meta.sarAmount ?? 0),
       valueLabel: meta.valueLabel ?? "",
       category: meta.category ?? "",
     };
