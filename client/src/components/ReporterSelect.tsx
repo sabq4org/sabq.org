@@ -27,6 +27,8 @@ interface Reporter {
   name: string;
   email: string;
   avatarUrl?: string | null;
+  /** بعد مهلة الترخيص: false = مطفي وغير قابل للاختيار */
+  licenseSelectable?: boolean;
 }
 
 interface ReporterSelectProps {
@@ -172,6 +174,16 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
     staleTime: 30000,
   });
 
+  // مراسل مقفول على نفسه: نعرف إن كان إرساله ممنوعاً بعد المهلة
+  const { data: ownLicense } = useQuery<{
+    submissionBlocked?: boolean;
+    valid?: boolean;
+  }>({
+    queryKey: ["/api/reporter/media-license"],
+    enabled: Boolean(isReporterOnly && user?.id),
+    staleTime: 60_000,
+  });
+
   const { data: selectedReporterData, isLoading: isLoadingSelected } = useQuery<{
     items: Reporter[];
   }>({
@@ -189,7 +201,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
 
   const reporters = useMemo(() => {
     if (isPublisherAccount) {
-      return [SABQ_NEWSPAPER_REPORTER];
+      return [{ ...SABQ_NEWSPAPER_REPORTER, licenseSelectable: true }];
     }
 
     if (isReporterOnly && user) {
@@ -203,6 +215,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
             "المراسل",
           email: user.email || "",
           avatarUrl: user.profileImageUrl || null,
+          licenseSelectable: ownLicense ? !ownLicense.submissionBlocked : undefined,
         },
       ];
     }
@@ -236,6 +249,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
     user,
     searchQuery,
     value,
+    ownLicense,
   ]);
 
   const selectedReporter = useMemo(() => {
@@ -251,13 +265,16 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
   };
 
   const handleSelect = useCallback(
-    (reporterId: string) => {
-      onChange(reporterId === value ? null : reporterId);
+    (reporter: Reporter) => {
+      if (reporter.licenseSelectable === false) return;
+      onChange(reporter.id === value ? null : reporter.id);
       setOpen(false);
       setSearchQuery("");
     },
     [value, onChange],
   );
+
+  const selectedBlocked = selectedReporter?.licenseSelectable === false;
 
   return (
     <div className="space-y-2">
@@ -277,7 +294,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
               data-testid="button-reporter-select"
             >
               {selectedReporter ? (
-                <div className="flex items-center gap-2">
+                <div className={cn("flex items-center gap-2", selectedBlocked && "opacity-40")}>
                   <Avatar className="h-6 w-6">
                     <AvatarImage src={selectedReporter.avatarUrl || undefined} />
                     <AvatarFallback className="text-xs">
@@ -327,16 +344,22 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
                   </CommandEmpty>
                 ) : (
                   <CommandGroup heading={`${reporters.length} مراسل`}>
-                    {reporters.map((reporter) => (
+                    {reporters.map((reporter) => {
+                      const blocked = reporter.licenseSelectable === false;
+                      return (
                       <CommandItem
                         key={reporter.id}
                         value={reporter.id}
-                        onSelect={() => handleSelect(reporter.id)}
-                        className="cursor-pointer"
+                        disabled={blocked}
+                        onSelect={() => handleSelect(reporter)}
+                        className={cn(
+                          "cursor-pointer",
+                          blocked && "opacity-40 cursor-not-allowed pointer-events-none",
+                        )}
                         data-testid={`item-reporter-${reporter.id}`}
                       >
                         <div className="flex items-center gap-3 flex-1">
-                          <Avatar className="h-8 w-8">
+                          <Avatar className={cn("h-8 w-8", blocked && "grayscale")}>
                             <AvatarImage src={reporter.avatarUrl || undefined} />
                             <AvatarFallback className="text-xs bg-primary/10">
                               {getInitials(reporter.name)}
@@ -347,7 +370,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
                               {reporter.name}
                             </span>
                             <span className="text-xs text-muted-foreground truncate w-full">
-                              {reporter.email}
+                              {blocked ? "بلا ترخيص مهني ساري — غير متاح" : reporter.email}
                             </span>
                           </div>
                         </div>
@@ -358,7 +381,8 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
                           )}
                         />
                       </CommandItem>
-                    ))}
+                      );
+                    })}
                   </CommandGroup>
                 )}
               </CommandList>
@@ -383,11 +407,13 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
       </div>
 
       <p className="text-xs text-muted-foreground" data-testid="text-reporter-helper">
-        {isPublisherAccount
-          ? "أخبار الوكالة تُنشر باسم صحيفة سبق فقط."
-          : isReporterOnly
-            ? "سيتم نشر الخبر باسمك كمراسل."
-            : "اكتب اسم المراسل للبحث السريع، أو اختر من القائمة."}
+        {selectedBlocked
+          ? "هذا المراسل بلا ترخيص مهني ساري — اختر مراسلاً مرخّصاً أو جدّد الترخيص قبل الإرسال."
+          : isPublisherAccount
+            ? "أخبار الوكالة تُنشر باسم صحيفة سبق فقط."
+            : isReporterOnly
+              ? "سيتم نشر الخبر باسمك كمراسل."
+              : "اكتب اسم المراسل للبحث السريع، أو اختر من القائمة."}
       </p>
     </div>
   );

@@ -78,7 +78,14 @@ import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalA
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
-import { mediaLicenseExpiryRejection } from "./services/mediaLicenseService";
+import {
+  assertMediaLicenseAllowsSubmission,
+  isInstitutionalMediaByline,
+  isMediaLicenseEnforcementActive,
+  mediaLicenseExpiryRejection,
+  mediaLicenseFlags,
+  resolveContentBylineUserId,
+} from "./services/mediaLicenseService";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
 import { findSimilarArticles, getPersonalizedRecommendations } from "./similarityEngine";
@@ -5004,6 +5011,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           bannedUntil: users.bannedUntil,
           suspensionReason: users.suspensionReason,
           banReason: users.banReason,
+          mediaLicenseNumber: users.mediaLicenseNumber,
+          mediaLicenseFileKey: users.mediaLicenseFileKey,
+          mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+          mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
         })
         .from(users);
 
@@ -5162,7 +5173,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // `pageSize` + `hasMore` ride along when the request was paged
       // (`?page=N` was supplied). Legacy callers see only the original
       // shape so nothing breaks.
-      const itemsMapped = usersWithRoles.map(u => ({
+      const licenseEnforcement = isMediaLicenseEnforcementActive();
+      const itemsMapped = usersWithRoles.map(u => {
+        const licenseSubmitted = Boolean(
+          u.mediaLicenseNumber && u.mediaLicenseFileKey && u.mediaLicenseSubmittedAt,
+        );
+        const licenseOk =
+          isInstitutionalMediaByline(u.id) ||
+          mediaLicenseFlags(licenseSubmitted, u.mediaLicenseExpiresAt).hasLicense;
+        // بعد المهلة: بلا ترخيص ساري = غير قابل للاختيار في منتقي المراسل/الكاتب
+        const licenseSelectable = !licenseEnforcement || licenseOk;
+        return {
           id: u.id,
           // Prefer staff Arabic name, then full name, then email
           name: u.staffNameAr || u.staffName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
@@ -5184,7 +5205,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           lastLoginAt: u.lastLoginAt,
           lastDeviceInfo: u.lastDeviceInfo,
           loyalty: u.loyalty,
-        }));
+          licenseSelectable,
+          mediaLicenseValid: licenseOk,
+        };
+      });
       res.json({
         items: itemsMapped,
         users: usersWithRoles,
@@ -7311,6 +7335,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       articleData.slug = finalSlug;
       articleData.englishSlug = generateEnglishSlug(parsed.data.title);
 
+      // من ٣١ يوليو: لا نشر/إرسال بلا ترخيص مهني ساري لصاحب الاسم
+      if (articleData.status === "published" || req.body?.submitForReview === true) {
+        const bylineUserId = resolveContentBylineUserId({
+          articleType: articleData.articleType,
+          authorId: articleData.authorId,
+          reporterId: articleData.reporterId,
+          opinionAuthorId: req.body?.opinionAuthorId,
+        });
+        const licenseGate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
+
       const [newArticle] = await db
         .insert(articles)
         .values(articleData)
@@ -7858,6 +7899,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         reporterIdInBody: req.body.reporterId,
         reporterIdInParsed: parsed.data.reporterId,
       });
+
+      const nextStatus = updateData.status ?? existingArticle.status;
+      const nextReview = updateData.reviewStatus ?? existingArticle.reviewStatus;
+      const publishingNow =
+        nextStatus === "published" && existingArticle.status !== "published";
+      const submittingNow =
+        wantsSubmitForReview ||
+        (nextReview === "pending_review" &&
+          existingArticle.reviewStatus !== "pending_review");
+      if (publishingNow || submittingNow) {
+        const bylineUserId = resolveContentBylineUserId({
+          articleType: updateData.articleType ?? existingArticle.articleType,
+          authorId: updateData.authorId ?? existingArticle.authorId,
+          reporterId: updateData.reporterId ?? existingArticle.reporterId,
+          opinionAuthorId: req.body?.opinionAuthorId,
+        });
+        const licenseGate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
 
       const [updatedArticle] = await db
         .update(articles)
@@ -11863,6 +11928,21 @@ Respond in valid JSON format only:
       // last review — the editorial team handles the rare unchanged
       // resubmission directly. Same behaviour now applied at the
       // `/api/articles/:id/submit-revision` route (~25649).
+
+      {
+        const bylineUserId = resolveContentBylineUserId({
+          articleType: existingArticle.articleType,
+          authorId: existingArticle.authorId,
+          reporterId: existingArticle.reporterId,
+        });
+        const licenseGate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
 
       const [updatedArticle] = await db
         .update(articles)
@@ -25877,6 +25957,18 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // see the sibling `/api/my/articles/:id/submit-review` route for
       // the full rationale. Letting any resubmit through eliminates the
       // silent-failure UX where the contributor missed the 400 toast.
+
+      {
+        const licenseGate = await assertMediaLicenseAllowsSubmission(
+          existingArticle.authorId,
+        );
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
 
       const [updatedArticle] = await db
         .update(articles)

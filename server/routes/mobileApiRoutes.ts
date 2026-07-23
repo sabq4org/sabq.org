@@ -4614,6 +4614,21 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       });
     }
 
+    // من ٣١ يوليو: كتّاب/مراسلون بلا ترخيص ساري لا يُرسلون من الموبايل
+    if (isWriter || isReporter) {
+      const { assertMediaLicenseAllowsSubmission } = await import(
+        "../services/mediaLicenseService"
+      );
+      const licenseGate = await assertMediaLicenseAllowsSubmission(session.userId);
+      if (!licenseGate.ok) {
+        return res.status(403).json({
+          success: false,
+          message: licenseGate.message,
+          code: licenseGate.code,
+        });
+      }
+    }
+
     // Decide article kind. Explicit `kind` wins for admin-likes; otherwise
     // derive from role: writers always submit opinion, reporters always
     // submit news.

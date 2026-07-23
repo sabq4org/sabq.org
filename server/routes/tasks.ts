@@ -4,6 +4,7 @@
 // storage-only data access. taskLimiter moved here with the routes; its
 // shared building blocks live in ../utils/rateLimiting.
 // 2026-07-22: POST /api/tasks/complete-all — إتمام جماعي للمهام الجذر غير المكتملة.
+// 2026-07-23: POST /api/tasks/delete-all — حذف جماعي للمهام الجذر ضمن الفلاتر.
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
@@ -280,6 +281,106 @@ export function registerTaskRoutes(app: Express) {
           return res.status(400).json({ error: "بيانات غير صالحة" });
         }
         res.status(500).json({ error: "فشل في إتمام المهام" });
+      }
+    },
+  );
+
+  // POST /api/tasks/delete-all — حذف المهام الجذر ضمن نطاق المستخدم/الفلاتر (حد 200)
+  app.post(
+    "/api/tasks/delete-all",
+    taskLimiter,
+    requireAuth,
+    requireAnyPermission("tasks.delete_any", "tasks.delete_own"),
+    async (req, res) => {
+      try {
+        const userId = (req.user as any).id;
+        const userPermissions = await storage.getUserPermissions(userId);
+        const canDeleteAny = userPermissions.includes("tasks.delete_any");
+
+        const bodySchema = z.object({
+          search: z.string().optional(),
+          priority: z.string().optional(),
+          assignedToId: z.string().optional(),
+          department: z.string().optional(),
+          status: z
+            .enum(["todo", "in_progress", "review", "completed", "archived", "all"])
+            .optional(),
+        });
+        const body = bodySchema.parse(req.body ?? {});
+
+        const filters: {
+          status?: string;
+          priority?: string;
+          assignedToId?: string;
+          department?: string;
+          parentTaskId: null;
+          search?: string;
+          limit: number;
+          offset: number;
+          userIdForOwn?: string;
+        } = {
+          parentTaskId: null,
+          limit: 200,
+          offset: 0,
+        };
+
+        if (body.status && body.status !== "all") {
+          filters.status = body.status;
+        }
+        if (body.priority && body.priority !== "all") {
+          filters.priority = body.priority;
+        }
+        if (body.assignedToId && body.assignedToId !== "all") {
+          filters.assignedToId = body.assignedToId;
+        }
+        if (body.department) {
+          filters.department = body.department;
+        }
+        if (body.search?.trim()) {
+          filters.search = body.search.trim();
+        }
+
+        if (!userPermissions.includes("tasks.view_all")) {
+          filters.userIdForOwn = userId;
+        }
+
+        const { tasks: candidates } = await storage.getTasks(filters);
+
+        let deletedCount = 0;
+        let skippedCount = 0;
+
+        for (const task of candidates) {
+          // delete_own: من أنشأ المهمة فقط (نفس قاعدة DELETE /:id)
+          if (!canDeleteAny && task.createdById !== userId) {
+            skippedCount += 1;
+            continue;
+          }
+
+          // مهام فرعية في جدول tasks بلا FK cascade — تُحذف قبل الجذر
+          const { tasks: children } = await storage.getTasks({
+            parentTaskId: task.id,
+            limit: 200,
+            offset: 0,
+          });
+          for (const child of children) {
+            if (!canDeleteAny && child.createdById !== userId) {
+              skippedCount += 1;
+              continue;
+            }
+            await storage.deleteTask(child.id);
+          }
+
+          await storage.deleteTask(task.id);
+          deletedCount += 1;
+        }
+
+        res.json({ deletedCount, skippedCount });
+      } catch (error: any) {
+        console.error("Error deleting all tasks:", error);
+        if (error.name === "ZodError") {
+          return res.status(400).json({ error: "بيانات غير صالحة" });
+        }
+        res.status(500).json({ error: "فشل في حذف المهام" });
       }
     },
   );

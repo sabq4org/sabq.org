@@ -626,6 +626,7 @@ export default function TasksPage() {
   const { user } = useAuth();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [completeAllOpen, setCompleteAllOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [viewTaskId, setViewTaskId] = useState<string | null>(null);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -795,6 +796,45 @@ export default function TasksPage() {
     },
   });
 
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest<{ deletedCount: number; skippedCount: number }>(
+        "/api/tasks/delete-all",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            search: searchQuery || undefined,
+            status: statusFilter,
+            priority: priorityFilter,
+            assignedToId: assigneeFilter,
+          }),
+        },
+      );
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/statistics"] });
+      setDeleteAllOpen(false);
+      toast({
+        title: "تم حذف المهام",
+        description:
+          result.deletedCount > 0
+            ? `حُذفت ${result.deletedCount.toLocaleString("en-US")} مهمة` +
+              (result.skippedCount
+                ? ` (تُخطّي ${result.skippedCount.toLocaleString("en-US")})`
+                : "")
+            : "لا توجد مهام للحذف ضمن الفلاتر الحالية",
+      });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "تعذر حذف الكل",
+        description: taskApiErrorMessage(error, "فشل حذف المهام"),
+        variant: "destructive",
+      });
+    },
+  });
+
   const incompleteOnPage =
     tasksData?.tasks.filter((t) => t.status !== "completed" && t.status !== "archived")
       .length ?? 0;
@@ -808,6 +848,8 @@ export default function TasksPage() {
     openTasksEstimate > 0 &&
     statusFilter !== "completed" &&
     statusFilter !== "archived";
+  const deleteAllEstimate = tasksData?.total ?? 0;
+  const canDeleteAll = deleteAllEstimate > 0;
 
   const toggleExpand = (taskId: string) => {
     setExpandedTasks(prev => {
@@ -1026,18 +1068,32 @@ export default function TasksPage() {
                   {(tasksData?.total ?? 0).toLocaleString("en-US")} — مرتّبة بالمتأخر والأهم أولاً
                 </CardDescription>
               </div>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className="gap-1.5 shrink-0"
-                disabled={!canCompleteAll || completeAllMutation.isPending}
-                onClick={() => setCompleteAllOpen(true)}
-                data-testid="button-complete-all"
-              >
-                <CheckCheck className="h-4 w-4" />
-                إتمام الكل
-              </Button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!canCompleteAll || completeAllMutation.isPending}
+                  onClick={() => setCompleteAllOpen(true)}
+                  data-testid="button-complete-all"
+                >
+                  <CheckCheck className="h-4 w-4" />
+                  إتمام الكل
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!canDeleteAll || deleteAllMutation.isPending}
+                  onClick={() => setDeleteAllOpen(true)}
+                  data-testid="button-delete-all"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  حذف الكل
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -1221,6 +1277,41 @@ export default function TasksPage() {
                 data-testid="button-confirm-complete-all"
               >
                 {completeAllMutation.isPending ? "جاري الإتمام..." : "إتمام الكل"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader>
+              <AlertDialogTitle data-testid="dialog-title-delete-all">
+                حذف كل المهام ضمن الفلاتر؟
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                سيتم حذف المهام الجذر المطابقة للفلاتر الحالية نهائياً
+                {deleteAllEstimate > 0 ? (
+                  <>
+                    {" "}
+                    (حوالي{" "}
+                    <span className="font-semibold tabular-nums">
+                      {deleteAllEstimate.toLocaleString("en-US")}
+                    </span>{" "}
+                    مهمة، بحد أقصى 200)
+                  </>
+                ) : null}
+                ، بما فيها المهام الفرعية المرتبطة. لا يمكن التراجع.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-delete-all">إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteAllMutation.mutate()}
+                disabled={deleteAllMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-delete-all"
+              >
+                {deleteAllMutation.isPending ? "جاري الحذف..." : "حذف الكل"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
