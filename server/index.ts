@@ -268,7 +268,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token', 'x-agent-secret'],
 }));
 
 // Security headers with Helmet.js - 'unsafe-inline' and 'unsafe-eval' needed for Swagger UI
@@ -587,6 +587,14 @@ const writeLimiter = rateLimit({
   skip: (req) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
     if (isTelemetryWrite(req)) return true;
+    // Meetings-agent (and future M2M) posts under /api/internal/* with a
+    // shared secret — all Railway egress shares one IP; don't throttle it
+    // with the anonymous write bucket. Mounted at /api so req.path is
+    // "/internal/…"; originalUrl keeps the full "/api/internal/…" form.
+    const full = (req.originalUrl || req.path).split("?")[0];
+    if (full.startsWith("/api/internal/") || req.path.startsWith("/internal/")) {
+      return true;
+    }
     return false;
   },
 });
