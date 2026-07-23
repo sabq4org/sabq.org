@@ -14,7 +14,7 @@ router.get("/api/authors/by-name", async (req, res) => {
       return res.status(400).json({ message: "اسم الكاتب مطلوب" });
     }
     const page = parseInt(String(req.query.page || "1"), 10) || 1;
-    const limit = parseInt(String(req.query.limit || "30"), 10) || 30;
+    const limit = parseInt(String(req.query.limit || "12"), 10) || 12;
 
     const result = await getAuthorPageByName(rawName, { page, limit });
     if (!result) {
