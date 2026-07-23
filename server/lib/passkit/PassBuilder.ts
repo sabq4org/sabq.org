@@ -82,13 +82,15 @@ export abstract class PassBuilder {
       );
       
       // Add barcode using setBarcodes method. Membership-style passes encode
-      // the user id; coupon passes override getBarcodeMessage() to encode the
-      // voucher code the partner till actually scans.
-      pass.setBarcodes({
-        format: 'PKBarcodeFormatQR',
-        message: this.getBarcodeMessage(data),
-        messageEncoding: 'iso-8859-1',
-      });
+      // the user id; passes whose code is typed/pasted rather than scanned
+      // (the WalaPlus top-up coupon) override includeBarcode() to skip it.
+      if (this.includeBarcode()) {
+        pass.setBarcodes({
+          format: 'PKBarcodeFormatQR',
+          message: this.getBarcodeMessage(data),
+          messageEncoding: 'iso-8859-1',
+        });
+      }
       
       // Configure custom fields. Subclasses may declare this as
       // async (PressPassBuilder does, so it can render and embed a
@@ -112,6 +114,10 @@ export abstract class PassBuilder {
 
   protected getBarcodeMessage(data: any): string {
     return data.userId;
+  }
+
+  protected includeBarcode(): boolean {
+    return true;
   }
 
   // Default white text on dark cards. Subclasses with a light background

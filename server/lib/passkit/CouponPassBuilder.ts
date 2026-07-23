@@ -8,15 +8,18 @@ import { renderCouponPassStrip } from './CouponPassStripRenderer';
 // في أول السلسلة تثبّت الفقرة عربية فيبقى المبلغ يميناً يُقرأ أولاً.
 const rtl = (s: string) => `‏${s}`;
 
-// بطاقة قسيمة «سبق بلس × ولاء ون» — نمط Coupon في Apple Wallet.
-// تُوقَّع بنفس شهادة الولاء (passTypeId واحد يصلح لأي نمط بطاقة)؛
-// رمز QR يحمل رقم القسيمة نفسه لأن هذا ما يُمسح عند الشريك.
+// بطاقة قسيمة «سبق بلس × ولاء بلس» — نمط Coupon في Apple Wallet.
+// تُوقَّع بنفس شهادة الولاء (passTypeId واحد يصلح لأي نمط بطاقة).
+//
+// نموذج المرحلة الأولى المعتمد (2026-07-23): كود شحن من 12 رقمًا يُنسخ
+// ويُلصق في شاشة «الشحن» بتطبيق ولاء بلس — لا QR (الكود لا يُمسح ضوئيًا)،
+// والكود يظهر نصًا كبيرًا في secondaryFields.
 //
 // التخطيط (نفس درس البطاقة الصحفية):
-//   • strip.png يحمل القيمة الكبيرة + اسم الشريك (البطل البصري)
-//   • الحقول الأصلية تحت الشريط فقط: رقم القسيمة + الانتهاء
+//   • strip.png يحمل القيمة الكبيرة + اسم المتجر (البطل البصري)
+//   • تحت الشريط: كود الشحن (secondary، مجمّع 4-4-4) ثم الانتهاء (auxiliary)
 //   • لا primaryFields فوق الـ strip (تتراكب نصاً أبيض وتفسّد التسلسل)
-//   • نص العرض الطويل في الخلف
+//   • التعليمات والشروط في الخلف
 export interface CouponPassData extends PassData {
   partnerName: string;
   offer: string;
@@ -46,8 +49,8 @@ export class CouponPassBuilder extends PassBuilder {
   }
 
   protected getBackgroundColor(): string {
-    // بنفسجي ولاء ون — مطابق لبطاقة القسيمة المعتمدة على /plus-preview
-    // (القسيمة منتج الشريك؛ الكحلي محفوظ لبطاقة العضوية).
+    // البنفسجي المعتمد — يبقى حتى توقيع الشراكة (قرار 2026-07-23)؛
+    // القسيمة منتج الشريك والكحلي محفوظ لبطاقة العضوية.
     return 'rgb(95, 79, 209)';
   }
 
@@ -59,8 +62,9 @@ export class CouponPassBuilder extends PassBuilder {
     return 'rgb(228, 222, 255)';
   }
 
-  protected getBarcodeMessage(data: CouponPassData): string {
-    return data.couponCode;
+  // كود الشحن يُلصق في تطبيق ولاء بلس ولا يُمسح عند كاشير — لا باركود.
+  protected includeBarcode(): boolean {
+    return false;
   }
 
   async configurePassFields(pass: PKPass, data: CouponPassData): Promise<void> {
@@ -122,19 +126,19 @@ export class CouponPassBuilder extends PassBuilder {
       day: 'numeric',
     });
 
-    // صف واحد تحت الشريط: انتهاء ثم رقم — يظهر الرمز يميناً في تدفق عربي
-    // (Apple يرصف auxiliary من اليسار لليمين حسب ترتيب الإدخال).
-    pass.auxiliaryFields.push({
-      key: 'expires',
-      label: 'صالحة حتى',
-      value: expiresLabel,
+    // كود الشحن هو بطل البطاقة بعد الشريط — نص كبير مجمّع 4-4-4 (بلا QR).
+    const groupedCode = data.couponCode.replace(/(.{4})(?=.)/g, '$1 ');
+    pass.secondaryFields.push({
+      key: 'code',
+      label: 'كود الشحن — أدخله في شاشة «الشحن» بتطبيق ولاء بلس',
+      value: groupedCode,
       ...RTL,
     });
 
     pass.auxiliaryFields.push({
-      key: 'code',
-      label: 'رقم القسيمة',
-      value: data.couponCode,
+      key: 'expires',
+      label: 'صالحة حتى',
+      value: expiresLabel,
       ...RTL,
     });
 
@@ -160,7 +164,8 @@ export class CouponPassBuilder extends PassBuilder {
       {
         key: 'how',
         label: 'طريقة الاستخدام',
-        value: 'أبرِز رمز QR أو رقم القسيمة عند الشريك قبل الدفع.',
+        value:
+          'انسخ كود الشحن، ثم افتح تطبيق ولاء بلس ← شاشة «الشحن» وألصق الكود — يُضاف الرصيد فورًا وتشتري قسيمة المتجر من داخل التطبيق.',
         ...RTL,
       },
       {
@@ -174,7 +179,7 @@ export class CouponPassBuilder extends PassBuilder {
         key: 'terms',
         label: 'الشروط',
         value:
-          'صادرة من برنامج سبق بلس عبر ولاء ون. تسري شروط وأحكام ولاء ون والشريك، ولا يمكن استرداد النقاط بعد الإصدار.',
+          'صادرة من برنامج سبق بلس عبر ولاء بلس. تسري شروط وأحكام ولاء بلس والمتجر، ولا يمكن استرداد النقاط بعد الإصدار.',
         ...RTL,
       },
       {
