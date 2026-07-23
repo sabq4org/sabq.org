@@ -1,12 +1,25 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "@shared/schema";
+import {
+  GMEDIA_REGISTER_URL,
+  MEDIA_LICENSE_DEADLINE,
+  MEDIA_LICENSE_REQUIRED_CODE,
+  MEDIA_LICENSE_REQUIRED_MESSAGE,
+  isInstitutionalMediaByline,
+  isMediaLicenseEnforcementActive,
+  resolveContentBylineUserId,
+} from "@shared/mediaLicense";
 
-/** مهلة تقديم الترخيص المهني لأول مرة (نهاية يوليو 2026). */
-export const MEDIA_LICENSE_DEADLINE = "2026-07-31";
-
-export const GMEDIA_REGISTER_URL =
-  "https://gmedia.gov.sa/services/registering-media-professionals";
+export {
+  GMEDIA_REGISTER_URL,
+  MEDIA_LICENSE_DEADLINE,
+  MEDIA_LICENSE_REQUIRED_CODE,
+  MEDIA_LICENSE_REQUIRED_MESSAGE,
+  isInstitutionalMediaByline,
+  isMediaLicenseEnforcementActive,
+  resolveContentBylineUserId,
+};
 
 /** نافذة التجديد: نحو شهرين قبل انتهاء الترخيص (٦٥ يوماً لتغطية التقويم) */
 export const MEDIA_LICENSE_RENEWAL_WARN_MS = 65 * 24 * 60 * 60 * 1000;
@@ -127,6 +140,8 @@ export type MediaLicenseStatus = {
   expiresAt: string | null;
   deadline: string;
   gmediaRegisterUrl: string;
+  enforcementActive: boolean;
+  submissionBlocked: boolean;
 };
 
 export function toMediaLicenseStatus(row: {
@@ -144,6 +159,7 @@ export function toMediaLicenseStatus(row: {
   if (submittedAt && !Number.isNaN(submittedAt.getTime())) {
     submittedAtIso = submittedAt.toISOString();
   }
+  const enforcementActive = isMediaLicenseEnforcementActive();
   return {
     submitted,
     valid: flags.hasLicense,
@@ -154,6 +170,34 @@ export function toMediaLicenseStatus(row: {
     expiresAt: flags.expiresAtIso,
     deadline: MEDIA_LICENSE_DEADLINE,
     gmediaRegisterUrl: GMEDIA_REGISTER_URL,
+    enforcementActive,
+    /** بعد المهلة: لا إرسال بلا ترخيص ساري */
+    submissionBlocked: enforcementActive && !flags.hasLicense,
+  };
+}
+
+export type MediaLicenseGateResult =
+  | { ok: true }
+  | { ok: false; message: string; code: typeof MEDIA_LICENSE_REQUIRED_CODE };
+
+/**
+ * بعد مهلة ٣١ يوليو: يمنع الإرسال/النشر إن كان صاحب الاسم بلا ترخيص ساري.
+ * قبل المهلة دائماً ok.
+ */
+export async function assertMediaLicenseAllowsSubmission(
+  bylineUserId: string | null | undefined,
+  now: Date = new Date(),
+): Promise<MediaLicenseGateResult> {
+  if (!isMediaLicenseEnforcementActive(now)) return { ok: true };
+  if (!bylineUserId || isInstitutionalMediaByline(bylineUserId)) return { ok: true };
+
+  const status = await getMediaLicense(bylineUserId);
+  if (status.valid) return { ok: true };
+
+  return {
+    ok: false,
+    message: MEDIA_LICENSE_REQUIRED_MESSAGE,
+    code: MEDIA_LICENSE_REQUIRED_CODE,
   };
 }
 

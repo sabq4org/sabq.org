@@ -23,6 +23,8 @@ interface OpinionAuthor {
   name: string;
   email: string;
   avatarUrl?: string | null;
+  /** بعد مهلة الترخيص: false = مطفي وغير قابل للاختيار */
+  licenseSelectable?: boolean;
 }
 
 interface OpinionAuthorSelectProps {
@@ -75,6 +77,8 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
     return authors.find((a) => a.id === value);
   }, [authors, value]);
 
+  const selectedBlocked = selectedAuthor?.licenseSelectable === false;
+
   const getInitials = (name: string) => {
     const parts = name.split(" ");
     if (parts.length >= 2) {
@@ -97,7 +101,7 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
               data-testid="button-opinion-author-select"
             >
               {selectedAuthor ? (
-                <div className="flex items-center gap-2">
+                <div className={cn("flex items-center gap-2", selectedBlocked && "opacity-40")}>
                   <Avatar className="h-6 w-6">
                     <AvatarImage src={selectedAuthor.avatarUrl || undefined} />
                     <AvatarFallback className="text-xs">
@@ -131,19 +135,26 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
                       لا يوجد نتائج للكاتب "{searchQuery}"
                     </CommandEmpty>
                     <CommandGroup>
-                      {authors.map((author) => (
+                      {authors.map((author) => {
+                        const blocked = author.licenseSelectable === false;
+                        return (
                         <CommandItem
                           key={author.id}
                           value={author.id}
+                          disabled={blocked}
                           onSelect={() => {
+                            if (blocked) return;
                             onChange(author.id === value ? null : author.id);
                             setOpen(false);
                             setSearchQuery("");
                           }}
+                          className={cn(
+                            blocked && "opacity-40 cursor-not-allowed pointer-events-none",
+                          )}
                           data-testid={`item-opinion-author-${author.id}`}
                         >
                           <div className="flex items-center gap-3 flex-1">
-                            <Avatar className="h-8 w-8">
+                            <Avatar className={cn("h-8 w-8", blocked && "grayscale")}>
                               <AvatarImage src={author.avatarUrl || undefined} />
                               <AvatarFallback className="text-xs">
                                 {getInitials(author.name)}
@@ -154,7 +165,7 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
                                 {author.name}
                               </span>
                               <span className="text-xs text-muted-foreground truncate w-full">
-                                {author.email}
+                                {blocked ? "بلا ترخيص مهني ساري — غير متاح" : author.email}
                               </span>
                             </div>
                           </div>
@@ -165,7 +176,8 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
                             )}
                           />
                         </CommandItem>
-                      ))}
+                        );
+                      })}
                     </CommandGroup>
                   </>
                 )}
@@ -191,7 +203,9 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
       </div>
 
       <p className="text-xs text-muted-foreground" data-testid="text-opinion-author-helper">
-        اسم كاتب الرأي الظاهر للقارئ في البطاقة وصفحة المقال — يختلف عن المحرّر الذي أدخل المادة في النظام.
+        {selectedBlocked
+          ? "هذا الكاتب بلا ترخيص مهني ساري — اختر كاتباً مرخّصاً أو جدّد الترخيص قبل الإرسال."
+          : "اسم كاتب الرأي الظاهر للقارئ في البطاقة وصفحة المقال — يختلف عن المحرّر الذي أدخل المادة في النظام."}
       </p>
     </div>
   );

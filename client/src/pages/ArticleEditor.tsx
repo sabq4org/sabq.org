@@ -128,6 +128,7 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { TagInput } from "@/components/TagInput";
 import { ReporterSelect } from "@/components/ReporterSelect";
 import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
+import { MEDIA_LICENSE_REQUIRED_MESSAGE } from "@shared/mediaLicense";
 import {
   WriterEditorialNoticesAside,
   WriterEditorialNoticesMobile,
@@ -412,6 +413,22 @@ export default function ArticleEditor() {
   
   // Check if user is an opinion author - opinion authors have restricted editor interface
   const isOpinionAuthor = user?.role === 'opinion_author' || (user?.roles && user.roles.some((r: any) => r.name === 'opinion_author' || r === 'opinion_author'));
+
+  const mediaLicenseEndpoint = isOpinionAuthor
+    ? "/api/opinion-author/media-license"
+    : isReporter
+      ? "/api/reporter/media-license"
+      : null;
+  const { data: ownMediaLicense } = useQuery<{
+    submissionBlocked?: boolean;
+    valid?: boolean;
+    enforcementActive?: boolean;
+  }>({
+    queryKey: [mediaLicenseEndpoint],
+    enabled: Boolean(user && mediaLicenseEndpoint),
+    staleTime: 60_000,
+  });
+  const ownSubmissionBlocked = Boolean(ownMediaLicense?.submissionBlocked);
 
   // Opinion authors (and opinion/column pieces) write "مقال", everyone else "خبر".
   // Drives the editor header wording so a كاتب رأي doesn't see "خبر جديد".
@@ -1834,6 +1851,16 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       return { ok: false };
     }
 
+    // من ٣١ يوليو: مراسل/كاتب رأي بلا ترخيص ساري لا يرسل ولا ينشر
+    if ((publishNow || options?.submitForReview) && ownSubmissionBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: MEDIA_LICENSE_REQUIRED_MESSAGE,
+        variant: "destructive",
+      });
+      return { ok: false };
+    }
+
     // حاجز الحقوق (غير مانع): عند النشر بصورة بارزة بلا حقوق موثّقة، افتح
     // نموذج التوثيق السريع. فحص best-effort — أي فشل فيه لا يعطّل النشر.
     if (HERO_RIGHTS_GATE_ENABLED && publishNow && !isOpinionAuthor && imageUrl && heroImageMediaId && !rightsGateBypassRef.current) {
@@ -2524,6 +2551,15 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </div>
             )}
           </div>
+
+          {ownSubmissionBlocked ? (
+            <div
+              className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100"
+              data-testid="alert-media-license-required"
+            >
+              {MEDIA_LICENSE_REQUIRED_MESSAGE}
+            </div>
+          ) : null}
 
           {/* Actions Row */}
           <div className={isOpinionAuthor ? "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end" : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end"}>
