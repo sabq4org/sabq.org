@@ -1,9 +1,13 @@
 /**
  * صفحة الكاتب العامة — نفس عقد الموبايل `/api/v1/authors/by-name`
  * لكن بشكل مناسب للويب (روابط /opinion و/article).
+ *
+ * الأداء: بدون JOIN ثقيل على كل المقالات عند مطابقة الاسم؛
+ * قائمة المقالات عبر author_id (فهرس)؛ كاش ذاكرة ٥ دقائق.
  */
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db";
+import { memoryCache } from "../memoryCache";
 import { articles, categories } from "@shared/schema";
 
 export type AuthorPageArticle = {
@@ -45,8 +49,61 @@ export type AuthorPageResult = {
   recentArticles: AuthorPageArticle[];
 };
 
+type UserRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  profile_image_url: string | null;
+  bio: string | null;
+  job_title: string | null;
+  department: string | null;
+  created_at: Date | string | null;
+};
+
 function normalizeAuthorName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
+}
+
+function rowsOf(result: unknown): Array<Record<string, unknown>> {
+  const withRows = result as { rows?: Array<Record<string, unknown>> };
+  if (Array.isArray(withRows?.rows)) return withRows.rows;
+  if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
+  return [];
+}
+
+async function resolveAuthorByName(name: string): Promise<UserRow | null> {
+  const candidatesRaw = await db.execute(sql`
+    SELECT id, first_name, last_name, profile_image_url, bio,
+           job_title, department, created_at
+    FROM users
+    WHERE LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')))
+          = LOWER(${name})
+    LIMIT 8
+  `);
+  const candidates = rowsOf(candidatesRaw) as unknown as UserRow[];
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const ids = candidates.map((c) => String(c.id));
+  // بين الأسماء المكررة: اختر صاحب آخر نشر عبر author_id فقط (خفيف + فهرس)
+  const pickRaw = await db.execute(sql`
+    SELECT a.author_id AS id, MAX(a.published_at) AS latest
+    FROM articles a
+    WHERE a.status = 'published'
+      AND a.author_id IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})
+    GROUP BY a.author_id
+    ORDER BY latest DESC NULLS LAST
+    LIMIT 1
+  `);
+  const pick = rowsOf(pickRaw)[0];
+  if (pick?.id) {
+    const matched = candidates.find((c) => String(c.id) === String(pick.id));
+    if (matched) return matched;
+  }
+  return candidates[0];
 }
 
 export async function getAuthorPageByName(
@@ -57,55 +114,29 @@ export async function getAuthorPageByName(
   if (!name) return null;
 
   const page = Math.max(1, opts.page ?? 1);
-  const limit = Math.min(50, Math.max(1, opts.limit ?? 30));
+  const limit = Math.min(24, Math.max(1, opts.limit ?? 12));
   const offset = (page - 1) * limit;
 
-  // ترتيب بآخر نشر حتى لا نلتقط حساباً قديماً مكرّر الاسم (نفس منطق الموبايل)
-  const userRow = (await db.execute(sql`
-    SELECT u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
-           u.job_title, u.department, u.created_at,
-           COUNT(a.id) AS published_count,
-           MAX(a.published_at) AS latest_published
-    FROM users u
-    LEFT JOIN articles a
-      ON a.status = 'published'
-      AND (a.author_id = u.id OR a.reporter_id = u.id)
-    WHERE LOWER(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')))
-          = LOWER(${name})
-    GROUP BY u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
-             u.job_title, u.department, u.created_at
-    ORDER BY latest_published DESC NULLS LAST,
-             published_count DESC,
-             u.created_at ASC
-    LIMIT 1
-  `)) as { rows?: Array<Record<string, unknown>> };
+  const cacheKey = `author:web:${name.toLowerCase()}:p${page}:l${limit}`;
+  const cached = memoryCache.get<AuthorPageResult>(cacheKey);
+  if (cached) return cached;
 
-  const author = (userRow?.rows ?? (userRow as unknown as Array<Record<string, unknown>>))[0];
+  const author = await resolveAuthorByName(name);
   if (!author) return null;
 
   const authorId = String(author.id);
 
-  const [statsRow, topCatsRows, recent] = await Promise.all([
+  // قائمة + عدّ عبر author_id فقط (كتّاب الرأي ومسار الويب الأساسي)
+  const [statsRow, recent] = await Promise.all([
     db.execute(sql`
       SELECT
-        COUNT(DISTINCT a.id) AS article_count,
-        COALESCE(SUM(a.views), 0) AS total_views,
+        COUNT(*)::int AS article_count,
+        COALESCE(SUM(a.views), 0)::bigint AS total_views,
         MIN(a.published_at) AS earliest_publish
       FROM articles a
       WHERE a.status = 'published'
-        AND (a.reporter_id = ${authorId} OR a.author_id = ${authorId})
-    `) as Promise<{ rows?: Array<Record<string, unknown>> }>,
-
-    db.execute(sql`
-      SELECT c.id, c.name_ar, c.color, c.icon, COUNT(*) AS count
-      FROM articles a
-      INNER JOIN categories c ON a.category_id = c.id
-      WHERE a.status = 'published'
-        AND (a.reporter_id = ${authorId} OR a.author_id = ${authorId})
-      GROUP BY c.id, c.name_ar, c.color, c.icon
-      ORDER BY count DESC
-      LIMIT 3
-    `) as Promise<{ rows?: Array<Record<string, unknown>> }>,
+        AND a.author_id = ${authorId}
+    `),
 
     db
       .select({
@@ -118,59 +149,104 @@ export async function getAuthorPageByName(
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
         views: articles.views,
+        categoryId: articles.categoryId,
         categoryNameAr: categories.nameAr,
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          or(eq(articles.reporterId, authorId), eq(articles.authorId, authorId)),
-        ),
-      )
+      .where(and(eq(articles.status, "published"), eq(articles.authorId, authorId)))
       .orderBy(desc(articles.publishedAt))
       .limit(limit)
       .offset(offset),
   ]);
 
-  const stats = (statsRow?.rows ?? (statsRow as unknown as Array<Record<string, unknown>>))[0] ?? {};
-  const topCategories = (topCatsRows?.rows ?? (topCatsRows as unknown as Array<Record<string, unknown>>)).map(
-    (r) => ({
-      id: String(r.id),
-      nameAr: String(r.name_ar ?? ""),
-      color: (r.color as string | null) ?? null,
-      icon: (r.icon as string | null) ?? null,
-      count: Number(r.count) || 0,
-    }),
-  );
+  const stats = rowsOf(statsRow)[0] ?? {};
 
-  const firstName = (author.first_name as string | null) ?? "";
-  const lastName = (author.last_name as string | null) ?? "";
+  // إن لم تُعثر مقالات على author_id (حساب قديم عبر reporter_id) — مسار احتياطي ضيّق
+  let list = recent;
+  let articleCount = Number(stats.article_count) || 0;
+  let totalViews = Number(stats.total_views) || 0;
+  let earliest = stats.earliest_publish as Date | string | null;
+
+  if (list.length === 0 && articleCount === 0) {
+    const [fallbackStats, fallbackList] = await Promise.all([
+      db.execute(sql`
+        SELECT
+          COUNT(*)::int AS article_count,
+          COALESCE(SUM(a.views), 0)::bigint AS total_views,
+          MIN(a.published_at) AS earliest_publish
+        FROM articles a
+        WHERE a.status = 'published'
+          AND a.reporter_id = ${authorId}
+      `),
+      db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          excerpt: articles.excerpt,
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          articleType: articles.articleType,
+          imageUrl: articles.imageUrl,
+          publishedAt: articles.publishedAt,
+          views: articles.views,
+          categoryId: articles.categoryId,
+          categoryNameAr: categories.nameAr,
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(and(eq(articles.status, "published"), eq(articles.reporterId, authorId)))
+        .orderBy(desc(articles.publishedAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
+    const fs = rowsOf(fallbackStats)[0] ?? {};
+    list = fallbackList;
+    articleCount = Number(fs.article_count) || 0;
+    totalViews = Number(fs.total_views) || 0;
+    earliest = fs.earliest_publish as Date | string | null;
+  }
+
+  // تصنيفات من الصفحة الحالية فقط — بلا GROUP BY على كل الأرشيف
+  const catCounts = new Map<string, { id: string; nameAr: string; count: number }>();
+  for (const r of list) {
+    if (!r.categoryId || !r.categoryNameAr) continue;
+    const prev = catCounts.get(r.categoryId);
+    if (prev) prev.count += 1;
+    else catCounts.set(r.categoryId, { id: r.categoryId, nameAr: r.categoryNameAr, count: 1 });
+  }
+  const topCategories = Array.from(catCounts.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3)
+    .map((c) => ({
+      id: c.id,
+      nameAr: c.nameAr,
+      color: null as string | null,
+      icon: null as string | null,
+      count: c.count,
+    }));
+
+  const firstName = author.first_name ?? "";
+  const lastName = author.last_name ?? "";
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || name;
-  const role =
-    (author.job_title as string | null) ||
-    (author.department as string | null) ||
-    "كاتب في سبق";
+  const role = author.job_title || author.department || "كاتب في سبق";
+  const joined = author.created_at;
 
-  const avatarRaw = author.profile_image_url as string | null;
-  const joined = author.created_at as Date | string | null;
-  const earliest = stats.earliest_publish as Date | string | null;
-
-  return {
+  const result: AuthorPageResult = {
     author: {
       id: authorId,
       name: fullName,
       role,
-      avatarUrl: avatarRaw || null,
-      bio: (author.bio as string | null) || null,
-      jobTitle: (author.job_title as string | null) || null,
-      department: (author.department as string | null) || null,
+      avatarUrl: author.profile_image_url || null,
+      bio: author.bio || null,
+      jobTitle: author.job_title || null,
+      department: author.department || null,
       joinedAt:
         joined instanceof Date ? joined.toISOString() : joined ? String(joined) : null,
     },
     stats: {
-      articleCount: Number(stats.article_count) || 0,
-      totalViews: Number(stats.total_views) || 0,
+      articleCount,
+      totalViews,
       earliestPublish:
         earliest instanceof Date
           ? earliest.toISOString()
@@ -179,7 +255,7 @@ export async function getAuthorPageByName(
             : null,
     },
     topCategories,
-    recentArticles: recent.map((r) => ({
+    recentArticles: list.map((r) => ({
       id: r.id,
       title: r.title,
       excerpt: r.excerpt,
@@ -192,4 +268,7 @@ export async function getAuthorPageByName(
       categoryNameAr: r.categoryNameAr ?? null,
     })),
   };
+
+  memoryCache.set(cacheKey, result, 5 * 60 * 1000);
+  return result;
 }
