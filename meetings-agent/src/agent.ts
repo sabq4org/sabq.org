@@ -75,7 +75,19 @@ class TranscriptUploader {
         },
       );
       if (!res.ok) {
-        console.error(`[Agent] upload failed ${res.status} — requeueing ${batch.length}`);
+        const body = await res.text().catch(() => "");
+        const snippet = body.replace(/\s+/g, " ").slice(0, 160);
+        // 401/403 = config/auth (wrong secret or CSRF) — retrying forever
+        // fills the queue and makes the LiveKit job "unresponsive".
+        if (res.status === 401 || res.status === 403) {
+          console.error(
+            `[Agent] upload failed ${res.status} (permanent) — dropping ${batch.length}: ${snippet}`,
+          );
+          return;
+        }
+        console.error(
+          `[Agent] upload failed ${res.status} — requeueing ${batch.length}: ${snippet}`,
+        );
         this.queue.unshift(...batch);
       } else {
         this.uploaded += batch.length;

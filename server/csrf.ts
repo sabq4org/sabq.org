@@ -95,6 +95,11 @@ const EXEMPT_PATHS = [
   "/api/store/cart",  // Store cart operations
   "/api/analytics/visitors/ping",  // Visitor heartbeat for anonymous users
   "/api/v1/",  // Mobile API (iOS/Android apps)
+  // Machine-to-machine agent/webhook routes — authenticated by shared secret
+  // (x-agent-secret), not by browser session cookies. Without this exemption
+  // CSRF middleware returns 403 and meetings-agent never persists transcripts
+  // (UI: «تعذر توليد المحضر» / 0 مقاطع). Prefix covers future /api/internal/*.
+  "/api/internal/",
   "/api/angle-submissions",  // Public angle submission form (Muqtarab)
   // Muqtarab public topic view counter (anonymous, idempotent-ish increment).
   // Only public /topics/:id/view lives here; authenticated writer routes are
