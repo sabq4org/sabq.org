@@ -50,6 +50,8 @@ type MeetingListItem = {
   isLocked: boolean;
   minutesEnabled: boolean;
   minutesStatus: string;
+  durationMinutes: number | null;
+  agendaCount: number;
   scheduledAt: string | null;
   startedAt: string | null;
   endedAt: string | null;
@@ -237,16 +239,27 @@ export default function MeetingsHub() {
                     <Radio className="h-3 w-3 animate-pulse" /> مباشر
                   </span>
                   <div className="min-w-[180px] flex-1">
-                    <div className="flex items-center gap-2 font-bold">
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 text-right font-bold hover:text-primary"
+                      onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
+                    >
                       {m.title}
                       {m.isLocked ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
-                    </div>
+                    </button>
                     <div className="text-xs text-muted-foreground">
                       بدأ {formatTime(m.startedAt)} · يستضيفه {m.hostName} · {m.participantCount} مشاركاً
                     </div>
                   </div>
                   <AccessBadge type={m.accessType} departmentName={m.departmentName} />
                   <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
+                    >
+                      التفاصيل
+                    </Button>
                     {canDeleteMeeting(m) ? (
                       <Button
                         size="icon"
@@ -288,13 +301,29 @@ export default function MeetingsHub() {
                         <Button
                           size="sm"
                           variant="outline"
+                          onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
+                        >
+                          التفاصيل
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={() => setLocation(`/dashboard/meetings/room/${m.id}`)}
                         >
                           بدء الآن
                         </Button>
                       </>
                     ) : (
-                      <RsvpButtons meeting={m} />
+                      <>
+                        <RsvpButtons meeting={m} />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
+                        >
+                          التفاصيل
+                        </Button>
+                      </>
                     )}
                     {canDeleteMeeting(m) ? (
                       <Button
@@ -338,20 +367,30 @@ export default function MeetingsHub() {
                       </span>
                     </span>
                   )}
-                  action={(m) =>
-                    canDeleteMeeting(m) ? (
+                  action={(m) => (
+                    <div className="flex items-center gap-1">
                       <Button
-                        size="icon"
+                        size="sm"
                         variant="ghost"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleteTarget(m)}
-                        data-testid={`button-delete-${m.id}`}
-                        aria-label="حذف الاجتماع"
+                        className="h-8"
+                        onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        التفاصيل
                       </Button>
-                    ) : null
-                  }
+                      {canDeleteMeeting(m) ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteTarget(m)}
+                          data-testid={`button-delete-${m.id}`}
+                          aria-label="حذف الاجتماع"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
                 />
               ) : null}
             </>
@@ -424,7 +463,8 @@ export default function MeetingsHub() {
             if (meeting.status === "live") {
               setLocation(`/dashboard/meetings/room/${meeting.id}`);
             } else {
-              toast({ title: "تمت الجدولة", description: "سيظهر الاجتماع في القائمة لوقته المحدد" });
+              toast({ title: "تمت الجدولة", description: "افتح صفحة التفاصيل لمتابعة الحضور والأجندة" });
+              setLocation(`/dashboard/meetings/${meeting.id}`);
             }
           }}
         />
@@ -454,6 +494,7 @@ function MeetingRows({
   action?: (m: MeetingListItem) => React.ReactNode;
   muted?: boolean;
 }) {
+  const [, setLocation] = useLocation();
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border bg-muted/40 px-4 py-2 text-xs font-bold text-muted-foreground">
@@ -471,7 +512,20 @@ function MeetingRows({
             )}
           >
             {right?.(m)}
-            <div className="min-w-[160px] flex-1 text-sm font-medium">{m.title}</div>
+            <button
+              type="button"
+              className="min-w-[160px] flex-1 text-right text-sm font-medium hover:text-primary"
+              onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
+            >
+              {m.title}
+              {(m.durationMinutes || m.agendaCount) ? (
+                <span className="mr-2 text-[11px] font-normal text-muted-foreground">
+                  {m.durationMinutes ? `${m.durationMinutes}د` : null}
+                  {m.durationMinutes && m.agendaCount ? " · " : null}
+                  {m.agendaCount ? `${m.agendaCount} بنود` : null}
+                </span>
+              ) : null}
+            </button>
             <AccessBadge type={m.accessType} departmentName={m.departmentName} />
             <span className="text-xs text-muted-foreground">{m.hostName}</span>
             {action?.(m)}
@@ -670,6 +724,8 @@ function CreateMeetingDialog({
   const [minutesEnabled, setMinutesEnabled] = useState(false);
   const [schedule, setSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("30");
+  const [agendaLines, setAgendaLines] = useState<string[]>([""]);
 
   const { data: optionsRaw } = useQuery({ queryKey: ["/api/meetings/form-options"] });
   const options = (optionsRaw ?? null) as FormOptions | null;
@@ -696,6 +752,12 @@ function CreateMeetingDialog({
           muteOnJoin,
           minutesEnabled,
           scheduledAt: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          durationMinutes:
+            schedule && durationMinutes ? Number(durationMinutes) : undefined,
+          agenda: agendaLines
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .map((t) => ({ title: t })),
         }),
       }),
     onSuccess: (meeting: { id: string; status: string }) => onCreated(meeting),
@@ -739,6 +801,46 @@ function CreateMeetingDialog({
           <div className="space-y-1.5">
             <label className="text-xs font-bold">وصف مختصر (اختياري)</label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold">أجندة الاجتماع (اختياري)</label>
+            <div className="space-y-1.5">
+              {agendaLines.map((line, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    value={line}
+                    onChange={(e) =>
+                      setAgendaLines((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))
+                    }
+                    placeholder={`البند ${i + 1}`}
+                    data-testid={`input-agenda-${i}`}
+                  />
+                  {agendaLines.length > 1 ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="shrink-0"
+                      onClick={() => setAgendaLines((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            {agendaLines.length < 20 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-1"
+                onClick={() => setAgendaLines((prev) => [...prev, ""])}
+              >
+                <Plus className="ml-1 h-3.5 w-3.5" /> بند أجندة
+              </Button>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -871,15 +973,31 @@ function CreateMeetingDialog({
               testId="switch-schedule"
             />
             {schedule ? (
-              <div className="flex items-center gap-2 pr-1">
-                <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  className="max-w-[240px]"
-                  dir="ltr"
-                />
+              <div className="space-y-2 pr-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                    className="max-w-[240px]"
+                    dir="ltr"
+                    data-testid="input-scheduled-at"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">المدة المتوقعة</span>
+                  <Select value={durationMinutes} onValueChange={setDurationMinutes}>
+                    <SelectTrigger className="w-[140px]" data-testid="select-duration">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[15, 30, 45, 60, 90, 120].map((d) => (
+                        <SelectItem key={d} value={String(d)}>{d} دقيقة</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             ) : null}
           </div>
