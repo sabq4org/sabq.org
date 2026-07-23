@@ -179,6 +179,7 @@ const NewsPage = lazy(() => retryImport(() => import("@/pages/NewsPage")));
 const CategoriesListPage = lazy(() => retryImport(() => import("@/pages/CategoriesListPage")));
 const OpinionPage = lazy(() => retryImport(() => import("@/pages/OpinionPage")));
 const OpinionDetailPage = lazy(() => retryImport(() => import("@/pages/OpinionDetailPage")));
+const AuthorArticlesPage = lazy(() => retryImport(() => import("@/pages/AuthorArticlesPage")));
 // AboutPage, TermsPage, PrivacyPage, AccessibilityStatement, DevelopersPage, AIPolicy - moved to eager imports
 const AIPublisher = lazy(() => retryImport(() => import("@/pages/AIPublisher")));
 // ContactPage - moved to eager imports above
@@ -799,6 +800,7 @@ function Router() {
         <Route path="/admin/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
 
         <Route path="/reporter/:slug">{() => <LazyRoute component={ReporterProfile} />}</Route>
+        <Route path="/author/:name">{() => <LazyRoute component={AuthorArticlesPage} />}</Route>
         
         {/* Smart Links pages */}
         <Route path="/term/:identifier">{() => <LazyRoute component={TermDetail} />}</Route>

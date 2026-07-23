@@ -532,6 +532,13 @@ export default function OpinionDetailPage() {
     ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "كاتب غير معروف"
     : "كاتب غير معروف";
 
+  // staff.slug → ملف المراسل؛ وإلا صفحة الكاتب بالاسم (مثل iOS AuthorArticlesView)
+  const authorProfileHref = article.staff?.slug
+    ? `/reporter/${article.staff.slug}`
+    : authorName !== "كاتب غير معروف"
+      ? `/author/${encodeURIComponent(authorName)}`
+      : null;
+
   const timeAgo = article.publishedAt
     ? formatDistanceToNow(new Date(article.publishedAt), {
         addSuffix: true,
@@ -580,8 +587,8 @@ export default function OpinionDetailPage() {
                 <div className="flex flex-wrap items-center gap-4 text-sm">
                   {article.author && (
                     <div className="flex items-center gap-2">
-                      {article.staff?.slug ? (
-                        <Link href={`/reporter/${article.staff.slug}`}>
+                      {authorProfileHref ? (
+                        <Link href={authorProfileHref}>
                           <Avatar className="h-12 w-12 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                             {(article.staff?.profileImage || article.author?.profileImageUrl) && (
                               <AvatarImage 
@@ -610,8 +617,8 @@ export default function OpinionDetailPage() {
                         </Avatar>
                       )}
                       <div>
-                        {article.staff?.slug ? (
-                          <Link href={`/reporter/${article.staff.slug}`}>
+                        {authorProfileHref ? (
+                          <Link href={authorProfileHref}>
                             <p className="font-bold text-base text-foreground hover:text-primary transition-colors cursor-pointer" data-testid="text-author-name">
                               {authorName}
                             </p>
@@ -761,23 +768,46 @@ export default function OpinionDetailPage() {
               {article.author && (
                 <div className="bg-muted/50 rounded-lg p-6">
                   <div className="flex items-start gap-4">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage 
-                        src={article.author?.profileImageUrl || ""} 
-                        alt={authorName}
-                        className="object-cover"
-                      />
-                      <AvatarFallback className="bg-primary/10 text-primary text-2xl">
-                        {getInitials(article.author?.firstName, article.author?.lastName, article.author?.email)}
-                      </AvatarFallback>
-                    </Avatar>
+                    {authorProfileHref ? (
+                      <Link href={authorProfileHref}>
+                        <Avatar className="h-20 w-20 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
+                          <AvatarImage 
+                            src={article.staff?.profileImage || article.author?.profileImageUrl || ""} 
+                            alt={authorName}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-primary/10 text-primary text-2xl">
+                            {getInitials(article.author?.firstName, article.author?.lastName, article.author?.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </Link>
+                    ) : (
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage 
+                          src={article.author?.profileImageUrl || ""} 
+                          alt={authorName}
+                          className="object-cover"
+                        />
+                        <AvatarFallback className="bg-primary/10 text-primary text-2xl">
+                          {getInitials(article.author?.firstName, article.author?.lastName, article.author?.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
                     <div className="flex-1 space-y-2">
                       <h3 className="font-bold text-xl text-foreground">
                         عن الكاتب
                       </h3>
-                      <p className="font-semibold text-lg text-foreground">
-                        {authorName}
-                      </p>
+                      {authorProfileHref ? (
+                        <Link href={authorProfileHref}>
+                          <p className="font-semibold text-lg text-foreground hover:text-primary transition-colors cursor-pointer">
+                            {authorName}
+                          </p>
+                        </Link>
+                      ) : (
+                        <p className="font-semibold text-lg text-foreground">
+                          {authorName}
+                        </p>
+                      )}
                       {((article as any).staff?.bioAr || article.author?.bio) && (
                         <p className="text-muted-foreground">
                           {(article as any).staff?.bioAr || article.author?.bio}
