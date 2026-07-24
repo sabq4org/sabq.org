@@ -125,3 +125,4 @@ docs/security/تقرير_المراجعة_الأمنية_سبق.json
 .idea/
 .vscode/
 .worktrees/
+.claude/launch.json

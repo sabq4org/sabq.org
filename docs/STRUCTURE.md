@@ -26,6 +26,7 @@
 - `threat_model.md` — نموذج التهديد
 
 ## docs/architecture/ — المعمارية
+- `CODEBASE_GUIDE.md` — السياق المعمّق المنقول من CLAUDE.md (طوبولوجيات، RBAC، كاش، تخزين، gotchas الحوادث)
 - `SYSTEM_DOCUMENTATION.md` — توثيق النظام الشامل
 - `AUTHENTICATION_FLOW.md` — تدفّق المصادقة
 - `CALENDAR_SYSTEM.md` — نظام التقويم
