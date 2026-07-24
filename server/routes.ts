@@ -13,6 +13,7 @@ import {
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
+import { denyPublish } from "./services/publishGate";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
@@ -7294,23 +7295,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
       }
-      // Check publish permission if status is "published"
-      if (parsed.data.status === 'published') {
-        // Publisher-agency accounts have a publishing window (publishers.
-        // publishing_ends_at); once it passes, publishing is blocked even
-        // though the role/permission still allows it.
-        const gate = await getPublishingGate(req.user.id);
-        if (gate.publisher && !gate.allowed) {
-          return res.status(403).json({ message: gate.message, code: gate.code });
-        }
-
-        const userPermissions = await getUserPermissions(req.user.id);
-        // الناشر الموثوق (auto_publish) ينشر من المحرر الأساسي دون
-        // articles.publish العامة — بوابته المفتوحة هي التفويض
-        const canPublish = userPermissions.includes("articles.publish")
-          || (gate.allowed && gate.publisher?.autoPublish === true);
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
+      // Publishing gate — covers "scheduled" as well as "published", plus the
+      // publisher publishing-window check. See server/services/publishGate.ts.
+      {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -7807,11 +7797,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // If status is being changed to published, check publish permission
-      if (parsed.data.status === "published" && existingArticle.status !== "published") {
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles" });
+      // Gate any move into a publishing status. This used to check only
+      // "published", so a holder of articles.edit_own reached the live site by
+      // sending status="scheduled" instead — the scheduler promotes it with no
+      // check of its own. It also skipped the publisher publishing-window gate.
+      if (parsed.data.status !== existingArticle.status) {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -15082,11 +15075,12 @@ Respond in valid JSON format only:
         }
       }
 
-      // If status is being changed to published, check publish permission
-      if (parsed.data.status === "published" && existingArticle.status !== "published") {
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles" });
+      // Gate every move into a publishing status ("published" OR "scheduled" —
+      // the scheduler promotes the latter with no check of its own).
+      if (parsed.data.status !== existingArticle.status) {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -16091,6 +16085,15 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Invalid article data", errors: parsed.error });
       }
 
+      // The role check above admits `reporter`, and `status` comes from the
+      // body — so a reporter could publish straight to the live site. The
+      // scheduling permission checked earlier only covers `scheduledAt`, not
+      // status="scheduled" on its own.
+      const denial = await denyPublish(userId, parsed.data.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+      }
+
       const article = await storage.createArticle(parsed.data);
 
       // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
@@ -16315,11 +16318,21 @@ Respond in valid JSON format only:
       // unknown keys + id/createdAt/updatedAt). `republish` is a control flag,
       // not a column, so it's read from req.body directly.
       const articleData: any = pickTableColumns(articles, req.body);
-      
+
       // Remove republish flag from data (it's only for control logic)
       const shouldRepublish = req.body.republish === true;
       delete articleData.republish;
-      
+
+      // No publish gate existed on this legacy path — a reporter editing their
+      // own draft could set status="published"/"scheduled" and reach the live
+      // site, bypassing articles.publish entirely.
+      if (articleData.status && articleData.status !== article.status) {
+        const denial = await denyPublish(userId, articleData.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        }
+      }
+
       // Handle publishedAt timestamp logic
       if (shouldRepublish) {
         // Explicitly requested to update publish time
@@ -28415,7 +28428,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
     try {
       const validatedData = insertEnArticleSchema.parse(req.body);
-      
+
+      // The role list above lets `reporter` and `opinion_author` through, but
+      // it says nothing about publishing — so `status:"published"` in the body
+      // put a contributor's article straight on the live English site.
+      const denial = await denyPublish(user.id, validatedData.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+      }
+
       // Set published_at if status is published
       const articleData = {
         ...validatedData,
@@ -28468,6 +28489,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // Only admins and the author can edit
       if (user.role !== 'admin' && user.id !== existing[0].authorId) {
         return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
+      }
+
+      // No publish gate existed here: the author of a draft could flip their
+      // own article to "published"/"scheduled" on the live English site
+      // regardless of articles.publish.
+      if (req.body.status && req.body.status !== existing[0].status) {
+        const denial = await denyPublish(user.id, req.body.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        }
       }
 
       const updateData: any = {
@@ -30119,15 +30150,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       if (existingArticle) {
         return res.status(409).json({ message: "Article slug already exists" });
-      // Check publish permission if status is "published"
-      if (parsed.data?.status === 'published') {
-        const userPermissions = await getUserPermissions(req.user.id);
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
-        }
       }
 
+      // The publish check used to live INSIDE the block above, after its
+      // unconditional `return` — dead code that never ran once. Any holder of
+      // articles.create could publish Urdu articles straight to the live site.
+      const denial = await denyPublish(userId, parsed.data.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
       }
 
       const [article] = await db
@@ -30204,6 +30234,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
         if (existingArticle && existingArticle.id !== articleId) {
           return res.status(409).json({ message: "Article slug already exists" });
+        }
+      }
+
+      // This path had no publish gate at all: articles.edit_own was enough to
+      // move an Urdu article to "published"/"scheduled" on the live site.
+      if (parsed.data.status && parsed.data.status !== oldArticle.status) {
+        const denial = await denyPublish(userId, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
