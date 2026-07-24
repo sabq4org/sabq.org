@@ -34,6 +34,11 @@ struct GcLoginResponse: Decodable {
     let token: String?
     let member: GcMember?
     let message: String?
+    // المصادقة الثنائية: عند تفعيل TOTP يرجع الخادم HTTP 200 بـ
+    // requires2FA=true و token=nil وتحدّي قصير العمر يُبادَل بجلسة كاملة
+    // عبر /auth/verify-2fa.
+    let requires2FA: Bool?
+    let challengeToken: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: GcFlexKey.self)
@@ -42,6 +47,8 @@ struct GcLoginResponse: Decodable {
         member = (try? c.decode(GcMember.self, forKey: GcFlexKey("user")))
             ?? (try? c.decode(GcMember.self, forKey: GcFlexKey("member")))
         message = try? c.decode(String.self, forKey: GcFlexKey("message"))
+        requires2FA = try? c.decode(Bool.self, forKey: GcFlexKey("requires2FA"))
+        challengeToken = try? c.decode(String.self, forKey: GcFlexKey("challengeToken"))
     }
 }
 
@@ -72,6 +79,13 @@ struct GcPhoneSendResponse: Decodable {
 struct GcPhoneVerifyRequest: Encodable {
     let phone: String
     let code: String
+    let deviceInfo: GcDeviceInfo?
+}
+
+struct GcVerifyTwoFactorRequest: Encodable {
+    let challengeToken: String
+    let token: String?       // رمز TOTP من تطبيق المصادقة
+    let backupCode: String?  // أو رمز احتياطي لمرة واحدة
     let deviceInfo: GcDeviceInfo?
 }
 
@@ -167,6 +181,18 @@ extension APIClient {
     func verifyPhoneCode(_ phone: String, code: String) async throws -> GcLoginResponse {
         let body = GcPhoneVerifyRequest(phone: phone, code: code, deviceInfo: Self.deviceInfo())
         return try await post(GcLoginResponse.self, path: "/auth/phone/verify", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول + رمز TOTP (أو رمز
+    /// احتياطي) بجلسة كاملة. الرد عند النجاح مطابق لرد الدخول العادي.
+    func verifyTwoFactor(challengeToken: String, code: String?, backupCode: String?) async throws -> GcLoginResponse {
+        let body = GcVerifyTwoFactorRequest(
+            challengeToken: challengeToken,
+            token: code,
+            backupCode: backupCode,
+            deviceInfo: Self.deviceInfo()
+        )
+        return try await post(GcLoginResponse.self, path: "/auth/verify-2fa", body: body, apiRoot: URLConstants.mobileAPI)
     }
 
     func submitGcPrediction(fixtureId: Int, predHome: Int, predAway: Int) async throws -> GcSubmittedPrediction {

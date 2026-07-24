@@ -21,6 +21,10 @@ final class SpAuthStore {
     /// مصدر آخر خطأ — ليعرض كلٌّ تحت زره الصحيح (خطأ العضوية تحت الزر الأخضر،
     /// وخطأ Apple تحت زر Apple) فلا يُظنّ أن خطأ الحقول يخصّ دخول Apple.
     var errorSource: SpAuthErrorSource = .none
+    /// غير nil أثناء دخول محمي بالمصادقة الثنائية: يحمل تحدّي الخادم لمبادلته
+    /// (برمز TOTP أو احتياطي) بجلسة. يقود خطوة إدخال الرمز في ورقة الدخول؛
+    /// يُمسح عند النجاح أو الإلغاء.
+    private(set) var pending2FAChallengeToken: String?
 
     // متابعات المستخدم + تفضيلات التنبيهات (تُحمَّل بعد الدخول).
     private(set) var followedKeys: Set<String> = []
@@ -234,14 +238,55 @@ final class SpAuthStore {
         isLoading = true
         errorMessage = nil
         errorSource = .none
+        pending2FAChallengeToken = nil
         do {
             let resp = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            // الحساب مفعّل للتحقّق بخطوتين: الخادم يرجع requires2FA + تحدّيًا
+            // (HTTP 200 بلا توكن) بدل الجلسة. ننتقل لخطوة إدخال الرمز بدل عرض
+            // رسالة التحدّي كخطأ.
+            if resp.requires2FA == true, let challenge = resp.challengeToken {
+                pending2FAChallengeToken = challenge
+                isLoading = false
+                return
+            }
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
             errorSource = .credentials
         }
         isLoading = false
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية برمز TOTP أو رمز احتياطي. يُبقي التحدّي
+    /// حيًّا عند فشل الرمز حتى يعيد المستخدم المحاولة دون إعادة كلمة المرور.
+    @discardableResult
+    func verifyTwoFactor(code: String?, backupCode: String? = nil) async -> Bool {
+        guard let challenge = pending2FAChallengeToken else { return false }
+        isLoading = true
+        errorMessage = nil
+        errorSource = .credentials
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.verifyTwoFactor(
+                challengeToken: challenge, code: code, backupCode: backupCode
+            )
+            try await applySession(resp)
+            pending2FAChallengeToken = nil
+            return true
+        } catch {
+            // 401 من هذا المسار = رمز خاطئ أو انتهاء صلاحية التحدّي (لا يحمل
+            // رسالة الخادم لأن مسارات /auth/ تُترجَم لـunauthorized عامّ).
+            errorMessage = L("رمز التحقق غير صحيح أو انتهت صلاحيته، حاول مجددًا")
+            errorSource = .credentials
+            return false
+        }
+    }
+
+    /// إلغاء خطوة المصادقة الثنائية والرجوع لنموذج الدخول.
+    func cancelTwoFactor() {
+        pending2FAChallengeToken = nil
+        errorMessage = nil
+        errorSource = .none
     }
 
     // MARK: - دخول/تسجيل بالجوال (Twilio Verify)

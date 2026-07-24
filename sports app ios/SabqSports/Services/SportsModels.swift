@@ -727,6 +727,11 @@ nonisolated struct SpLoginResponse: Decodable {
     let token: String?
     let member: SpMember?
     let message: String?
+    // 2FA: حين يكون الحساب مفعّلًا للتحقّق بخطوتين يرجع الخادم HTTP 200 مع
+    // requires2FA=true وtoken=nil وتحدّيًا قصير العمر (challengeToken) يُبادَل
+    // بجلسة كاملة عبر /auth/verify-2fa.
+    let requires2FA: Bool?
+    let challengeToken: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: SpFlexKey.self)
@@ -736,6 +741,8 @@ nonisolated struct SpLoginResponse: Decodable {
             ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("member")))
             ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("data")))
         message = try? c.decode(String.self, forKey: SpFlexKey("message"))
+        requires2FA = try? c.decode(Bool.self, forKey: SpFlexKey("requires2FA"))
+        challengeToken = try? c.decode(String.self, forKey: SpFlexKey("challengeToken"))
     }
 }
 
@@ -772,6 +779,15 @@ nonisolated struct SpLoginRequest: Encodable {
     let email: String?
     let phone: String?
     let password: String
+    let deviceInfo: SpDeviceInfo?
+}
+
+/// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول برمز TOTP (token) أو
+/// رمز احتياطي (backupCode) — الحقول الفارغة تُحذف من JSON تلقائيًّا.
+nonisolated struct SpVerifyTwoFactorRequest: Encodable {
+    let challengeToken: String
+    let token: String?       // رمز TOTP من تطبيق المصادقة
+    let backupCode: String?  // أو رمز احتياطي لمرة واحدة
     let deviceInfo: SpDeviceInfo?
 }
 
@@ -1856,6 +1872,18 @@ extension APIClient {
     func verifyPhoneCode(_ phone: String, code: String) async throws -> SpLoginResponse {
         let body = SpPhoneVerifyRequest(phone: phone, code: code, deviceInfo: APIClient.deviceInfo())
         return try await post(SpLoginResponse.self, path: "/auth/phone/verify", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول + رمز TOTP (أو رمز
+    /// احتياطي) بجلسة كاملة. الرد عند النجاح مطابق لرد الدخول العادي.
+    func verifyTwoFactor(challengeToken: String, code: String?, backupCode: String?) async throws -> SpLoginResponse {
+        let body = SpVerifyTwoFactorRequest(
+            challengeToken: challengeToken,
+            token: code,
+            backupCode: backupCode,
+            deviceInfo: APIClient.deviceInfo()
+        )
+        return try await post(SpLoginResponse.self, path: "/auth/verify-2fa", body: body, apiRoot: URLConstants.mobileAPI)
     }
 
     /// أخبار سبق الرياضية (تصنيف «رياضة») — عبر mobileAPI، عامّة بلا مصادقة.

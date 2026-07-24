@@ -740,8 +740,25 @@ struct SpMembershipLogin: View {
     @State private var mode: SpLoginMode = .phone
     @State private var identifier = ""
     @State private var password = ""
+    // خطوة إدخال رمز المصادقة الثنائية — تظهر حين يرجع الخادم تحدّيًا
+    // (auth.pending2FAChallengeToken != nil) بدل جلسة كاملة.
+    @State private var twoFactorCode = ""
+    @State private var twoFactorBackupCode = ""
+    @State private var useBackupCode = false
 
     var body: some View {
+        VStack(spacing: 14) {
+            // في منتصف دخول محمي بالتحقّق بخطوتين نُظهر خطوة الرمز بدل النموذج.
+            if auth.pending2FAChallengeToken != nil {
+                twoFactorStep
+            } else {
+                loginContent
+            }
+        }
+    }
+
+    // المحتوى الأساسي لورقة الدخول (ترويسة + تبويبات + Apple).
+    private var loginContent: some View {
         VStack(spacing: 14) {
             header
             modeTabs
@@ -768,6 +785,115 @@ struct SpMembershipLogin: View {
             .disabled(auth.isLoading)
 
             errorText(for: .apple)
+        }
+    }
+
+    // خطوة التحقّق بخطوتين — تُعرض مؤقتًا مكان النموذج حين يكون الحساب مفعّلًا
+    // للـTOTP. تعيد استخدام SpOtpBoxes للرمز المكوّن من ٦ أرقام، مع بديل رمز احتياطي.
+    private var twoFactorStep: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(SpTheme.green)
+                .padding(.top, 8)
+
+            Text(L("التحقّق بخطوتين"))
+                .font(SportsFonts.app(size: 22, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
+
+            Text(useBackupCode
+                 ? L("أدخل أحد الرموز الاحتياطية")
+                 : L("أدخل الرمز المكوّن من ٦ أرقام من تطبيق المصادقة"))
+                .font(SportsFonts.app(size: 13))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if useBackupCode {
+                TextField("", text: $twoFactorBackupCode,
+                          prompt: Text(L("الرمز الاحتياطي")).foregroundStyle(SpTheme.onDarkFaint))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(SportsFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDark)
+                    .tint(SpTheme.green)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 14).padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                            .fill(SpTheme.cardFill)
+                            .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                                .stroke(SpTheme.outline, lineWidth: 1))
+                    )
+                    .environment(\.layoutDirection, .leftToRight)
+            } else {
+                SpOtpBoxes(code: $twoFactorCode) { Task { await submitTwoFactor() } }
+            }
+
+            errorText(for: .credentials)
+
+            Button {
+                Task { await submitTwoFactor() }
+            } label: {
+                HStack(spacing: 8) {
+                    if auth.isLoading { ProgressView().tint(.white) }
+                    Text(L("تحقّق")).font(SportsFonts.app(size: 16, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 50)
+                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
+                    .fill(twoFactorSubmitEnabled ? SpTheme.green : SpTheme.green.opacity(0.4)))
+            }
+            .buttonStyle(.plain)
+            .disabled(!twoFactorSubmitEnabled || auth.isLoading)
+
+            HStack {
+                Button(useBackupCode ? L("استخدام رمز التطبيق") : L("استخدام رمز احتياطي")) {
+                    useBackupCode.toggle()
+                    twoFactorCode = ""
+                    twoFactorBackupCode = ""
+                    auth.errorMessage = nil
+                }
+                .buttonStyle(.plain)
+                .font(SportsFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(SpTheme.green)
+
+                Spacer()
+
+                Button(L("رجوع")) {
+                    twoFactorCode = ""
+                    twoFactorBackupCode = ""
+                    useBackupCode = false
+                    auth.cancelTwoFactor()
+                }
+                .buttonStyle(.plain)
+                .font(SportsFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(SpTheme.onDarkDim)
+            }
+        }
+    }
+
+    private var twoFactorSubmitEnabled: Bool {
+        useBackupCode
+            ? !twoFactorBackupCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            : twoFactorCode.count == 6
+    }
+
+    private func submitTwoFactor() async {
+        let ok = await auth.verifyTwoFactor(
+            code: useBackupCode ? nil : twoFactorCode,
+            backupCode: useBackupCode ? twoFactorBackupCode.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        )
+        if ok {
+            twoFactorCode = ""
+            twoFactorBackupCode = ""
+            useBackupCode = false
+            // النجاح يُغلق الورقة عبر onChange(isLoggedIn) في SpLoginSheet.
+        } else {
+            // رمز خاطئ — نفرّغ الحقل لإعادة محاولة نظيفة؛ الخادم يُبقي التحدّي
+            // حيًّا فلا يحتاج المستخدم لإعادة كلمة المرور.
+            twoFactorCode = ""
         }
     }
 

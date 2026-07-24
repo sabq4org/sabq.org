@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.AuthException
 import com.sabq.smart.data.AuthRepository
 import com.sabq.smart.data.PendingActivationException
+import com.sabq.smart.data.TwoFactorRequiredException
 import com.sabq.smart.data.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -29,6 +30,20 @@ sealed interface AuthFormState {
         val message: String,
         val userId: String?,
         val email: String?,
+    ) : AuthFormState
+    /**
+     * Credentials were accepted but the account has 2FA enabled, so the
+     * server issued a [challengeToken] instead of a session. The login
+     * screen shows the TOTP / backup-code entry step. [submitting] drives
+     * the inline spinner during a verify attempt; [error] holds the
+     * "wrong code" message WITHOUT dropping the still-valid challenge, so
+     * the user can retry without re-entering their password. Mirrors iOS
+     * `AuthStore.pending2FAChallengeToken` + `errorMessage`.
+     */
+    data class Requires2FA(
+        val challengeToken: String,
+        val submitting: Boolean = false,
+        val error: String? = null,
     ) : AuthFormState
     data class Success(val user: User) : AuthFormState
 }
@@ -93,6 +108,9 @@ class AuthViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _form.value = when (e) {
+                        is TwoFactorRequiredException -> AuthFormState.Requires2FA(
+                            challengeToken = e.challengeToken,
+                        )
                         is PendingActivationException -> AuthFormState.PendingActivation(
                             message = e.message ?: "الحساب غير مفعل. يرجى تفعيل الحساب أولاً",
                             userId = e.userId,
@@ -102,6 +120,47 @@ class AuthViewModel @Inject constructor(
                         else -> AuthFormState.Error(e.localizedMessage ?: "حدث خطأ، حاول مجدداً")
                     }
                 }
+        }
+    }
+
+    /**
+     * Complete a 2FA-gated login. Only valid while [form] is
+     * [AuthFormState.Requires2FA] (the challenge lives inside that
+     * state). Pass EITHER a 6-digit TOTP [code] OR a [backupCode]. A
+     * wrong code keeps the challenge alive with an inline error so the
+     * user retries without re-entering their password; a valid code
+     * flips straight to [AuthFormState.Success]. Mirrors iOS
+     * `AuthStore.verifyTwoFactor`.
+     */
+    fun verifyTwoFactor(code: String?, backupCode: String? = null) {
+        val state = _form.value as? AuthFormState.Requires2FA ?: return
+        if (code.isNullOrBlank() && backupCode.isNullOrBlank()) {
+            _form.value = state.copy(error = "أدخل رمز التحقق")
+            return
+        }
+        viewModelScope.launch {
+            _form.value = state.copy(submitting = true, error = null)
+            _resend.value = ResendActivationState.Idle
+            runCatching { repo.verifyTwoFactor(state.challengeToken, code, backupCode) }
+                .onSuccess {
+                    com.sabq.smart.data.analytics.SabqAnalytics.login("2fa")
+                    _form.value = AuthFormState.Success(it)
+                }
+                .onFailure { e ->
+                    _form.value = state.copy(
+                        submitting = false,
+                        error = (e as? AuthException)?.message
+                            ?: e.localizedMessage
+                            ?: "رمز التحقق غير صحيح",
+                    )
+                }
+        }
+    }
+
+    /** إلغاء خطوة المصادقة الثنائية والرجوع لنموذج الدخول. */
+    fun cancelTwoFactor() {
+        if (_form.value is AuthFormState.Requires2FA) {
+            _form.value = AuthFormState.Idle
         }
     }
 

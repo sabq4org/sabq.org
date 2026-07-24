@@ -386,5 +386,14 @@
   "auth.error.rateLimited": "محاولات كثيرة، حاول بعد قليل",
   "auth.error.generic": "تعذّر تسجيل الدخول",
   "auth.account": "حسابك",
-  "auth.phone.pickCountry": "اختر الدولة"
+  "auth.phone.pickCountry": "اختر الدولة",
+  "auth.2fa.title": "المصادقة الثنائية",
+  "auth.2fa.subtitle": "أدخل الرمز المكوّن من ٦ أرقام من تطبيق المصادقة",
+  "auth.2fa.verify": "تحقّق ودخول",
+  "auth.2fa.useBackup": "استخدام رمز احتياطي",
+  "auth.2fa.useApp": "استخدام رمز التطبيق",
+  "auth.2fa.backupHint": "أدخل أحد الرموز الاحتياطية التي حفظتها عند التفعيل",
+  "auth.2fa.backupPlaceholder": "الرمز الاحتياطي",
+  "auth.2fa.back": "رجوع لتسجيل الدخول",
+  "auth.2fa.invalidCode": "الرمز غير صحيح، حاول مجددًا"
 }

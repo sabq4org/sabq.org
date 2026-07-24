@@ -12,8 +12,27 @@ struct GcMembershipLogin: View {
     @State private var mode: GcLoginMode = .phone
     @State private var identifier = ""
     @State private var password = ""
+    // خطوة إدخال رمز المصادقة الثنائية (تظهر حين auth.pending2FAChallengeToken != nil).
+    @State private var twoFactorCode = ""
+    @State private var twoFactorBackupCode = ""
+    @State private var useBackupCode = false
 
     var body: some View {
+        VStack(spacing: 14) {
+            if auth.pending2FAChallengeToken != nil {
+                twoFactorStepView
+            } else {
+                loginFormView
+            }
+        }
+        .onDisappear {
+            // أسقِط أي خطوة 2FA نصف مكتملة كي تبدأ إعادة الفتح من نظيفة.
+            if auth.pending2FAChallengeToken != nil { auth.cancelTwoFactor() }
+            resetTwoFactorFields()
+        }
+    }
+
+    private var loginFormView: some View {
         VStack(spacing: 14) {
             if showWelcome {
                 welcomeHeader
@@ -40,6 +59,127 @@ struct GcMembershipLogin: View {
                     .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    // MARK: - المصادقة الثنائية
+
+    /// خطوة إدخال رمز التحقّق أثناء الدخول حين يكون TOTP مفعّلًا على الحساب.
+    /// تعيد استخدام GcOtpBoxes لرمز الـ٦ خانات مع بديل رمز احتياطي.
+    private var twoFactorStepView: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(GcTheme.sky)
+                Text(L("auth.2fa.title"))
+                    .font(GulfCupFonts.app(size: 20, weight: .bold))
+                    .foregroundStyle(GcTheme.ink)
+                Text(useBackupCode ? L("auth.2fa.subtitle.backup") : L("auth.2fa.subtitle.totp"))
+                    .font(GulfCupFonts.app(size: 13))
+                    .foregroundStyle(GcTheme.inkDim)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+
+            if useBackupCode {
+                TextField("", text: $twoFactorBackupCode,
+                          prompt: Text(L("auth.2fa.backupPlaceholder")).foregroundStyle(GcTheme.inkFaint))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(GulfCupFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(GcTheme.ink)
+                    .tint(GcTheme.sky)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 14).padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: GcTheme.tileRadius, style: .continuous)
+                            .fill(GcTheme.cardBg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: GcTheme.tileRadius, style: .continuous)
+                                    .stroke(GcTheme.line, lineWidth: 1)
+                            )
+                    )
+                    .environment(\.layoutDirection, .leftToRight)
+            } else {
+                GcOtpBoxes(code: $twoFactorCode) { Task { await submitTwoFactor() } }
+            }
+
+            if auth.errorSource == .credentials, let err = auth.errorMessage {
+                Text(err)
+                    .font(GulfCupFonts.app(size: 12))
+                    .foregroundStyle(GcTheme.crimson)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Button {
+                Task { await submitTwoFactor() }
+            } label: {
+                HStack(spacing: 8) {
+                    if auth.isLoading { ProgressView().tint(.white) }
+                    Text(L("auth.2fa.verify")).font(GulfCupFonts.app(size: 15, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: GcTheme.buttonRadius, style: .continuous)
+                        .fill(twoFactorSubmitEnabled ? GcTheme.sky : GcTheme.sky.opacity(0.4))
+                )
+            }
+            .buttonStyle(GcPressStyle())
+            .disabled(!twoFactorSubmitEnabled || auth.isLoading)
+
+            HStack {
+                Button(useBackupCode ? L("auth.2fa.useApp") : L("auth.2fa.useBackup")) {
+                    useBackupCode.toggle()
+                    twoFactorCode = ""
+                    twoFactorBackupCode = ""
+                    auth.errorMessage = nil
+                }
+                .buttonStyle(.plain)
+                .font(GulfCupFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(GcTheme.sky)
+
+                Spacer()
+
+                Button(L("auth.2fa.back")) {
+                    resetTwoFactorFields()
+                    auth.cancelTwoFactor()
+                }
+                .buttonStyle(.plain)
+                .font(GulfCupFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(GcTheme.inkDim)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var twoFactorSubmitEnabled: Bool {
+        useBackupCode ? !twoFactorBackupCode.isEmpty : twoFactorCode.count == 6
+    }
+
+    @MainActor
+    private func submitTwoFactor() async {
+        guard twoFactorSubmitEnabled else { return }
+        let ok = await auth.verifyTwoFactor(
+            code: useBackupCode ? nil : twoFactorCode,
+            backupCode: useBackupCode ? twoFactorBackupCode : nil
+        )
+        if ok {
+            resetTwoFactorFields()
+        } else {
+            // رمز خاطئ — امسح الحقل لإعادة محاولة نظيفة؛ يبقي الخادم التحدّي حيًّا
+            // فلا حاجة لإعادة إدخال كلمة المرور.
+            twoFactorCode = ""
+        }
+    }
+
+    private func resetTwoFactorFields() {
+        twoFactorCode = ""
+        twoFactorBackupCode = ""
+        useBackupCode = false
     }
 
     /// ترحيب + ختم سبق + تنويه الغرض — مطابق منطقيًا لـ SpMembershipLogin في VARA.
