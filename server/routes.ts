@@ -122,9 +122,9 @@ import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAc
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import pLimit from 'p-limit';
-import { db, executeWithStatementTimeout } from "./db";
+import { db, executeWithStatementTimeout, withStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
-import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt } from "drizzle-orm";
+import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
 import path from "path";
@@ -6886,7 +6886,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const reporterAlias = aliasedTable(users, 'reporter');
 
       // Build where conditions array
-      const whereConditions = [];
+      const whereConditions: (SQL<unknown> | undefined)[] = [];
 
       if (search) {
         whereConditions.push(
@@ -6957,55 +6957,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Build query with all conditions
-      let query = db
-        .select({
-          article: articleAdminSelect,
-          category: categories,
-          author: {
-            id: users.id,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            firstNameEn: users.firstNameEn,
-            lastNameEn: users.lastNameEn,
-            email: users.email,
-            profileImageUrl: users.profileImageUrl,
-          },
-          reporter: {
-            id: reporterAlias.id,
-            firstName: reporterAlias.firstName,
-            lastName: reporterAlias.lastName,
-            firstNameEn: reporterAlias.firstNameEn,
-            lastNameEn: reporterAlias.lastNameEn,
-            email: reporterAlias.email,
-            profileImageUrl: reporterAlias.profileImageUrl,
-          },
-          publisher: {
-            id: publishers.id,
-            companyName: publishers.agencyName,
-          },
-        })
-        .from(articles)
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(users, eq(articles.authorId, users.id))
-        .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
-        .leftJoin(publishers, eq(articles.publisherId, publishers.id))
-        .$dynamic();
-
-      // Apply all conditions
-      if (whereConditions.length > 0) {
-        query = query.where(and(...whereConditions));
-      }
-
-      
-      // Get total count for pagination
-      let countQuery = db.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
-      if (whereConditions.length > 0) {
-        countQuery = countQuery.where(and(...whereConditions));
-      }
-      const [countResult] = await countQuery;
-      const total = Number(countResult?.count || 0);
-
       // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
       // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
       // reordering from the dashboard persists after refetch instead of snapping back to date order
@@ -7020,11 +6971,62 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
-      query = query.orderBy(...orderClauses)
-        .limit(limitNum)
-        .offset(offset);
+      // البحث بالعنوان/المقتطف بلغ 47 ث تحت الضغط وعدّ النتائج 24 ث
+      // (pg_stat_statements) — مهلة 15 ث تلغي الاستعلام من جهة الخادم وتحرر
+      // اتصال الـpool بدل خنق بقية الطلبات.
+      const { results, total } = await withStatementTimeout(15_000, async (tx) => {
+        let query = tx
+          .select({
+            article: articleAdminSelect,
+            category: categories,
+            author: {
+              id: users.id,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              firstNameEn: users.firstNameEn,
+              lastNameEn: users.lastNameEn,
+              email: users.email,
+              profileImageUrl: users.profileImageUrl,
+            },
+            reporter: {
+              id: reporterAlias.id,
+              firstName: reporterAlias.firstName,
+              lastName: reporterAlias.lastName,
+              firstNameEn: reporterAlias.firstNameEn,
+              lastNameEn: reporterAlias.lastNameEn,
+              email: reporterAlias.email,
+              profileImageUrl: reporterAlias.profileImageUrl,
+            },
+            publisher: {
+              id: publishers.id,
+              companyName: publishers.agencyName,
+            },
+          })
+          .from(articles)
+          .leftJoin(categories, eq(articles.categoryId, categories.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
+          .leftJoin(publishers, eq(articles.publisherId, publishers.id))
+          .$dynamic();
 
-      const results = await query;
+        // Apply all conditions
+        if (whereConditions.length > 0) {
+          query = query.where(and(...whereConditions));
+        }
+
+        // Get total count for pagination
+        let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
+        if (whereConditions.length > 0) {
+          countQuery = countQuery.where(and(...whereConditions));
+        }
+        const [countResult] = await countQuery;
+
+        const rows = await query.orderBy(...orderClauses)
+          .limit(limitNum)
+          .offset(offset);
+
+        return { results: rows, total: Number(countResult?.count || 0) };
+      });
 
       const formattedArticles = results.map((row) => ({
         ...row.article,
