@@ -9,11 +9,11 @@ import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { db, getSessionFallbackPool } from "./db";
 import { users, appMemberSessions, canUserLogin, getUserStatusMessage } from "@shared/schema";
-import { eq, or, sql } from "drizzle-orm";
+import { eq, or, sql, and, ne } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
-import { getRedisSessionAdapter, getRedisClient } from "./redis";
+import { getRedisSessionAdapter } from "./redis";
 import { RedisStore } from "connect-redis";
 import { SessionFailoverStore } from "./sessionFailoverStore";
 
@@ -537,12 +537,18 @@ export function invalidateUserSessionCache(userId: string): void {
  * never thrown into the caller's reset flow. Password resets are rare, so the
  * Redis scan cost is acceptable.
  */
-export async function invalidateAllUserSessions(userId: string): Promise<void> {
+export async function invalidateAllUserSessions(
+  userId: string,
+  opts?: { exceptWebSid?: string; exceptMobileTokenHash?: string },
+): Promise<void> {
   invalidateUserSessionCache(userId);
 
-  // Mobile bearer tokens.
+  // Mobile bearer tokens (keep the caller's own token on a self-service change).
   try {
-    await db.delete(appMemberSessions).where(eq(appMemberSessions.memberId, userId));
+    const cond = opts?.exceptMobileTokenHash
+      ? and(eq(appMemberSessions.memberId, userId), ne(appMemberSessions.tokenHash, opts.exceptMobileTokenHash))
+      : eq(appMemberSessions.memberId, userId);
+    await db.delete(appMemberSessions).where(cond);
   } catch (e) {
     console.error("[Session] appMemberSessions purge failed:", e);
   }
@@ -550,20 +556,31 @@ export async function invalidateAllUserSessions(userId: string): Promise<void> {
   // Postgres session store (connect-pg-simple: table `sessions`, jsonb `sess`).
   try {
     const pool = getSessionFallbackPool();
-    await pool.query(`DELETE FROM sessions WHERE (sess #>> '{passport,user}') = $1`, [userId]);
+    if (opts?.exceptWebSid) {
+      await pool.query(
+        `DELETE FROM sessions WHERE (sess #>> '{passport,user}') = $1 AND sid <> $2`,
+        [userId, opts.exceptWebSid],
+      );
+    } else {
+      await pool.query(`DELETE FROM sessions WHERE (sess #>> '{passport,user}') = $1`, [userId]);
+    }
   } catch (e) {
     console.error("[Session] Postgres session purge failed:", e);
   }
 
   // Redis session store (connect-redis, prefix `sess:`). Scan + match passport.user.
+  // Use the session adapter (present whenever REDIS_URL is set, even mid-reconnect)
+  // rather than getRedisClient (null until fully ready) so the purge isn't skipped.
   try {
-    const redis = getRedisClient();
+    const redis = getRedisSessionAdapter();
     if (redis) {
+      const keepKey = opts?.exceptWebSid ? `sess:${opts.exceptWebSid}` : null;
       let cursor = "0";
       do {
         const [next, keys] = (await redis.scan(cursor, "MATCH", "sess:*", "COUNT", 200)) as [string, string[]];
         cursor = next;
         for (const key of keys) {
+          if (key === keepKey) continue;
           const raw = await redis.get(key);
           if (!raw) continue;
           try {

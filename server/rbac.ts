@@ -4,7 +4,7 @@ import { db } from "./db";
 import { users, roles, permissions, rolePermissions, userRoles, userPermissionOverrides } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
-import { SUPERUSER_ROLE_NAMES, getPermissionsForRoles } from "@shared/rbac-constants";
+import { SUPERUSER_ROLE_NAMES, getPermissionsForRoles, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
@@ -95,6 +95,40 @@ export async function userHasAnyRole(
 ): Promise<boolean> {
   const userRolesList = await getUserRoleNames(userId);
   return roleNames.some((r) => userRolesList.includes(r));
+}
+
+/**
+ * The role-assignment tier of an actor, for use with canAssignRole. Maps the
+ * actor's roles to SYSTEM_ADMIN (system_admin/system.admin/superadmin), ADMIN,
+ * or "" (may assign nothing). Centralizes the hierarchy check so EVERY
+ * role-mutation endpoint enforces it — an `admin` must never be able to mint a
+ * `system_admin` (audit #2 + the dashboard siblings the first fix missed).
+ */
+export async function getRoleAssignmentAuthority(assignerId: string): Promise<string> {
+  const names = await getUserRoleNames(assignerId);
+  const SYSTEM_ADMIN_EQUIVALENTS = ["system_admin", "system.admin", "superadmin"];
+  if (names.some((r) => SYSTEM_ADMIN_EQUIVALENTS.includes(r))) return ROLE_NAMES.SYSTEM_ADMIN;
+  if (names.includes(ROLE_NAMES.ADMIN)) return ROLE_NAMES.ADMIN;
+  return "";
+}
+
+/**
+ * Validate that `assignerId` may grant `targetRoleName`. Returns an
+ * {status, message} to send back, or null when the assignment is allowed.
+ * Shared by every role-mutation endpoint so the hierarchy check is identical.
+ */
+export async function roleAssignmentError(
+  assignerId: string,
+  targetRoleName: string,
+): Promise<{ status: number; message: string } | null> {
+  if (!(Object.values(ROLE_NAMES) as string[]).includes(targetRoleName)) {
+    return { status: 400, message: "دور غير معروف" };
+  }
+  const authority = await getRoleAssignmentAuthority(assignerId);
+  if (!canAssignRole(authority, targetRoleName)) {
+    return { status: 403, message: "لا تملك صلاحية إسناد هذا الدور" };
+  }
+  return null;
 }
 
 export async function getUserPermissions(userId: string): Promise<string[]> {

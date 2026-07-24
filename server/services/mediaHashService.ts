@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../db";
 import { mediaFiles } from "@shared/schema";
+import { isSafeImageUrl } from "../utils/safeImageUrl";
 
 // 64-bit dHash: resize to 9x8 grayscale, compare each pixel to its horizontal
 // neighbor. Robust to re-encoding, resizing, and mild compression — the exact
@@ -91,6 +92,7 @@ async function fetchImageBytes(id: string, url: string, size: number | null): Pr
   if (size && size > MAX_HASH_FETCH_BYTES) return null;
   try {
     if (url.startsWith("https://")) {
+      if (!isSafeImageUrl(url)) return null; // SSRF guard on DB-sourced URL (audit #3)
       const resp = await fetch(url);
       if (!resp.ok) return null;
       const buf = Buffer.from(await resp.arrayBuffer());

@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { db } from "../db";
 import { mediaFiles } from "@shared/schema";
 import { enqueueAutoTag } from "./mediaAutoTagService";
+import { isSafeImageUrl } from "../utils/safeImageUrl";
 
 export interface SaveGeneratedImageInput {
   imageUrl: string;
@@ -29,6 +30,7 @@ export async function saveGeneratedImage(
   let size = 0;
   let mimeType = "image/png";
   try {
+    if (!isSafeImageUrl(input.imageUrl)) throw new Error("unsafe image url — skipped (audit #3)");
     const resp = await fetch(input.imageUrl);
     if (resp.ok) {
       const buf = Buffer.from(await resp.arrayBuffer());

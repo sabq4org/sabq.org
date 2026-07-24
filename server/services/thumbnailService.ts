@@ -10,6 +10,7 @@ import { articles } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import path from 'path';
 import { newsImageStorageService } from './newsImageStorageService';
+import { isSafeImageUrl } from '../utils/safeImageUrl';
 
 interface FocalPoint {
   x: number;
@@ -69,51 +70,12 @@ function normalizeImageUrl(url: string): string {
  * Validate URL for security (prevent SSRF)
  */
 function isValidImageUrl(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url);
-    
-    // Allow only HTTPS and HTTP protocols
-    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-      return false;
-    }
-    
-    // Build list of trusted domains dynamically
-    const trustedDomains = [
-      'storage.googleapis.com',
-      'imagedelivery.net', // Cloudflare Images CDN
-      'localhost',
-      '127.0.0.1',
-      '0.0.0.0',
-      'replit.dev', // Replit domains
-      'repl.co',
-    ];
-    
-    // Add configured domains
-    if (process.env.DOMAIN) {
-      trustedDomains.push(process.env.DOMAIN);
-    }
-    if (process.env.REPLIT_DEV_DOMAIN) {
-      trustedDomains.push(process.env.REPLIT_DEV_DOMAIN);
-    }
-    
-    // Add additional trusted domains
-    trustedDomains.push('sabq.org', 'sabq.org');
-    
-    const hostname = parsedUrl.hostname.toLowerCase();
-    
-    // Check if hostname is in trusted domains or is a subdomain
-    const isTrusted = trustedDomains.some(domain => 
-      hostname === domain || hostname.endsWith(`.${domain}`)
-    );
-    
-    if (!isTrusted) {
-      console.warn(`[Thumbnail Service] Untrusted domain: ${hostname}`);
-    }
-    
-    return isTrusted;
-  } catch {
-    return false;
-  }
+  // SSRF guard: the old allowlist explicitly permitted http:// and
+  // localhost/127.0.0.1/0.0.0.0, so an authenticated caller of
+  // /api/thumbnails/generate could point the server at loopback (audit #3).
+  // Delegate to the shared strict guard: https-only, tight host allowlist,
+  // private/loopback IP rejection.
+  return isSafeImageUrl(url);
 }
 
 /**

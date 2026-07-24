@@ -17,6 +17,7 @@
  */
 
 import { db } from "../db";
+import crypto from "crypto";
 import { storage } from "../storage";
 import { users, roles, userRoles, type AngleSubmission, type Angle, type User } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -52,7 +53,8 @@ function generatePassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let password = "";
   for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    // CSPRNG — this becomes the writer's real login password (audit #10).
+    password += chars.charAt(crypto.randomInt(chars.length));
   }
   return password;
 }

@@ -937,6 +937,18 @@ router.get("/devices/status", async (req: Request, res: Response) => {
 // نظام العضوية - MEMBERSHIP SYSTEM APIs (Using unified users table)
 // ============================================================================
 
+// Brute-force limiter for the account-activation / email-verification endpoints
+// (defined here so it precedes /auth/activate below; audit #4/#10).
+const mobileActivationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
 // Helper: Generate 6-digit verification code.
 // Uses a CSPRNG (crypto.randomInt) — Math.random is predictable/seedable and must
 // never back a password-reset or email-verification code (security audit S-04:
@@ -1168,7 +1180,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 // 2. تفعيل الحساب - Activate Account
 // POST /api/v1/auth/activate
 // ==========================================
-router.post("/auth/activate", async (req: Request, res: Response) => {
+router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email, code } = req.body;
 
@@ -1257,7 +1269,7 @@ router.post("/auth/activate", async (req: Request, res: Response) => {
 // 3. إعادة إرسال رمز التفعيل - Resend Activation Code
 // POST /api/v1/auth/resend-activation
 // ==========================================
-router.post("/auth/resend-activation", async (req: Request, res: Response) => {
+router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email } = req.body;
 
@@ -2329,9 +2341,18 @@ router.post("/members/change-password", async (req: Request, res: Response) => {
       .set({ passwordHash })
       .where(eq(users.id, session.userId));
 
-    res.json({ 
-      success: true, 
-      message: "تم تغيير كلمة المرور بنجاح" 
+    // Evict every OTHER session on a password change (audit #8), keeping the
+    // caller's current bearer token so this device stays signed in.
+    const authHeader = req.headers.authorization || "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const currentTokenHash = bearerToken
+      ? crypto.createHash("sha256").update(bearerToken).digest("hex")
+      : undefined;
+    await invalidateAllUserSessions(session.userId, { exceptMobileTokenHash: currentTokenHash });
+
+    res.json({
+      success: true,
+      message: "تم تغيير كلمة المرور بنجاح"
     });
   } catch (error) {
     console.error("[Mobile API] members/change-password error:", error);
