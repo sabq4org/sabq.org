@@ -40,6 +40,23 @@ data class PhoneVerifyRequest(
     val deviceInfo: OAuthDeviceInfo? = null,
 )
 
+/**
+ * Body for `POST /api/v1/auth/verify-2fa` — exchanges the [challengeToken]
+ * issued by a `requires2FA` login for a real session. Send EITHER a TOTP
+ * [token] (6 digits from the authenticator app) OR a one-time [backupCode];
+ * the server accepts whichever is present (nulls are dropped from JSON).
+ * On success the response is byte-for-byte identical to a normal login
+ * ([ApiLoginResponse] with token + user). Mirrors iOS
+ * `APIVerifyTwoFactorRequest` (Services/APIModels.swift:819).
+ */
+@Serializable
+data class VerifyTwoFactorRequest(
+    val challengeToken: String,
+    val token: String? = null,
+    val backupCode: String? = null,
+    val deviceInfo: OAuthDeviceInfo? = null,
+)
+
 @Serializable
 data class RegisterRequest(
     val name: String,
@@ -97,6 +114,18 @@ data class ApiLoginResponse(
     val user: ApiUser? = null,
     @JsonNames("emailSent", "email_sent")
     val emailSent: Boolean? = null,
+    /**
+     * Set by `/api/v1/auth/login` when the account has 2FA (TOTP)
+     * enabled: the server replies HTTP 200 with `requires2FA: true`,
+     * a null [token], and a short-lived [challengeToken] instead of a
+     * session. The app then exchanges the challenge (plus the TOTP or a
+     * backup code) via `/api/v1/auth/verify-2fa` for a real session.
+     * iOS parity: APILoginResponse in Services/APIModels.swift:878.
+     */
+    @JsonNames("requires_2fa")
+    val requires2FA: Boolean? = null,
+    @JsonNames("challenge_token")
+    val challengeToken: String? = null,
 )
 
 @Serializable

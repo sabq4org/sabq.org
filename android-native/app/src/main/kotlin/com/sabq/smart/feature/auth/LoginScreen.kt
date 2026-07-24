@@ -153,39 +153,178 @@ fun LoginScreen(
             color = SabqTheme.colors.secondaryInk,
         )
 
-        LoginModeTabs(
-            mode = mode,
-            onSelect = {
-                viewModel.resetForm()
-                mode = it
-            },
-        )
+        val twoFactor = form as? AuthFormState.Requires2FA
+
+        if (twoFactor == null) {
+            LoginModeTabs(
+                mode = mode,
+                onSelect = {
+                    viewModel.resetForm()
+                    mode = it
+                },
+            )
+        }
 
         SurfaceCard {
-            when (mode) {
-                LoginMode.Phone -> PhoneLoginSection(viewModel = viewModel, form = form)
-                LoginMode.Email -> EmailLoginSection(
-                    viewModel = viewModel,
-                    form = form,
-                    resend = resend,
-                    identifier = identifier,
-                    onIdentifierChange = { identifier = it },
-                    password = password,
-                    onPasswordChange = { password = it },
-                    onForgotPasswordClick = onForgotPasswordClick,
-                )
+            if (twoFactor != null) {
+                TwoFactorSection(viewModel = viewModel, state = twoFactor)
+            } else {
+                when (mode) {
+                    LoginMode.Phone -> PhoneLoginSection(viewModel = viewModel, form = form)
+                    LoginMode.Email -> EmailLoginSection(
+                        viewModel = viewModel,
+                        form = form,
+                        resend = resend,
+                        identifier = identifier,
+                        onIdentifierChange = { identifier = it },
+                        password = password,
+                        onPasswordChange = { password = it },
+                        onForgotPasswordClick = onForgotPasswordClick,
+                    )
+                }
             }
         }
 
+        if (twoFactor == null) {
+            Text(
+                text = "ليس لديك حساب؟ إنشاء حساب جديد",
+                style = SabqTheme.typography.chipLabel,
+                color = SabqTheme.colors.primaryEnd,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .clickable { onSmartSignUpClick() },
+            )
+        }
+    }
+}
+
+/**
+ * خطوة المصادقة الثنائية (TOTP). تظهر بعد قبول كلمة المرور عندما يكون
+ * الحساب مفعّلًا 2FA. تدعم إدخال رمز 6 خانات من تطبيق المصادقة أو التبديل
+ * لإدخال «رمز احتياطي». عند الرمز الخاطئ يبقى التحدّي حيًّا مع رسالة خطأ
+ * دون العودة لخطوة كلمة المرور. مطابقة لتدفّق iOS `verifyTwoFactor`.
+ */
+@Composable
+private fun TwoFactorSection(
+    viewModel: AuthViewModel,
+    state: AuthFormState.Requires2FA,
+) {
+    var code by remember { mutableStateOf("") }
+    var backupCode by remember { mutableStateOf("") }
+    var useBackup by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription = null,
+                tint = SabqTheme.colors.primaryEnd,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = "التحقق بخطوتين",
+                style = SabqTheme.typography.chipLabel.copy(fontWeight = FontWeight.Bold),
+                color = SabqTheme.colors.ink,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+
         Text(
-            text = "ليس لديك حساب؟ إنشاء حساب جديد",
-            style = SabqTheme.typography.chipLabel,
+            text = if (useBackup) {
+                "أدخل أحد رموزك الاحتياطية لإكمال تسجيل الدخول."
+            } else {
+                "أدخل الرمز المكوّن من ٦ أرقام من تطبيق المصادقة."
+            },
+            style = SabqTheme.typography.meta,
+            color = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+
+        if (useBackup) {
+            FormField(
+                icon = Icons.Filled.Lock,
+                placeholder = "الرمز الاحتياطي",
+                value = backupCode,
+                onValueChange = { backupCode = it.trim() },
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Done,
+                onSubmit = { viewModel.verifyTwoFactor(code = null, backupCode = backupCode) },
+            )
+        } else {
+            OtpBoxes(
+                code = code,
+                onCodeChange = { code = it },
+                onComplete = { viewModel.verifyTwoFactor(code = it, backupCode = null) },
+            )
+        }
+
+        Text(
+            text = if (useBackup) "استخدام رمز التطبيق بدلاً من ذلك" else "استخدام رمز احتياطي",
+            style = SabqTheme.typography.chipLabel.copy(fontWeight = FontWeight.Bold),
             color = SabqTheme.colors.primaryEnd,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp)
-                .clickable { onSmartSignUpClick() },
+                .clickable {
+                    useBackup = !useBackup
+                    code = ""
+                    backupCode = ""
+                },
+            textAlign = TextAlign.Center,
         )
+
+        if (state.error != null) {
+            Text(
+                text = state.error,
+                style = SabqTheme.typography.meta,
+                color = SabqTheme.colors.coral,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        if (state.submitting) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                CircularProgressIndicator(
+                    color = SabqTheme.colors.primaryEnd,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        } else {
+            PrimaryCTAButton(
+                title = "تحقّق ودخول",
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                enabled = if (useBackup) backupCode.isNotBlank() else code.length == 6,
+                onClick = {
+                    if (useBackup) {
+                        viewModel.verifyTwoFactor(code = null, backupCode = backupCode)
+                    } else {
+                        viewModel.verifyTwoFactor(code = code, backupCode = null)
+                    }
+                },
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { viewModel.cancelTwoFactor() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "رجوع لتسجيل الدخول",
+                style = SabqTheme.typography.meta,
+                color = SabqTheme.colors.secondaryInk,
+            )
+        }
     }
 }
 

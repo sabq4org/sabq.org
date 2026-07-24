@@ -911,13 +911,21 @@ struct AcLoginForm: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            modeTabs
-            if mode == .phone {
-                AcPhoneLoginFlow()
+            if auth.pending2FAChallengeToken != nil {
+                // حساب مفعّل عليه المصادقة الثنائية بعد دخول بالبريد/كلمة المرور:
+                // نستبدل التبويبات والنماذج بخطوة إدخال رمز TOTP / احتياطي.
+                AcTwoFactorStep()
+                    .transition(.opacity)
             } else {
-                emailFields
+                modeTabs
+                if mode == .phone {
+                    AcPhoneLoginFlow()
+                } else {
+                    emailFields
+                }
             }
         }
+        .animation(.easeOut(duration: 0.2), value: auth.pending2FAChallengeToken)
     }
 
     private var modeTabs: some View {
@@ -1251,6 +1259,133 @@ struct AcOtpBoxes: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(active ? AcTheme.emerald : AcTheme.outline, lineWidth: active ? 2 : 1)
             )
+    }
+}
+
+// MARK: - خطوة المصادقة الثنائية (TOTP أو رمز احتياطي)
+// تُعرض داخل نموذج الدخول حين يعيد الخادم تحدّيًا بدل الجلسة. تحاكي مسار سبق
+// لكن بهوية كأس آسيا (الزمرّدي/الأربعة أدوار وخطوط التطبيق).
+
+struct AcTwoFactorStep: View {
+    @Environment(AcAuthStore.self) private var auth
+    @State private var code = ""
+    @State private var backupCode = ""
+    @State private var useBackup = false
+    @FocusState private var backupFocused: Bool
+
+    private var canVerify: Bool {
+        useBackup
+            ? !backupCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            : code.count == 6
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(AcTheme.emerald)
+                Text(L("auth.2fa.title"))
+                    .font(AsianCupFonts.app(size: 16, weight: .bold))
+                    .foregroundStyle(AcTheme.onDark)
+                Text(useBackup ? L("auth.2fa.backupHint") : L("auth.2fa.subtitle"))
+                    .font(AsianCupFonts.app(size: 12.5))
+                    .foregroundStyle(AcTheme.onDarkDim)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            if useBackup {
+                backupField
+            } else {
+                AcOtpBoxes(code: $code) { Task { await verify() } }
+            }
+
+            if auth.errorSource == .credentials, let err = auth.errorMessage {
+                Text(err)
+                    .font(AsianCupFonts.app(size: 12))
+                    .foregroundStyle(AcTheme.crimson)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            primaryButton(L("auth.2fa.verify"), enabled: canVerify) { Task { await verify() } }
+
+            Button(useBackup ? L("auth.2fa.useApp") : L("auth.2fa.useBackup")) {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    useBackup.toggle()
+                    code = ""
+                    backupCode = ""
+                }
+            }
+            .buttonStyle(.plain)
+            .font(AsianCupFonts.app(size: 13, weight: .bold))
+            .foregroundStyle(AcTheme.emerald)
+
+            Button(L("auth.2fa.back")) { auth.cancelTwoFactor() }
+                .buttonStyle(.plain)
+                .font(AsianCupFonts.app(size: 12.5))
+                .foregroundStyle(AcTheme.onDarkDim)
+        }
+    }
+
+    private var backupField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "key.horizontal")
+                .font(.system(size: 14))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .frame(width: 18)
+            TextField(
+                "",
+                text: $backupCode,
+                prompt: Text(L("auth.2fa.backupPlaceholder")).foregroundStyle(AcTheme.onDarkFaint)
+            )
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .textContentType(.oneTimeCode)
+                .font(AsianCupFonts.app(size: 15))
+                .foregroundStyle(AcTheme.onDark)
+                .tint(AcTheme.emerald)
+                .focused($backupFocused)
+                .onSubmit { Task { await verify() } }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 13)
+        .background(
+            RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                .fill(AcTheme.cardFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                        .stroke(AcTheme.outline, lineWidth: 1)
+                )
+        )
+        .onAppear { backupFocused = true }
+    }
+
+    private func verify() async {
+        guard canVerify else { return }
+        if useBackup {
+            let trimmed = backupCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            await auth.verifyTwoFactor(code: nil, backupCode: trimmed)
+        } else {
+            await auth.verifyTwoFactor(code: code, backupCode: nil)
+        }
+    }
+
+    private func primaryButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if auth.isLoading { ProgressView().tint(.white) }
+                Text(title).font(AsianCupFonts.app(size: 15, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                    .fill(enabled ? AcTheme.emerald : AcTheme.emerald.opacity(0.4))
+            )
+        }
+        .buttonStyle(AcPressableStyle())
+        .disabled(!enabled || auth.isLoading)
     }
 }
 

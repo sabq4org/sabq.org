@@ -140,6 +140,17 @@ interface SabqApi {
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): ApiLoginResponse
 
+    /**
+     * Complete a 2FA-gated login. Called only after `/auth/login`
+     * returned `requires2FA: true` + a `challengeToken`. Body carries
+     * the challenge plus a TOTP `token` or a `backupCode`. Success
+     * returns the same envelope as `/auth/login` (token + user); a wrong
+     * code / expired challenge is HTTP 401. See iOS
+     * `APIClient.verifyTwoFactor` (Services/APIClient.swift:711).
+     */
+    @POST("api/v1/auth/verify-2fa")
+    suspend fun verifyTwoFactor(@Body body: VerifyTwoFactorRequest): ApiLoginResponse
+
     /** إرسال رمز OTP للجوال (Twilio Verify). */
     @POST("api/v1/auth/phone/send")
     suspend fun sendPhoneCode(@Body body: PhoneSendRequest): PhoneSendResponse
