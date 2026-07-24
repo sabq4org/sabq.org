@@ -285,12 +285,13 @@ export async function seedRBAC() {
   }
 
   if (rolePermissionValues.length > 0) {
-    await db
+    const insertedMappings = await db
       .insert(rolePermissions)
       .values(rolePermissionValues)
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: rolePermissions.id });
 
-    console.log(`✅ Created ${rolePermissionValues.length} role-permission mappings`);
+    console.log(`✅ Created ${insertedMappings.length} role-permission mappings (${rolePermissionValues.length - insertedMappings.length} already existed)`);
   }
 
   return { allRoles, allPermissions };

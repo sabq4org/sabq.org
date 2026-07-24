@@ -1780,7 +1780,12 @@ export const rolePermissions = pgTable("role_permissions", {
   roleId: varchar("role_id").references(() => roles.id, { onDelete: "cascade" }).notNull(),
   permissionId: varchar("permission_id").references(() => permissions.id, { onDelete: "cascade" }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  // بدون هذا القيد كان onConflictDoNothing في seedRBAC لا يمسك شيئًا (المفتاح
+  // uuid عشوائي)، فتضخم الجدول إلى 428 ألف صف مكرر قبل تنظيف 2026-07-25.
+  // الفهرس أُنشئ على الإنتاج يدويًا بنفس الاسم (CONCURRENTLY) — لا تغيّر الاسم.
+  uniqueIndex("role_permissions_role_permission_unique").on(table.roleId, table.permissionId),
+]);
 
 // User-Role mapping (updated to support RBAC)
 export const userRoles = pgTable("user_roles", {
