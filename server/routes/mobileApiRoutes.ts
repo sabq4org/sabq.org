@@ -2781,6 +2781,10 @@ router.delete("/members/account", async (req: Request, res: Response) => {
       WHERE id = ${userId}
     `);
 
+    // Also kill web (Passport) sessions — the SQL above only cleared
+    // app_member_sessions, leaving any web session alive (audit #8).
+    await invalidateAllUserSessions(userId);
+
     console.log(`[Mobile API] Account hard-deleted (anonymised + cascaded): ${userId}`);
 
     // Best-effort: clean up the Cloudflare Images avatar so the file

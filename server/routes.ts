@@ -1157,9 +1157,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ used: true })
         .where(eq(passwordResetTokens.id, matchedToken.id));
 
-      // Kill every existing session so a stolen cookie/token can't survive the
-      // reset (audit #8).
-      await invalidateAllUserSessions(matchedToken.userId);
+      await invalidateAllUserSessions(matchedToken.userId); // kill all sessions so a stolen cookie can't survive the reset (audit #8)
 
       res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
     } catch (error) {
@@ -5550,6 +5548,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ status: "banned" })
         .where(eq(users.id, targetUserId));
 
+      await invalidateAllUserSessions(targetUserId); // revoke access immediately: web+mobile sessions + cache (audit #8)
+
       // Log activity
       await logActivity({
         userId: adminUserId,
@@ -5668,6 +5668,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
+      await invalidateAllUserSessions(targetUserId); // kill any lingering sessions (audit #8)
+
       console.log(`[ADMIN] User ${targetUserId} permanently deleted by admin ${adminUserId}`);
 
       res.json({
@@ -5732,9 +5734,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         })
         .where(eq(users.id, targetUserId));
 
-      // Kill every existing session for the target user (audit #8) — an admin
-      // reset must also evict a compromised session, not just change the hash.
-      await invalidateAllUserSessions(targetUserId);
+      await invalidateAllUserSessions(targetUserId); // admin reset must also evict a compromised session (audit #8)
 
       // Log activity
       await logActivity({
@@ -6265,9 +6265,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               } as any)
               .where(eq(users.id, staffUser.id));
 
-            // New credentials issued — evict every existing session for the
-            // target so an old/compromised session can't outlive the reset (audit #8).
-            await invalidateAllUserSessions(staffUser.id);
+            await invalidateAllUserSessions(staffUser.id); // new credentials — evict any old/compromised session (audit #8)
 
             results.push({ userId: staffUser.id, email: staffUser.email, success: true });
             console.log(`✅ [SEND CREDENTIALS] Sent credentials to ${staffUser.email}`);
@@ -18126,7 +18124,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log("🗑️ [USER DELETE] Soft deleting user:", userId);
 
       const updatedUser = await storage.softDeleteUser(userId);
-      
+      await invalidateAllUserSessions(userId); // revoke access immediately (audit #8)
+
       console.log("✅ [USER DELETE] User soft deleted successfully:", userId);
       res.json(updatedUser);
     } catch (error) {

@@ -491,7 +491,16 @@ export async function setupAuth(app: Express) {
       if (!user) {
         return done(null, false);
       }
-      
+
+      // Reject sessions of banned/suspended/deleted accounts on EVERY request —
+      // deserialize is the choke point, so an admin ban/delete (or self-delete)
+      // revokes web access immediately, even for a session that predates it
+      // (audit #8: access revocation, not just password reset). The 60s cache is
+      // cleared by invalidateAllUserSessions at ban/delete time so this is hit.
+      if (!canUserLogin(user)) {
+        return done(null, false);
+      }
+
       // Include display fields used by presence / avatars. Omitting firstName
       // made /api/editor-presence fall back to the email local-part (e.g. alawijan1).
       const serializedUser = {
