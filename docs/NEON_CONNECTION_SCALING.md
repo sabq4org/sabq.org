@@ -28,11 +28,15 @@ Neon يعطي مضيفَين لنفس القاعدة:
 | **pooled** | `ep-xxxx-**pooler**.<region>.aws.neon.tech` | ~10,000 |
 
 - من لوحة **Neon → Connection Details → فعّل «Pooled connection»** وانسخ سلسلة الـ`-pooler`.
-- على **Railway**، اضبط `NEON_DATABASE_URL` على سلسلة الـ`-pooler` (أبقِ `?sslmode=require`):
+- على **Railway**، اضبطها على **المتغيّر المُستخدَم فعليًا في الإنتاج وهو `DATABASE_URL`**
+  (الكود يقرأ `NEON_DATABASE_URL || DATABASE_URL`؛ الإنتاج لا يضبط الأول)، أبقِ `?sslmode=require`:
   ```
-  NEON_DATABASE_URL=postgresql://user:pass@ep-xxxx-pooler.<region>.aws.neon.tech/db?sslmode=require
+  DATABASE_URL=postgresql://user:pass@ep-xxxx-pooler.<region>.aws.neon.tech/db?sslmode=require
   ```
 - بعدها يصبح `50 × عدد كبير من الـpods` آمنًا.
+- **تنبيه توافق:** نقطة الـ-pooler هي PgBouncer بوضع transaction — يعمل معها
+  node-postgres، لكن تحقّق ألا تنكسر ميزات جلسة (prepared statements مُسمّاة،
+  advisory locks عبر عدة عبارات). اختبرها على staging قبل الإنتاج.
 
 ### 2) اضبط `DB_POOL_MAX` (سقف الاتصالات لكل pod)
 - الكود الآن يقرأ `DB_POOL_MAX` (افتراضي 50، محدود [1,500]) — لا تعديل كود لاحقًا.
