@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-23 | المالك: editorial
+> آخر مراجعة: 2026-07-24 | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -50,6 +50,7 @@
 - **إدارة المراسلين:** `/dashboard/reporters` — **مسؤول النظام فقط** (`requireRoles` في السايدبار + `ProtectedRoute` + `requireRole` على `/api/admin/reporters*`). لا تُفتح عبر `articles.view`/`users.view`. أعمدة الصفحة: ترخيص، مدينة، آخر دخول — **بدون** منشورة/آخر خبر/مشاهدات. API: `GET /api/admin/reporters` من `users` + ملف الترخيص؛ `GET /api/admin/reporters/:id/articles` موجود ولا تستهلكه الصفحة. ترتيب: منتهٍ → جدّد → بدون → ساري. KPI «نشطون آخر ٧ أيام» يعتمد `lastLoginAt` فقط.
 - **مفضلة لوحة التحكم:** نجمة ★ بجانب اسم الصفحة النشطة في `AppBreadcrumbs` (كل صفحات `/dashboard/*` ذات عنصر قائمة). `AppBreadcrumbs` يمرّر `permissions`/`allRoles` وإلا تُستبعد العناصر ذات صلاحيات ويُعرض «نظرة عامة» خطأً. `findActiveItem` لا يطابق `meta.exact` بالمقدّمة. `DashboardPageHeader.showFavoriteToggle` افتراضياً false لتفادي نجمتين.
 - **سايدبار محرّر المقال:** بدون `sticky`/`max-h` على عمود الإعدادات — التمرير يتم مع صفحة الداشبورد حتى يُصل لآخر حقول SEO والكلمات المفتاحية (كان sticky يقصّ الأسفل داخل `overflow-auto` للداشبورد).
+- **قنوات الاتصال (`/dashboard/communications`):** مفردات الحالة في السجلات هي ما يكتبه الخادم فقط — البريد: `received` / `published` / `processed` (= مسودة) / `rejected` / `failed`، وواتساب: `received` / `processed` / `rejected` مع `publishStatus` للتمييز بين منشور ومسودة. لا تُضِف خيارات فلترة بأسماء غير هذه (`success` / `drafted` / `processing` كانت ترجع صفر نتائج دائماً؛ `success`→`processed` و`failed`→`rejected` مقبولان الآن كمرادفين في `/api/whatsapp/logs` للتوافق فقط). `badge-stats` للقناتين يعيد `newMessages` / `publishedToday` / `draftedToday` / `rejectedToday`، و«اليوم» يُحسب بتوقيت الرياض عبر `server/utils/riyadhDay.ts` لا بتوقيت الخادم. رمز واتساب يُولَّد على الخادم بـ `crypto` قبل `insertWhatsappTokenSchema.parse` ولا يُقبل من العميل. بوابة الصفحة صلاحيات لا أدوار نصية، والتبويب الذي لا يملكه المستخدم يعرض رسالة صريحة بدل جدول فارغ.
 - **إنعاش الخبر:** `POST /api/articles/:id/resurface` يختم `articles.resurfaced_at` فقط (لا يغيّر `publishedAt`/المشاهدات/الرابط). صدارة الواجهة تعتمد `COALESCE(resurfaced_at, published_at)` في `homepage-lite` و`/api/v1/homepage` و`home-bundle` — أي مسار موجز جديد يجب أن يستخدم نفس الترتيب وإلا لن يظهر المُنعش أولاً.
 
 ## عند التعديل

@@ -14,8 +14,21 @@ import { invalidatePublishedContent } from "../services/contentInvalidation";
 import mammoth from "mammoth";
 import OpenAI from "openai";
 import { newsImageStorageService } from "../services/newsImageStorageService";
+import { riyadhDayRange } from "../utils/riyadhDay";
 
 const router = Router();
+
+// الواجهة القديمة كانت ترسل success/failed وهما اسمان لا يكتبهما هذا المسار إطلاقاً،
+// فكان فلتر السجلات يرجع صفر نتائج دائماً. نقبل الاسمين كمرادفين للقيم الحقيقية.
+const LOG_STATUS_ALIASES: Record<string, string> = {
+  success: "processed",
+  failed: "rejected",
+};
+
+function normalizeLogStatus(status?: string): string | undefined {
+  if (!status || status === "all") return undefined;
+  return LOG_STATUS_ALIASES[status] ?? status;
+}
 
 async function uploadToCloudStorage(
   file: Buffer,
@@ -455,8 +468,7 @@ router.get("/stats", requireAuth, requireRole('admin', 'manager', 'system_admin'
     const allTokens = await storage.getAllWhatsappTokens();
     
     // Calculate stats
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const { start: today } = riyadhDayRange();
     
     const logsToday = allLogs.logs.filter(log => new Date(log.createdAt) >= today);
     const successLogs = logsToday.filter(log => log.status === 'processed');
@@ -492,8 +504,7 @@ router.get("/badge-stats", requireAuth, requireRole('admin', 'manager', 'system_
     const allLogs = await storage.getWhatsappWebhookLogs({ limit: 1000, offset: 0 });
     
     // Calculate today's date range
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const { start: today } = riyadhDayRange();
     
     // Filter logs for today
     const logsToday = allLogs.logs.filter(log => new Date(log.createdAt) >= today);
@@ -503,11 +514,15 @@ router.get("/badge-stats", requireAuth, requireRole('admin', 'manager', 'system_
     const publishedToday = logsToday.filter(log => 
       log.status === 'processed' && log.publishStatus === 'published'
     ).length;
+    const draftedToday = logsToday.filter(log =>
+      log.status === 'processed' && log.publishStatus === 'draft'
+    ).length;
     const rejectedToday = logsToday.filter(log => log.status === 'rejected').length;
     
     return res.json({
       newMessages,
       publishedToday,
+      draftedToday,
       rejectedToday,
     });
   } catch (error) {
@@ -1673,17 +1688,16 @@ router.post("/tokens", requireAuth, requireRole('admin', 'manager'), async (req:
   try {
     const userId = (req.user as any).id;
     
+    // الرمز يُولَّد هنا دائماً — لا يُقبل من العميل حتى لا يُختار رمز ضعيف أو مكرر.
+    const token = `SABQ-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+    
     const validatedData = insertWhatsappTokenSchema.parse({
       ...req.body,
+      token,
       userId,
     });
     
-    const token = `SABQ-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
-    
-    const newToken = await storage.createWhatsappToken({
-      ...validatedData,
-      token,
-    });
+    const newToken = await storage.createWhatsappToken(validatedData);
     
     return res.status(201).json(newToken);
   } catch (error) {
@@ -1745,7 +1759,7 @@ router.get("/logs", requireAuth, requireRole('admin', 'manager'), async (req: Re
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
-    const status = req.query.status as string | undefined;
+    const status = normalizeLogStatus(req.query.status as string | undefined);
     
     const result = await storage.getWhatsappWebhookLogs({ limit, offset, status });
     
