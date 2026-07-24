@@ -121,6 +121,7 @@ import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
+import { getSitemapXmlFromRedis, setSitemapXmlInRedis } from "./services/sitemapCacheService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
@@ -26970,6 +26971,16 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.send(cache.xml);
       }
 
+      // طبقة Redis: تنجو من النشرات وتُشارك بين النسخ — بدونها كل إقلاع
+      // يعيد التوليد من القاعدة (راجع sitemapCacheService).
+      const redisXml = await getSitemapXmlFromRedis('index');
+      if (redisXml) {
+        (app as any).__sitemapIndexCache = { xml: redisXml, ts: now };
+        res.header('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
+        return res.send(redisXml);
+      }
+
       // Most-recent published article → a <lastmod> hint on the
       // frequently-changing news + article-bucket children so Google
       // reprioritizes them on recrawl. One cheap aggregate; index is cached 10m.
@@ -26997,6 +27008,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       xml += '</sitemapindex>';
 
       (app as any).__sitemapIndexCache = { xml, ts: now };
+      await setSitemapXmlInRedis('index', xml, 30 * 60 * 1000);
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
       res.send(xml);
@@ -27036,6 +27048,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
         return res.send(cache.xml);
       }
+      const redisXml = await getSitemapXmlFromRedis('categories');
+      if (redisXml) {
+        (app as any).__sitemapCatsCache = { xml: redisXml, ts: now };
+        res.header('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
+        return res.send(redisXml);
+      }
       const activeCats = await db.execute(sql`
         SELECT c.slug, c.english_slug FROM categories c
         WHERE c.status = 'visible'
@@ -27052,6 +27071,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
       xml += '</urlset>';
       (app as any).__sitemapCatsCache = { xml, ts: now };
+      await setSitemapXmlInRedis('categories', xml, 30 * 60 * 1000);
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
       res.send(xml);
@@ -27178,10 +27198,19 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           return res.send(cache.xml);
         }
 
+        const redisXml = await getSitemapXmlFromRedis(cacheKey);
+        if (redisXml) {
+          (app as any)[cacheKey] = { xml: redisXml, ts: now };
+          res.header('Content-Type', 'application/xml; charset=utf-8');
+          res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
+          return res.send(redisXml);
+        }
+
         const xml = await generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets);
         if (xml === null) return res.status(404).send("Not found");
 
         (app as any)[cacheKey] = { xml, ts: now };
+        await setSitemapXmlInRedis(cacheKey, xml, 6 * 60 * 60 * 1000);
         res.header('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
         res.send(xml);
