@@ -18,6 +18,7 @@ import {
   getPublishersSummary,
   listAgencyReviewQueue,
   listGuideSectionsAdmin,
+  listOwnPublisherRequests,
   listPublisherRequests,
   listPublisherMembers,
   listPublishersRich,
@@ -396,6 +397,16 @@ router.delete("/api/admin/publishers/guide/:id", requireAuth, requirePublisherMa
 const portalRequestSchema = z.object({
   type: z.enum(["renewal", "window_extension", "other"]).optional(),
   message: z.string().trim().max(1000).optional(),
+});
+
+router.get("/api/publisher/portal/requests", async (req, res) => {
+  try {
+    const publisher = (req as any).publisher as { id: string };
+    res.json({ requests: await listOwnPublisherRequests(publisher.id) });
+  } catch (error) {
+    console.error("[Publisher Portal] own requests failed:", error);
+    res.status(500).json({ message: "تعذر جلب طلباتكم" });
+  }
 });
 
 router.post("/api/publisher/portal/requests", async (req, res) => {

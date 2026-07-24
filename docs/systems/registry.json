@@ -154,6 +154,8 @@
         "server/services/publisherPortalService.ts",
         "client/src/pages/admin/publishers/**",
         "client/src/components/admin/publishers/**",
+        "client/src/pages/publisher/**",
+        "client/src/components/publisher/**",
         "docs/editorial/**"
       ],
       "aiFeatureKeys": [

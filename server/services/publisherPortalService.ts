@@ -779,8 +779,15 @@ export async function getPortalOverview(userId: string) {
       .limit(5),
   ]);
 
-  // شارات «يتطلب انتباهك» تُحسب في الخادم لتبقى الواجهة عرضاً فقط
-  const attention: Array<{ type: string; severity: "warning" | "critical"; message: string }> = [];
+  // شارات «يتطلب انتباهك» تُحسب في الخادم لتبقى الواجهة عرضاً فقط.
+  // `action` يحوّل الرسالة من إخبار إلى إجراء: كانت الوكالة تقرأ «نفد
+  // رصيدكم» بلا أي زر يفعل شيئاً حيالها.
+  const attention: Array<{
+    type: string;
+    severity: "warning" | "critical";
+    message: string;
+    action?: { kind: "request"; requestType: string; label: string } | { kind: "link"; href: string; label: string };
+  }> = [];
 
   const needsChangesCount = Number(stats?.needsChanges) || 0;
   if (needsChangesCount > 0) {
@@ -788,8 +795,16 @@ export async function getPortalOverview(userId: string) {
       type: "needs_changes",
       severity: "warning",
       message: `لديك ${needsChangesCount} ${needsChangesCount === 1 ? "مادة تحتاج" : "مواد تحتاج"} تعديلات من المحرر — راجع الملاحظات وأعد الإرسال.`,
+      action: { kind: "link", href: "/dashboard/publisher/articles", label: "عرض المواد" },
     });
   }
+
+  const extendAction = {
+    kind: "request" as const,
+    requestType: "window_extension",
+    label: "طلب تمديد الفترة",
+  };
+  const renewAction = { kind: "request" as const, requestType: "renewal", label: "طلب تجديد الباقة" };
 
   if (publisher.publishingEndsAt) {
     const daysLeft = Math.ceil((publisher.publishingEndsAt.getTime() - now.getTime()) / 86_400_000);
@@ -797,13 +812,15 @@ export async function getPortalOverview(userId: string) {
       attention.push({
         type: "window_closed",
         severity: "critical",
-        message: "انتهت فترة النشر المتاحة لحسابكم. تواصلوا مع الإدارة للتجديد.",
+        message: "انتهت فترة النشر المتاحة لحسابكم.",
+        action: extendAction,
       });
     } else if (daysLeft <= 14) {
       attention.push({
         type: "window_ending",
         severity: "warning",
         message: `تنتهي فترة النشر المتاحة لحسابكم خلال ${daysLeft} ${daysLeft <= 10 ? "أيام" : "يوماً"}.`,
+        action: extendAction,
       });
     }
   }
@@ -818,12 +835,14 @@ export async function getPortalOverview(userId: string) {
         type: "credits_exhausted",
         severity: "critical",
         message: "نفد رصيد باقتكم الحالية. لا يمكن نشر مواد جديدة حتى التجديد.",
+        action: renewAction,
       });
     } else if (!activeCredit.isUnlimited && ratio <= 0.2) {
       attention.push({
         type: "credits_low",
         severity: "warning",
         message: `تبقى ${activeCredit.remainingCredits} فقط من رصيد باقة «${activeCredit.packageName}».`,
+        action: renewAction,
       });
     }
     if (activeCredit.expiryDate) {
@@ -833,6 +852,7 @@ export async function getPortalOverview(userId: string) {
           type: "package_expiring",
           severity: "warning",
           message: `تنتهي صلاحية باقة «${activeCredit.packageName}» خلال ${expiryDays} ${expiryDays <= 10 ? "أيام" : "يوماً"}.`,
+          action: renewAction,
         });
       }
     }
@@ -841,6 +861,7 @@ export async function getPortalOverview(userId: string) {
       type: "no_active_package",
       severity: "critical",
       message: "لا توجد باقة رصيد نشطة لحسابكم.",
+      action: renewAction,
     });
   }
 
@@ -877,6 +898,30 @@ export async function getPortalOverview(userId: string) {
     } as typeof activeCredit & { countingFrom: Date };
   }
 
+  // زر «خبر جديد» كان يُعطَّل بصمت عند انتهاء النافذة فقط، ويبقى فعّالاً
+  // مع رصيد صفر ثم يرفض الخادم عند النشر. السبب يُحسب هنا مرة واحدة.
+  const publishBlock: { reason: string; requestType: string } | null =
+    !publisher.isActive
+      ? { reason: "حساب الوكالة موقوف حالياً.", requestType: "other" }
+      : publisher.publishingEndsAt && publisher.publishingEndsAt.getTime() < now.getTime()
+        ? { reason: "انتهت فترة النشر المتاحة لحسابكم.", requestType: "window_extension" }
+        : !activeCredit
+          ? { reason: "لا توجد باقة رصيد نشطة.", requestType: "renewal" }
+          : !activeCredit.isUnlimited && activeCredit.remainingCredits <= 0
+            ? { reason: "نفد رصيد الباقة الحالية.", requestType: "renewal" }
+            : null;
+
+  const [openRequest] = await db
+    .select({
+      id: publisherRequests.id,
+      type: publisherRequests.type,
+      createdAt: publisherRequests.createdAt,
+    })
+    .from(publisherRequests)
+    .where(and(eq(publisherRequests.publisherId, publisher.id), eq(publisherRequests.status, "open")))
+    .orderBy(desc(publisherRequests.createdAt))
+    .limit(1);
+
   return {
     publisher: {
       id: publisher.id,
@@ -890,6 +935,8 @@ export async function getPortalOverview(userId: string) {
       publishingEndsAt: publisher.publishingEndsAt,
       autoPublish: publisher.autoPublish,
     },
+    publishBlock,
+    openRequest: openRequest ?? null,
     stats: {
       totalArticles: Number(stats?.totalArticles) || 0,
       publishedArticles: Number(stats?.publishedArticles) || 0,
@@ -1411,6 +1458,23 @@ export async function createPublisherRequest(
 }
 
 export type PublisherRequestStatus = "open" | "closed" | "rejected";
+
+/** طلبات الوكالة نفسها — لتعرف أن طلبها وصل وما مصيره. */
+export async function listOwnPublisherRequests(publisherId: string) {
+  return db
+    .select({
+      id: publisherRequests.id,
+      type: publisherRequests.type,
+      message: publisherRequests.message,
+      status: publisherRequests.status,
+      createdAt: publisherRequests.createdAt,
+      handledAt: publisherRequests.handledAt,
+    })
+    .from(publisherRequests)
+    .where(eq(publisherRequests.publisherId, publisherId))
+    .orderBy(desc(publisherRequests.createdAt))
+    .limit(20);
+}
 
 /**
  * سجل الطلبات. الافتراضي «المفتوحة» فقط كما كان، لكن الإدارة تحتاج أيضاً

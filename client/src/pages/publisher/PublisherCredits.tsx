@@ -2,6 +2,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
+import {
+  PublisherRequestDialog,
+  REQUEST_TYPE_LABELS,
+} from "@/components/publisher/PublisherRequestDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +28,7 @@ import {
   Ban,
   CheckCircle2,
   Clock3,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
@@ -45,6 +50,30 @@ interface CreditLog {
     isUnlimited?: boolean;
   };
 }
+
+interface PublisherRequest {
+  id: string;
+  type: string;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  handledAt: string | null;
+}
+
+const REQUEST_STATUS_META: Record<string, { label: string; className: string }> = {
+  open: {
+    label: "قيد المعالجة",
+    className: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
+  },
+  closed: {
+    label: "مقبول",
+    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+  },
+  rejected: {
+    label: "غير مقبول",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
+  },
+};
 
 interface CreditPackage {
   id: string;
@@ -96,11 +125,18 @@ function statusMeta(status: CreditPackage["status"]) {
 export default function PublisherCredits() {
   usePublisherAccess();
   const [page, setPage] = useState(1);
+  const [requestOpen, setRequestOpen] = useState(false);
   const limit = 20;
 
   const { data: packagesData, isLoading: packagesLoading } = useQuery<{ packages: CreditPackage[] }>({
     queryKey: ["/api/publisher/portal/credit-packages"],
   });
+
+  const { data: requestsData } = useQuery<{ requests: PublisherRequest[] }>({
+    queryKey: ["/api/publisher/portal/requests"],
+  });
+  const requests = Array.isArray(requestsData?.requests) ? requestsData!.requests : [];
+  const hasOpenRequest = requests.some((request) => request.status === "open");
 
   const { data: dataRaw, isLoading: logsLoading } = useQuery<{ logs: CreditLog[]; total: number }>({
     queryKey: ["/api/publisher/portal/credit-logs", { page, limit }],
@@ -149,13 +185,24 @@ export default function PublisherCredits() {
   return (
     <PublisherLayout>
       <div className="w-full space-y-6" dir="rtl">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            الرصيد والباقات
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            باقات وكالتكم كما تظهر لدى الإدارة، مع عدّاد المنشور الفعلي للباقة المفتوحة
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">
+              الرصيد والباقات
+            </h1>
+            <p className="mt-1 text-muted-foreground">
+              باقات وكالتكم كما تظهر لدى الإدارة، مع عدّاد المنشور الفعلي للباقة المفتوحة
+            </p>
+          </div>
+          <Button
+            className="shrink-0 gap-2"
+            onClick={() => setRequestOpen(true)}
+            disabled={hasOpenRequest}
+            data-testid="button-request-renewal"
+          >
+            <Send className="h-4 w-4" />
+            {hasOpenRequest ? "طلبكم قيد المعالجة" : "طلب تجديد الباقة"}
+          </Button>
         </div>
 
         {packagesLoading ? (
@@ -301,6 +348,47 @@ export default function PublisherCredits() {
           </CardContent>
         </Card>
 
+        {requests.length > 0 && (
+          <Card data-testid="card-publisher-requests">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Send className="h-5 w-5" />
+                طلباتكم لدى الإدارة
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {requests.map((request) => {
+                  const meta = REQUEST_STATUS_META[request.status] ?? REQUEST_STATUS_META.open;
+                  return (
+                    <div
+                      key={request.id}
+                      className="flex flex-col gap-2 rounded-xl border bg-muted/20 p-3 sm:flex-row sm:items-center"
+                      data-testid={`own-request-${request.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">
+                          {REQUEST_TYPE_LABELS[request.type] ?? request.type}
+                        </p>
+                        {request.message ? (
+                          <p className="mt-0.5 text-sm text-muted-foreground">{request.message}</p>
+                        ) : null}
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          أُرسل {formatDateShort(request.createdAt)}
+                          {request.handledAt ? ` · عولج ${formatDateShort(request.handledAt)}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn("shrink-0 border-0", meta.className)}>
+                        {meta.label}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card data-testid="card-credit-logs">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -424,6 +512,8 @@ export default function PublisherCredits() {
           </CardContent>
         </Card>
       </div>
+
+      <PublisherRequestDialog open={requestOpen} onOpenChange={setRequestOpen} defaultType="renewal" />
     </PublisherLayout>
   );
 }
