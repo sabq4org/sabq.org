@@ -26599,7 +26599,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/entity-types - إنشاء نوع كيان جديد
-  app.post("/api/entity-types", requireAuth, async (req: any, res) => {
+  app.post("/api/entity-types", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertEntityTypeSchema.safeParse(req.body);
       if (!result.success) {
@@ -26643,7 +26643,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-entities - إنشاء كيان جديد
-  app.post("/api/smart-entities", requireAuth, async (req: any, res) => {
+  app.post("/api/smart-entities", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertSmartEntitySchema.safeParse(req.body);
       if (!result.success) {
@@ -26670,7 +26670,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // PATCH /api/smart-entities/:id - تحديث كيان
-  app.patch("/api/smart-entities/:id", requireAuth, async (req: any, res) => {
+  app.patch("/api/smart-entities/:id", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const { id } = req.params;
       const entity = await storage.updateSmartEntity(id, req.body);
@@ -26693,7 +26693,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/smart-entities/:id - حذف كيان
-  app.delete("/api/smart-entities/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/smart-entities/:id", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const { id } = req.params;
       await storage.deleteSmartEntity(id);
@@ -26732,7 +26732,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-terms - إنشاء مصطلح جديد
-  app.post("/api/smart-terms", requireAuth, async (req: any, res) => {
+  app.post("/api/smart-terms", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertSmartTermSchema.safeParse(req.body);
       if (!result.success) {
@@ -26872,7 +26872,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-entities/upload-image - رفع صورة كيان
-  app.post("/api/smart-entities/upload-image", requireAuth, upload.single('image'), async (req: any, res) => {
+  app.post("/api/smart-entities/upload-image", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), upload.single('image'), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "الصورة مطلوبة" });

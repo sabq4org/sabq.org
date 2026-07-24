@@ -500,11 +500,17 @@ function articleMetaPayload(opts: {
     }
   }
 
-  const schemaExtras = buildNewsArticleSchemaExtras(
-    opts.contentHtml,
-    opts.image,
-    SITE_URL,
-  );
+  // SECURITY: only published articles may expose their body.
+  //
+  // `computeArticleRobots` below already knows an unpublished row must be
+  // `noindex` — but noindex is a request to search engines, not access
+  // control. The payload still carried the full text through
+  // `jsonLd.articleBody` and `semanticHtml`, so any anonymous caller could
+  // read drafts, embargoed/scheduled pieces and archived articles by slug.
+  const isPublished = opts.status === "published";
+  const schemaExtras = isPublished
+    ? buildNewsArticleSchemaExtras(opts.contentHtml, opts.image, SITE_URL)
+    : buildNewsArticleSchemaExtras(null, opts.image, SITE_URL);
 
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
@@ -554,7 +560,9 @@ function articleMetaPayload(opts: {
     twitterSite: "@sabq",
     hreflang,
     jsonLd,
-    semanticHtml: opts.semanticHtml,
+    // Same rule as articleBody above — the SPA fallback shell must not carry
+    // the text of an article that isn't published.
+    semanticHtml: isPublished ? opts.semanticHtml : undefined,
   };
 }
 
@@ -2398,6 +2406,15 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
     }
 
     if (!row || !meta) return res.status(404).json({ error: "not_found" });
+
+    // Unpublished articles have no public representation. This endpoint feeds
+    // the SSR renderer, and the edge already serves 410 for these slugs, so
+    // returning the row here only created an anonymous read path into drafts,
+    // scheduled/embargoed pieces and archived articles.
+    if (row.status !== "published") {
+      return res.status(404).json({ error: "not_found" });
+    }
+
     const seoData = (row.seo as any) || {};
 
     return res.json({
