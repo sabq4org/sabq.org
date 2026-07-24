@@ -53,6 +53,17 @@ async function requireModeratorAuth(req: Request, res: Response, next: NextFunct
   return res.status(403).json({ error: "ليس لديك صلاحية للوصول إلى هذه الميزة" });
 }
 
+// SECURITY: gate the WHOLE router, not route by route.
+// Half of these routes were declared without the guard, so anyone on the
+// internet could read every commenter's email (/search/commenters), dump
+// unpublished comment text (/comments, /results, /search/comments), and burn
+// AI spend while overwriting stored moderation verdicts (/analyze-all,
+// /analyze/:commentId). Gating at the mount point makes the default
+// fail-closed: a new route added below cannot be exposed by omission.
+// Every consumer is an admin surface (AIModerationDashboard,
+// SentimentInsights, ModerationAdvancedSearch) — nothing public reads this.
+router.use(requireModeratorAuth);
+
 // Analyze a comment with AI
 router.post("/analyze", async (req: Request, res: Response) => {
   try {
@@ -93,7 +104,7 @@ router.get("/sentiment-stats", async (req: Request, res: Response) => {
 });
 
 // Editorial sentiment insights (نبض الجمهور dashboard)
-router.get("/sentiment-insights", requireModeratorAuth, async (req: Request, res: Response) => {
+router.get("/sentiment-insights", async (req: Request, res: Response) => {
   try {
     const days = parseInt((req.query.days as string) || "7", 10) || 7;
     const insights = await getSentimentInsights(days);
@@ -197,7 +208,7 @@ router.get("/comments", async (req: Request, res: Response) => {
 });
 
 // Re-analyze a comment
-router.post("/reanalyze/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/reanalyze/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     
@@ -219,7 +230,7 @@ router.post("/reanalyze/:commentId", requireModeratorAuth, async (req: Request, 
 });
 
 // Approve a comment
-router.post("/approve/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/approve/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     const userId = (req as any).user?.id;
@@ -238,7 +249,7 @@ router.post("/approve/:commentId", requireModeratorAuth, async (req: Request, re
 });
 
 // Reject a comment
-router.post("/reject/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/reject/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     const { reason } = req.body;
@@ -261,7 +272,7 @@ router.post("/reject/:commentId", requireModeratorAuth, async (req: Request, res
 });
 
 // Bulk actions
-router.post("/bulk", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/bulk", async (req: Request, res: Response) => {
   try {
     const { commentIds, action, reason } = req.body;
     const userId = (req as any).user?.id;
@@ -322,7 +333,7 @@ const editCommentSchema = z.object({
   reason: z.string().max(500, "السبب طويل جداً").optional(),
 });
 
-router.put("/edit/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.put("/edit/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     
@@ -369,7 +380,7 @@ const deleteCommentSchema = z.object({
   reason: z.string().max(500, "السبب طويل جداً").optional(),
 });
 
-router.delete("/delete/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.delete("/delete/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     
@@ -439,7 +450,7 @@ router.get("/details/:commentId", async (req: Request, res: Response) => {
 });
 
 // Get member profile with statistics (for moderators)
-router.get("/member/:memberId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.get("/member/:memberId", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     
@@ -457,7 +468,7 @@ router.get("/member/:memberId", requireModeratorAuth, async (req: Request, res: 
 });
 
 // Get member comment history with filtering (for moderators)
-router.get("/member/:memberId/comments", requireModeratorAuth, async (req: Request, res: Response) => {
+router.get("/member/:memberId/comments", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const { status, classification, sortBy, sortOrder, limit, offset } = req.query;
@@ -485,7 +496,7 @@ const bulkActionSchema = z.object({
   reason: z.string().optional(),
 });
 
-router.post("/member/:memberId/bulk-action", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/member/:memberId/bulk-action", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const moderatorId = (req as any).user?.id;
@@ -539,7 +550,7 @@ const bulkActionByFilterSchema = z.object({
   reason: z.string().optional(),
 });
 
-router.post("/member/:memberId/bulk-action-by-filter", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/member/:memberId/bulk-action-by-filter", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const moderatorId = (req as any).user?.id;

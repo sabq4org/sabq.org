@@ -12,6 +12,7 @@ import {
   verifyImageMagicBytes,
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
+import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
@@ -30755,7 +30756,18 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.post("/api/shortlinks", shortLinksLimiter, async (req: any, res) => {
     try {
       const validatedData = insertShortLinkSchema.parse(req.body);
-      
+
+      // SECURITY: this endpoint is unauthenticated AND CSRF-exempt, and the
+      // destination is rendered into an <a href> on sabq.org by GET /s/:code.
+      // `z.string().url()` in the schema accepts any scheme, so without this
+      // anyone could mint an open redirect — or a `javascript:` link that runs
+      // on our own origin — under a sabq.org address.
+      if (!isSafeRedirectUrl(validatedData.originalUrl)) {
+        return res.status(400).json({
+          message: "الرابط غير مسموح — يجب أن يكون رابط http(s) على نطاق سبق",
+        });
+      }
+
       if (validatedData.articleId) {
         const existingLink = await storage.getShortLinkByArticle(validatedData.articleId);
         if (existingLink) {
@@ -30832,6 +30844,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(410).send("انتهت صلاحية هذا الرابط");
       }
 
+      // Validate at the sink too, not just at creation: rows planted before the
+      // check above still live in the table, and this is the handler that turns
+      // them into a real navigation on the sabq.org origin.
+      if (!isSafeRedirectUrl(shortLink.originalUrl)) {
+        console.warn(`[shortlinks] blocked unsafe destination on /s/${code}: ${shortLink.originalUrl}`);
+        return res.status(410).send("هذا الرابط غير صالح");
+      }
+
       const clickData: InsertShortLinkClick = {
         shortLinkId: shortLink.id,
         ipAddress: req.ip,
@@ -30894,9 +30914,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const safeRedirectUrl = escapeHtml(redirectUrl);
 
       // For crawlers: serve meta tags without redirect; for browsers: instant redirect
+      // JSON.stringify, not escapeHtml, for the JS string: `&quot;` is never
+      // decoded inside a <script> block, so HTML escaping both fails to encode
+      // and corrupts the URL. The href/meta sinks keep the HTML escaping.
       const redirectMeta = isCrawler ? '' : `
   <meta http-equiv="refresh" content="0;url=${safeRedirectUrl}">
-  <script>window.location.href="${safeRedirectUrl}";</script>`;
+  <script>window.location.href=${JSON.stringify(redirectUrl)};</script>`;
 
       const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
