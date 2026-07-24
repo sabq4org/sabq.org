@@ -17,6 +17,7 @@
     "test:unit": "vitest run",
     "test:smoke": "playwright test e2e/smoke.spec.ts",
     "test:e2e": "playwright test",
+    "test:load": "k6 run load-test/breaking-point.js",
     "db:push": "drizzle-kit push",
     "db:push:local": "bash scripts/db-push-local.sh",
     "db:up": "docker compose up -d postgres redis",
