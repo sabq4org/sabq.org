@@ -57,9 +57,19 @@ function initPool(databaseUrl: string): void {
   // returning 5xx HTML to clients (the "JSON Parse: Unrecognized token '<'"
   // reports). max=50 stays well under Neon's limits (direct ≥112, -pooler 10k).
   // min=2 keeps warm sockets so a post-idle burst doesn't pay full cold-start.
+  //
+  // Per-pod ceiling is configurable via DB_POOL_MAX so the connection budget can
+  // be right-sized to (pods × DB_POOL_MAX ≤ provider limit) WITHOUT a code change
+  // — essential when scaling horizontally. On the Neon -pooler endpoint the limit
+  // is ~10k (safe under high replica counts); on a DIRECT connection (≥112) keep
+  // pods × max under it. See docs/NEON_CONNECTION_SCALING.md. Bounded [1,500].
+  const parsedPoolMax = Number.parseInt(process.env.DB_POOL_MAX || "", 10);
+  const poolMax = Number.isFinite(parsedPoolMax)
+    ? Math.min(500, Math.max(1, parsedPoolMax))
+    : 50;
   const poolConfig = {
     connectionString: databaseUrl,
-    max: 50,
+    max: poolMax,
     min: 2,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
