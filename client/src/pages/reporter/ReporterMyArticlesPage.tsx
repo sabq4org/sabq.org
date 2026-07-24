@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { WriterMediaLicenseCard } from "@/pages/opinion-author/WriterMediaLicenseCard";
+import { EditorialReferenceCard } from "@/components/EditorialReferenceCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -209,6 +210,8 @@ export default function ReporterMyArticlesPage() {
         />
 
         <WriterMediaLicenseCard endpoint="/api/reporter/media-license" />
+
+        <EditorialReferenceCard />
 
         {isError ? (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
