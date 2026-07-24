@@ -101,6 +101,25 @@ async function issueSession(
   return { token, expiresAt };
 }
 
+// If the matched account has 2FA enabled, an external identity (Google / Apple /
+// SMS) must NOT bypass TOTP (audit #1). Returns true after sending a challenge
+// response — callers must `return` immediately. New accounts (twoFactorEnabled
+// falsy) proceed to a normal session. Completed via POST /api/v1/auth/verify-2fa.
+async function maybeRequireTwoFactor(
+  user: { id: string; twoFactorEnabled?: boolean | null },
+  res: Response,
+): Promise<boolean> {
+  if (!user.twoFactorEnabled) return false;
+  const challengeToken = await createTwoFactorChallenge(user.id);
+  res.status(200).json({
+    success: false,
+    requires2FA: true,
+    challengeToken,
+    message: "يرجى إدخال رمز التحقق بخطوتين",
+  });
+  return true;
+}
+
 // MARK: - دخول/تسجيل بالجوال (Twilio Verify) — E.164 دولي (+ أو 00) أو سعودي محلي.
 // (التطبيع + إنشاء/ربط المستخدم في services/phoneAuth.ts — مشترك مع الويب.)
 
@@ -228,6 +247,8 @@ router.post("/auth/google", async (req: Request, res: Response) => {
         .returning();
       user = created;
     }
+
+    if (await maybeRequireTwoFactor(user, res)) return;
 
     const { token, expiresAt } = await issueSession(
       user.id,
@@ -380,6 +401,8 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       user = created;
     }
 
+    if (await maybeRequireTwoFactor(user, res)) return;
+
     const { token, expiresAt } = await issueSession(
       user.id,
       deviceInfo,
@@ -455,20 +478,8 @@ router.post("/auth/phone/verify", phoneVerifyLimiter, async (req: Request, res: 
     }
     const user = result.user;
 
-    // 2FA gate: matching an EXISTING account that has TOTP enabled must not mint
-    // a session from an SMS code alone — otherwise a SIM-swap defeats the very
-    // 2FA that protects editor/admin accounts (audit #1, phone sibling). New
-    // accounts (twoFactorEnabled=false) proceed normally. The challenge is
-    // completed via POST /api/v1/auth/verify-2fa (shared challenge store).
-    if ((user as { twoFactorEnabled?: boolean }).twoFactorEnabled) {
-      const challengeToken = await createTwoFactorChallenge(user.id);
-      return res.status(200).json({
-        success: false,
-        requires2FA: true,
-        challengeToken,
-        message: "يرجى إدخال رمز التحقق بخطوتين",
-      });
-    }
+    // 2FA gate — SMS alone must not bypass TOTP on an existing account (SIM-swap).
+    if (await maybeRequireTwoFactor(user, res)) return;
 
     const { token, expiresAt } = await issueSession(user.id, deviceInfo, req.ip);
 

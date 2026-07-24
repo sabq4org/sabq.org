@@ -63,8 +63,8 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getUserRoleNames, getRoleAssignmentAuthority, roleAssignmentError } from "./rbac";
-import { PERMISSION_CODES, canAssignRole, ROLE_NAMES } from "@shared/rbac-constants";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { PERMISSION_CODES, ROLE_NAMES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
 // Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
@@ -5312,6 +5312,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // This generic user-update endpoint also assigns a role (roleId) — apply the
+      // same hierarchy guard as /roles so an admin can't mint system_admin here (audit #2).
+      const patchRoleErr = await roleIdsAssignmentError(adminUserId, parsed.data.roleId ? [parsed.data.roleId] : null);
+      if (patchRoleErr) return res.status(patchRoleErr.status).json({ message: patchRoleErr.message });
+
       // Get old user data for logging
       const [oldUser] = await db
         .select()
@@ -5771,6 +5776,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // Can't bootstrap a system_admin via user creation either (audit #2).
+      const createRoleErr = await roleIdsAssignmentError(createdBy, parsed.data.roleIds);
+      if (createRoleErr) return res.status(createRoleErr.status).json({ message: createRoleErr.message });
+
       // Pre-check lower(email) قبل الإدراج (يطابق /api/register، يقلل الضغط).
       const normalizedEmail = parsed.data.email.trim().toLowerCase();
       const existingUser = await storage.getUserByEmailBasic(normalizedEmail);
@@ -5916,27 +5925,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "User not found" });
       }
 
-      // RBAC hierarchy guard (privilege-escalation fix): the assigner may only
-      // grant roles their own authority permits — an `admin` must not be able to
-      // mint a `system_admin`. canAssignRole encodes this policy but was never
-      // called; without it, holding users.change_role was enough to self-escalate.
-      const assignerRoleNames = await getUserRoleNames(updatedBy);
-      const SYSTEM_ADMIN_EQUIVALENTS = ["system_admin", "system.admin", "superadmin"];
-      const assignerAuthority = assignerRoleNames.some(r => SYSTEM_ADMIN_EQUIVALENTS.includes(r))
-        ? ROLE_NAMES.SYSTEM_ADMIN
-        : (assignerRoleNames.includes(ROLE_NAMES.ADMIN) ? ROLE_NAMES.ADMIN : "");
-      const targetRoles = parsed.data.roleIds.length
-        ? await db.select({ name: roles.name }).from(roles).where(inArray(roles.id, parsed.data.roleIds))
-        : [];
-      const forbiddenRoles = targetRoles.filter(r => !canAssignRole(assignerAuthority, r.name));
-      if (forbiddenRoles.length > 0) {
-        console.warn("🚫 [UPDATE USER ROLES] Blocked privilege escalation", {
-          updatedBy, targetUserId, assignerAuthority, forbidden: forbiddenRoles.map(r => r.name),
-        });
-        return res.status(403).json({
-          message: `لا تملك صلاحية إسناد الأدوار التالية: ${forbiddenRoles.map(r => r.name).join("، ")}`,
-        });
-      }
+      // RBAC hierarchy guard: the assigner may only grant roles their authority
+      // permits — an `admin` must never be able to mint a `system_admin` (audit #2).
+      const rolesErr = await roleIdsAssignmentError(updatedBy, parsed.data.roleIds);
+      if (rolesErr) return res.status(rolesErr.status).json({ message: rolesErr.message });
 
       await storage.updateUserRoles(
         targetUserId,

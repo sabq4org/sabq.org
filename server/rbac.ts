@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { users, roles, permissions, rolePermissions, userRoles, userPermissionOverrides } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { SUPERUSER_ROLE_NAMES, getPermissionsForRoles, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
 
@@ -127,6 +127,26 @@ export async function roleAssignmentError(
   const authority = await getRoleAssignmentAuthority(assignerId);
   if (!canAssignRole(authority, targetRoleName)) {
     return { status: 403, message: "لا تملك صلاحية إسناد هذا الدور" };
+  }
+  return null;
+}
+
+/**
+ * Hierarchy check for a list of role IDs (resolves each id → name). Returns an
+ * {status, message} to send back, or null when allowed. Use on EVERY endpoint
+ * that assigns roles by id — create user, update user, update roles — so an
+ * admin can never mint a system_admin through any of them (audit #2).
+ */
+export async function roleIdsAssignmentError(
+  assignerId: string,
+  roleIds: string[] | undefined | null,
+): Promise<{ status: number; message: string } | null> {
+  if (!roleIds || roleIds.length === 0) return null;
+  const targetRoles = await db.select({ name: roles.name }).from(roles).where(inArray(roles.id, roleIds));
+  const authority = await getRoleAssignmentAuthority(assignerId);
+  const forbidden = targetRoles.filter((r) => !canAssignRole(authority, r.name));
+  if (forbidden.length > 0) {
+    return { status: 403, message: `لا تملك صلاحية إسناد الأدوار: ${forbidden.map((r) => r.name).join("، ")}` };
   }
   return null;
 }
