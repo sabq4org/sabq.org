@@ -3635,6 +3635,31 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   credibilityAnalysis: true,
   credibilityLastUpdated: true,
   authorId: true, // Backend adds this from req.user.id
+  // Editorial verdict is the desk's to set, never the submitter's: a reporter
+  // could POST reviewStatus:"approved" and satisfy every downstream check that
+  // trusts it. Same for the publisher review/approval chain.
+  reviewStatus: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  reviewNotes: true,
+  verifiedBy: true,
+  verifiedAt: true,
+  // «من أدخل المادة» — the server stamps it from the session; a client value
+  // used to win over that, forging the editor behind an opinion piece.
+  submitterId: true,
+  // The publisher stamp decides quota, credit deduction and agency
+  // attribution; the publisher portal writes it, never the submitter.
+  publisherId: true,
+  isPublisherNews: true,
+  isPublisherContent: true,
+  publisherSubmittedAt: true,
+  publisherStatus: true,
+  publisherReviewedBy: true,
+  publisherReviewedAt: true,
+  publisherReviewNotes: true,
+  publisherCreditDeducted: true,
+  publisherApprovedAt: true,
+  publisherApprovedBy: true,
 }).extend({
   slug: z.string().max(150, "الرابط (slug) يجب أن لا يتجاوز 150 حرف"),
   imageFocalPoint: imageFocalPointSchema.nullable().optional(),
@@ -3697,12 +3722,30 @@ export const insertRssFeedSchema = createInsertSchema(rssFeeds).omit({
   createdAt: true,
   lastFetchedAt: true,
 });
-export const insertCommentSchema = createInsertSchema(comments).omit({ 
-  id: true, 
+// SECURITY: this schema is fed `{...req.body}` by the public comment-create
+// routes (web + mobile), so anything left in it is client-settable. Omitting
+// only the three moderatedBy/At/Reason fields left `status` open — a commenter
+// could post `{"content":"…","status":"approved"}` and skip moderation
+// entirely — plus every AI-verdict and sentiment column, letting them forge
+// the moderation record the dashboard shows. All of these are server-owned:
+// `status` defaults to "pending", the AI fields are written by the moderation
+// pipeline, and likesCount is a denormalised counter.
+export const insertCommentSchema = createInsertSchema(comments).omit({
+  id: true,
   createdAt: true,
+  status: true,
   moderatedBy: true,
   moderatedAt: true,
   moderationReason: true,
+  currentSentiment: true,
+  currentSentimentConfidence: true,
+  sentimentAnalyzedAt: true,
+  aiModerationScore: true,
+  aiClassification: true,
+  aiDetectedIssues: true,
+  aiModerationReason: true,
+  aiAnalyzedAt: true,
+  likesCount: true,
 });
 // Comment sentiments schemas
 export const insertCommentSentimentSchema = createInsertSchema(commentSentiments).omit({
@@ -3717,12 +3760,24 @@ export const insertCommentReactionSchema = createInsertSchema(commentReactions).
 
 // Muqtarab topic comments — same omit set as insertCommentSchema. likesCount is
 // managed by the reaction routes, not the create path, so it's omitted too.
+// Muqtarab topic comments — same server-owned set as insertCommentSchema.
+// `status` and the AI-verdict columns were reachable from req.body, so a
+// commenter could post `status:"approved"` and forge the AI moderation record.
 export const insertTopicCommentSchema = createInsertSchema(topicComments).omit({
   id: true,
   createdAt: true,
+  status: true,
   moderatedBy: true,
   moderatedAt: true,
   moderationReason: true,
+  currentSentiment: true,
+  currentSentimentConfidence: true,
+  sentimentAnalyzedAt: true,
+  aiModerationScore: true,
+  aiClassification: true,
+  aiDetectedIssues: true,
+  aiModerationReason: true,
+  aiAnalyzedAt: true,
   likesCount: true,
 });
 export const insertTopicCommentReactionSchema = createInsertSchema(topicCommentReactions).omit({ id: true, createdAt: true });
@@ -6639,15 +6694,27 @@ export const insertEnArticleSchema = createInsertSchema(enArticles).omit({
   avgReadTimeOverride: true,
   completionRateOverride: true,
   authorId: true, // Backend adds this from req.user.id
+  // Editorial verdict — see insertArticleSchema.
+  reviewStatus: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  reviewNotes: true,
 }).extend({
   title: z.string().min(1, "Title is required"),
   content: z.string().min(1, "Content is required"),
   slug: z.string().min(1, "Slug is required"),
 });
 
+// Same client-settable-fields hazard as insertCommentSchema: the create route
+// spreads req.body into this schema, so status/moderatedBy/moderatedAt/
+// moderationReason must not survive — otherwise a commenter self-approves.
 export const insertEnCommentSchema = createInsertSchema(enComments).omit({
   id: true,
   createdAt: true,
+  status: true,
+  moderatedBy: true,
+  moderatedAt: true,
+  moderationReason: true,
 }).extend({
   content: z.string().min(1, "Comment content is required"),
 });
@@ -6850,15 +6917,25 @@ export const insertUrArticleSchema = createInsertSchema(urArticles).omit({
   avgReadTimeOverride: true,
   completionRateOverride: true,
   authorId: true, // Backend adds this from req.user.id
+  // Editorial verdict — see insertArticleSchema.
+  reviewStatus: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  reviewNotes: true,
 }).extend({
   title: z.string().min(1, "Title is required"),
   content: z.string().min(1, "Content is required"),
   slug: z.string().min(1, "Slug is required"),
 });
 
+// See insertEnCommentSchema — moderation columns are server-owned.
 export const insertUrCommentSchema = createInsertSchema(urComments).omit({
   id: true,
   createdAt: true,
+  status: true,
+  moderatedBy: true,
+  moderatedAt: true,
+  moderationReason: true,
 }).extend({
   content: z.string().min(1, "Comment content is required"),
 });

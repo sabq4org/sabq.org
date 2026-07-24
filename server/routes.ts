@@ -26,7 +26,7 @@ import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
 } from "./services/articleAnalyticsSearchService";
-import { pickTableColumns } from "./utils/sanitizeBody";
+import { pickTableColumns, ARTICLE_SERVER_OWNED_COLUMNS } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache, invalidateAllUserSessions } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
@@ -287,6 +287,8 @@ import {
   smartTerms,
   articleSmartLinks,
   enArticles,
+  deepAnalyses,
+  userPreferences,
   enCategories,
   enComments,
   enReactions,
@@ -16317,7 +16319,9 @@ Respond in valid JSON format only:
       // Mass-assignment guard: restrict to real article columns (drops
       // unknown keys + id/createdAt/updatedAt). `republish` is a control flag,
       // not a column, so it's read from req.body directly.
-      const articleData: any = pickTableColumns(articles, req.body);
+      const articleData: any = pickTableColumns(articles, req.body, {
+        omit: ARTICLE_SERVER_OWNED_COLUMNS,
+      });
 
       // Remove republish flag from data (it's only for control logic)
       const shouldRepublish = req.body.republish === true;
@@ -18383,7 +18387,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.put("/api/user/preferences", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const updatedPrefs = await storage.updateUserFullPreferences(userId, req.body);
+      // The WHERE clause is bound to the session user, but `...prefs` used to
+      // carry `userId` from the body straight into the SET — re-pointing the
+      // caller's preference row at another account (and on the insert branch,
+      // creating a row on their behalf).
+      const prefs = pickTableColumns(userPreferences, req.body, { omit: ["userId"] });
+      const updatedPrefs = await storage.updateUserFullPreferences(userId, prefs);
       res.json(updatedPrefs);
     } catch (error) {
       console.error("Error updating user preferences:", error);
@@ -28502,7 +28511,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
 
       const updateData: any = {
-        ...pickTableColumns(enArticles, req.body),
+        // Without the omit list this accepted every enArticles column: `views`
+        // (ranking inflation), `authorId` (byline theft), `reviewStatus`
+        // (forged editorial approval), `publishedAt`.
+        ...pickTableColumns(enArticles, req.body, {
+          omit: [...ARTICLE_SERVER_OWNED_COLUMNS, "publishedAt"],
+        }),
         updatedAt: new Date(),
       };
 
@@ -31223,7 +31237,24 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(403).json({ error: 'Not authorized to update this analysis' });
       }
 
-      const updated = await storage.updateDeepAnalysis(req.params.id, req.body);
+      // `status:"published"` puts this on the public /omq surface, and anyone
+      // with an account can create an analysis to own — so the ownership check
+      // above is not a publishing authorisation. Gate it like any article.
+      if (req.body?.status && req.body.status !== analysis.status) {
+        const denial = await denyPublish((req.user as any).id, req.body.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ error: denial.message, code: denial.code });
+        }
+      }
+
+      // Raw req.body reached the UPDATE: `createdBy` (steal or hand off
+      // ownership, and forge attribution on a public surface) and `reporterId`
+      // (byline theft) were both client-settable.
+      const updates = pickTableColumns(deepAnalyses, req.body, {
+        omit: ["createdBy", "generationTime"],
+      });
+
+      const updated = await storage.updateDeepAnalysis(req.params.id, updates);
       res.json(updated);
     } catch (error: any) {
       console.error('Error updating deep analysis:', error);
