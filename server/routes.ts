@@ -63,8 +63,8 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache } from "./rbac";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getUserRoleNames } from "./rbac";
+import { PERMISSION_CODES, canAssignRole, ROLE_NAMES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
 // Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
@@ -5902,6 +5902,28 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       if (!user) {
         return res.status(404).json({ message: "User not found" });
+      }
+
+      // RBAC hierarchy guard (privilege-escalation fix): the assigner may only
+      // grant roles their own authority permits — an `admin` must not be able to
+      // mint a `system_admin`. canAssignRole encodes this policy but was never
+      // called; without it, holding users.change_role was enough to self-escalate.
+      const assignerRoleNames = await getUserRoleNames(updatedBy);
+      const SYSTEM_ADMIN_EQUIVALENTS = ["system_admin", "system.admin", "superadmin"];
+      const assignerAuthority = assignerRoleNames.some(r => SYSTEM_ADMIN_EQUIVALENTS.includes(r))
+        ? ROLE_NAMES.SYSTEM_ADMIN
+        : (assignerRoleNames.includes(ROLE_NAMES.ADMIN) ? ROLE_NAMES.ADMIN : "");
+      const targetRoles = parsed.data.roleIds.length
+        ? await db.select({ name: roles.name }).from(roles).where(inArray(roles.id, parsed.data.roleIds))
+        : [];
+      const forbiddenRoles = targetRoles.filter(r => !canAssignRole(assignerAuthority, r.name));
+      if (forbiddenRoles.length > 0) {
+        console.warn("🚫 [UPDATE USER ROLES] Blocked privilege escalation", {
+          updatedBy, targetUserId, assignerAuthority, forbidden: forbiddenRoles.map(r => r.name),
+        });
+        return res.status(403).json({
+          message: `لا تملك صلاحية إسناد الأدوار التالية: ${forbiddenRoles.map(r => r.name).join("، ")}`,
+        });
       }
 
       await storage.updateUserRoles(

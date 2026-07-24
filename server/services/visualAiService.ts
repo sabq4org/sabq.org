@@ -9,6 +9,7 @@
 
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
+import { assertSafeImageUrl } from "../utils/safeImageUrl";
 import pRetry from "p-retry";
 import https from "https";
 import http from "http";
@@ -100,10 +101,14 @@ export interface ImageAnalysisResult {
  * Download image from URL to base64
  */
 async function downloadImageToBase64(url: string): Promise<string> {
+  // SSRF guard: a user-supplied imageUrl must not let the server reach internal
+  // services or the cloud metadata endpoint (169.254.169.254). Only allowlisted
+  // https media hosts pass; anything else throws (security audit S-02).
+  const safeUrl = assertSafeImageUrl(url);
   return new Promise((resolve, reject) => {
-    const client = url.startsWith('https') ? https : http;
-    
-    client.get(url, (response) => {
+    const client = safeUrl.startsWith('https') ? https : http;
+
+    client.get(safeUrl, (response) => {
       if (response.statusCode !== 200) {
         reject(new Error(`Failed to download image: ${response.statusCode}`));
         return;
