@@ -7800,10 +7800,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Gate any move into a publishing status. This used to check only
-      // "published", so a holder of articles.edit_own reached the live site by
-      // sending status="scheduled" instead — the scheduler promotes it with no
-      // check of its own. It also skipped the publisher publishing-window gate.
+      // Any move into a publishing status: "scheduled" counts, since the
+      // scheduler promotes it with no check of its own. See publishGate.ts.
       if (parsed.data.status !== existingArticle.status) {
         const denial = await denyPublish(req.user.id, parsed.data.status);
         if (denial) {
@@ -14058,9 +14056,7 @@ Respond in valid JSON format only:
     try {
       const articleId = req.params.id;
 
-      // The route accepts articles.edit_own, but nothing checked whose article
-      // this is — so it behaved exactly like articles.edit_any and wrote SEO
-      // metadata (public OG/meta tags) onto any article id.
+      // articles.edit_own with no ownership check behaved as edit_any.
       const access = await authorizeArticleWrite(req.user.id, articleId);
       if (!access.ok) {
         return res.status(access.httpStatus).json({ message: access.message });
@@ -14513,8 +14509,7 @@ Respond in valid JSON format only:
           });
         }
         
-        // The permission gate above is article-agnostic: any reporter could
-        // rewrite the media attached to any article.
+        // The permission gate above is article-agnostic.
         const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
         if (!access.ok) {
           return res.status(access.httpStatus).json({ message: access.message });
@@ -14552,8 +14547,7 @@ Respond in valid JSON format only:
     try {
         const { id } = req.params;
 
-        // `media.delete` is not article-scoped; edit_any holders short-circuit
-        // inside the helper, so desk-wide roles are unaffected.
+        // `media.delete` is not article-scoped; edit_any short-circuits.
         const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
         if (!access.ok) {
           return res.status(access.httpStatus).json({ message: access.message });
@@ -15100,8 +15094,7 @@ Respond in valid JSON format only:
         }
       }
 
-      // Gate every move into a publishing status ("published" OR "scheduled" —
-      // the scheduler promotes the latter with no check of its own).
+      // "scheduled" counts as publishing — see publishGate.ts.
       if (parsed.data.status !== existingArticle.status) {
         const denial = await denyPublish(req.user.id, parsed.data.status);
         if (denial) {
@@ -16110,10 +16103,8 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Invalid article data", errors: parsed.error });
       }
 
-      // The role check above admits `reporter`, and `status` comes from the
-      // body — so a reporter could publish straight to the live site. The
-      // scheduling permission checked earlier only covers `scheduledAt`, not
-      // status="scheduled" on its own.
+      // The role check above admits `reporter` and `status` comes from the
+      // body; the scheduledAt check earlier doesn't cover status="scheduled".
       const denial = await denyPublish(userId, parsed.data.status);
       if (denial) {
         return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
@@ -16350,9 +16341,7 @@ Respond in valid JSON format only:
       const shouldRepublish = req.body.republish === true;
       delete articleData.republish;
 
-      // No publish gate existed on this legacy path — a reporter editing their
-      // own draft could set status="published"/"scheduled" and reach the live
-      // site, bypassing articles.publish entirely.
+      // Legacy path had no publish gate at all.
       if (articleData.status && articleData.status !== article.status) {
         const denial = await denyPublish(userId, articleData.status);
         if (denial) {
@@ -18410,10 +18399,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.put("/api/user/preferences", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      // The WHERE clause is bound to the session user, but `...prefs` used to
-      // carry `userId` from the body straight into the SET — re-pointing the
-      // caller's preference row at another account (and on the insert branch,
-      // creating a row on their behalf).
+      // WHERE is bound to the session user, but `...prefs` carried `userId`
+      // from the body into the SET, re-pointing the row at another account.
       const prefs = pickTableColumns(userPreferences, req.body, { omit: ["userId"] });
       const updatedPrefs = await storage.updateUserFullPreferences(userId, prefs);
       res.json(updatedPrefs);
@@ -21753,9 +21740,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const { id } = req.params;
 
-      // articles.ai_generate says nothing about WHICH article — any holder
-      // (including external publisher accounts) could wipe and rewrite the
-      // smart-category assignments of any article.
+      // articles.ai_generate says nothing about WHICH article.
       const access = await authorizeArticleWrite(req.user.id, id);
       if (!access.ok) {
         return res.status(access.httpStatus).json({ message: access.message });
@@ -21954,8 +21939,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         // Existing flow: generate SEO for saved article
         const { articleId, language } = validated;
 
-        // articles.ai_generate is not article-scoped: without this any holder
-        // could overwrite the public SEO/OG metadata of any article.
+        // articles.ai_generate is not article-scoped.
         const access = await authorizeArticleWrite(req.user.id, articleId);
         if (!access.ok) {
           return res.status(access.httpStatus).json({ message: access.message });
@@ -28476,9 +28460,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const validatedData = insertEnArticleSchema.parse(req.body);
 
-      // The role list above lets `reporter` and `opinion_author` through, but
-      // it says nothing about publishing — so `status:"published"` in the body
-      // put a contributor's article straight on the live English site.
+      // The role list admits `reporter`/`opinion_author` but says nothing
+      // about publishing.
       const denial = await denyPublish(user.id, validatedData.status);
       if (denial) {
         return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
@@ -28538,9 +28521,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
       }
 
-      // No publish gate existed here: the author of a draft could flip their
-      // own article to "published"/"scheduled" on the live English site
-      // regardless of articles.publish.
+      // No publish gate existed here.
       if (req.body.status && req.body.status !== existing[0].status) {
         const denial = await denyPublish(user.id, req.body.status);
         if (denial) {
@@ -30204,9 +30185,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(409).json({ message: "Article slug already exists" });
       }
 
-      // The publish check used to live INSIDE the block above, after its
-      // unconditional `return` — dead code that never ran once. Any holder of
-      // articles.create could publish Urdu articles straight to the live site.
+      // The old check sat INSIDE the block above, after its unconditional
+      // `return` — dead code that never ran once.
       const denial = await denyPublish(userId, parsed.data.status);
       if (denial) {
         return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
@@ -30289,8 +30269,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         }
       }
 
-      // This path had no publish gate at all: articles.edit_own was enough to
-      // move an Urdu article to "published"/"scheduled" on the live site.
+      // No publish gate existed here.
       if (parsed.data.status && parsed.data.status !== oldArticle.status) {
         const denial = await denyPublish(userId, parsed.data.status);
         if (denial) {
@@ -30848,11 +30827,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const validatedData = insertShortLinkSchema.parse(req.body);
 
-      // SECURITY: this endpoint is unauthenticated AND CSRF-exempt, and the
-      // destination is rendered into an <a href> on sabq.org by GET /s/:code.
-      // `z.string().url()` in the schema accepts any scheme, so without this
-      // anyone could mint an open redirect — or a `javascript:` link that runs
-      // on our own origin — under a sabq.org address.
+      // Unauthenticated + CSRF-exempt, and GET /s/:code renders the target
+      // into an <a href> on sabq.org. `z.string().url()` accepts any scheme.
       if (!isSafeRedirectUrl(validatedData.originalUrl)) {
         return res.status(400).json({
           message: "الرابط غير مسموح — يجب أن يكون رابط http(s) على نطاق سبق",
@@ -30935,9 +30911,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(410).send("انتهت صلاحية هذا الرابط");
       }
 
-      // Validate at the sink too, not just at creation: rows planted before the
-      // check above still live in the table, and this is the handler that turns
-      // them into a real navigation on the sabq.org origin.
+      // Also at the sink: rows planted before the check above still exist.
       if (!isSafeRedirectUrl(shortLink.originalUrl)) {
         console.warn(`[shortlinks] blocked unsafe destination on /s/${code}: ${shortLink.originalUrl}`);
         return res.status(410).send("هذا الرابط غير صالح");
@@ -31005,9 +30979,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const safeRedirectUrl = escapeHtml(redirectUrl);
 
       // For crawlers: serve meta tags without redirect; for browsers: instant redirect
-      // JSON.stringify, not escapeHtml, for the JS string: `&quot;` is never
-      // decoded inside a <script> block, so HTML escaping both fails to encode
-      // and corrupts the URL. The href/meta sinks keep the HTML escaping.
+      // JSON.stringify for the JS string: `&quot;` is never decoded inside
+      // <script>, so HTML escaping there corrupts without encoding.
       const redirectMeta = isCrawler ? '' : `
   <meta http-equiv="refresh" content="0;url=${safeRedirectUrl}">
   <script>window.location.href=${JSON.stringify(redirectUrl)};</script>`;
@@ -31275,9 +31248,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(403).json({ error: 'Not authorized to update this analysis' });
       }
 
-      // `status:"published"` puts this on the public /omq surface, and anyone
-      // with an account can create an analysis to own — so the ownership check
-      // above is not a publishing authorisation. Gate it like any article.
+      // Anyone can create an analysis to own, so the ownership check above
+      // is not a publishing authorisation.
       if (req.body?.status && req.body.status !== analysis.status) {
         const denial = await denyPublish((req.user as any).id, req.body.status);
         if (denial) {
@@ -31285,9 +31257,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         }
       }
 
-      // Raw req.body reached the UPDATE: `createdBy` (steal or hand off
-      // ownership, and forge attribution on a public surface) and `reporterId`
-      // (byline theft) were both client-settable.
+      // Raw req.body reached the UPDATE: `createdBy` was client-settable.
       const updates = pickTableColumns(deepAnalyses, req.body, {
         omit: ["createdBy", "generationTime"],
       });
