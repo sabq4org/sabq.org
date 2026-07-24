@@ -150,6 +150,10 @@
         "client/src/components/InternalAnnouncement.tsx",
         "tests/unit/internalAnnouncementTargeting.test.ts",
         "client/src/pages/DataStoryGenerator.tsx",
+        "server/routes/publisherPortal.ts",
+        "server/services/publisherPortalService.ts",
+        "client/src/pages/admin/publishers/**",
+        "client/src/components/admin/publishers/**",
         "docs/editorial/**"
       ],
       "aiFeatureKeys": [

@@ -1410,7 +1410,13 @@ export async function createPublisherRequest(
   return { ok: true, message: "أُرسل طلبكم للإدارة وسيتم التواصل معكم قريباً" };
 }
 
-export async function listOpenPublisherRequests() {
+export type PublisherRequestStatus = "open" | "closed" | "rejected";
+
+/**
+ * سجل الطلبات. الافتراضي «المفتوحة» فقط كما كان، لكن الإدارة تحتاج أيضاً
+ * رؤية المعالج والمرفوض — الطلب كان يختفي بلا أثر بعد إغلاقه.
+ */
+export async function listPublisherRequests(status: PublisherRequestStatus | "all" = "open") {
   return db
     .select({
       id: publisherRequests.id,
@@ -1418,30 +1424,111 @@ export async function listOpenPublisherRequests() {
       message: publisherRequests.message,
       status: publisherRequests.status,
       createdAt: publisherRequests.createdAt,
+      handledAt: publisherRequests.handledAt,
       publisherId: publishers.id,
       agencyName: publishers.agencyName,
       logoUrl: publishers.logoUrl,
     })
     .from(publisherRequests)
     .innerJoin(publishers, eq(publisherRequests.publisherId, publishers.id))
-    .where(eq(publisherRequests.status, "open"))
-    .orderBy(desc(publisherRequests.createdAt));
+    .where(status === "all" ? undefined : eq(publisherRequests.status, status))
+    .orderBy(desc(publisherRequests.createdAt))
+    .limit(200);
 }
 
-export async function closePublisherRequest(requestId: string, adminId: string) {
+/**
+ * معالجة الطلب: موافقة (`closed`) أو رفض (`rejected`).
+ * الرفض كان غير موجود إطلاقاً، فكانت الموافقة هي المخرج الوحيد.
+ * سبب الرفض يصل الوكالة في الإشعار (لا عمود له في الجدول حتى الآن).
+ */
+export async function resolvePublisherRequest(
+  requestId: string,
+  adminId: string,
+  action: "close" | "reject",
+  note?: string,
+) {
+  const rejected = action === "reject";
   const [updated] = await db
     .update(publisherRequests)
-    .set({ status: "closed", handledBy: adminId, handledAt: new Date() })
+    .set({
+      status: rejected ? "rejected" : "closed",
+      handledBy: adminId,
+      handledAt: new Date(),
+    })
     .where(and(eq(publisherRequests.id, requestId), eq(publisherRequests.status, "open")))
     .returning({ id: publisherRequests.id, requestedBy: publisherRequests.requestedBy, type: publisherRequests.type });
-  if (updated?.requestedBy) {
+
+  if (!updated) return false;
+
+  if (updated.requestedBy) {
+    const typeLabel = REQUEST_TYPE_LABELS[updated.type] ?? updated.type;
+    const trimmedNote = note?.trim();
     await notifyPublisherUser(updated.requestedBy, {
-      title: "تمت معالجة طلبكم",
-      body: `أغلقت الإدارة طلب ${REQUEST_TYPE_LABELS[updated.type] ?? updated.type} — تواصلوا معنا لأي استفسار.`,
+      title: rejected ? "لم تتم الموافقة على طلبكم" : "تمت معالجة طلبكم",
+      body: rejected
+        ? `اعتذرت الإدارة عن طلب ${typeLabel}${trimmedNote ? `: ${trimmedNote}` : " — تواصلوا معنا لمعرفة التفاصيل."}`
+        : `أغلقت الإدارة طلب ${typeLabel} — تواصلوا معنا لأي استفسار.`,
       deeplink: "/dashboard/publisher",
     });
   }
-  return !!updated;
+  return true;
+}
+
+/** حذف نهائي — لطلبات التجربة التي لا قيمة لإبقائها في السجل. */
+export async function deletePublisherRequest(requestId: string) {
+  const [deleted] = await db
+    .delete(publisherRequests)
+    .where(eq(publisherRequests.id, requestId))
+    .returning({ id: publisherRequests.id });
+  return !!deleted;
+}
+
+/**
+ * حالة الوكالة الواحدة المشتقة. البطاقة كانت تعرض خمس إشارات مستقلة
+ * (نشط/موقوف، نشر فوري، الباقة، تاريخ الباقة، تاريخ النافذة) تتناقض فيما
+ * بينها — فتظهر شارة خضراء «الباقة: بعد ٣٠٠ يوم» لوكالة موقوفة أصلاً.
+ * الترتيب هنا هو أولوية العرض: الأخطر أولاً.
+ */
+export type PublisherHealth =
+  | "suspended"
+  | "window_ended"
+  | "no_package"
+  | "package_expired"
+  | "credits_out"
+  | "expiring_soon"
+  | "healthy";
+
+const EXPIRY_WARNING_DAYS = 7;
+
+function daysUntil(date: Date | string | null | undefined, now: Date): number | null {
+  if (!date) return null;
+  const time = date instanceof Date ? date.getTime() : new Date(date).getTime();
+  if (Number.isNaN(time)) return null;
+  return Math.ceil((time - now.getTime()) / 86_400_000);
+}
+
+function derivePublisherHealth(params: {
+  isActive: boolean;
+  publishingEndsAt: Date | null;
+  activeCredit: { isUnlimited: boolean; remainingCredits: number; expiryDate: Date | null } | null;
+  hadPackageBefore: boolean;
+  now: Date;
+}): PublisherHealth {
+  const { isActive, publishingEndsAt, activeCredit, hadPackageBefore, now } = params;
+
+  if (!isActive) return "suspended";
+
+  const windowDays = daysUntil(publishingEndsAt, now);
+  if (windowDays !== null && windowDays < 0) return "window_ended";
+
+  if (!activeCredit) return hadPackageBefore ? "package_expired" : "no_package";
+  if (!activeCredit.isUnlimited && activeCredit.remainingCredits <= 0) return "credits_out";
+
+  const packageDays = daysUntil(activeCredit.expiryDate, now);
+  const soonest = [windowDays, packageDays].filter((d): d is number => d !== null);
+  if (soonest.length > 0 && Math.min(...soonest) <= EXPIRY_WARNING_DAYS) return "expiring_soon";
+
+  return "healthy";
 }
 
 /**
@@ -1469,16 +1556,12 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
   const now = new Date();
 
   const [credits, articleAgg, openRequests] = await Promise.all([
+    // كل الباقات (لا النشطة فقط) — نحتاج المنتهية أيضاً لنقول «انتهت في …»
+    // بدل «لا توجد باقة» التي لا تفرّق بين وكالة جديدة وأخرى انتهى عقدها.
     db
       .select()
       .from(publisherCredits)
-      .where(
-        and(
-          inArray(publisherCredits.publisherId, ids),
-          eq(publisherCredits.isActive, true),
-          or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
-        ),
-      )
+      .where(inArray(publisherCredits.publisherId, ids))
       .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt)),
     db
       .select({
@@ -1500,16 +1583,26 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
       .groupBy(publisherRequests.publisherId),
   ]);
 
-  const creditByPublisher = new Map<string, typeof credits[number]>();
+  const isCreditUsable = (credit: typeof credits[number]) =>
+    credit.isActive && (!credit.expiryDate || new Date(credit.expiryDate) >= now);
+
+  const activeCreditByPublisher = new Map<string, typeof credits[number]>();
+  const lastCreditByPublisher = new Map<string, typeof credits[number]>();
   for (const credit of credits) {
-    if (!creditByPublisher.has(credit.publisherId)) creditByPublisher.set(credit.publisherId, credit);
+    if (isCreditUsable(credit) && !activeCreditByPublisher.has(credit.publisherId)) {
+      activeCreditByPublisher.set(credit.publisherId, credit);
+    }
+    if (!lastCreditByPublisher.has(credit.publisherId)) {
+      lastCreditByPublisher.set(credit.publisherId, credit);
+    }
   }
   const articlesByPublisher = new Map(articleAgg.map((a) => [a.publisherId, a]));
   const requestsByPublisher = new Map(openRequests.map((r) => [r.publisherId, Number(r.openRequests) || 0]));
 
   return {
     publishers: rows.map((publisher) => {
-      const credit = creditByPublisher.get(publisher.id) ?? null;
+      const credit = activeCreditByPublisher.get(publisher.id) ?? null;
+      const lastCredit = lastCreditByPublisher.get(publisher.id) ?? null;
       const agg = articlesByPublisher.get(publisher.id);
       return {
         id: publisher.id,
@@ -1530,6 +1623,21 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
               expiryDate: credit.expiryDate,
             }
           : null,
+        lastPackage:
+          !credit && lastCredit
+            ? {
+                packageName: lastCredit.packageName,
+                expiryDate: lastCredit.expiryDate,
+                cancelled: !lastCredit.isActive,
+              }
+            : null,
+        health: derivePublisherHealth({
+          isActive: publisher.isActive,
+          publishingEndsAt: publisher.publishingEndsAt,
+          activeCredit: credit,
+          hadPackageBefore: !!lastCredit,
+          now,
+        }),
         totalArticles: Number(agg?.totalArticles) || 0,
         publishedArticles: Number(agg?.publishedArticles) || 0,
         lastActivityAt: agg?.lastActivityAt ?? null,
@@ -1539,6 +1647,77 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
     total: Number(count) || 0,
     page,
     limit,
+  };
+}
+
+/**
+ * أرقام الترويسة على كل الوكالات لا على الصفحة الحالية — البطاقات القديمة
+ * كانت تقول «نشطة (الصفحة)» وهو رقم لا يعني شيئاً للإدارة.
+ */
+export async function getPublishersSummary() {
+  const warningInterval = sql.raw(`interval '${EXPIRY_WARNING_DAYS} days'`);
+
+  /** لا باقة صالحة: منتهية أو ملغاة أو نفدت موادها. */
+  const noValidPackageSql = sql`not exists (
+    select 1 from ${publisherCredits} pc
+    where pc.publisher_id = ${publishers.id}
+      and pc.is_active
+      and (pc.expiry_date is null or pc.expiry_date >= now())
+      and (pc.is_unlimited or pc.remaining_credits > 0)
+  )`;
+
+  // الأقواس ضرورية: `NOT` أعلى أولوية من `AND` في Postgres، فبدونها
+  // يصبح `not (a and b)` هو `(not a) and b` — شرط لا يتحقق أبداً.
+  const windowEndedSql = sql`(${publishers.publishingEndsAt} is not null
+    and ${publishers.publishingEndsAt} < now())`;
+
+  const expiringSoonSql = sql`(
+    (${publishers.publishingEndsAt} between now() and now() + ${warningInterval})
+    or exists (
+      select 1 from ${publisherCredits} pc
+      where pc.publisher_id = ${publishers.id}
+        and pc.is_active
+        and pc.expiry_date between now() and now() + ${warningInterval}
+    )
+  )`;
+
+  const [[counts], [attention], [{ openRequests }]] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${publishers.isActive})`,
+        suspended: sql<number>`count(*) filter (where not ${publishers.isActive})`,
+      })
+      .from(publishers),
+    db
+      .select({
+        noValidPackage: sql<number>`count(*) filter (where ${publishers.isActive} and ${noValidPackageSql})`,
+        windowEnded: sql<number>`count(*) filter (where ${publishers.isActive} and ${windowEndedSql})`,
+        // وكالة واحدة قد تكون بلا باقة وانتهت نافذتها معاً — الجمع الحسابي
+        // للرقمين كان يعدّها مرتين ويجعل «تعمل الآن» أقل من الحقيقة.
+        needsAttention: sql<number>`count(*) filter (where ${publishers.isActive}
+          and (${noValidPackageSql} or ${windowEndedSql}))`,
+        expiringSoon: sql<number>`count(*) filter (where ${publishers.isActive}
+          and not ${windowEndedSql}
+          and not ${noValidPackageSql}
+          and ${expiringSoonSql})`,
+      })
+      .from(publishers),
+    db
+      .select({ openRequests: sql<number>`count(*)` })
+      .from(publisherRequests)
+      .where(eq(publisherRequests.status, "open")),
+  ]);
+
+  return {
+    total: Number(counts?.total) || 0,
+    active: Number(counts?.active) || 0,
+    suspended: Number(counts?.suspended) || 0,
+    noValidPackage: Number(attention?.noValidPackage) || 0,
+    windowEnded: Number(attention?.windowEnded) || 0,
+    needsAttention: Number(attention?.needsAttention) || 0,
+    expiringSoon: Number(attention?.expiringSoon) || 0,
+    openRequests: Number(openRequests) || 0,
   };
 }
 
