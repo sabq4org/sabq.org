@@ -127,8 +127,83 @@ function requireAdvertiser(req: Request, res: Response, next: Function) {
     });
     return res.status(403).json({ error: "ليس لديك صلاحية الوصول إلى نظام الإعلانات" });
   }
-  
+
   next();
+}
+
+/**
+ * Which campaigns may this caller see?
+ *
+ * `requireAdvertiser` admits advertiser, admin, superadmin, editor AND
+ * reporter, and the analytics queries then read whatever campaign id they were
+ * handed — so one advertiser could pull a competitor's spend, impressions and
+ * conversion figures, and any reporter could read the whole book.
+ *
+ * Returns `{accountId: null}` for staff (unrestricted, which is the
+ * dashboard's purpose), `{accountId}` for an advertiser, or null when the
+ * caller owns no ad account — they own nothing, so they must see nothing.
+ */
+const STAFF_ADS_ROLES = ["admin", "superadmin", "editor"];
+
+async function resolveAdsScope(req: Request): Promise<{ accountId: string | null } | null> {
+  const role = (req.user as any)?.role;
+  if (STAFF_ADS_ROLES.includes(role)) return { accountId: null };
+
+  const userId = (req.user as any)?.id;
+  if (!userId) return null;
+
+  const [account] = await db
+    .select({ id: adAccounts.id })
+    .from(adAccounts)
+    .where(eq(adAccounts.userId, userId))
+    .limit(1);
+
+  return account ? { accountId: account.id } : null;
+}
+
+/**
+ * Express guard for every analytics route that takes a campaign id from the
+ * client. Staff pass through; an advertiser may only name campaigns on their
+ * own ad account. Reads `campaignId` / `campaignIds` from the query and
+ * `campaignId` from the path, so it covers all shapes these routes use.
+ */
+async function requireCampaignScope(req: Request, res: Response, next: Function) {
+  try {
+    const scope = await resolveAdsScope(req);
+    if (!scope) {
+      return res.status(403).json({ error: "لا يوجد حساب معلن مرتبط بهذا المستخدم" });
+    }
+    // Staff: unrestricted.
+    if (scope.accountId === null) return next();
+
+    const raw = [
+      req.params?.campaignId,
+      req.query?.campaignId,
+      ...(typeof req.query?.campaignIds === "string" ? req.query.campaignIds.split(",") : []),
+    ].filter((v): v is string => typeof v === "string" && v.length > 0);
+
+    if (raw.length === 0) {
+      // No campaign named — the handler aggregates over "everything visible".
+      // Pin that to the caller's account so the aggregate can't span the book.
+      (req as any).adsScopeAccountId = scope.accountId;
+      return next();
+    }
+
+    const owned = await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(and(inArray(campaigns.id, raw), eq(campaigns.accountId, scope.accountId)));
+
+    if (owned.length !== new Set(raw).size) {
+      return res.status(403).json({ error: "لا تملك صلاحية الاطلاع على هذه الحملة" });
+    }
+
+    (req as any).adsScopeAccountId = scope.accountId;
+    next();
+  } catch (error) {
+    console.error("[Ads Auth] campaign scope check failed:", error);
+    res.status(500).json({ error: "تعذر التحقق من صلاحية الحملة" });
+  }
 }
 
 // التحقق من أن المستخدم مشرف
@@ -3396,7 +3471,7 @@ router.post("/track/click/:impressionId", async (req, res) => {
 import { adsAnalyticsService } from "./services/adsAnalytics";
 
 // نظرة عامة على الإحصائيات
-router.get("/analytics/overview", requireAdvertiser, async (req, res) => {
+router.get("/analytics/overview", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     
@@ -3421,7 +3496,7 @@ router.get("/analytics/overview", requireAdvertiser, async (req, res) => {
 });
 
 // نظرة عامة مع المقارنة بالفترة السابقة - DIRECT QUERY FIX
-router.get("/analytics/overview-comparison", requireAdvertiser, async (req, res) => {
+router.get("/analytics/overview-comparison", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     console.log("[OVERVIEW-COMPARISON V3] 🚀 Direct query fix - Request:", { campaignId, dateFrom, dateTo });
@@ -3513,7 +3588,7 @@ router.get("/analytics/overview-comparison", requireAdvertiser, async (req, res)
 });
 
 // بيانات السلسلة الزمنية
-router.get("/analytics/timeseries", requireAdvertiser, async (req, res) => {
+router.get("/analytics/timeseries", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { period = 'daily', campaignId, dateFrom, dateTo } = req.query;
     
@@ -3535,7 +3610,7 @@ router.get("/analytics/timeseries", requireAdvertiser, async (req, res) => {
 });
 
 // بيانات قمع التسويق
-router.get("/analytics/funnel", requireAdvertiser, async (req, res) => {
+router.get("/analytics/funnel", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     
@@ -3556,7 +3631,7 @@ router.get("/analytics/funnel", requireAdvertiser, async (req, res) => {
 });
 
 // تحليل الجمهور
-router.get("/analytics/audience", requireAdvertiser, async (req, res) => {
+router.get("/analytics/audience", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     
@@ -3577,7 +3652,7 @@ router.get("/analytics/audience", requireAdvertiser, async (req, res) => {
 });
 
 // مقارنة الحملات
-router.get("/analytics/campaigns/compare", requireAdvertiser, async (req, res) => {
+router.get("/analytics/campaigns/compare", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignIds, dateFrom, dateTo } = req.query;
     
@@ -3599,7 +3674,7 @@ router.get("/analytics/campaigns/compare", requireAdvertiser, async (req, res) =
 });
 
 // مؤشرات الجودة
-router.get("/analytics/quality/:campaignId", requireAdvertiser, async (req, res) => {
+router.get("/analytics/quality/:campaignId", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId } = req.params;
     
@@ -3616,17 +3691,27 @@ router.get("/analytics/quality/:campaignId", requireAdvertiser, async (req, res)
 router.get("/analytics/campaigns", requireAdvertiser, async (req, res) => {
   try {
     const { dateFrom, dateTo, status } = req.query;
-    
+
     const fromDate = dateFrom ? new Date(dateFrom as string) : undefined;
     const toDate = dateTo ? new Date(dateTo as string) : undefined;
-    
-    // Get all campaigns
-    let campaignsQuery = db.select().from(campaigns);
-    
-    if (status) {
-      campaignsQuery = campaignsQuery.where(eq(campaigns.status, status as string)) as any;
+
+    // Scope to the caller's own account — this used to return every
+    // advertiser's campaigns with their spend and performance figures.
+    const scope = await resolveAdsScope(req);
+    if (!scope) {
+      return res.status(403).json({ error: "لا يوجد حساب معلن مرتبط بهذا المستخدم" });
     }
-    
+
+    const filters = [
+      status ? eq(campaigns.status, status as string) : undefined,
+      scope.accountId ? eq(campaigns.accountId, scope.accountId) : undefined,
+    ].filter(Boolean) as any[];
+
+    let campaignsQuery = db.select().from(campaigns);
+    if (filters.length > 0) {
+      campaignsQuery = campaignsQuery.where(and(...filters)) as any;
+    }
+
     const allCampaigns = await campaignsQuery.orderBy(desc(campaigns.createdAt));
     
     // Get stats for each campaign
@@ -3656,7 +3741,7 @@ router.get("/analytics/campaigns", requireAdvertiser, async (req, res) => {
 // ============================================
 
 // Polling endpoint for live data (more reliable with auth)
-router.get("/analytics/live-poll", requireAdvertiser, async (req, res) => {
+router.get("/analytics/live-poll", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -3684,14 +3769,14 @@ router.get("/analytics/live-poll", requireAdvertiser, async (req, res) => {
 // Legacy SSE endpoint removed. Clients should use
 // /api/ads/analytics/live-poll (already used by the dashboard) instead to
 // avoid long-lived connections pinning Autoscale instances.
-router.get("/analytics/live", requireAdvertiser, async (_req, res) => {
+router.get("/analytics/live", requireAdvertiser, requireCampaignScope, async (_req, res) => {
   res.status(410).json({
     error: 'SSE stream disabled. Poll /api/ads/analytics/live-poll instead.',
   });
 });
 
 // تصدير التقارير (CSV)
-router.get("/analytics/export/csv", requireAdvertiser, async (req, res) => {
+router.get("/analytics/export/csv", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo, type = 'overview' } = req.query;
     

@@ -999,8 +999,55 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
     }
     return { userId: session.userId };
   }
-  
+
   return null;
+}
+
+/**
+ * Resolve which newsletter subscription the caller owns.
+ *
+ * The newsletter endpoints used to take a bare `email` and act on whoever
+ * owned it — cross-account unsubscription, and a subscriber-enumeration
+ * oracle. An address identifies; it does not authenticate. Two accepted
+ * proofs, mirroring the web routes:
+ *   - `token`: the subscription row's own uuid, which is what the mailed
+ *     unsubscribe link carries;
+ *   - a valid member session, which may only act on its own address.
+ */
+async function resolveNewsletterSubscription(req: Request) {
+  const { newsletterSubscriptions, users: usersTable } = await import("@shared/schema");
+
+  const token = typeof (req.body as any)?.token === "string"
+    ? (req.body as any).token
+    : typeof req.query.token === "string"
+      ? req.query.token
+      : null;
+
+  if (token) {
+    const [row] = await db
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, token))
+      .limit(1);
+    return row ?? null;
+  }
+
+  const session = await verifyMemberSession(req);
+  if (!session) return null;
+
+  const [member] = await db
+    .select({ email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.id, session.userId))
+    .limit(1);
+  if (!member?.email) return null;
+
+  const [row] = await db
+    .select()
+    .from(newsletterSubscriptions)
+    .where(eq(newsletterSubscriptions.email, member.email))
+    .limit(1);
+  return row ?? null;
 }
 
 // ==========================================
@@ -4535,27 +4582,22 @@ router.post("/newsletter/subscribe", async (req: Request, res: Response) => {
 // GET /api/v1/newsletter/status?email=...
 router.get("/newsletter/status", async (req: Request, res: Response) => {
   try {
-    const { newsletterSubscriptions } = await import("@shared/schema");
-    const email = typeof req.query.email === "string" ? req.query.email.trim() : "";
-    if (!email || !email.includes("@")) {
-      return res.status(400).json({ success: false, message: "البريد الإلكتروني مطلوب" });
+    // Answering "is <email> subscribed?" for any address is a subscriber
+    // enumeration oracle over the whole reader base — same ownership proof as
+    // unsubscribe.
+    const sub = await resolveNewsletterSubscription(req);
+    if (!sub) {
+      return res.status(403).json({
+        success: false,
+        message: "غير مصرح بالاطلاع على حالة هذا الاشتراك",
+      });
     }
-
-    const [sub] = await db
-      .select({
-        email: newsletterSubscriptions.email,
-        status: newsletterSubscriptions.status,
-        language: newsletterSubscriptions.language,
-      })
-      .from(newsletterSubscriptions)
-      .where(eq(newsletterSubscriptions.email, email))
-      .limit(1);
 
     res.json({
       success: true,
-      subscribed: sub?.status === "active",
-      status: sub?.status || "none",
-      language: sub?.language || null,
+      subscribed: sub.status === "active",
+      status: sub.status || "none",
+      language: sub.language || null,
     });
   } catch (error) {
     console.error("[Mobile API] /newsletter/status error:", error);
@@ -4567,22 +4609,20 @@ router.get("/newsletter/status", async (req: Request, res: Response) => {
 router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
   try {
     const { newsletterSubscriptions } = await import("@shared/schema");
-    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
     const reason = typeof req.body?.reason === "string" ? req.body.reason : null;
 
-    if (!email || !email.includes("@")) {
-      return res.status(400).json({ success: false, message: "البريد الإلكتروني مطلوب" });
-    }
-
-    const [existing] = await db
-      .select()
-      .from(newsletterSubscriptions)
-      .where(eq(newsletterSubscriptions.email, email))
-      .limit(1);
-
+    // SECURITY: the address used to be the only credential, so anyone could
+    // unsubscribe any reader. Proof of ownership is either the token from the
+    // mailed unsubscribe link (the subscription row's own uuid) or a valid
+    // member session — and a session may only act on its own address.
+    const existing = await resolveNewsletterSubscription(req);
     if (!existing) {
-      return res.status(404).json({ success: false, message: "لم نجد اشتراكاً بهذا البريد" });
+      return res.status(403).json({
+        success: false,
+        message: "رابط غير صالح. استخدم رابط إلغاء الاشتراك من رسالة النشرة، أو سجّل الدخول.",
+      });
     }
+    const email = existing.email;
 
     await db
       .update(newsletterSubscriptions)
