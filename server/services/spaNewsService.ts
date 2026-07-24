@@ -4,15 +4,15 @@
 // الاستخدام: لوحة التحكم فقط — المحرّر يتصفّح المواد حسب القسم/الخلاصة ثم يستورد
 // المختار كمسودّات في سبق (مثل مستورد RSS لكن مخصّص لهذه الواجهة المنظَّمة).
 //
-// الإعداد: SPA_NEWS_BASE_URL و SPA_NEWS_API_KEY (لهما قيمتان افتراضيتان موثّقتان
-// كي تعمل الخدمة فورًا؛ يُفضّل ضبطهما في البيئة للإنتاج وتدوير المفتاح عند الحاجة).
+// الإعداد: SPA_NEWS_BASE_URL (له قيمة افتراضية عامة) و SPA_NEWS_API_KEY (سرّي —
+// يجب ضبطه في البيئة؛ لا مفتاح مثبّت في المصدر). بدون المفتاح تُعطَّل الخدمة بأمان.
 
 import { withSWR } from "../memoryCache";
 import { storage } from "../storage";
 
-// قيم افتراضية من توثيق الواجهة (worker للقراءة فقط) — قابلة للتجاوز بالبيئة.
+// عنوان الـworker العام قابل للتجاوز بالبيئة. المفتاح سرّي — من البيئة فقط
+// (كان مثبّتًا هنا سابقًا؛ أُزيل ويجب تدويره — gitleaks/audit #9-class).
 const DEFAULT_BASE = "https://spa-news-lan.plain-water-0957.workers.dev";
-const DEFAULT_KEY = "fwq4625epxmb80salam";
 
 // حساب «صحيفة سبق» المعتمد للمواد المستوردة من مصادر خارجية (نفس افتراضي الرادار).
 const SPA_REPORTER_ID =
@@ -54,7 +54,7 @@ function baseUrl(): string {
 }
 
 function apiKey(): string {
-  return (process.env.SPA_NEWS_API_KEY || DEFAULT_KEY).trim();
+  return (process.env.SPA_NEWS_API_KEY || "").trim();
 }
 
 export function isSpaNewsConfigured(): boolean {
