@@ -387,6 +387,8 @@
         "server/services/gc*.ts",
         "server/services/sportmonksService.ts",
         "server/services/sportmonksNewsService.ts",
+        "server/services/apiFootballClient.ts",
+        "server/services/transferCenterService.ts",
         "server/services/saudiLeagueService.ts",
         "server/services/sportsTournamentsService.ts",
         "server/services/sportsNamesService.ts",
@@ -432,7 +434,7 @@
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
       "owners": ["sports"],
-      "lastReviewed": "2026-07-22"
+      "lastReviewed": "2026-07-25"
     },
     {
       "id": "push-notifications",

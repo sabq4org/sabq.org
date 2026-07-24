@@ -30,6 +30,28 @@ const DEFAULT_RPM = 250;
 const MIN_GAP_MS = 80;
 /** تهدئة 429: كانت 15ث فتتسلسل الطوابير خلفها إلى دقائق (team/:id بلغ 83ث) */
 const RATE_LIMIT_COOLDOWN_MS = 4_000;
+/**
+ * مهلة النداء الواحد. كانت 15ث، وحادثة 2026-07-24 أثبتت أن ذلك طويل جدًا:
+ * حين توقّف المزوّد عن قبول الاتصالات ظلّ كل نداء يشغل دوره 15 ثانية قبل أن
+ * يفشل، فامتلأ الطابور وتعلّقت الطلبات الواردة خلفه. النظير في SportMonks
+ * ‏3500ms لنفس السبب (راجع docs/systems/sports-tournaments/SYSTEM.md).
+ */
+const DEFAULT_HTTP_TIMEOUT_MS = 8_000;
+/**
+ * أقصى انتظار مسموح داخل الطابور قبل رفض النداء فورًا.
+ *
+ * هذا هو الحاجز الذي كان مفقودًا في حادثة 2026-07-24: مسارات عامة مثل
+ * `/api/sports/player/:id` تنتظر `acquireSlot` بلا حدّ، فحين تعطّل المزوّد
+ * تراكمت آلاف الطلبات الواردة المعلّقة حتى عجزت العملية عن قبول اتصالات
+ * جديدة — فردّ راوتر Railway بـ‏502 `connection dial timeout` على **كل**
+ * المسارات، بما فيها ما لا علاقة له بالرياضة. الفشل السريع هنا أرحم: المستدعي
+ * يرجع كاشًا بائتًا أو قائمة فارغة بدل أن يحتجز مقبسًا.
+ */
+const DEFAULT_MAX_QUEUE_WAIT_MS = 6_000;
+/** بعد هذا العدد من إخفاقات النقل المتتالية نعتبر المزوّد ساقطًا ونتوقف مؤقتًا. */
+const OUTAGE_FAILURE_THRESHOLD = 8;
+/** مدة التوقف عن محاولة المزوّد بعد اعتباره ساقطًا. */
+const OUTAGE_COOLDOWN_MS = 30_000;
 
 /** الحدّ الفعلي بالدقيقة كما رصدناه من ترويسات المزوّد (يتكيّف مع الخطة تلقائيًا). */
 let observedRpm: number | null = null;
@@ -37,6 +59,15 @@ let observedRpm: number | null = null;
 let cooldownUntil = 0;
 /** أزمنة الإرسال المجدولة داخل النافذة (مرتّبة تصاعديًا تقريبًا). */
 const scheduled: number[] = [];
+/** إخفاقات نقل متتالية (تعذّر الاتصال أو انتهاء المهلة) — تُصفّر عند أول رد. */
+let consecutiveTransportFailures = 0;
+/** لا محاولات إطلاقًا قبل هذا الوقت — يُرفع عندما نعتبر المزوّد ساقطًا. */
+let outageUntil = 0;
+
+function envMs(name: string, fallback: number): number {
+  const value = Number.parseInt((process.env[name] || "").trim(), 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 function currentRpm(): number {
   const envRpm = Number.parseInt((process.env.APIFOOTBALL_RPM || "").trim(), 10);
@@ -45,8 +76,11 @@ function currentRpm(): number {
   return DEFAULT_RPM;
 }
 
-/** يحجز دورًا في النافذة الحالية وينتظر حتى يحين (فوريّ ما دمنا تحت الحدّ). */
-async function acquireSlot(): Promise<void> {
+/**
+ * يحجز دورًا في النافذة الحالية وينتظر حتى يحين (فوريّ ما دمنا تحت الحدّ).
+ * يرمي فورًا — بلا حجز ولا انتظار — إن تجاوز الدور المتاح سقف الانتظار.
+ */
+async function acquireSlot(tag: string, path: string): Promise<void> {
   const now = Date.now();
   while (scheduled.length && scheduled[0] <= now - WINDOW_MS) scheduled.shift();
   const rpm = currentRpm();
@@ -58,9 +92,26 @@ async function acquireSlot(): Promise<void> {
   if (scheduled.length >= rpm) {
     at = Math.max(at, scheduled[scheduled.length - rpm] + WINDOW_MS);
   }
-  scheduled.push(at);
   const wait = at - now;
+  const maxWait = envMs("APIFOOTBALL_MAX_QUEUE_WAIT_MS", DEFAULT_MAX_QUEUE_WAIT_MS);
+  if (wait > maxWait) {
+    throw new Error(
+      `[${tag}] API-Football queue saturated (${wait}ms > ${maxWait}ms) for ${path}`,
+    );
+  }
+  scheduled.push(at);
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+}
+
+function noteTransportFailure(): void {
+  consecutiveTransportFailures += 1;
+  if (consecutiveTransportFailures >= OUTAGE_FAILURE_THRESHOLD) {
+    outageUntil = Date.now() + OUTAGE_COOLDOWN_MS;
+  }
+}
+
+function noteTransportSuccess(): void {
+  consecutiveTransportFailures = 0;
 }
 
 function noteResponseHeaders(response: Response): void {
@@ -101,15 +152,29 @@ export async function apiFootballGet(
   const apiKey = (process.env.APIFOOTBALL_KEY || "").trim();
   if (!apiKey) throw new Error("APIFOOTBALL_KEY is not set");
 
+  if (Date.now() < outageUntil) {
+    throw new Error(`[${tag}] API-Football unreachable — cooling down, skipped ${path}`);
+  }
+
   const url = new URL(`${API_BASE}/${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
   for (let attempt = 0; ; attempt++) {
-    await acquireSlot();
-    const response = await fetch(url, {
-      headers: { "x-apisports-key": apiKey },
-      signal: AbortSignal.timeout(15_000),
-    });
+    await acquireSlot(tag, path);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { "x-apisports-key": apiKey },
+        signal: AbortSignal.timeout(envMs("APIFOOTBALL_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS)),
+      });
+    } catch (error) {
+      // تعذّر الاتصال أو انتهت المهلة — لم يصل الطلب للمزوّد أصلًا.
+      noteTransportFailure();
+      throw new Error(
+        `[${tag}] API-Football transport failure for ${path}: ${(error as Error)?.message ?? error}`,
+      );
+    }
+    noteTransportSuccess();
     noteResponseHeaders(response);
 
     if (!response.ok) {
