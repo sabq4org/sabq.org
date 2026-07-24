@@ -1,4 +1,6 @@
 import { Router, Request, Response } from "express";
+import sharp from "sharp";
+import crypto from "crypto";
 import { canAcceptExternalSse, trackExternalSse, CACHE_TTL, withSWR } from "./memoryCache";
 import { db } from "./db";
 import { pickTableColumns } from "./utils/sanitizeBody";
@@ -2115,20 +2117,37 @@ router.post("/creatives/upload", requireAdvertiser, upload.single("file"), async
       return res.status(400).json({ error: "لم يتم رفع أي ملف" });
     }
     
-    // تحديد نوع الملف
+    // تحديد نوع الملف من الامتداد (قائمة بيضاء)
     const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
     const isImage = ALLOWED_IMAGE_EXTENSIONS.includes(ext);
     const isVideo = ALLOWED_VIDEO_EXTENSIONS.includes(ext);
-    
+
     if (!isImage && !isVideo) {
       return res.status(400).json({ error: "نوع الملف غير مدعوم" });
     }
-    
+
+    // للصور: تحقّق فعلي من البايتات واشتقاق الامتداد/النوع من الصيغة المُتحقَّقة —
+    // لا من الامتداد أو ترويسة MIME (audit #6, CWE-434).
+    let safeExt = ext;
+    let contentType = file.mimetype;
+    if (isImage) {
+      const RASTER: Record<string, string> = { jpeg: ".jpg", png: ".png", gif: ".gif", webp: ".webp" };
+      try {
+        const fmt = (await sharp(file.buffer).metadata()).format || "";
+        if (!RASTER[fmt]) return res.status(400).json({ error: "الصورة غير صالحة" });
+        safeExt = RASTER[fmt];
+        contentType = `image/${fmt}`;
+      } catch {
+        return res.status(400).json({ error: "الصورة غير صالحة" });
+      }
+    }
+
     const fileType = isImage ? "image" : "video";
-    
-    // رفع الملف إلى Object Storage
-    const relativePath = `ads/creatives/${userId}/${Date.now()}-${file.originalname}`;
-    const result = await objectStorage.uploadFile(relativePath, file.buffer, file.mimetype, "public");
+
+    // اسم عشوائي + امتداد آمن — لا نستخدم originalname (يمنع اجتياز المسار وامتدادًا مزوَّرًا).
+    const safeName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${safeExt}`;
+    const relativePath = `ads/creatives/${userId}/${safeName}`;
+    const result = await objectStorage.uploadFile(relativePath, file.buffer, contentType, "public");
     
     // استخدام proxy URL بدلاً من GCS URL المباشر لتجنب مشاكل الصلاحيات
     const proxyUrl = `/public-objects/${relativePath}`;

@@ -1504,13 +1504,22 @@ router.post("/auth/login", mobileAuthLimiter, async (req: Request, res: Response
       });
     }
 
+    // Per-account lockout on password guessing (audit #4) — bounds brute-force
+    // per ACCOUNT even if the IP rate-limiter is bypassed by spoofing client-IP
+    // headers against a directly-reachable origin.
+    if (await isLockedOut(`login:${user.id}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "بيانات الدخول غير صحيحة" 
+      await recordFailure(`login:${user.id}`);
+      return res.status(401).json({
+        success: false,
+        message: "بيانات الدخول غير صحيحة"
       });
     }
+    await clearFailures(`login:${user.id}`);
 
     // 2FA gate — a valid password ALONE must not mint a session when the account
     // has TOTP enabled (security audit S-01: the mobile flow skipped this check
