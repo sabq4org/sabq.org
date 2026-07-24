@@ -323,10 +323,10 @@ Body:
 
 | المعلومة | القيمة |
 |----------|--------|
-| **Measurement ID** | `G-EEB5593GY7` |
-| **API Secret** | `bQ0kFYHbRYelCTjeT3iVmg` |
+| **Measurement ID** | `YOUR_GA_MEASUREMENT_ID` |
+| **API Secret** | `YOUR_GA_API_SECRET` (من متغيّر بيئة — لا تضعه هنا) |
 
-✅ جاهز للاستخدام في التطبيق!
+> ⚠️ القيمة القديمة كانت مكشوفة في المستودع — يجب تدويرها في Google Analytics.
 
 ---
 
