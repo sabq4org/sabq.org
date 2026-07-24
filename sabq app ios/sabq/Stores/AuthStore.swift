@@ -19,6 +19,10 @@ final class AuthStore {
     private(set) var pendingActivationUserId: String?
     private(set) var pendingActivationEmail: String?
     private(set) var isResendingActivation = false
+    /// Non-nil while a password login is mid-2FA: holds the server challenge
+    /// token to exchange (with a TOTP or backup code) for a session. Drives the
+    /// code-entry step in LoginSheet; cleared on success or cancel.
+    private(set) var pending2FAChallengeToken: String?
     /// True when the most-recent auth response surfaced
     /// `isProfileComplete = false` — drives the "أكمل بياناتك" banner in
     /// Settings. Kept separate from `currentUser.isProfileComplete` because
@@ -124,10 +128,19 @@ final class AuthStore {
         errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
+        pending2FAChallengeToken = nil
         loginAttempts += 1
         lastLoginAttempt = Date()
         do {
             let response = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            // Account has 2FA enabled: the server returns requires2FA + a challenge
+            // (HTTP 200, no token) instead of a session. Switch to the code-entry
+            // step rather than surfacing the challenge message as an error.
+            if response.requires2FA == true, let challenge = response.challengeToken {
+                pending2FAChallengeToken = challenge
+                isLoading = false
+                return
+            }
             try await applySession(response, analyticsMethod: id.contains("@") ? "email" : "phone_password")
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
@@ -141,6 +154,41 @@ final class AuthStore {
             errorSource = .credentials
         }
         isLoading = false
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية برمز TOTP أو رمز احتياطي. يُبقي التحدّي
+    /// عند فشل الرمز حتى يتمكّن المستخدم من إعادة المحاولة دون إعادة الدخول.
+    @MainActor
+    func verifyTwoFactor(code: String?, backupCode: String? = nil) async -> Bool {
+        guard let challenge = pending2FAChallengeToken else { return false }
+        isLoading = true
+        errorMessage = nil
+        errorSource = .credentials
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.verifyTwoFactor(
+                challengeToken: challenge, code: code, backupCode: backupCode
+            )
+            try await applySession(response, analyticsMethod: "2fa")
+            pending2FAChallengeToken = nil
+            return true
+        } catch let apiError as APIError {
+            errorMessage = apiError.errorDescription ?? "رمز التحقق غير صحيح"
+            errorSource = .credentials
+            return false
+        } catch {
+            errorMessage = "رمز التحقق غير صحيح"
+            errorSource = .credentials
+            return false
+        }
+    }
+
+    /// إلغاء خطوة المصادقة الثنائية والرجوع لنموذج الدخول.
+    @MainActor
+    func cancelTwoFactor() {
+        pending2FAChallengeToken = nil
+        errorMessage = nil
+        errorSource = .none
     }
 
     // MARK: - دخول/تسجيل بالجوال (Twilio Verify)

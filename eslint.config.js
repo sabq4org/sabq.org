@@ -99,6 +99,14 @@ export default tseslint.config(
     rules: { "max-lines": ["error", { max: 21240 }] },
   },
   {
+    // Third emerging monolith: mobileApiRoutes.ts is the /api/v1 surface and had
+    // no ceiling while it grew past 9.8k lines. Cap it here (current size + ~100
+    // slack) so new endpoints go in their own module. When an extraction shrinks
+    // it, RATCHET this down — same rule as the two monoliths above.
+    files: ["server/routes/mobileApiRoutes.ts"],
+    rules: { "max-lines": ["error", { max: 10046 }] },
+  },
+  {
     // AI Hub (issue #589, Phase 3): every AI call goes through
     // server/ai/gateway (aiGateway.complete/embed/generateImage/tts) so it
     // gets usage tracking, cost accounting, and automatic failover. Direct

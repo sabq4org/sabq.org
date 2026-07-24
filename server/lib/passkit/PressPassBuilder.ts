@@ -3,6 +3,7 @@ import { PKPass } from 'passkit-generator';
 import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
+import { assertSafeImageUrl } from '../../utils/safeImageUrl';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -68,7 +69,11 @@ async function buildWhiteSabqLogoBuffers(): Promise<{ x1: Buffer; x2: Buffer; x3
  */
 async function buildCircularThumbnail(imageUrl: string): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer } | null> {
   try {
-    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
+    // SSRF guard: profileImageUrl is user-settable (PUT /api/profile/image), and a
+    // press-card holder could point this server fetch at internal services / cloud
+    // metadata. Allowlist + https-only + no-redirect (audit #3).
+    const safeUrl = assertSafeImageUrl(imageUrl);
+    const response = await fetch(safeUrl, { signal: AbortSignal.timeout(8000), redirect: "error" });
     if (!response.ok) return null;
     const source = Buffer.from(await response.arrayBuffer());
 

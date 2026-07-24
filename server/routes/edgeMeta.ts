@@ -35,6 +35,7 @@ import {
 } from "@shared/schema";
 import { eq, or, and, desc, ne, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
+import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import {
   buildArticleAuthorPerson,
   buildPersonJsonLd,
@@ -311,18 +312,10 @@ function escapeHtml(s: string): string {
 }
 
 // Mirrors server/seoInjector.ts — sanitize editor HTML before edge injection.
+// Delegates to the shared DOMPurify sanitizer (audit #5: the old regex left
+// unquoted `onerror`/`<img>` handlers intact → stored XSS).
 function stripUnsafeHtml(html: string): string {
-  if (!html) return "";
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
-    .replace(/<embed\b[^>]*>/gi, "")
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
-    .replace(/(href|src)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
-    .replace(/(href|src)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
+  return sanitizeArticleHtml(html);
 }
 
 // مقالات المونديال تربط لهب /world-cup — الفحص مشترك بين معالج seo-meta

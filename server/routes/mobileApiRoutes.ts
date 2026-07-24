@@ -13,6 +13,10 @@
 import { Router, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { userHasAnyRole } from "../rbac";
+import { invalidateAllUserSessions } from "../auth";
+import { verifyToken, verifyBackupCode } from "../twoFactor";
+import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
+import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -934,9 +938,24 @@ router.get("/devices/status", async (req: Request, res: Response) => {
 // نظام العضوية - MEMBERSHIP SYSTEM APIs (Using unified users table)
 // ============================================================================
 
-// Helper: Generate 6-digit verification code
+// Brute-force limiter for the account-activation / email-verification endpoints
+// (defined here so it precedes /auth/activate below; audit #4/#10).
+const mobileActivationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
+// Helper: Generate 6-digit verification code.
+// Uses a CSPRNG (crypto.randomInt) — Math.random is predictable/seedable and must
+// never back a password-reset or email-verification code (security audit S-04:
+// weak reset code). randomInt(100000, 1000000) is a uniform 6-digit value.
 function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 // Helper: Generate secure session token
@@ -1162,7 +1181,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 // 2. تفعيل الحساب - Activate Account
 // POST /api/v1/auth/activate
 // ==========================================
-router.post("/auth/activate", async (req: Request, res: Response) => {
+router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email, code } = req.body;
 
@@ -1251,7 +1270,7 @@ router.post("/auth/activate", async (req: Request, res: Response) => {
 // 3. إعادة إرسال رمز التفعيل - Resend Activation Code
 // POST /api/v1/auth/resend-activation
 // ==========================================
-router.post("/auth/resend-activation", async (req: Request, res: Response) => {
+router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email } = req.body;
 
@@ -1323,9 +1342,78 @@ router.post("/auth/resend-activation", async (req: Request, res: Response) => {
 
 // ==========================================
 // 4. تسجيل الدخول - Login
+// Bound brute-force on the credential + 2FA endpoints. Keyed by client IP
+// (Cloudflare-aware) — an anonymous mitigation until per-account lockout lands.
+const mobileAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
+// Mint the real member session + canonical user payload. Shared by the no-2FA
+// login path and the post-2FA verify path so both return an identical shape
+// (the iOS APIUser decoder depends on it — see buildUserRolePayload).
+async function issueMemberSessionResponse(
+  req: Request,
+  res: Response,
+  user: typeof users.$inferSelect,
+  deviceInfo: unknown,
+) {
+  const sessionToken = generateSessionToken();
+  const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  await db.insert(appMemberSessions).values({
+    memberId: user.id,
+    tokenHash,
+    deviceInfo: deviceInfo || null,
+    ipAddress: req.ip || null,
+    expiresAt,
+  });
+
+  await db.update(users)
+    .set({ lastLoginAt: new Date(), lastDeviceInfo: deviceInfo || null })
+    .where(eq(users.id, user.id));
+
+  console.log(`[Mobile API] User logged in: ${user.id}`);
+
+  const rolePayload = await buildUserRolePayload(user.id, user.role, user.jobTitle);
+
+  return res.json({
+    success: true,
+    message: "تم تسجيل الدخول بنجاح",
+    token: sessionToken,
+    expiresAt: expiresAt.toISOString(),
+    user: {
+      id: user.id,
+      email: user.email,
+      phone: user.phoneNumber,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImageUrl: user.profileImageUrl,
+      gender: user.gender,
+      city: user.city,
+      country: user.country,
+      locale: user.locale,
+      emailVerified: user.emailVerified,
+      phoneVerified: user.phoneVerified,
+      bio: user.bio,
+      jobTitle: user.jobTitle,
+      department: user.department,
+      verificationBadge: user.verificationBadge,
+      hasPressCard: user.hasPressCard,
+      ...rolePayload,
+    },
+  });
+}
+
 // POST /api/v1/auth/login
 // ==========================================
-router.post("/auth/login", async (req: Request, res: Response) => {
+router.post("/auth/login", mobileAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       email, 
@@ -1416,73 +1504,113 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       });
     }
 
+    // Per-account lockout on password guessing (audit #4) — bounds brute-force
+    // per ACCOUNT even if the IP rate-limiter is bypassed by spoofing client-IP
+    // headers against a directly-reachable origin.
+    if (await isLockedOut(`login:${user.id}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "بيانات الدخول غير صحيحة" 
+      await recordFailure(`login:${user.id}`);
+      return res.status(401).json({
+        success: false,
+        message: "بيانات الدخول غير صحيحة"
+      });
+    }
+    await clearFailures(`login:${user.id}`);
+
+    // 2FA gate — a valid password ALONE must not mint a session when the account
+    // has TOTP enabled (security audit S-01: the mobile flow skipped this check
+    // entirely, so a leaked password bypassed 2FA on editor/admin accounts).
+    // Hand back a short-lived, single-use challenge; the client completes login
+    // via POST /auth/verify-2fa with the TOTP or a backup code.
+    if (user.twoFactorEnabled) {
+      const challengeToken = await createTwoFactorChallenge(user.id);
+      return res.status(200).json({
+        success: false,
+        requires2FA: true,
+        challengeToken,
+        message: "يرجى إدخال رمز التحقق بخطوتين",
       });
     }
 
-    // Generate session token
-    const sessionToken = generateSessionToken();
-    const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-    // Create session
-    await db.insert(appMemberSessions).values({
-      memberId: user.id,
-      tokenHash,
-      deviceInfo: deviceInfo || null,
-      ipAddress: req.ip || null,
-      expiresAt,
-    });
-
-    // Update last login
-    await db.update(users)
-      .set({ 
-        lastLoginAt: new Date(),
-        lastDeviceInfo: deviceInfo || null,
-      })
-      .where(eq(users.id, user.id));
-
-    console.log(`[Mobile API] User logged in: ${user.id}`);
-
-    // Surface the full role/roles/jobTitle bundle on login (previously
-    // omitted) so the iOS APIUser decoder gets the canonical role on
-    // first paint — no more "قارئ" flicker / stuck-at-reader when the
-    // follow-up /members/profile call fails or is slow. See
-    // buildUserRolePayload() comment for the full rationale.
-    const rolePayload = await buildUserRolePayload(user.id, user.role, user.jobTitle);
-
-    res.json({
-      success: true,
-      message: "تم تسجيل الدخول بنجاح",
-      token: sessionToken,
-      expiresAt: expiresAt.toISOString(),
-      user: {
-        id: user.id,
-        email: user.email,
-        phone: user.phoneNumber,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl,
-        gender: user.gender,
-        city: user.city,
-        country: user.country,
-        locale: user.locale,
-        emailVerified: user.emailVerified,
-        phoneVerified: user.phoneVerified,
-        bio: user.bio,
-        jobTitle: user.jobTitle,
-        department: user.department,
-        verificationBadge: user.verificationBadge,
-        hasPressCard: user.hasPressCard,
-        ...rolePayload,
-      },
-    });
+    return issueMemberSessionResponse(req, res, user, deviceInfo);
   } catch (error) {
     console.error("[Mobile API] auth/login error:", error);
+    res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
+  }
+});
+
+// ==========================================
+// POST /api/v1/auth/verify-2fa
+// Completes a login that returned requires2FA: exchanges the challenge token +
+// a valid TOTP / backup code for a real member session. Mirrors the web
+// /api/2fa/verify logic but for the token-based mobile flow.
+// ==========================================
+router.post("/auth/verify-2fa", mobileAuthLimiter, async (req: Request, res: Response) => {
+  try {
+    const { challengeToken, token, backupCode, deviceInfo } = req.body ?? {};
+
+    if (!challengeToken) {
+      return res.status(400).json({ success: false, message: "رمز الجلسة مطلوب" });
+    }
+    if (!token && !backupCode) {
+      return res.status(400).json({ success: false, message: "رمز التحقق مطلوب" });
+    }
+
+    // Peek (do NOT consume yet) so a mistyped code can be retried without being
+    // forced back to the password step — the mobileAuthLimiter + 5-min TTL bound
+    // brute-force. The challenge is consumed only after a successful check.
+    const userId = await resolveTwoFactorChallenge(challengeToken);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "انتهت صلاحية جلسة التحقق. يرجى تسجيل الدخول من جديد",
+      });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user || !user.twoFactorEnabled) {
+      return res.status(401).json({ success: false, message: "تعذّر التحقق" });
+    }
+
+    // Per-account lockout (audit #4): bound online TOTP/backup-code guessing per
+    // account, not just per IP — an attacker holding the password can rotate IPs.
+    if (await isLockedOut(`2fa:${userId}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
+    let isValid = false;
+    let remainingBackupCodes: string[] | undefined;
+    if (backupCode) {
+      const result = verifyBackupCode(user.twoFactorBackupCodes || [], backupCode);
+      isValid = result.valid;
+      remainingBackupCodes = result.remainingCodes;
+    } else {
+      isValid = verifyToken(user.twoFactorSecret || "", token);
+    }
+
+    if (!isValid) {
+      // Wrong code: keep the challenge alive for a retry, but count the failure.
+      await recordFailure(`2fa:${userId}`);
+      return res.status(401).json({ success: false, message: "رمز التحقق غير صحيح" });
+    }
+
+    // Success — burn the challenge (single-use), clear the failure counter, and
+    // for a backup code persist the remaining set so it can't be reused.
+    await consumeTwoFactorChallenge(challengeToken);
+    await clearFailures(`2fa:${userId}`);
+    if (backupCode && remainingBackupCodes) {
+      await db.update(users)
+        .set({ twoFactorBackupCodes: remainingBackupCodes })
+        .where(eq(users.id, user.id));
+    }
+
+    return issueMemberSessionResponse(req, res, user, deviceInfo);
+  } catch (error) {
+    console.error("[Mobile API] auth/verify-2fa error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
   }
 });
@@ -1555,7 +1683,7 @@ router.post("/auth/logout-all", async (req: Request, res: Response) => {
 // 7. نسيت كلمة المرور - Forgot Password
 // POST /api/v1/auth/forgot-password
 // ==========================================
-router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { email, phone } = req.body;
 
@@ -1631,7 +1759,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
 // 8. إعادة تعيين كلمة المرور - Reset Password
 // POST /api/v1/auth/reset-password
 // ==========================================
-router.post("/auth/reset-password", async (req: Request, res: Response) => {
+router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email, phone, code, newPassword } = req.body;
 
@@ -1678,6 +1806,12 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       });
     }
 
+    // Per-account lockout on reset-code guessing — bounds the 6-digit space per
+    // account regardless of source IP (audit #4).
+    if (await isLockedOut(`reset:${user.id}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
     // Verify reset token
     const [resetRecord] = await db
       .select()
@@ -1691,9 +1825,10 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       .limit(1);
 
     if (!resetRecord) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية" 
+      await recordFailure(`reset:${user.id}`);
+      return res.status(400).json({
+        success: false,
+        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية"
       });
     }
 
@@ -1708,10 +1843,10 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       .set({ used: true })
       .where(eq(passwordResetTokens.id, resetRecord.id));
 
-    // Invalidate all sessions
-    await db.update(appMemberSessions)
-      .set({ isActive: false })
-      .where(eq(appMemberSessions.memberId, user.id));
+    // Kill ALL sessions (web + mobile) so a stolen session can't survive the
+    // reset — previously only mobile appMemberSessions were invalidated (audit #8).
+    await invalidateAllUserSessions(user.id);
+    await clearFailures(`reset:${user.id}`);
 
     console.log(`[Mobile API] Password reset for: ${user.id}`);
 
@@ -2232,9 +2367,18 @@ router.post("/members/change-password", async (req: Request, res: Response) => {
       .set({ passwordHash })
       .where(eq(users.id, session.userId));
 
-    res.json({ 
-      success: true, 
-      message: "تم تغيير كلمة المرور بنجاح" 
+    // Evict every OTHER session on a password change (audit #8), keeping the
+    // caller's current bearer token so this device stays signed in.
+    const authHeader = req.headers.authorization || "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const currentTokenHash = bearerToken
+      ? crypto.createHash("sha256").update(bearerToken).digest("hex")
+      : undefined;
+    await invalidateAllUserSessions(session.userId, { exceptMobileTokenHash: currentTokenHash });
+
+    res.json({
+      success: true,
+      message: "تم تغيير كلمة المرور بنجاح"
     });
   } catch (error) {
     console.error("[Mobile API] members/change-password error:", error);
@@ -2636,6 +2780,10 @@ router.delete("/members/account", async (req: Request, res: Response) => {
           deleted_at = NOW()
       WHERE id = ${userId}
     `);
+
+    // Also kill web (Passport) sessions — the SQL above only cleared
+    // app_member_sessions, leaving any web session alive (audit #8).
+    await invalidateAllUserSessions(userId);
 
     console.log(`[Mobile API] Account hard-deleted (anonymised + cascaded): ${userId}`);
 

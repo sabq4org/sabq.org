@@ -706,6 +706,23 @@ actor APIClient {
         )
     }
 
+    /// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول + رمز TOTP (أو رمز
+    /// احتياطي) بجلسة كاملة. الرد عند النجاح مطابق لرد الدخول العادي.
+    func verifyTwoFactor(challengeToken: String, code: String?, backupCode: String?) async throws -> APILoginResponse {
+        await ensureCSRF()
+        let deviceInfo = await Self.currentDeviceInfo()
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/verify-2fa",
+            body: APIVerifyTwoFactorRequest(
+                challengeToken: challengeToken,
+                token: code,
+                backupCode: backupCode,
+                deviceInfo: deviceInfo
+            )
+        )
+    }
+
     func register(name: String, email: String, password: String) async throws -> APILoginResponse {
         await ensureCSRF()
         return try await post(APILoginResponse.self, path: "/auth/register", body: APIRegisterRequest(

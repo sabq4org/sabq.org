@@ -1,0 +1,88 @@
+/**
+ * Pending-2FA challenge store for the token-based mobile auth flow.
+ *
+ * The web login holds its mid-2FA state in the Passport session
+ * (`pending2FAUserId`). Mobile clients are session-less (bearer tokens), so a
+ * successful password check on an account with 2FA enabled instead returns a
+ * short-lived challenge token. The client must then present a valid TOTP /
+ * backup code together with this token before any real session is minted.
+ *
+ * Two-step lifecycle so a mistyped code does NOT force a re-login (parity with
+ * the web flow):
+ *   - resolveTwoFactorChallenge(token) → peek: userId without consuming, so the
+ *     user can retry a wrong code (bounded by the endpoint's rate limiter + TTL).
+ *   - consumeTwoFactorChallenge(token) → invalidate, called only AFTER a
+ *     successful verification (single-use).
+ *
+ * Storage: Redis when connected (multi-pod safe — production runs Redis), with
+ * an in-memory fallback for single-instance / dev. The store never grants
+ * access on its own; it only maps an opaque token → userId for a few minutes,
+ * and fails closed (returns null) when the token is missing, expired, or reused.
+ */
+import crypto from "crypto";
+import { getRedisClient } from "../redis";
+
+const PREFIX = "m2fa:";
+const TTL_SECONDS = 5 * 60;
+
+// Fallback used only when Redis is not connected. `expiresAt` is epoch ms.
+const memoryStore = new Map<string, { userId: string; expiresAt: number }>();
+
+function sweepMemory(): void {
+  const now = Date.now();
+  for (const [key, entry] of memoryStore) {
+    if (entry.expiresAt <= now) memoryStore.delete(key);
+  }
+}
+
+/** Create a challenge for `userId`; returns the opaque token. */
+export async function createTwoFactorChallenge(userId: string): Promise<string> {
+  const token = crypto.randomBytes(32).toString("hex");
+  const key = PREFIX + token;
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.set(key, userId, { expiration: { type: "EX", value: TTL_SECONDS } });
+  } else {
+    sweepMemory();
+    memoryStore.set(key, { userId, expiresAt: Date.now() + TTL_SECONDS * 1000 });
+  }
+  return token;
+}
+
+/**
+ * Resolve a challenge token to its userId WITHOUT consuming it. Returns the
+ * userId for a valid, unexpired token, or null otherwise (missing / expired /
+ * malformed). Not consuming here lets the client retry a wrong code without
+ * being forced back to the password step.
+ */
+export async function resolveTwoFactorChallenge(token: unknown): Promise<string | null> {
+  if (typeof token !== "string" || token.length === 0) return null;
+  const key = PREFIX + token;
+  const redis = getRedisClient();
+  if (redis) {
+    return (await redis.get(key)) || null;
+  }
+  sweepMemory();
+  const entry = memoryStore.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    memoryStore.delete(key);
+    return null;
+  }
+  return entry.userId;
+}
+
+/**
+ * Invalidate a challenge token. Call ONLY after a successful verification so the
+ * token is strictly single-use for minting a session.
+ */
+export async function consumeTwoFactorChallenge(token: unknown): Promise<void> {
+  if (typeof token !== "string" || token.length === 0) return;
+  const key = PREFIX + token;
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.del(key);
+    return;
+  }
+  memoryStore.delete(key);
+}

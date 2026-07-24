@@ -60,7 +60,10 @@ async function fetchImage(url: string): Promise<Image | null> {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 4000);
-    const resp = await fetch(url, { signal: ctrl.signal });
+    // redirect:'error' closes the redirect-to-internal vector; no host allowlist
+    // here because meta.logo is server-configured (not user-controlled) and may
+    // legitimately point at external team-logo CDNs (audit #3, low-risk sibling).
+    const resp = await fetch(url, { signal: ctrl.signal, redirect: "error" });
     clearTimeout(t);
     if (!resp.ok) return null;
     const buf = Buffer.from(await resp.arrayBuffer());

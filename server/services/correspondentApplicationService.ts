@@ -16,6 +16,8 @@ import {
   type User,
 } from "@shared/schema";
 import { isMediaLicenseExpired } from "./mediaLicenseService";
+import { invalidateAllUserSessions } from "../auth";
+import { invalidateUserPermissionCache } from "../rbac";
 
 // Only plain reader-type accounts may be auto-upgraded on approval. A
 // staff/admin account with the same email must be handled manually — silently
@@ -265,6 +267,12 @@ export async function approveCorrespondentApplication(
   }
 
   await assignReporterRbacRole(finalUser.id, reviewerId);
+
+  // An existing reader account was re-credentialed and escalated to reporter —
+  // evict every prior session and permission cache so a stale/stolen session
+  // can't survive the reset or silently inherit the higher role (audit #8).
+  await invalidateAllUserSessions(finalUser.id);
+  invalidateUserPermissionCache(finalUser.id);
 
   const [updatedApplication] = await db
     .update(correspondentApplications)

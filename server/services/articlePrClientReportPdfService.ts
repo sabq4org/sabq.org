@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, enArticles, readingHistory } from "@shared/schema";
+import { isSafeImageUrl } from "../utils/safeImageUrl";
 import {
   getArticleReadingOverrides,
   resolveReadingMetrics,
@@ -182,11 +183,16 @@ async function fetchImageAsDataUrl(url: string | null | undefined): Promise<stri
 
   const candidates = jpegFriendlyCandidates(url);
   for (const candidate of candidates) {
+    // SSRF guard: article.imageUrl is editor-controlled, so this server-side
+    // fetch must be restricted to allowlisted https image hosts — never internal
+    // services / cloud metadata (audit #3, S-02 sibling).
+    if (!isSafeImageUrl(candidate)) continue;
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 12_000);
       const res = await fetch(candidate, {
         signal: controller.signal,
+        redirect: "error",
         headers: { Accept: "image/jpeg,image/png,image/*;q=0.8,*/*;q=0.5" },
       });
       clearTimeout(timer);

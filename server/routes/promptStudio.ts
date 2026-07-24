@@ -4,6 +4,7 @@
  *   POST /api/prompt-studio/optimize   يعيد صياغة برومبت وفق دليل Anthropic
  */
 import { Router } from "express";
+import crypto from "crypto";
 import { requireAuth } from "../rbac";
 import {
   optimizePrompt,
@@ -20,8 +21,20 @@ const TOOL_BEHAVIORS: ToolBehavior[] = ["proactive", "conservative", "parallel",
 const THINKING_DEPTHS: ThinkingDepth[] = ["none", "low", "medium", "high", "max"];
 const PROVIDERS: AIProvider[] = ["anthropic", "openai", "gemini"];
 
-// كلمة السر للرابط العام (خارج لوحة التحكم) — قابلة للتجاوز عبر متغير البيئة.
-const PUBLIC_PASSWORD = process.env.PROMPT_STUDIO_PASSWORD || "Ali&Sultan";
+// كلمة سر الرابط العام تأتي من البيئة فقط — لا قيمة احتياطية مثبّتة في git
+// (audit #9). عند غيابها تُعطَّل النقطة العامة بأمان (503) بدل قبول سرّ معروف.
+const PUBLIC_PASSWORD = process.env.PROMPT_STUDIO_PASSWORD;
+
+// مقارنة ثابتة الزمن — تمنع تسريب المحتوى/الطول عبر توقيت الرد.
+function timingSafeEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) {
+    crypto.timingSafeEqual(bb, bb); // عمل وهمي ثابت الزمن قبل الرفض
+    return false;
+  }
+  return crypto.timingSafeEqual(ab, bb);
+}
 
 function parseInput(body: any): OptimizePromptInput {
   const toolBehavior = TOOL_BEHAVIORS.includes(body.toolBehavior)
@@ -73,8 +86,11 @@ router.post("/api/prompt-studio/optimize", requireAuth, async (req: any, res) =>
 router.post("/api/prompt-studio/optimize-public", async (req: any, res) => {
   try {
     const body = req.body || {};
+    if (!PUBLIC_PASSWORD) {
+      return res.status(503).json({ message: "الرابط العام غير مفعّل حالياً" });
+    }
     const password = String(body.password || "");
-    if (password !== PUBLIC_PASSWORD) {
+    if (!timingSafeEquals(password, PUBLIC_PASSWORD)) {
       return res.status(401).json({ message: "كلمة السر غير صحيحة" });
     }
 

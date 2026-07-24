@@ -25,7 +25,7 @@ import {
   searchEnArticlesForAnalytics,
 } from "./services/articleAnalyticsSearchService";
 import { pickTableColumns } from "./utils/sanitizeBody";
-import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
+import { setupAuth, isAuthenticated, invalidateUserSessionCache, invalidateAllUserSessions } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
 import { registerDataStoryRoutes } from './data-story-routes';
@@ -63,8 +63,8 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache } from "./rbac";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { PERMISSION_CODES, ROLE_NAMES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
 // Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
@@ -1157,6 +1157,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ used: true })
         .where(eq(passwordResetTokens.id, matchedToken.id));
 
+      await invalidateAllUserSessions(matchedToken.userId); // kill all sessions so a stolen cookie can't survive the reset (audit #8)
+
       res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
     } catch (error) {
       console.error("Reset password error:", error);
@@ -1203,11 +1205,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Update user password and set mustChangePassword to false
       await db
         .update(users)
-        .set({ 
+        .set({
           passwordHash,
-          mustChangePassword: false 
+          mustChangePassword: false
         })
         .where(eq(users.id, userId));
+
+      // Evict every OTHER session on a password change (audit #8), keeping the
+      // caller's current session so they aren't logged out mid-flow.
+      await invalidateAllUserSessions(userId, { exceptWebSid: req.sessionID });
 
       console.log("✅ Password changed successfully for user:", user.email);
       res.json({ message: "تم تغيير كلمة المرور بنجاح" });
@@ -5304,6 +5310,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // This generic user-update endpoint also assigns a role (roleId) — apply the
+      // same hierarchy guard as /roles so an admin can't mint system_admin here (audit #2).
+      const patchRoleErr = await roleIdsAssignmentError(adminUserId, parsed.data.roleId ? [parsed.data.roleId] : null);
+      if (patchRoleErr) return res.status(patchRoleErr.status).json({ message: patchRoleErr.message });
+
       // Get old user data for logging
       const [oldUser] = await db
         .select()
@@ -5537,6 +5548,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ status: "banned" })
         .where(eq(users.id, targetUserId));
 
+      await invalidateAllUserSessions(targetUserId); // revoke access immediately: web+mobile sessions + cache (audit #8)
+
       // Log activity
       await logActivity({
         userId: adminUserId,
@@ -5655,6 +5668,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
+      await invalidateAllUserSessions(targetUserId); // kill any lingering sessions (audit #8)
+
       console.log(`[ADMIN] User ${targetUserId} permanently deleted by admin ${adminUserId}`);
 
       res.json({
@@ -5714,10 +5729,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Update password
       await db
         .update(users)
-        .set({ 
+        .set({
           passwordHash: hashedPassword
         })
         .where(eq(users.id, targetUserId));
+
+      await invalidateAllUserSessions(targetUserId); // admin reset must also evict a compromised session (audit #8)
 
       // Log activity
       await logActivity({
@@ -5758,6 +5775,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           errors: parsed.error.flatten().fieldErrors,
         });
       }
+
+      // Can't bootstrap a system_admin via user creation either (audit #2).
+      const createRoleErr = await roleIdsAssignmentError(createdBy, parsed.data.roleIds);
+      if (createRoleErr) return res.status(createRoleErr.status).json({ message: createRoleErr.message });
 
       // Pre-check lower(email) قبل الإدراج (يطابق /api/register، يقلل الضغط).
       const normalizedEmail = parsed.data.email.trim().toLowerCase();
@@ -5904,6 +5925,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "User not found" });
       }
 
+      // RBAC hierarchy guard: the assigner may only grant roles their authority
+      // permits — an `admin` must never be able to mint a `system_admin` (audit #2).
+      const rolesErr = await roleIdsAssignmentError(updatedBy, parsed.data.roleIds);
+      if (rolesErr) return res.status(rolesErr.status).json({ message: rolesErr.message });
+
       await storage.updateUserRoles(
         targetUserId,
         parsed.data.roleIds,
@@ -6015,6 +6041,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "التأثير يجب أن يكون 'allow' أو 'deny'" });
       }
 
+      // Escalation guard (audit #2, override vector): 'allow'-granting a
+      // privilege-management permission is a back door to superuser — only a
+      // system_admin may, and no one edits their own overrides.
+      if (userId === grantedBy) {
+        return res.status(403).json({ message: "لا يمكنك تعديل صلاحياتك بنفسك" });
+      }
+      const PRIVILEGE_GRANTING_CODES = new Set(["users.change_role", "users.manage", "system.manage_roles", "permissions.manage", "roles.manage"]);
+      if (effect === "allow" && PRIVILEGE_GRANTING_CODES.has(permissionCode)
+          && (await getRoleAssignmentAuthority(grantedBy)) !== ROLE_NAMES.SYSTEM_ADMIN) {
+        return res.status(403).json({ message: "منح هذه الصلاحية مقصور على مدير النظام" });
+      }
+
       // Upsert the permission override
       const { userPermissionOverrides } = await import("@shared/schema");
       const { eq, and } = await import("drizzle-orm");
@@ -6121,7 +6159,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         let password = '';
         for (let i = 0; i < length; i++) {
-          password += chars.charAt(Math.floor(Math.random() * chars.length));
+          // CSPRNG — this password is emailed/stored as a real login credential (audit #10).
+          password += chars.charAt(crypto.randomInt(chars.length));
         }
         return password;
       }
@@ -6225,7 +6264,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 updatedAt: new Date(),
               } as any)
               .where(eq(users.id, staffUser.id));
-            
+
+            await invalidateAllUserSessions(staffUser.id); // new credentials — evict any old/compromised session (audit #8)
+
             results.push({ userId: staffUser.id, email: staffUser.email, success: true });
             console.log(`✅ [SEND CREDENTIALS] Sent credentials to ${staffUser.email}`);
           } else {
@@ -6478,6 +6519,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       if (!normalizedName || normalizedName.length < 2) {
         return res.status(400).json({ message: "اسم الدور يجب أن يحتوي على حرفين على الأقل" });
+      }
+
+      // Never let a custom role be named into a superuser tier — those names grant
+      // full superuser via getUserPermissions' name check, so creating one would be
+      // a back door around canAssignRole (audit #2). Note: normalization strips the
+      // dot, so "system.admin" arrives as "systemadmin".
+      const RESERVED_ROLE_NAMES = ["system_admin", "systemadmin", "superadmin", "admin"];
+      if (RESERVED_ROLE_NAMES.includes(normalizedName)) {
+        return res.status(400).json({ message: "اسم الدور محجوز ولا يمكن استخدامه" });
       }
 
       // Validate with Zod schema
@@ -18020,6 +18070,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!role) {
         return res.status(400).json({ message: "الدور مطلوب" });
       }
+      // RBAC hierarchy guard (audit #2 — this dashboard sibling was missed by the
+      // first fix, which only covered /api/admin/users/:id/roles). An admin must
+      // not be able to write role='system_admin' or self-escalate.
+      if (userId === req.user?.id) {
+        return res.status(403).json({ message: "لا يمكنك تعديل دورك بنفسك" });
+      }
+      const roleErr = await roleAssignmentError(req.user.id, role);
+      if (roleErr) return res.status(roleErr.status).json({ message: roleErr.message });
 
       const updatedUser = await storage.updateUserRole(userId, role);
       invalidateUserPermissionCache(userId);
@@ -18066,7 +18124,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log("🗑️ [USER DELETE] Soft deleting user:", userId);
 
       const updatedUser = await storage.softDeleteUser(userId);
-      
+      await invalidateAllUserSessions(userId); // revoke access immediately (audit #8)
+
       console.log("✅ [USER DELETE] User soft deleted successfully:", userId);
       res.json(updatedUser);
     } catch (error) {
@@ -18163,6 +18222,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!role) {
         return res.status(400).json({ message: "الدور مطلوب" });
       }
+      // Same RBAC hierarchy guard as the single-user endpoint (audit #2).
+      if (userIds.includes(req.user?.id)) {
+        return res.status(403).json({ message: "لا يمكنك تعديل دورك ضمن التحديث الجماعي" });
+      }
+      const bulkRoleErr = await roleAssignmentError(req.user.id, role);
+      if (bulkRoleErr) return res.status(bulkRoleErr.status).json({ message: bulkRoleErr.message });
 
       const result = await storage.bulkUpdateUserRole(userIds, role);
       for (const uid of userIds) {

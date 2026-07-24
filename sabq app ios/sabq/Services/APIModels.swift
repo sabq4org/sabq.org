@@ -816,6 +816,13 @@ nonisolated struct APIPhoneVerifyRequest: Encodable {
     let deviceInfo: APIDeviceInfo?
 }
 
+nonisolated struct APIVerifyTwoFactorRequest: Encodable {
+    let challengeToken: String
+    let token: String?       // TOTP code from the authenticator app
+    let backupCode: String?  // or a one-time backup code
+    let deviceInfo: APIDeviceInfo?
+}
+
 nonisolated struct APIAvatarUploadResponse: Decodable {
     let success: Bool?
     let imageUrl: String?
@@ -865,6 +872,11 @@ nonisolated struct APILoginResponse: Decodable {
     let token: String?
     let user: APIUser?
     let emailSent: Bool?
+    // 2FA: when the account has TOTP enabled the server returns HTTP 200 with
+    // requires2FA=true, token=nil, and a short-lived challengeToken to exchange
+    // for a real session via /auth/verify-2fa.
+    let requires2FA: Bool?
+    let challengeToken: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -874,6 +886,8 @@ nonisolated struct APILoginResponse: Decodable {
         user = (try? c.decode(APIUser.self, forKey: FlexKey("user")))
             ?? (try? c.decode(APIUser.self, forKey: FlexKey("data")))
         emailSent = try? c.decode(Bool.self, forKey: FlexKey("emailSent"))
+        requires2FA = try? c.decode(Bool.self, forKey: FlexKey("requires2FA"))
+        challengeToken = try? c.decode(String.self, forKey: FlexKey("challengeToken"))
     }
 }
 

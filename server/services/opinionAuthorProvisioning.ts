@@ -6,7 +6,7 @@ import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { users, opinionAuthorApplications } from "@shared/schema";
-import { invalidateUserSessionCache } from "../auth";
+import { invalidateAllUserSessions } from "../auth";
 import { sendOpinionAuthorApprovalEmail } from "./employeeNotifications";
 
 export interface ResendOpinionAuthorCredentialsResult {
@@ -62,7 +62,9 @@ export async function resendOpinionAuthorCredentials(
     })
     .where(eq(users.id, user.id));
 
-  invalidateUserSessionCache(user.id);
+  // New credentials issued to an existing account — evict every prior session
+  // so a stolen session can't survive the reset (audit #8).
+  await invalidateAllUserSessions(user.id);
 
   const emailResult = await sendOpinionAuthorApprovalEmail(
     application.email,

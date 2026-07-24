@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags, angles, topics, staff } from "@shared/schema";
 import { eq, or, desc, and, sql, aliasedTable, inArray } from "drizzle-orm";
+import { sanitizeArticleHtml } from "./utils/sanitizeHtml";
 
 // Pulled into a module-level alias so we can join the `users` table twice in
 // the same query — once for `authorId` (the staff member who entered the
@@ -103,21 +104,11 @@ function truncate(str: string, len: number): string {
   return str.substring(0, len).replace(/\s+\S*$/, '') + '...';
 }
 
-// Removes script/iframe/style/embed tags, inline event handlers, and javascript: URLs
-// from stored article HTML before injecting it into the SSR response. The content
-// is editor-controlled (TipTap) so this is defense-in-depth, not primary sanitization.
+// Sanitizes stored article HTML before injecting it into the SSR response.
+// Delegates to the shared DOMPurify-based sanitizer — the previous regex missed
+// unquoted event handlers (`<img src=x onerror=...>`) → stored XSS (audit #5).
 function stripUnsafeHtml(html: string): string {
-  if (!html) return '';
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/(href|src)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
-    .replace(/(href|src)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
+  return sanitizeArticleHtml(html);
 }
 
 function getBaseUrl(req: Request): string {

@@ -17,6 +17,7 @@
  */
 
 import { db } from "../db";
+import crypto from "crypto";
 import { storage } from "../storage";
 import { users, roles, userRoles, type AngleSubmission, type Angle, type User } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -24,7 +25,7 @@ import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
 import { transliterateToEnglish, generateEnglishSlug } from "../utils/slugTransliterator";
 import { logActivity, invalidateUserPermissionCache } from "../rbac";
-import { invalidateUserSessionCache } from "../auth";
+import { invalidateAllUserSessions } from "../auth";
 import { sendEmailNotification } from "./email";
 
 const LOGIN_URL = "https://sabq.org/login";
@@ -52,7 +53,8 @@ function generatePassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let password = "";
   for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    // CSPRNG — this becomes the writer's real login password (audit #10).
+    password += chars.charAt(crypto.randomInt(chars.length));
   }
   return password;
 }
@@ -141,7 +143,7 @@ export async function provisionAngleFromSubmission(
     console.warn("[muqtarab] دور angle_writer غير موجود في DB — شغّل seedRBAC. تم تخطّي إسناد الدور.");
   }
   invalidateUserPermissionCache(user.id);
-  invalidateUserSessionCache(user.id);
+  await invalidateAllUserSessions(user.id);
 
   // إنشاء الزاوية وربطها بالمستخدم كمدير
   const angle = await storage.createAngle({
@@ -236,7 +238,7 @@ export async function resendAngleWriterCredentials(
         emailVerified: true,
       })
       .where(eq(users.id, user.id));
-    invalidateUserSessionCache(user.id);
+    await invalidateAllUserSessions(user.id);
     showAsNewCredentials = true;
   }
 

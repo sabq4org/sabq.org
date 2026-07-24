@@ -13,6 +13,7 @@ import {
 import { db } from "../../db";
 import { varaSendOtp, varaVerifyOtp } from "../../services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "../../services/phoneAuth";
+import { createTwoFactorChallenge } from "../../services/mobileTwoFactorChallenge";
 
 const router = Router();
 
@@ -98,6 +99,25 @@ async function issueSession(
   });
 
   return { token, expiresAt };
+}
+
+// If the matched account has 2FA enabled, an external identity (Google / Apple /
+// SMS) must NOT bypass TOTP (audit #1). Returns true after sending a challenge
+// response — callers must `return` immediately. New accounts (twoFactorEnabled
+// falsy) proceed to a normal session. Completed via POST /api/v1/auth/verify-2fa.
+async function maybeRequireTwoFactor(
+  user: { id: string; twoFactorEnabled?: boolean | null },
+  res: Response,
+): Promise<boolean> {
+  if (!user.twoFactorEnabled) return false;
+  const challengeToken = await createTwoFactorChallenge(user.id);
+  res.status(200).json({
+    success: false,
+    requires2FA: true,
+    challengeToken,
+    message: "يرجى إدخال رمز التحقق بخطوتين",
+  });
+  return true;
 }
 
 // MARK: - دخول/تسجيل بالجوال (Twilio Verify) — E.164 دولي (+ أو 00) أو سعودي محلي.
@@ -227,6 +247,8 @@ router.post("/auth/google", async (req: Request, res: Response) => {
         .returning();
       user = created;
     }
+
+    if (await maybeRequireTwoFactor(user, res)) return;
 
     const { token, expiresAt } = await issueSession(
       user.id,
@@ -379,6 +401,8 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       user = created;
     }
 
+    if (await maybeRequireTwoFactor(user, res)) return;
+
     const { token, expiresAt } = await issueSession(
       user.id,
       deviceInfo,
@@ -419,8 +443,17 @@ router.post("/auth/phone/send", phoneSendLimiter, async (req: Request, res: Resp
   }
 });
 
+// حدّ محاولات التحقق — يمنع تخمين رمز SMS/تكرار المطابقة بحساب قائم.
+const phoneVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
 // التحقق من الرمز → دخول العضو، وإنشاء حسابه إن لم يكن موجودًا (نفس SSO سبق).
-router.post("/auth/phone/verify", async (req: Request, res: Response) => {
+router.post("/auth/phone/verify", phoneVerifyLimiter, async (req: Request, res: Response) => {
   try {
     const e164 = normalizePhone(req.body?.phone);
     const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
@@ -444,6 +477,9 @@ router.post("/auth/phone/verify", async (req: Request, res: Response) => {
       return res.status(result.status).json({ success: false, message: result.message });
     }
     const user = result.user;
+
+    // 2FA gate — SMS alone must not bypass TOTP on an existing account (SIM-swap).
+    if (await maybeRequireTwoFactor(user, res)) return;
 
     const { token, expiresAt } = await issueSession(user.id, deviceInfo, req.ip);
 

@@ -181,7 +181,15 @@ router.post(
       if (!isPrivateObjectStorageConfigured()) {
         return res.status(503).json({ message: "التخزين الخاص غير مهيأ" });
       }
-      const ext = (req.file.originalname.split(".").pop() || "bin").toLowerCase().slice(0, 6);
+      // Constrain the stored extension to a known-safe allowlist rather than
+      // trusting originalname (audit #6, CWE-434) — blocks .html/.svg/.js even
+      // though these docs live in private storage behind short-lived signed URLs.
+      const rawExt = (req.file.originalname.split(".").pop() || "").toLowerCase();
+      const ALLOWED_DOC_EXT = new Set(["pdf", "jpg", "jpeg", "png", "webp"]);
+      if (!ALLOWED_DOC_EXT.has(rawExt)) {
+        return res.status(400).json({ message: "امتداد الملف غير مسموح. المسموح: PDF, JPG, PNG, WEBP" });
+      }
+      const ext = rawExt;
       const key = `staff-docs/${req.params.userId}-${kind}-${Date.now()}.${ext}`;
       const stored = await new ObjectStorageService().uploadFile(key, req.file.buffer, req.file.mimetype, "private");
       await setStaffDocumentKey(req.params.userId, kind, stored.path, (req.user as { id: string }).id);
