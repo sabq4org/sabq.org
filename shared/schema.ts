@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, integer, bigint, jsonb, index, real, primaryKey, uniqueIndex, serial, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, integer, bigint, jsonb, index, real, primaryKey, uniqueIndex, serial, date, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7076,12 +7076,18 @@ export const mediaUsageLog = pgTable("media_usage_log", {
 // large vector never loads in the common media list query.
 export const mediaVectors = pgTable("media_vectors", {
   mediaFileId: varchar("media_file_id").primaryKey().references(() => mediaFiles.id, { onDelete: "cascade" }),
-  embedding: jsonb("embedding").$type<number[]>(), // 1536-dim vector
+  embedding: jsonb("embedding").$type<number[]>(), // legacy 1536-dim jsonb — يبقى للتوافق حتى اكتمال التحول
+  // pgvector: البحث بالمسافة يجري داخل PostgreSQL (فهرس HNSW) بدل سحب آلاف
+  // المتجهات إلى Node. يتطلب CREATE EXTENSION vector (موجود على الإنتاج
+  // 2026-07-25، ومحليًا عبر صورة pgvector/pgvector في docker-compose).
+  embeddingVec: vector("embedding_vec", { dimensions: 1536 }),
   embeddingText: text("embedding_text"), // the source text the vector was built from
   embeddingModel: text("embedding_model").default("text-embedding-3-large"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_media_vectors_updated").on(table.updatedAt),
+  // HNSW بنفس اسم الفهرس المُنشأ يدويًا على الإنتاج (CONCURRENTLY) — لا تغيّر الاسم
+  index("idx_media_vectors_embedding_hnsw").using("hnsw", table.embeddingVec.op("vector_cosine_ops")),
 ]);
 
 // ============================================
