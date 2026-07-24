@@ -20,6 +20,7 @@ import { memoryCache } from "../memoryCache";
 import { invalidatePublishedContent } from "../services/contentInvalidation";
 import { detectUrls, isNewsUrl, containsOnlyUrl, extractArticleContent, getSourceAttribution } from "../services/urlContentExtractor";
 import { sendEditorPublishAlert, getPublisherName } from "../services/editorAlerts";
+import { riyadhDayRange } from "../utils/riyadhDay";
 
 const router = Router();
 
@@ -2065,23 +2066,27 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
   }
 });
 
+// المسار يكتب "processed" للرسالة التي حُفظت مسودة (مرسل بلا نشر تلقائي)؛
+// "drafted" قيمة تاريخية بقيت في صفوف قديمة.
+const DRAFTED_STATUSES = new Set(["processed", "drafted"]);
+
+function isDraftedStatus(status?: string | null): boolean {
+  return !!status && DRAFTED_STATUSES.has(status);
+}
+
 // GET /api/email-agent/stats - Get email agent statistics (admin only)
 router.get("/stats", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    // Calculate stats directly from webhook logs for today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { start, end } = riyadhDayRange();
     
     // Get all webhook logs for today using date range query
-    const todayLogs = await storage.getEmailWebhookLogsByDateRange(today, tomorrow);
+    const todayLogs = await storage.getEmailWebhookLogsByDateRange(start, end);
     
     // Calculate stats from actual logs (already filtered by DB)
     const stats = {
       emailsReceived: todayLogs.length,
       emailsPublished: todayLogs.filter((log: any) => log.status === 'published').length,
-      emailsDrafted: todayLogs.filter((log: any) => log.status === 'drafted').length,
+      emailsDrafted: todayLogs.filter((log: any) => isDraftedStatus(log.status)).length,
       emailsRejected: todayLogs.filter((log: any) => log.status === 'rejected').length,
       emailsFailed: todayLogs.filter((log: any) => log.status === 'failed').length,
     };
@@ -2110,23 +2115,21 @@ router.get("/stats", isAuthenticated, requirePermission('admin.manage_settings')
 // GET /api/email-agent/badge-stats - Get badge notification statistics (admin only)
 router.get("/badge-stats", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    // Calculate today's date range
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { start, end } = riyadhDayRange();
     
     // Get all webhook logs for today using date range query
-    const todayLogs = await storage.getEmailWebhookLogsByDateRange(today, tomorrow);
+    const todayLogs = await storage.getEmailWebhookLogsByDateRange(start, end);
     
     // Calculate badge stats
     const newMessages = todayLogs.filter((log: any) => log.status === 'received').length;
     const publishedToday = todayLogs.filter((log: any) => log.status === 'published').length;
+    const draftedToday = todayLogs.filter((log: any) => isDraftedStatus(log.status)).length;
     const rejectedToday = todayLogs.filter((log: any) => log.status === 'rejected').length;
     
     return res.json({
       newMessages,
       publishedToday,
+      draftedToday,
       rejectedToday,
     });
   } catch (error: any) {
@@ -2166,6 +2169,26 @@ router.get("/logs", isAuthenticated, requirePermission('admin.manage_settings'),
     console.error("[Email Agent] Error fetching logs:", error);
     return res.status(500).json({
       message: "Failed to fetch email logs",
+      error: error.message,
+    });
+  }
+});
+
+// POST /api/email-agent/logs/bulk-delete - Delete several webhook logs (admin only)
+router.post("/logs/bulk-delete", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body ?? {};
+    
+    if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === 'string')) {
+      return res.status(400).json({ message: "قائمة المعرفات مطلوبة" });
+    }
+    
+    await storage.deleteEmailWebhookLogs(ids);
+    return res.json({ message: "Logs deleted successfully", deleted: ids.length });
+  } catch (error: any) {
+    console.error("[Email Agent] Error bulk deleting logs:", error);
+    return res.status(500).json({
+      message: "Failed to delete logs",
       error: error.message,
     });
   }

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -45,7 +46,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
   MessageSquare,
-  Users,
   TrendingUp,
   CheckCircle2,
   XCircle,
@@ -56,11 +56,19 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  KeyRound,
+  ScrollText,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { WhatsappToken, WhatsappWebhookLog, User } from "@shared/schema";
-import { formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
+import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
+import { SectionHeading } from "@/components/communications/SectionHeading";
+import {
+  WHATSAPP_STATUS_FILTERS,
+  formatRelativeSafe,
+  getLogStatusMeta,
+} from "@/components/communications/logStatus";
+import type { WhatsappToken, WhatsappWebhookLog } from "@shared/schema";
 
 interface StatsData {
   totalToday: number;
@@ -87,11 +95,7 @@ interface TokenFormValues {
   isActive: boolean;
 }
 
-interface WhatsAppTabProps {
-  user: User;
-}
-
-export default function WhatsAppTab({ user }: WhatsAppTabProps) {
+export default function WhatsAppTab() {
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -123,28 +127,24 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
     queryKey: ['/api/whatsapp/config'],
     retry: 1,
     staleTime: 60000,
-    enabled: !!user && ['admin', 'system_admin', 'manager'].includes(user.role || ''),
   });
 
   const { data: stats, isLoading: statsLoading } = useQuery<StatsData>({
     queryKey: ['/api/whatsapp/stats'],
     retry: 1,
     staleTime: 30000,
-    enabled: !!user && ['admin', 'system_admin', 'manager'].includes(user.role || ''),
   });
 
-  const { data: tokens, isLoading: tokensLoading } = useQuery<WhatsappToken[]>({
+  const { data: tokens, isLoading: tokensLoading, error: tokensError } = useQuery<WhatsappToken[]>({
     queryKey: ['/api/whatsapp/tokens'],
     retry: 1,
     staleTime: 30000,
-    enabled: !!user && ['admin', 'system_admin', 'manager'].includes(user.role || ''),
   });
 
-  const { data: logsData, isLoading: logsLoading } = useQuery<{ logs: WhatsappWebhookLog[]; total: number }>({
+  const { data: logsData, isLoading: logsLoading, error: logsError } = useQuery<{ logs: WhatsappWebhookLog[]; total: number }>({
     queryKey: ['/api/whatsapp/logs', { status: logsStatusFilter, limit: 50, offset: (logsPage - 1) * 50 }],
     retry: 1,
     staleTime: 30000,
-    enabled: !!user && ['admin', 'system_admin', 'manager'].includes(user.role || ''),
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: '50',
@@ -153,7 +153,7 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
       if (logsStatusFilter !== 'all') {
         params.append('status', logsStatusFilter);
       }
-      const res = await fetch(`/api/whatsapp/logs?${params}`, {
+      const res = await fetch(apiUrl(`/api/whatsapp/logs?${params}`), {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('فشل في تحميل السجلات');
@@ -161,21 +161,12 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
     },
   });
 
-  const generateToken = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let token = 'SABQ-';
-    for (let i = 0; i < 24; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
-  };
-
   const createTokenMutation = useMutation({
     mutationFn: async (values: TokenFormValues) => {
-      const token = generateToken();
+      // الرمز يُولَّد على الخادم بـ crypto؛ لا ترسله من المتصفح.
       return await apiRequest('/api/whatsapp/tokens', {
         method: 'POST',
-        body: JSON.stringify({ ...values, token }),
+        body: JSON.stringify(values),
       });
     },
     onSuccess: (data) => {
@@ -380,6 +371,12 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
     }
   };
 
+  const handleStatusFilterChange = (status: string) => {
+    setLogsStatusFilter(status);
+    setLogsPage(1);
+    setSelectedLogIds([]);
+  };
+
   const handleSubmitCreate = async () => {
     if (!formData.label || !formData.phoneNumber) {
       toast({
@@ -428,78 +425,68 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <Badge className="bg-green-500" data-testid={`badge-status-${status}`}>نجح</Badge>;
-      case 'rejected':
-        return <Badge className="bg-red-500" data-testid={`badge-status-${status}`}>مرفوض</Badge>;
-      case 'failed':
-        return <Badge className="bg-yellow-500" data-testid={`badge-status-${status}`}>فشل</Badge>;
-      default:
-        return <Badge data-testid={`badge-status-${status}`}>{status}</Badge>;
-    }
+    const meta = getLogStatusMeta(status);
+    return (
+      <Badge className={meta.className} data-testid={`badge-status-${status}`}>
+        {meta.label}
+      </Badge>
+    );
   };
 
   const totalPages = Math.ceil((logsData?.total || 0) / 50);
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">رسائل اليوم</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-today">
-              {statsLoading ? "..." : stats?.totalToday || 0}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">معدل النجاح</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-success-rate">
-              {statsLoading ? "..." : `${(stats?.successRate || 0).toFixed(1)}%`}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">متوسط الجودة</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-avg-quality">
-              {statsLoading ? "..." : (stats?.averageQualityScore || 0).toFixed(1)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الرموز النشطة</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-active-tokens">
-              {statsLoading ? "..." : stats?.activeTokens || 0}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-4">
+        <SectionHeading
+          icon={TrendingUp}
+          title="أداء القناة اليوم"
+          description="جودة المعالجة الآلية للرسائل الواردة عبر واتساب"
+        />
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4 md:gap-4">
+          <MobileOptimizedKpiCard
+            label="رسائل اليوم"
+            value={statsLoading ? "…" : (stats?.totalToday ?? 0)}
+            icon={MessageSquare}
+            iconColor="text-green-600 dark:text-green-400"
+            iconBgColor="bg-green-50 dark:bg-green-950"
+            testId="text-total-today"
+            ariaLive
+          />
+          <MobileOptimizedKpiCard
+            label="معدل النجاح"
+            value={statsLoading ? "…" : (stats?.successRate ?? 0).toFixed(1)}
+            suffix={statsLoading ? undefined : "%"}
+            icon={TrendingUp}
+            iconColor="text-emerald-600 dark:text-emerald-400"
+            iconBgColor="bg-emerald-50 dark:bg-emerald-950"
+            testId="text-success-rate"
+          />
+          <MobileOptimizedKpiCard
+            label="متوسط الجودة"
+            value={statsLoading ? "…" : (stats?.averageQualityScore ?? 0).toFixed(1)}
+            icon={Sparkles}
+            iconColor="text-indigo-600 dark:text-indigo-400"
+            iconBgColor="bg-indigo-50 dark:bg-indigo-950"
+            testId="text-avg-quality"
+          />
+          <MobileOptimizedKpiCard
+            label="الرموز النشطة"
+            value={statsLoading ? "…" : (stats?.activeTokens ?? 0)}
+            icon={KeyRound}
+            iconColor="text-amber-600 dark:text-amber-400"
+            iconBgColor="bg-amber-50 dark:bg-amber-950"
+            testId="text-active-tokens"
+          />
+        </div>
       </div>
 
       <Separator />
 
       {/* Usage Instructions */}
-      <Card className="bg-gradient-to-l from-primary/5 to-transparent border-primary/20">
+      <Card className="border-primary/20 bg-gradient-to-l from-primary/5 to-transparent">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
             <MessageSquare className="h-5 w-5 text-primary" />
             كيفية إرسال الأخبار عبر واتساب
           </CardTitle>
@@ -578,30 +565,36 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                رموز واتساب
-              </CardTitle>
-              <CardDescription>
-                إدارة الرموز المصرح لها بإرسال الرسائل
-              </CardDescription>
-            </div>
-            <Button onClick={handleCreateToken} data-testid="button-create-token" className="w-full sm:w-auto">
-              <Plus className="h-4 w-4 ml-2" />
-              إنشاء رمز جديد
-            </Button>
-          </div>
+          <SectionHeading
+            icon={KeyRound}
+            title="رموز واتساب"
+            description="إدارة الرموز المصرح لها بإرسال الرسائل"
+            actions={
+              <Button onClick={handleCreateToken} data-testid="button-create-token">
+                <Plus className="ml-2 h-4 w-4" />
+                إنشاء رمز جديد
+              </Button>
+            }
+          />
         </CardHeader>
         <CardContent>
-          {tokensLoading ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">جاري التحميل...</p>
+          {tokensError ? (
+            <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
+              تعذر تحميل الرموز: {tokensError.message}
+            </div>
+          ) : tokensLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
             </div>
           ) : !tokens || tokens.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">لا توجد رموز</p>
+            <div className="rounded-lg border border-dashed py-12 text-center">
+              <KeyRound className="mx-auto mb-3 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+              <p className="font-medium">لا توجد رموز بعد</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                أنشئ رمزاً لتتمكن المكاتب والمراسلون من إرسال الأخبار عبر واتساب
+              </p>
             </div>
           ) : (
             <>
@@ -660,12 +653,7 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
                         </TableCell>
                         <TableCell data-testid={`text-usage-${token.id}`}>{token.usageCount || 0}</TableCell>
                         <TableCell data-testid={`text-lastused-${token.id}`}>
-                          {token.lastUsedAt
-                            ? formatDistanceToNow(new Date(token.lastUsedAt), {
-                                addSuffix: true,
-                                locale: ar,
-                              })
-                            : "لم يستخدم بعد"}
+                          {token.lastUsedAt ? formatRelativeSafe(token.lastUsedAt) : "لم يستخدم بعد"}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -776,12 +764,7 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">آخر استخدام:</span>
                           <span data-testid={`text-lastused-${token.id}`} className="text-xs">
-                            {token.lastUsedAt
-                              ? formatDistanceToNow(new Date(token.lastUsedAt), {
-                                  addSuffix: true,
-                                  locale: ar,
-                                })
-                              : "لم يستخدم بعد"}
+                            {token.lastUsedAt ? formatRelativeSafe(token.lastUsedAt) : "لم يستخدم بعد"}
                           </span>
                         </div>
                       </div>
@@ -799,26 +782,25 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  سجلات الرسائل
-                </CardTitle>
-                <CardDescription>جميع الرسائل المستلمة وحالة معالجتها</CardDescription>
-              </div>
-              <Select value={logsStatusFilter} onValueChange={setLogsStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[150px]" data-testid="select-status-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="success">نجح</SelectItem>
-                  <SelectItem value="rejected">مرفوض</SelectItem>
-                  <SelectItem value="failed">فشل</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <SectionHeading
+              icon={ScrollText}
+              title="سجلات الرسائل"
+              description="جميع الرسائل المستلمة وحالة معالجتها"
+              actions={
+                <Select value={logsStatusFilter} onValueChange={handleStatusFilterChange}>
+                  <SelectTrigger className="w-[170px]" data-testid="select-status-filter">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WHATSAPP_STATUS_FILTERS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            />
             {selectedLogIds.length > 0 && (
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
                 <p className="text-sm font-medium">تم تحديد {selectedLogIds.length} سجل</p>
@@ -836,13 +818,25 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
           </div>
         </CardHeader>
         <CardContent>
-          {logsLoading ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">جاري التحميل...</p>
+          {logsError ? (
+            <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
+              تعذر تحميل السجلات: {logsError.message}
+            </div>
+          ) : logsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
             </div>
           ) : !logsData?.logs || logsData.logs.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">لا توجد سجلات</p>
+            <div className="rounded-lg border border-dashed py-12 text-center">
+              <ScrollText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+              <p className="font-medium">لا توجد سجلات</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {logsStatusFilter === "all"
+                  ? "لم تصل أي رسالة عبر واتساب بعد"
+                  : "لا توجد رسائل بهذه الحالة — جرّب فلتراً آخر"}
+              </p>
             </div>
           ) : (
             <>
@@ -934,11 +928,8 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
                             "-"
                           )}
                         </TableCell>
-                        <TableCell data-testid={`text-created-${log.id}`}>
-                          {formatDistanceToNow(new Date(log.createdAt), {
-                            addSuffix: true,
-                            locale: ar,
-                          })}
+                        <TableCell className="whitespace-nowrap" data-testid={`text-created-${log.id}`}>
+                          {formatRelativeSafe(log.createdAt)}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -982,10 +973,7 @@ export default function WhatsAppTab({ user }: WhatsAppTabProps) {
                             ) : null}
                           </div>
                           <p className="text-xs text-muted-foreground" data-testid={`text-created-${log.id}`}>
-                            {formatDistanceToNow(new Date(log.createdAt), {
-                              addSuffix: true,
-                              locale: ar,
-                            })}
+                            {formatRelativeSafe(log.createdAt)}
                           </p>
                         </div>
                         <div className="flex items-center gap-1">

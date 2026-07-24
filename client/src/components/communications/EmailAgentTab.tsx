@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { EmailAgentStats, type EmailAgentStatsData } from "@/components/EmailAgentStats";
+import { SectionHeading } from "@/components/communications/SectionHeading";
 import { TrustedSendersTable } from "@/components/TrustedSendersTable";
 import { AddSenderDialog } from "@/components/AddSenderDialog";
 import { WebhookLogsTable } from "@/components/WebhookLogsTable";
@@ -11,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Plus, Mail, Users, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { TrustedEmailSender, EmailWebhookLog, User } from "@shared/schema";
+import type { TrustedEmailSender, EmailWebhookLog } from "@shared/schema";
 
 interface SenderFormValues {
   email: string;
@@ -23,11 +24,7 @@ interface SenderFormValues {
   token?: string;
 }
 
-interface EmailAgentTabProps {
-  user: User;
-}
-
-export default function EmailAgentTab({ user }: EmailAgentTabProps) {
+export default function EmailAgentTab() {
   const { toast } = useToast();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingSender, setEditingSender] = useState<TrustedEmailSender | null>(null);
@@ -39,31 +36,26 @@ export default function EmailAgentTab({ user }: EmailAgentTabProps) {
     queryKey: ['/api/email-agent/stats'],
     retry: 1,
     staleTime: 30000,
-    enabled: !!user && (user.role === 'admin' || user.role === 'system_admin'),
   });
 
   const {
     data: senders,
     isLoading: sendersLoading,
     error: sendersError,
-    refetch: refetchSenders,
   } = useQuery<TrustedEmailSender[]>({
     queryKey: ['/api/email-agent/senders'],
     retry: 1,
     staleTime: 30000,
-    enabled: !!user && (user.role === 'admin' || user.role === 'system_admin'),
   });
 
   const {
     data: logsData,
     isLoading: logsLoading,
     error: logsError,
-    refetch: refetchLogs,
   } = useQuery<{ logs: EmailWebhookLog[]; total: number }>({
     queryKey: ['/api/email-agent/logs', logsPage, logsStatusFilter],
     retry: 1,
     staleTime: 30000,
-    enabled: !!user && (user.role === 'admin' || user.role === 'system_admin'),
     queryFn: async () => {
       const params = new URLSearchParams({
         page: String(logsPage),
@@ -72,7 +64,7 @@ export default function EmailAgentTab({ user }: EmailAgentTabProps) {
       if (logsStatusFilter !== 'all') {
         params.append('status', logsStatusFilter);
       }
-      const res = await fetch(`/api/email-agent/logs?${params}`, {
+      const res = await fetch(apiUrl(`/api/email-agent/logs?${params}`), {
         credentials: 'include',
       });
       if (!res.ok) {
@@ -284,18 +276,11 @@ export default function EmailAgentTab({ user }: EmailAgentTabProps) {
 
       {/* Stats Section - No Card Wrapper */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-1 bg-blue-500 rounded-full"></div>
-          <div>
-            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-              <FileText className="h-5 w-5 text-blue-500" />
-              إحصائيات اليوم
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              ملخص نشاط البريد الإلكتروني لهذا اليوم
-            </p>
-          </div>
-        </div>
+        <SectionHeading
+          icon={FileText}
+          title="تفاصيل البريد اليوم"
+          description="الحالات واللغات المكتشفة للرسائل الواردة اليوم"
+        />
         {statsError ? (
           <div className="text-destructive text-sm p-4 bg-destructive/10 rounded">
             فشل في تحميل الإحصائيات. الرجاء إعادة تحميل الصفحة.
