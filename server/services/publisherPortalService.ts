@@ -1469,6 +1469,7 @@ export async function listOwnPublisherRequests(publisherId: string) {
       status: publisherRequests.status,
       createdAt: publisherRequests.createdAt,
       handledAt: publisherRequests.handledAt,
+      adminNote: publisherRequests.adminNote,
     })
     .from(publisherRequests)
     .where(eq(publisherRequests.publisherId, publisherId))
@@ -1489,6 +1490,7 @@ export async function listPublisherRequests(status: PublisherRequestStatus | "al
       status: publisherRequests.status,
       createdAt: publisherRequests.createdAt,
       handledAt: publisherRequests.handledAt,
+      adminNote: publisherRequests.adminNote,
       publisherId: publishers.id,
       agencyName: publishers.agencyName,
       logoUrl: publishers.logoUrl,
@@ -1512,12 +1514,14 @@ export async function resolvePublisherRequest(
   note?: string,
 ) {
   const rejected = action === "reject";
+  const trimmedNote = note?.trim() || null;
   const [updated] = await db
     .update(publisherRequests)
     .set({
       status: rejected ? "rejected" : "closed",
       handledBy: adminId,
       handledAt: new Date(),
+      adminNote: trimmedNote,
     })
     .where(and(eq(publisherRequests.id, requestId), eq(publisherRequests.status, "open")))
     .returning({ id: publisherRequests.id, requestedBy: publisherRequests.requestedBy, type: publisherRequests.type });
@@ -1526,7 +1530,6 @@ export async function resolvePublisherRequest(
 
   if (updated.requestedBy) {
     const typeLabel = REQUEST_TYPE_LABELS[updated.type] ?? updated.type;
-    const trimmedNote = note?.trim();
     await notifyPublisherUser(updated.requestedBy, {
       title: rejected ? "لم تتم الموافقة على طلبكم" : "تمت معالجة طلبكم",
       body: rejected

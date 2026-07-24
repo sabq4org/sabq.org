@@ -38,6 +38,7 @@ interface PublisherRequest {
   status: string;
   createdAt: string;
   handledAt: string | null;
+  adminNote: string | null;
   publisherId: string;
   agencyName: string;
   logoUrl: string | null;
@@ -197,6 +198,11 @@ export function PublisherRequestsPanel({ openCount }: { openCount: number }) {
                     </div>
                     {request.message && (
                       <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{request.message}</p>
+                    )}
+                    {request.adminNote && (
+                      <p className="mt-1 text-xs text-foreground/80">
+                        <span className="text-muted-foreground">ردّ الإدارة:</span> {request.adminNote}
+                      </p>
                     )}
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatRelativeTime(request.createdAt)}

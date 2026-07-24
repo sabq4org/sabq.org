@@ -58,6 +58,7 @@ interface PublisherRequest {
   status: string;
   createdAt: string;
   handledAt: string | null;
+  adminNote: string | null;
 }
 
 const REQUEST_STATUS_META: Record<string, { label: string; className: string }> = {
@@ -372,6 +373,19 @@ export default function PublisherCredits() {
                         </p>
                         {request.message ? (
                           <p className="mt-0.5 text-sm text-muted-foreground">{request.message}</p>
+                        ) : null}
+                        {request.adminNote ? (
+                          <p
+                            className={cn(
+                              "mt-1.5 rounded-lg border px-2.5 py-1.5 text-sm",
+                              request.status === "rejected"
+                                ? "border-red-200 bg-red-50/60 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100"
+                                : "border-border bg-muted/40",
+                            )}
+                            data-testid={`request-admin-note-${request.id}`}
+                          >
+                            <span className="font-medium">ردّ الإدارة:</span> {request.adminNote}
+                          </p>
                         ) : null}
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           أُرسل {formatDateShort(request.createdAt)}
