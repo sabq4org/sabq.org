@@ -58,8 +58,12 @@ describe("canAssignRole", () => {
     expect(canAssignRole(ROLE_NAMES.SYSTEM_ADMIN, ROLE_NAMES.READER)).toBe(true);
   });
 
-  it("admin can assign anything except system_admin", () => {
+  it("admin can assign anything except any system-admin-equivalent tier", () => {
     expect(canAssignRole(ROLE_NAMES.ADMIN, ROLE_NAMES.SYSTEM_ADMIN)).toBe(false);
+    // The whole superuser tier is blocked, not just the literal "system_admin" —
+    // else an admin could create+assign a "superadmin" role and self-escalate (audit #2).
+    expect(canAssignRole(ROLE_NAMES.ADMIN, "superadmin")).toBe(false);
+    expect(canAssignRole(ROLE_NAMES.ADMIN, "system.admin")).toBe(false);
     expect(canAssignRole(ROLE_NAMES.ADMIN, ROLE_NAMES.EDITOR)).toBe(true);
     expect(canAssignRole(ROLE_NAMES.ADMIN, ROLE_NAMES.ADMIN)).toBe(true);
   });

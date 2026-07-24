@@ -538,18 +538,24 @@ export function getPermissionsForRoles(roleNames: string[]): string[] {
   return Array.from(allPermissions);
 }
 
+// Roles that grant full superuser via getUserPermissions' name check — assigning
+// ANY of these must be gated the same way, not just the literal "system_admin".
+export const SYSTEM_ADMIN_TIER_ROLES = ["system_admin", "system.admin", "superadmin"];
+
 // Helper function to check if a role can be assigned by another role
 export function canAssignRole(assignerRole: string, targetRole: string): boolean {
   // System admin can assign any role
   if (assignerRole === ROLE_NAMES.SYSTEM_ADMIN) {
     return true;
   }
-  
-  // Admin can assign any role except system_admin
+
+  // Admin can assign any role EXCEPT any system-admin-equivalent tier. Blocking
+  // only the literal "system_admin" let an admin create+assign a role named
+  // "superadmin"/"system.admin" — also superuser tiers — and self-escalate (audit #2).
   if (assignerRole === ROLE_NAMES.ADMIN) {
-    return targetRole !== ROLE_NAMES.SYSTEM_ADMIN;
+    return !SYSTEM_ADMIN_TIER_ROLES.includes(targetRole);
   }
-  
+
   // Other roles cannot assign roles
   return false;
 }

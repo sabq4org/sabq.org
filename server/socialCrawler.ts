@@ -3,6 +3,7 @@ import { db } from "./db";
 import { articles, categories, users, enArticles, urArticles, gulfEvents, angles, topics } from "@shared/schema";
 import { eq, or, and, desc } from "drizzle-orm";
 import { withCache, CACHE_TTL } from "./memoryCache";
+import { sanitizeArticleHtml } from "./utils/sanitizeHtml";
 import path from "path";
 import fs from "fs/promises";
 import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
@@ -658,19 +659,11 @@ interface MetaHTMLOptions {
   authorName?: string;
 }
 
-// Defense-in-depth: strip <script>/<iframe>/<style>/event-handlers and javascript: URLs
+// Defense-in-depth: delegate to the shared DOMPurify sanitizer — the previous
+// regex missed unquoted event handlers (`<img src=x onerror=...>`), a stored-XSS
+// sibling of audit #5 that fires whenever this crawler HTML is served (SERVE_SPA=true).
 function stripUnsafeArticleHtml(html: string): string {
-  if (!html) return '';
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/(href|src)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
-    .replace(/(href|src)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
+  return sanitizeArticleHtml(html);
 }
 
 function generateMetaHTML(options: MetaHTMLOptions): string {

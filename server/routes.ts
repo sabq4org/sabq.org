@@ -6523,6 +6523,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "اسم الدور يجب أن يحتوي على حرفين على الأقل" });
       }
 
+      // Never let a custom role be named into a superuser tier — those names grant
+      // full superuser via getUserPermissions' name check, so creating one would be
+      // a back door around canAssignRole (audit #2). Note: normalization strips the
+      // dot, so "system.admin" arrives as "systemadmin".
+      const RESERVED_ROLE_NAMES = ["system_admin", "systemadmin", "superadmin", "admin"];
+      if (RESERVED_ROLE_NAMES.includes(normalizedName)) {
+        return res.status(400).json({ message: "اسم الدور محجوز ولا يمكن استخدامه" });
+      }
+
       // Validate with Zod schema
       const validationResult = insertRoleSchema.safeParse({
         name: normalizedName,
