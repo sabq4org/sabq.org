@@ -144,7 +144,6 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     icon: Settings,
     itemIds: [
       "rss_feeds",
-      "spa_news",
       "sportmonks_news",
       "integrations",
       "storage",
