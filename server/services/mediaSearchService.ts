@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { db } from "../db";
+import { db, withStatementTimeout } from "../db";
 import { mediaFiles, mediaVectors } from "@shared/schema";
 import { generateEmbedding, cosineSimilarity } from "../embeddingsService";
 
@@ -147,7 +147,9 @@ export async function semanticSearchMedia(
   if (opts.category) conditions.push(eq(mediaFiles.category, opts.category));
 
   // Pull id + vector for the candidate set (most-recent first), capped.
-  const candidates = await db
+  // مهلة 20 ث: نقل 5000 متجه بلغ 73 ث تحت الضغط — الإلغاء يحرر اتصال الـpool،
+  // والعلاج الجذري (pgvector) بند مستقل في خطة تقرير Neon.
+  const candidates = await withStatementTimeout(20_000, (tx) => tx
     .select({
       id: mediaVectors.mediaFileId,
       embedding: mediaVectors.embedding,
@@ -156,7 +158,7 @@ export async function semanticSearchMedia(
     .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
     .where(and(...conditions))
     .orderBy(desc(mediaFiles.createdAt))
-    .limit(CANDIDATE_CAP);
+    .limit(CANDIDATE_CAP));
 
   const capped = candidates.length >= CANDIDATE_CAP;
   if (capped) {
@@ -322,13 +324,14 @@ export async function similarMedia(
   }
   const selfVec = self.embedding as number[];
 
-  const candidates = await db
+  // مهلة 20 ث — نفس منطق semanticSearchMedia أعلاه.
+  const candidates = await withStatementTimeout(20_000, (tx) => tx
     .select({ id: mediaVectors.mediaFileId, embedding: mediaVectors.embedding })
     .from(mediaVectors)
     .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
     .where(and(eq(mediaFiles.type, "image"), isNotNull(mediaVectors.embedding)))
     .orderBy(desc(mediaFiles.createdAt))
-    .limit(CANDIDATE_CAP);
+    .limit(CANDIDATE_CAP));
 
   const scored = candidates
     .filter((c) => c.id !== mediaFileId && Array.isArray(c.embedding) && c.embedding.length > 0)
