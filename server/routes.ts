@@ -14,6 +14,7 @@ import {
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { denyPublish } from "./services/publishGate";
+import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
@@ -14056,7 +14057,15 @@ Respond in valid JSON format only:
   app.post("/api/articles/:id/analyze-seo", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const articleId = req.params.id;
-      
+
+      // The route accepts articles.edit_own, but nothing checked whose article
+      // this is — so it behaved exactly like articles.edit_any and wrote SEO
+      // metadata (public OG/meta tags) onto any article id.
+      const access = await authorizeArticleWrite(req.user.id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const [article] = await db
         .select()
         .from(articles)
@@ -14504,6 +14513,13 @@ Respond in valid JSON format only:
           });
         }
         
+        // The permission gate above is article-agnostic: any reporter could
+        // rewrite the media attached to any article.
+        const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
+
         const dataToUpdate = {
           ...parsed.data,
           altText: parsed.data.altText || "صورة الخبر",
@@ -14535,6 +14551,13 @@ Respond in valid JSON format only:
     async (req: any, res) => {
     try {
         const { id } = req.params;
+
+        // `media.delete` is not article-scoped; edit_any holders short-circuit
+        // inside the helper, so desk-wide roles are unaffected.
+        const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
 
         // Look up asset BEFORE deleting so we can purge the right article URLs.
         const existing = await storage.getArticleMediaAssetById(id);
@@ -21730,6 +21753,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const { id } = req.params;
 
+      // articles.ai_generate says nothing about WHICH article — any holder
+      // (including external publisher accounts) could wipe and rewrite the
+      // smart-category assignments of any article.
+      const access = await authorizeArticleWrite(req.user.id, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       // Get article
       const [article] = await db
         .select()
@@ -21922,6 +21953,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (validated.mode === "saved") {
         // Existing flow: generate SEO for saved article
         const { articleId, language } = validated;
+
+        // articles.ai_generate is not article-scoped: without this any holder
+        // could overwrite the public SEO/OG metadata of any article.
+        const access = await authorizeArticleWrite(req.user.id, articleId);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
 
         // Fetch article using storage method
         const article = await storage.getArticleForSeo(articleId, language);
