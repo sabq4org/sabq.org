@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { CheckCircle, XCircle, Loader2, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/queryClient";
 
 interface PurchaseData {
   id: string;
@@ -12,7 +13,7 @@ interface PurchaseData {
   priceHalalas: number;
   currency: string;
   chargeId: string | null;
-  accessToken: string;
+  accessToken?: string | null; // returned only to the verified buyer (audit #7)
   createdAt: string;
   article: {
     id: string;
@@ -30,11 +31,15 @@ export default function PaymentCallback() {
   
   const searchParams = new URLSearchParams(window.location.search);
   const purchaseId = searchParams.get("purchase_id");
+  // Tap appends its charge id (tap_id) to the return URL — it's the buyer's proof
+  // of ownership, required for the server to return the paid-article access token.
+  const tapId = searchParams.get("tap_id");
 
   const { data, isLoading, isError, error } = useQuery<{ success: boolean; data: PurchaseData }>({
-    queryKey: ["/api/payments/purchase", purchaseId],
+    queryKey: ["/api/payments/purchase", purchaseId, tapId],
     queryFn: async () => {
-      const response = await fetch(`/api/payments/purchase/${purchaseId}`, {
+      const qs = tapId ? `?tap_id=${encodeURIComponent(tapId)}` : "";
+      const response = await fetch(apiUrl(`/api/payments/purchase/${purchaseId}${qs}`), {
         credentials: "include",
       });
       if (!response.ok) {
@@ -63,7 +68,9 @@ export default function PaymentCallback() {
         setRedirectCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            const redirectUrl = `/article/${purchase.article.slug}?token=${purchase.accessToken}`;
+            const redirectUrl = purchase.accessToken
+              ? `/article/${purchase.article.slug}?token=${purchase.accessToken}`
+              : `/article/${purchase.article.slug}`;
             navigate(redirectUrl);
             return 0;
           }
@@ -195,7 +202,9 @@ export default function PaymentCallback() {
             
             <Button 
               className="w-full gap-2" 
-              onClick={() => navigate(`/article/${purchase?.article?.slug}?token=${purchase?.accessToken}`)}
+              onClick={() => navigate(purchase?.accessToken
+                ? `/article/${purchase?.article?.slug}?token=${purchase.accessToken}`
+                : `/article/${purchase?.article?.slug}`)}
               data-testid="button-go-to-article"
             >
               <ArrowRight className="h-4 w-4" />
