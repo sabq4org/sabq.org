@@ -29,6 +29,12 @@ const backupCodesSchema = z.object({
   password: z.string().min(1, "كلمة المرور مطلوبة"),
 });
 
+// Setting up 2FA overwrites the account's TOTP secret, so it is password-gated
+// on the server exactly like disabling it or regenerating backup codes.
+const setupSchema = z.object({
+  password: z.string().min(1, "كلمة المرور مطلوبة"),
+});
+
 const methodSchema = z.object({
   method: z.enum(['authenticator', 'sms', 'both']),
   password: z.string().min(1, "كلمة المرور مطلوبة"),
@@ -38,6 +44,7 @@ type EnableFormData = z.infer<typeof enableSchema>;
 type DisableFormData = z.infer<typeof disableSchema>;
 type BackupCodesFormData = z.infer<typeof backupCodesSchema>;
 type MethodFormData = z.infer<typeof methodSchema>;
+type SetupFormData = z.infer<typeof setupSchema>;
 
 interface TwoFactorStatus {
   enabled: boolean;
@@ -59,6 +66,7 @@ export function TwoFactorSettings() {
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [disableDialogOpen, setDisableDialogOpen] = useState(false);
   const [backupCodesDialogOpen, setBackupCodesDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [methodDialogOpen, setMethodDialogOpen] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
@@ -67,10 +75,9 @@ export function TwoFactorSettings() {
     queryKey: ["/api/2fa/status"],
   });
 
-  const { data: setupData, isLoading: isLoadingSetup, refetch: refetchSetup } = useQuery<SetupResponse>({
-    queryKey: ["/api/2fa/setup"],
-    enabled: false,
-  });
+  // Setup is a POST (it rotates the TOTP secret), so it is a mutation, not a
+  // query — the response is held in state for the QR dialog.
+  const [setupData, setSetupData] = useState<SetupResponse | null>(null);
 
   const enableForm = useForm<EnableFormData>({
     resolver: zodResolver(enableSchema),
@@ -102,18 +109,30 @@ export function TwoFactorSettings() {
     },
   });
 
-  const setupMutation = useMutation({
-    mutationFn: async () => {
-      const result = await refetchSetup();
-      return result.data;
+  const setupForm = useForm<SetupFormData>({
+    resolver: zodResolver(setupSchema),
+    defaultValues: {
+      password: "",
     },
-    onSuccess: () => {
+  });
+
+  const setupMutation = useMutation({
+    mutationFn: async (data: SetupFormData) => {
+      return (await apiRequest("/api/2fa/setup", {
+        method: "POST",
+        body: JSON.stringify(data),
+      })) as SetupResponse;
+    },
+    onSuccess: (data) => {
+      setSetupData(data);
+      setPasswordDialogOpen(false);
+      setupForm.reset();
       setSetupDialogOpen(true);
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "خطأ",
-        description: "فشل في إعداد التحقق بخطوتين",
+        description: error?.message || "فشل في إعداد التحقق بخطوتين",
         variant: "destructive",
       });
     },
@@ -301,7 +320,7 @@ export function TwoFactorSettings() {
             </Alert>
 
             <Button
-              onClick={() => setupMutation.mutate()}
+              onClick={() => setPasswordDialogOpen(true)}
               disabled={setupMutation.isPending}
               data-testid="button-enable-2fa"
               className="w-full"
@@ -635,6 +654,76 @@ export function TwoFactorSettings() {
         </Dialog>
 
         {/* Backup Codes Dialog */}
+        {/* Password confirmation before setup — /api/2fa/setup rotates the
+            account's TOTP secret, so it is password-gated on the server. */}
+        <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+          <DialogContent className="max-w-md" data-testid="dialog-setup-password">
+            <DialogHeader>
+              <DialogTitle>تأكيد كلمة المرور</DialogTitle>
+              <DialogDescription>
+                أدخل كلمة مرورك للمتابعة في إعداد التحقق بخطوتين
+              </DialogDescription>
+            </DialogHeader>
+
+            <Form {...setupForm}>
+              <form
+                onSubmit={setupForm.handleSubmit((data) => setupMutation.mutate(data))}
+                className="space-y-4"
+              >
+                <FormField
+                  control={setupForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>كلمة المرور</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="••••••"
+                          dir="ltr"
+                          data-testid="input-setup-password"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setPasswordDialogOpen(false);
+                      setupForm.reset();
+                    }}
+                    className="flex-1"
+                    data-testid="button-cancel-setup"
+                  >
+                    إلغاء
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    disabled={setupMutation.isPending}
+                    data-testid="button-confirm-setup"
+                  >
+                    {setupMutation.isPending ? (
+                      <>
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                        جاري الإعداد...
+                      </>
+                    ) : (
+                      "متابعة"
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={backupCodesDialogOpen} onOpenChange={setBackupCodesDialogOpen}>
           <DialogContent className="max-w-md" data-testid="dialog-backup-codes">
             <DialogHeader>
