@@ -399,6 +399,10 @@ router.get("/purchase/:purchaseId", async (req: Request, res: Response) => {
   try {
     const { purchaseId } = req.params;
     
+    // NOTE: never select/return `accessToken` here — it is the secret that
+    // grants access to the paid article (see /check-purchase?token=). This
+    // lookup is by purchaseId only (no ownership check), so exposing the token
+    // was an IDOR credential leak (audit #7). Metadata only.
     const [purchase] = await db
       .select({
         id: articlePurchases.id,
@@ -407,7 +411,6 @@ router.get("/purchase/:purchaseId", async (req: Request, res: Response) => {
         priceHalalas: articlePurchases.priceHalalas,
         currency: articlePurchases.currency,
         chargeId: articlePurchases.chargeId,
-        accessToken: articlePurchases.accessToken,
         createdAt: articlePurchases.createdAt,
       })
       .from(articlePurchases)

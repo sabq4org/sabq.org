@@ -25,7 +25,7 @@ import {
   searchEnArticlesForAnalytics,
 } from "./services/articleAnalyticsSearchService";
 import { pickTableColumns } from "./utils/sanitizeBody";
-import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
+import { setupAuth, isAuthenticated, invalidateUserSessionCache, invalidateAllUserSessions } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
 import { registerDataStoryRoutes } from './data-story-routes';
@@ -1156,6 +1156,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .update(passwordResetTokens)
         .set({ used: true })
         .where(eq(passwordResetTokens.id, matchedToken.id));
+
+      // Kill every existing session so a stolen cookie/token can't survive the
+      // reset (audit #8).
+      await invalidateAllUserSessions(matchedToken.userId);
 
       res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
     } catch (error) {
@@ -5714,10 +5718,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Update password
       await db
         .update(users)
-        .set({ 
+        .set({
           passwordHash: hashedPassword
         })
         .where(eq(users.id, targetUserId));
+
+      // Kill every existing session for the target user (audit #8) — an admin
+      // reset must also evict a compromised session, not just change the hash.
+      await invalidateAllUserSessions(targetUserId);
 
       // Log activity
       await logActivity({

@@ -13,8 +13,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { userHasAnyRole } from "../rbac";
+import { invalidateAllUserSessions } from "../auth";
 import { verifyToken, verifyBackupCode } from "../twoFactor";
-import { createTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
+import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -1537,7 +1538,10 @@ router.post("/auth/verify-2fa", mobileAuthLimiter, async (req: Request, res: Res
       return res.status(400).json({ success: false, message: "رمز التحقق مطلوب" });
     }
 
-    const userId = await consumeTwoFactorChallenge(challengeToken);
+    // Peek (do NOT consume yet) so a mistyped code can be retried without being
+    // forced back to the password step — the mobileAuthLimiter + 5-min TTL bound
+    // brute-force. The challenge is consumed only after a successful check.
+    const userId = await resolveTwoFactorChallenge(challengeToken);
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -1551,21 +1555,27 @@ router.post("/auth/verify-2fa", mobileAuthLimiter, async (req: Request, res: Res
     }
 
     let isValid = false;
+    let remainingBackupCodes: string[] | undefined;
     if (backupCode) {
       const result = verifyBackupCode(user.twoFactorBackupCodes || [], backupCode);
       isValid = result.valid;
-      // Backup codes are single-use — persist the remaining set on success.
-      if (isValid && result.remainingCodes) {
-        await db.update(users)
-          .set({ twoFactorBackupCodes: result.remainingCodes })
-          .where(eq(users.id, user.id));
-      }
+      remainingBackupCodes = result.remainingCodes;
     } else {
       isValid = verifyToken(user.twoFactorSecret || "", token);
     }
 
     if (!isValid) {
+      // Wrong code: keep the challenge alive for a retry.
       return res.status(401).json({ success: false, message: "رمز التحقق غير صحيح" });
+    }
+
+    // Success — burn the challenge (single-use) and, for a backup code, persist
+    // the remaining set so it can't be reused.
+    await consumeTwoFactorChallenge(challengeToken);
+    if (backupCode && remainingBackupCodes) {
+      await db.update(users)
+        .set({ twoFactorBackupCodes: remainingBackupCodes })
+        .where(eq(users.id, user.id));
     }
 
     return issueMemberSessionResponse(req, res, user, deviceInfo);
@@ -1796,10 +1806,9 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       .set({ used: true })
       .where(eq(passwordResetTokens.id, resetRecord.id));
 
-    // Invalidate all sessions
-    await db.update(appMemberSessions)
-      .set({ isActive: false })
-      .where(eq(appMemberSessions.memberId, user.id));
+    // Kill ALL sessions (web + mobile) so a stolen session can't survive the
+    // reset — previously only mobile appMemberSessions were invalidated (audit #8).
+    await invalidateAllUserSessions(user.id);
 
     console.log(`[Mobile API] Password reset for: ${user.id}`);
 
