@@ -2995,7 +2995,7 @@ function formatArticleForMobile(row: any, baseUrl: string) {
   };
 }
 
-import { memoryCache as sharedMemoryCache } from "../memoryCache";
+import { memoryCache as sharedMemoryCache, withSWR, CACHE_TTL } from "../memoryCache";
 
 function getCached(key: string) {
   return sharedMemoryCache.get(key);
@@ -3127,12 +3127,24 @@ router.get("/news/paginated", async (req: Request, res: Response) => {
       or(isNull(articles.source), ne(articles.source, "ai")),
     ];
 
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(...conditions));
-
-    const total = Number(countResult?.count || 0);
+    // `total` only feeds pagination metadata, so a stale count is harmless —
+    // and caching it matters: this fires on every feed load and every
+    // load-more, and `count(*)` over the 5 GB `articles` table cannot be
+    // served from an index. The web twin at `/api/news/paginated` caches the
+    // identical predicate, but the key is deliberately NOT shared so either
+    // side can change its filter without silently reporting the other's count.
+    const total = await withSWR(
+      "mobile:news-paginated-total",
+      CACHE_TTL.SHORT,
+      CACHE_TTL.SHORT * 2,
+      async () => {
+        const [countResult] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(articles)
+          .where(and(...conditions));
+        return Number(countResult?.count || 0);
+      },
+    );
 
     const results = await db
       .select({
@@ -5063,7 +5075,11 @@ router.get("/articles/my-revisions", async (req: Request, res: Response) => {
           ),
         ),
       )
-      .orderBy(desc(articles.reviewedAt));
+      .orderBy(desc(articles.reviewedAt))
+      // Bounded because the Settings card polls this and renders only the
+      // first few rows; without a limit a prolific author drags their whole
+      // revision history across the wire on every poll.
+      .limit(100);
 
     res.json({
       success: true,
