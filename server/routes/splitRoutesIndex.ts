@@ -57,7 +57,6 @@ import sportsTournamentsRouter from "./sportsTournaments";
 import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
 import { registerRadarRoutes } from "./radar";
 import { registerCoverageGapRoutes } from "./coverageGaps";
-import { registerSpaNewsRoutes } from "./spaNews";
 import { registerSportmonksNewsRoutes } from "./sportmonksNews";
 import { registerSportsNamesRoutes } from "./sportsNames";
 import commentReactionsRouter from "./commentReactions";
@@ -156,7 +155,6 @@ export function registerSplitRoutes(app: Express) {
   registerSportsLiveStreamRoutes(app);
   registerRadarRoutes(app);
   registerCoverageGapRoutes(app);
-  registerSpaNewsRoutes(app);
   registerSportmonksNewsRoutes(app);
   registerSportsNamesRoutes(app);
   app.use(commentReactionsRouter);
