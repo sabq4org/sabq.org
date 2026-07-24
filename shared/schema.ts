@@ -9567,9 +9567,12 @@ export const publisherRequests = pgTable("publisher_requests", {
   requestedBy: varchar("requested_by").references(() => users.id),
   type: text("type").default("renewal").notNull(), // renewal | window_extension | other
   message: text("message"),
-  status: text("status").default("open").notNull(), // open | closed
+  status: text("status").default("open").notNull(), // open | closed | rejected
   handledBy: varchar("handled_by").references(() => users.id),
   handledAt: timestamp("handled_at"),
+  // ملاحظة الإدارة عند المعالجة — سبب الرفض تحديداً. كان يُرسل في الإشعار
+  // فقط، فيضيع بمجرد أن تمر الوكالة على إشعاراتها.
+  adminNote: text("admin_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("publisher_requests_publisher_idx").on(table.publisherId),
