@@ -104,8 +104,10 @@ async function analyzeImage(imageUrl: string): Promise<string> {
   try {
     console.log(`[AI Smart Thumbnail] Analyzing image: ${imageUrl}`);
 
-    // Fetch the image
-    const response = await fetch(safeImageUrl);
+    // Fetch the image. redirect:'error' — the allowlist checks only the initial
+    // URL, so a redirect from an allowlisted host to an internal target must not
+    // be followed (audit #3).
+    const response = await fetch(safeImageUrl, { redirect: "error" });
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.statusText}`);
     }

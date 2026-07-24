@@ -31,7 +31,7 @@ export async function saveGeneratedImage(
   let mimeType = "image/png";
   try {
     if (!isSafeImageUrl(input.imageUrl)) throw new Error("unsafe image url — skipped (audit #3)");
-    const resp = await fetch(input.imageUrl);
+    const resp = await fetch(input.imageUrl, { redirect: "error" }); // no redirect past the allowlist check
     if (resp.ok) {
       const buf = Buffer.from(await resp.arrayBuffer());
       size = buf.length;

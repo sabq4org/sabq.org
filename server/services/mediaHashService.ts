@@ -93,7 +93,7 @@ async function fetchImageBytes(id: string, url: string, size: number | null): Pr
   try {
     if (url.startsWith("https://")) {
       if (!isSafeImageUrl(url)) return null; // SSRF guard on DB-sourced URL (audit #3)
-      const resp = await fetch(url);
+      const resp = await fetch(url, { redirect: "error" }); // no redirect past the allowlist check
       if (!resp.ok) return null;
       const buf = Buffer.from(await resp.arrayBuffer());
       return buf.length > 0 && buf.length <= MAX_HASH_FETCH_BYTES ? buf : null;

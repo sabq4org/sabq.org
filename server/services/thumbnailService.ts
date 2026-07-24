@@ -159,6 +159,7 @@ export async function generateThumbnail(
       
       const response = await fetch(normalizedUrl, {
         signal: controller.signal,
+        redirect: "error", // no redirect past the isValidImageUrl allowlist check (audit #3)
         headers: {
           'User-Agent': 'Sabq-Thumbnail-Service/1.0'
         }
