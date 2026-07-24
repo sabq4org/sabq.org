@@ -123,7 +123,7 @@ import { invalidatePublishedContent, invalidateArticleWrite } from "./services/c
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
-import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
+import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
@@ -28037,8 +28037,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const baseCacheKey = `en:article:base:${slug}`;
       const baseData = await withCache(baseCacheKey, CACHE_TTL.SHORT, async () => {
         const reporterAlias = aliasedTable(users, 'reporter');
+        // Project the joined author/reporter explicitly — a bare .select()
+        // returns the whole `users` row (passwordHash, twoFactorSecret,
+        // twoFactorBackupCodes) and this endpoint is public.
         const results = await db
-          .select()
+          .select({
+            en_articles: enArticles,
+            en_categories: enCategories,
+            users: userBylineSelect(users),
+            reporter: userBylineSelect(reporterAlias),
+          })
           .from(enArticles)
           .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
           .leftJoin(users, eq(enArticles.authorId, users.id))
@@ -28056,8 +28064,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return {
           article: art,
           category: r.en_categories,
-          authorData: r.users,
-          reporterData: r.reporter,
+          // A column-object projection over a leftJoin yields {id:null,…}
+          // instead of null when the join misses, so collapse it — otherwise
+          // an empty reporter would win over a real author below.
+          authorData: r.users?.id ? r.users : null,
+          reporterData: r.reporter?.id ? r.reporter : null,
           reactionsCount: Number(reactionsCountResult[0].count),
           commentsCount: Number(commentsCountResult[0].count),
         };
@@ -29130,16 +29141,24 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // Create alias for reporter
       const reporterAlias = aliasedTable(users, 'reporter');
 
-      // Get article with category, author, and reporter joins
+      // Get article with category, author, and reporter joins.
+      // Author/reporter are projected explicitly: a bare .select() returns the
+      // whole `users` row (passwordHash, twoFactorSecret, twoFactorBackupCodes)
+      // and this endpoint is public.
       const results = await db
-        .select()
+        .select({
+          ur_articles: urArticles,
+          ur_categories: urCategories,
+          users: userBylineSelect(users),
+          reporter: userBylineSelect(reporterAlias),
+        })
         .from(urArticles)
         .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
         .leftJoin(users, eq(urArticles.authorId, users.id))
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(eq(urArticles.slug, req.params.slug))
         .limit(1);
-      
+
       if (!results || results.length === 0) {
         return res.status(404).json({ message: "Article not found" });
       }
@@ -29148,8 +29167,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const result: any = results[0];
       const article = result.ur_articles;
       const category = result.ur_categories;
-      const authorData = result.users;
-      const reporterData = result.reporter;
+      // A column-object projection over a leftJoin yields {id:null,…} instead
+      // of null when the join misses — collapse it so an empty reporter can't
+      // win over a real author.
+      const authorData = result.users?.id ? result.users : null;
+      const reporterData = result.reporter?.id ? result.reporter : null;
 
       // Run all queries in parallel for better performance
       const [
@@ -29269,8 +29291,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .select({
           article: urArticles,
           category: urCategories,
-          author: users,
-          reporter: reporterAlias,
+          // Byline columns only — `author: users` would ship the whole row
+          // (passwordHash, twoFactorSecret) for up to five staff per call.
+          author: userBylineSelect(users),
+          reporter: userBylineSelect(reporterAlias),
         })
         .from(urArticles)
         .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
@@ -29283,7 +29307,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const related = results.map((r) => ({
         ...r.article,
         category: r.category || undefined,
-        author: r.reporter || r.author || undefined,
+        // ?.id — a column-object projection over a leftJoin yields {id:null,…}
+        // rather than null, so an empty reporter would shadow a real author.
+        author: (r.reporter?.id ? r.reporter : null) || (r.author?.id ? r.author : null) || undefined,
       }));
 
       res.json(related);

@@ -257,7 +257,7 @@ export default function UrduArticleDetail() {
                     <p className="font-medium text-foreground" data-testid="text-author-name">
                       {article.author.firstName && article.author.lastName
                         ? `${article.author.firstName} ${article.author.lastName}`
-                        : article.author.email}
+                        : "سبق"}
                     </p>
                     <p className="text-xs">رپورٹر</p>
                   </div>
@@ -454,7 +454,7 @@ export default function UrduArticleDetail() {
               authorName={article.author
                 ? (article.author.firstName && article.author.lastName
                   ? `${article.author.firstName} ${article.author.lastName}`
-                  : article.author.email)
+                  : "سبق")
                 : null}
               publishedAt={article.publishedAt}
               articleSlug={params.slug}

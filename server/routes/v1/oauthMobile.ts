@@ -274,15 +274,15 @@ router.post("/auth/google", async (req: Request, res: Response) => {
 
 router.post("/auth/apple", async (req: Request, res: Response) => {
   try {
+    // NOTE: the client may still send `email` — it is deliberately ignored.
+    // Only the Apple-signed token may establish identity (see rawEmail below).
     const {
       identityToken,
       fullName,
-      email: bodyEmail,
       deviceInfo,
     } = (req.body ?? {}) as {
       identityToken?: string;
       fullName?: { firstName?: string; lastName?: string };
-      email?: string;
       deviceInfo?: DeviceInfo;
     };
 
@@ -324,11 +324,28 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       });
     }
 
-    const rawEmail = (verified.email ?? bodyEmail ?? "").toLowerCase().trim();
+    // SECURITY: identity comes from the Apple-signed token ONLY.
+    // The previous `verified.email ?? bodyEmail` fallback was a full account
+    // takeover: the attacker runs the client, so they can request an Apple
+    // authorization WITHOUT the email scope, receive a genuinely signed token
+    // that carries no `email` claim, then name any victim in `req.body.email`.
+    // That string was used to match the victim's row, weld the attacker's
+    // `appleId` onto it, and mint a 30-day Bearer session for the victim.
+    // The web strategy (server/auth.ts) already hard-fails on a missing token
+    // email — mobile now behaves the same.
+    const rawEmail = (verified.email ?? "").toLowerCase().trim();
     const isPrivateRelay =
       typeof verified.is_private_email === "string"
         ? verified.is_private_email === "true"
         : Boolean(verified.is_private_email);
+    // Apple omits `email_verified` on some tokens; only an explicit false is
+    // disqualifying. Mirrors the Google handler's check above.
+    const emailIsVerified =
+      verified.email_verified === undefined
+        ? true
+        : typeof verified.email_verified === "string"
+          ? verified.email_verified === "true"
+          : Boolean(verified.email_verified);
 
     const firstName = fullName?.firstName?.trim() ?? "";
     const lastName = fullName?.lastName?.trim() ?? "";
@@ -340,7 +357,9 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       .where(eq(users.appleId, appleId))
       .limit(1);
 
-    if (!existing && rawEmail && !isPrivateRelay) {
+    // Linking an Apple identity onto an existing account is only safe when
+    // Apple itself vouches for the address (verified, not a private relay).
+    if (!existing && rawEmail && !isPrivateRelay && emailIsVerified) {
       [existing] = await db
         .select()
         .from(users)

@@ -262,7 +262,7 @@ export default function EnglishArticleDetail() {
                         ? `${article.author.firstNameEn} ${article.author.lastNameEn}`
                         : article.author.firstName && article.author.lastName
                           ? `${article.author.firstName} ${article.author.lastName}`
-                          : article.author.email}
+                          : "Sabq"}
                     </p>
                     <p className="text-xs">Reporter</p>
                   </div>
@@ -310,7 +310,7 @@ export default function EnglishArticleDetail() {
                   ? `${article.author.firstNameEn} ${article.author.lastNameEn}`
                   : article.author.firstName && article.author.lastName
                     ? `${article.author.firstName} ${article.author.lastName}`
-                    : article.author.email)
+                    : "Sabq")
                 : null}
               publishedAt={article.publishedAt}
               articleSlug={params.slug}
