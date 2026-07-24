@@ -16,6 +16,7 @@ import { userHasAnyRole } from "../rbac";
 import { invalidateAllUserSessions } from "../auth";
 import { verifyToken, verifyBackupCode } from "../twoFactor";
 import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
+import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -1566,6 +1567,12 @@ router.post("/auth/verify-2fa", mobileAuthLimiter, async (req: Request, res: Res
       return res.status(401).json({ success: false, message: "تعذّر التحقق" });
     }
 
+    // Per-account lockout (audit #4): bound online TOTP/backup-code guessing per
+    // account, not just per IP — an attacker holding the password can rotate IPs.
+    if (await isLockedOut(`2fa:${userId}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
     let isValid = false;
     let remainingBackupCodes: string[] | undefined;
     if (backupCode) {
@@ -1577,13 +1584,15 @@ router.post("/auth/verify-2fa", mobileAuthLimiter, async (req: Request, res: Res
     }
 
     if (!isValid) {
-      // Wrong code: keep the challenge alive for a retry.
+      // Wrong code: keep the challenge alive for a retry, but count the failure.
+      await recordFailure(`2fa:${userId}`);
       return res.status(401).json({ success: false, message: "رمز التحقق غير صحيح" });
     }
 
-    // Success — burn the challenge (single-use) and, for a backup code, persist
-    // the remaining set so it can't be reused.
+    // Success — burn the challenge (single-use), clear the failure counter, and
+    // for a backup code persist the remaining set so it can't be reused.
     await consumeTwoFactorChallenge(challengeToken);
+    await clearFailures(`2fa:${userId}`);
     if (backupCode && remainingBackupCodes) {
       await db.update(users)
         .set({ twoFactorBackupCodes: remainingBackupCodes })
@@ -1788,6 +1797,12 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       });
     }
 
+    // Per-account lockout on reset-code guessing — bounds the 6-digit space per
+    // account regardless of source IP (audit #4).
+    if (await isLockedOut(`reset:${user.id}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
     // Verify reset token
     const [resetRecord] = await db
       .select()
@@ -1801,9 +1816,10 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       .limit(1);
 
     if (!resetRecord) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية" 
+      await recordFailure(`reset:${user.id}`);
+      return res.status(400).json({
+        success: false,
+        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية"
       });
     }
 
@@ -1821,6 +1837,7 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
     // Kill ALL sessions (web + mobile) so a stolen session can't survive the
     // reset — previously only mobile appMemberSessions were invalidated (audit #8).
     await invalidateAllUserSessions(user.id);
+    await clearFailures(`reset:${user.id}`);
 
     console.log(`[Mobile API] Password reset for: ${user.id}`);
 

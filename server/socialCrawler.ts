@@ -698,10 +698,12 @@ function generateMetaHTML(options: MetaHTMLOptions): string {
     ? alternateLanguages.map(alt => `<link rel="alternate" hreflang="${escapeHtml(alt.lang)}" href="${escapeHtml(alt.url)}">`).join('\n  ')
     : '';
   
-  // Generate JSON-LD structured data
-  const structuredDataScript = structuredData 
+  // Generate JSON-LD structured data. Escape `<` so a `</script>` inside any
+  // string field (article title/description, foreign-imported event.content)
+  // can't break out of the script tag → stored XSS (audit #5, JSON-LD sink).
+  const structuredDataScript = structuredData
     ? `<script type="application/ld+json">
-${JSON.stringify(structuredData, null, 2)}
+${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}
 </script>`
     : '';
   
