@@ -27,13 +27,17 @@ services:
       - sabq-network
 
   postgres:
-    image: postgres:16-alpine
+    # pgvector مطلوب لعمود media_vectors.embedding_vec — الصورة الرسمية
+    # pgvector/pgvector هي postgres:16 + الامتداد (متوافقة مع volume قائم).
+    # على volume قديم يلزم مرة واحدة: CREATE EXTENSION IF NOT EXISTS vector;
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: sabq_db
       POSTGRES_USER: sabq
       POSTGRES_PASSWORD: sabq_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db-init:/docker-entrypoint-initdb.d
     ports:
       - "5432:5432"
     healthcheck:

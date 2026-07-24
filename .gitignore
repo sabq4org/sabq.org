@@ -40,6 +40,8 @@ backup_unused_assets
 !migrations/*.sql
 # DDL تشغيلي بلا بيانات شخصية — زراعة جداول الميزات عبر محرر SQL
 !scripts/sql/*.sql
+# تهيئة Postgres المحلي (docker-entrypoint-initdb.d) — امتدادات فقط
+!scripts/db-init/*.sql
 *.sql.gz
 *.dump
 *.backup

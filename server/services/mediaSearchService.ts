@@ -1,14 +1,50 @@
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, cosineDistance, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { db, withStatementTimeout } from "../db";
 import { mediaFiles, mediaVectors } from "@shared/schema";
 import { generateEmbedding, cosineSimilarity } from "../embeddingsService";
 
-// Cap how many candidate vectors we pull into memory for a single JS-side cosine
-// scan. Mirrors the article recommendation pattern (jsonb + JS cosine, no
-// pgvector). When the filtered set exceeds this we score only the most-recent
-// slice and log it — never a silent truncation.
+// المسار الأساسي صار pgvector: الترتيب بالمسافة يجري داخل PostgreSQL عبر فهرس
+// HNSW على embedding_vec (~40ms مقيسة على الإنتاج بدل سحب 5000 متجه إلى Node
+// بمتوسط 7 ث). CANDIDATE_CAP يخص مسار الطوارئ القديم (JS cosine على jsonb)
+// الذي نتدهور إليه إذا فشل استعلام المتجهات — بيئة تطوير قبل db:push مثلًا.
 const CANDIDATE_CAP = 5000;
 const MAX_EMBED_TEXT = 1500;
+
+let vectorPathFailedOnce = false;
+
+/**
+ * Top-K الأقرب للمتجه المعطى — داخل PostgreSQL. يرجع [{id, score}] بنفس دلالة
+ * cosineSimilarity القديمة (1 = تطابق). يرمي عند غياب العمود/الامتداد ليمسكه
+ * المستدعي ويتدهور للمسار القديم.
+ */
+async function nearestByVector(
+  queryVec: number[],
+  extraConditions: SQL<unknown>[],
+  limit: number,
+): Promise<{ id: string; score: number }[]> {
+  const distance = cosineDistance(mediaVectors.embeddingVec, queryVec);
+  const rows = await withStatementTimeout(20_000, (tx) => tx
+    .select({
+      id: mediaVectors.mediaFileId,
+      similarity: sql<number>`1 - (${distance})`,
+    })
+    .from(mediaVectors)
+    .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
+    .where(and(isNotNull(mediaVectors.embeddingVec), ...extraConditions))
+    .orderBy(distance)
+    .limit(limit));
+  return rows.map((r) => ({ id: r.id as string, score: Number(r.similarity) }));
+}
+
+function warnVectorFallback(context: string, error: unknown): void {
+  if (!vectorPathFailedOnce) {
+    vectorPathFailedOnce = true;
+    console.warn(
+      `[Media Search] pgvector path failed (${context}) — falling back to JS cosine over jsonb:`,
+      (error as any)?.message || error,
+    );
+  }
+}
 
 /** Build the descriptive text a media file's embedding is generated from. */
 export function buildEmbeddingText(file: {
@@ -61,11 +97,13 @@ export async function embedMediaFile(mediaFileId: string): Promise<boolean> {
 
     const embedding = await generateEmbedding(text);
 
+    // كتابة مزدوجة: jsonb القديم (توافق مسار الطوارئ) + عمود pgvector للبحث.
     await db
       .insert(mediaVectors)
       .values({
         mediaFileId,
         embedding,
+        embeddingVec: embedding,
         embeddingText: text,
         embeddingModel: "text-embedding-3-large",
         updatedAt: new Date(),
@@ -74,6 +112,7 @@ export async function embedMediaFile(mediaFileId: string): Promise<boolean> {
         target: mediaVectors.mediaFileId,
         set: {
           embedding,
+          embeddingVec: embedding,
           embeddingText: text,
           embeddingModel: "text-embedding-3-large",
           updatedAt: new Date(),
@@ -142,38 +181,43 @@ export async function semanticSearchMedia(
   const limit = Math.min(60, Math.max(1, opts.limit ?? 30));
   const queryVec = await generateEmbedding(q);
 
-  const conditions = [eq(mediaFiles.type, "image"), isNotNull(mediaVectors.embedding)];
-  if (opts.folderId) conditions.push(eq(mediaFiles.folderId, opts.folderId));
-  if (opts.category) conditions.push(eq(mediaFiles.category, opts.category));
+  const filterConditions: SQL<unknown>[] = [eq(mediaFiles.type, "image")];
+  if (opts.folderId) filterConditions.push(eq(mediaFiles.folderId, opts.folderId));
+  if (opts.category) filterConditions.push(eq(mediaFiles.category, opts.category));
 
-  // Pull id + vector for the candidate set (most-recent first), capped.
-  // مهلة 20 ث: نقل 5000 متجه بلغ 73 ث تحت الضغط — الإلغاء يحرر اتصال الـpool،
-  // والعلاج الجذري (pgvector) بند مستقل في خطة تقرير Neon.
-  const candidates = await withStatementTimeout(20_000, (tx) => tx
-    .select({
-      id: mediaVectors.mediaFileId,
-      embedding: mediaVectors.embedding,
-    })
-    .from(mediaVectors)
-    .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
-    .where(and(...conditions))
-    .orderBy(desc(mediaFiles.createdAt))
-    .limit(CANDIDATE_CAP));
+  // المسار الأساسي: Top-K داخل PostgreSQL عبر HNSW. لا مفهوم cap هنا —
+  // البحث دقيق على كامل المكتبة. الفشل (بيئة بلا pgvector) يتدهور للمسار القديم.
+  let scored: { id: string; score: number }[];
+  let capped = false;
+  try {
+    scored = await nearestByVector(queryVec, filterConditions, limit);
+  } catch (error) {
+    warnVectorFallback("semanticSearchMedia", error);
+    const candidates = await withStatementTimeout(20_000, (tx) => tx
+      .select({
+        id: mediaVectors.mediaFileId,
+        embedding: mediaVectors.embedding,
+      })
+      .from(mediaVectors)
+      .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
+      .where(and(isNotNull(mediaVectors.embedding), ...filterConditions))
+      .orderBy(desc(mediaFiles.createdAt))
+      .limit(CANDIDATE_CAP));
 
-  const capped = candidates.length >= CANDIDATE_CAP;
-  if (capped) {
-    console.warn(`[Media Search] candidate set hit cap (${CANDIDATE_CAP}); scoring most-recent slice only.`);
+    capped = candidates.length >= CANDIDATE_CAP;
+    if (capped) {
+      console.warn(`[Media Search] candidate set hit cap (${CANDIDATE_CAP}); scoring most-recent slice only.`);
+    }
+
+    scored = candidates
+      .filter((c) => Array.isArray(c.embedding) && c.embedding.length > 0)
+      .map((c) => ({ id: c.id as string, score: cosineSimilarity(queryVec, c.embedding as number[]) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
   }
-
-  const scored = candidates
-    .filter((c) => Array.isArray(c.embedding) && c.embedding.length > 0)
-    .map((c) => ({ id: c.id, score: cosineSimilarity(queryVec, c.embedding as number[]) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
 
   if (scored.length === 0) return { files: [], total: 0, capped };
 
-  const scoreById = new Map(scored.map((s) => [s.id, s.score]));
   const ids = scored.map((s) => s.id);
 
   const rows = await db
@@ -315,29 +359,39 @@ export async function similarMedia(
   const capped = Math.min(30, Math.max(1, limit));
 
   const [self] = await db
-    .select({ embedding: mediaVectors.embedding })
+    .select({ embedding: mediaVectors.embedding, embeddingVec: mediaVectors.embeddingVec })
     .from(mediaVectors)
     .where(eq(mediaVectors.mediaFileId, mediaFileId))
     .limit(1);
-  if (!self || !Array.isArray(self.embedding) || self.embedding.length === 0) {
+  const selfVec = (Array.isArray(self?.embeddingVec) && self.embeddingVec.length > 0
+    ? self.embeddingVec
+    : self?.embedding) as number[] | undefined;
+  if (!selfVec || !Array.isArray(selfVec) || selfVec.length === 0) {
     return { files: [], total: 0 };
   }
-  const selfVec = self.embedding as number[];
 
-  // مهلة 20 ث — نفس منطق semanticSearchMedia أعلاه.
-  const candidates = await withStatementTimeout(20_000, (tx) => tx
-    .select({ id: mediaVectors.mediaFileId, embedding: mediaVectors.embedding })
-    .from(mediaVectors)
-    .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
-    .where(and(eq(mediaFiles.type, "image"), isNotNull(mediaVectors.embedding)))
-    .orderBy(desc(mediaFiles.createdAt))
-    .limit(CANDIDATE_CAP));
+  let scored: { id: string; score: number }[];
+  try {
+    // +1 ثم استبعاد الملف نفسه — أقرب جار لأي متجه هو نفسه دائمًا.
+    scored = (await nearestByVector(selfVec, [eq(mediaFiles.type, "image")], capped + 1))
+      .filter((s) => s.id !== mediaFileId)
+      .slice(0, capped);
+  } catch (error) {
+    warnVectorFallback("similarMedia", error);
+    const candidates = await withStatementTimeout(20_000, (tx) => tx
+      .select({ id: mediaVectors.mediaFileId, embedding: mediaVectors.embedding })
+      .from(mediaVectors)
+      .innerJoin(mediaFiles, eq(mediaVectors.mediaFileId, mediaFiles.id))
+      .where(and(eq(mediaFiles.type, "image"), isNotNull(mediaVectors.embedding)))
+      .orderBy(desc(mediaFiles.createdAt))
+      .limit(CANDIDATE_CAP));
 
-  const scored = candidates
-    .filter((c) => c.id !== mediaFileId && Array.isArray(c.embedding) && c.embedding.length > 0)
-    .map((c) => ({ id: c.id, score: cosineSimilarity(selfVec, c.embedding as number[]) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, capped);
+    scored = candidates
+      .filter((c) => c.id !== mediaFileId && Array.isArray(c.embedding) && c.embedding.length > 0)
+      .map((c) => ({ id: c.id as string, score: cosineSimilarity(selfVec, c.embedding as number[]) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, capped);
+  }
 
   if (scored.length === 0) return { files: [], total: 0 };
 
