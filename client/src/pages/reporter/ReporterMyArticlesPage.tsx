@@ -209,9 +209,9 @@ export default function ReporterMyArticlesPage() {
           }
         />
 
-        <WriterMediaLicenseCard endpoint="/api/reporter/media-license" />
-
         <EditorialReferenceCard />
+
+        <WriterMediaLicenseCard endpoint="/api/reporter/media-license" />
 
         {isError ? (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
