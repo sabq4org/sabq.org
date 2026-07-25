@@ -13,6 +13,7 @@ import {
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
+import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError } from "./utils/pgError";
@@ -950,6 +951,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const result = await findOrCreatePhoneUser(e164);
       if (!result.ok) return res.status(result.status).json({ message: result.message });
 
+      // SECURITY: honour 2FA here exactly as /api/login does. Passing the OTP
+      // proves control of the phone number, not of the second factor — without
+      // this branch, an account protected by TOTP could be entered with the
+      // phone step alone, which is a complete 2FA bypass for anyone who can
+      // receive that number's SMS.
+      if ((result.user as any).twoFactorEnabled) {
+        (req.session as any).pending2FAUserId = result.user.id;
+        return req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("❌ phone login session save error:", saveErr);
+            return res.status(500).json({ message: "خطأ في حفظ الجلسة" });
+          }
+          return res.json({
+            requires2FA: true,
+            message: "يرجى إدخال رمز التحقق بخطوتين",
+          });
+        });
+      }
+
       // جلسة كوكيز عبر Passport (نفس نمط /api/register).
       req.logIn(result.user as any, (err) => {
         if (err) {
@@ -1450,8 +1470,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.error("[auth/user] resolvePublisherForUser failed:", err);
       }
 
-      // SECURITY: Never send passwordHash to client
-      const { passwordHash, twoFactorSecret, ...safeUser } = user;
+      // SECURITY: never send credential columns to a client. This used to
+      // strip only passwordHash + twoFactorSecret by hand and shipped
+      // twoFactorBackupCodes and fcmToken; toPublicUser covers all four and is
+      // drift-tested against the schema.
+      const safeUser = toPublicUser(user);
       const payload = {
         ...safeUser,
         role,
@@ -1500,7 +1523,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const user = await storage.updateUser(userId, data);
       memoryCache.delete(`auth-user:${userId}`);
-      res.json(user);
+      // toPublicUser: storage.updateUser returns the raw row (bare .returning()).
+      res.json(toPublicUser(user));
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ message: "فشل في تحديث البيانات" });
@@ -1565,7 +1589,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json({ 
         success: true,
         profileImageUrl: objectPath,
-        user
+        user: toPublicUser(user)
       });
     } catch (error) {
       console.error("Error updating profile image:", error);
@@ -3155,7 +3179,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json({ 
         success: true,
         profileImageUrl: publicUrl,
-        user
+        user: toPublicUser(user)
       });
     } catch (error: any) {
       console.error("Error uploading avatar:", error);

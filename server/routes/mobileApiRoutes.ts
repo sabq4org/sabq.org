@@ -61,6 +61,7 @@ import {
   contactMessageReplies,
   opinionTickets,
   opinionTicketMessages,
+  canUserLogin,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
 
@@ -973,16 +974,47 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
   const token = authHeader.substring(7);
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   
+  // SECURITY: the account's CURRENT status is part of session validity.
+  //
+  // This lookup used to touch `app_member_sessions` only, so banning, deleting
+  // or demoting an account changed nothing for anyone already holding a mobile
+  // token — they kept full /api/v1 access, including the admin endpoints, for
+  // the remaining life of the session (up to 30 days). Moderation and
+  // offboarding were effectively advisory on mobile.
+  //
+  // Joined into the same query — no extra round trip on a path that runs for
+  // every mobile request — and the rule itself is reused from shared/schema.ts
+  // rather than re-implemented, so temporary bans that have expired still work.
   const [session] = await db
-    .select({ userId: appMemberSessions.memberId, lastUsedAt: appMemberSessions.lastUsedAt })
+    .select({
+      userId: appMemberSessions.memberId,
+      lastUsedAt: appMemberSessions.lastUsedAt,
+      status: users.status,
+      bannedUntil: users.bannedUntil,
+      deletedAt: users.deletedAt,
+    })
     .from(appMemberSessions)
+    .innerJoin(users, eq(users.id, appMemberSessions.memberId))
     .where(and(
       eq(appMemberSessions.tokenHash, tokenHash),
       eq(appMemberSessions.isActive, true),
       gt(appMemberSessions.expiresAt, new Date())
     ))
     .limit(1);
-  
+
+  if (session && !canUserLogin(session as any)) {
+    // Retire the token so the next request doesn't re-run this check, and so
+    // the row stops looking live in the sessions dashboard.
+    try {
+      await db.update(appMemberSessions)
+        .set({ isActive: false })
+        .where(eq(appMemberSessions.tokenHash, tokenHash));
+    } catch (err) {
+      console.warn("[auth] failed to retire session for blocked account:", err);
+    }
+    return null;
+  }
+
   if (session) {
     // خنق كتابة lastUsedAt — مرة كل 5 دقائق للجلسة بدل كتابة لكل طلب،
     // فاستطلاعات الموبايل المتكررة كانت تضغط كتابة دائمة على القاعدة.

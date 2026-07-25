@@ -4,6 +4,7 @@ import { db } from "../db";
 import { isAuthenticated } from "../auth";
 import { storage } from "../storage";
 import { categories, userInterests } from "@shared/schema";
+import { toPublicUser } from "../utils/publicUser";
 
 const router: Router = Router();
 
@@ -67,7 +68,8 @@ router.post("/api/auth/complete-profile", isAuthenticated, async (req: any, res)
       isProfileComplete: true,
     });
 
-    res.json({ success: true, user });
+    // storage.updateUser returns the raw row — strip credentials.
+    res.json({ success: true, user: toPublicUser(user) });
   } catch (error) {
     console.error("Error completing profile:", error);
     res.status(500).json({ message: "Failed to complete profile" });

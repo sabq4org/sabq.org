@@ -241,10 +241,24 @@ app.use(cors({
     // Ionic legacy → ionic://localhost
     // These are app-bundle WebViews loading our own JS, so we trust them like
     // first-party origins. App identity is enforced separately by auth tokens.
+    // SECURITY: the http(s)+localhost branch must NOT accept a port.
+    //
+    // Capacitor serves the app bundle from bare `https://localhost` (and
+    // legacy `http://localhost`) — no port. Matching on hostname alone also
+    // accepted `http://localhost:<anything>` in production with
+    // `credentials: true`, so any process the victim could be lured into
+    // running locally (a dev server, an npx tool, a malicious "localhost app")
+    // became a trusted origin able to read authenticated API responses —
+    // including GET /api/csrf-token, which then defeats CSRF entirely.
+    // Ports stay allowed outside production for local dev servers.
+    const isBareLocalhost = parsed.hostname === 'localhost' && parsed.port === '';
     const isCapacitorWebView =
       (parsed.protocol === 'capacitor:' && parsed.hostname === 'localhost') ||
       (parsed.protocol === 'ionic:' && parsed.hostname === 'localhost') ||
-      ((parsed.protocol === 'https:' || parsed.protocol === 'http:') && parsed.hostname === 'localhost');
+      ((parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+        (isBareLocalhost || process.env.NODE_ENV !== 'production'
+          ? parsed.hostname === 'localhost'
+          : false));
     if (isCapacitorWebView) {
       return callback(null, true);
     }

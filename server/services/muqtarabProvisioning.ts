@@ -19,7 +19,7 @@
 import { db } from "../db";
 import crypto from "crypto";
 import { storage } from "../storage";
-import { users, roles, userRoles, type AngleSubmission, type Angle, type User } from "@shared/schema";
+import { users, roles, userRoles, angles, type AngleSubmission, type Angle, type User } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
@@ -218,9 +218,37 @@ export async function resendAngleWriterCredentials(
   }
 
   const email = submission.email.trim().toLowerCase();
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+  // SECURITY: resolve the account through the angle this flow actually
+  // provisioned — never through the submission's email.
+  //
+  // `submission.email` comes from POST /api/angle-submissions, a public,
+  // unauthenticated, CSRF-exempt form where the submitter types any address
+  // they like. Matching `users.email` against it meant a holder of
+  // `muqtarab.manage` (an editor-level permission) could aim this at ANY
+  // account — including system_admin — and force a password reset, wipe the
+  // session, and flip `status` back to "active", which quietly undoes a ban.
+  // `angles.managerUserId` is the account this submission genuinely created.
+  const [angle] = await db
+    .select({ managerUserId: angles.managerUserId })
+    .from(angles)
+    .where(eq(angles.id, submission.createdAngleId))
+    .limit(1);
+
+  if (!angle?.managerUserId) {
+    return { ok: false, message: "لم يُعثر على حساب المستخدم المرتبط بالطلب" };
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, angle.managerUserId)).limit(1);
   if (!user) {
     return { ok: false, message: "لم يُعثر على حساب المستخدم المرتبط بالطلب" };
+  }
+
+  // Defence in depth: even the correct angle owner must not be re-credentialled
+  // through this path if the account has since been banned or deleted —
+  // otherwise the reset below (`status: "active"`) becomes a ban-evasion tool.
+  if (user.deletedAt || user.status === "banned") {
+    return { ok: false, message: "الحساب موقوف أو محذوف — لا يمكن إعادة إرسال بيانات الدخول" };
   }
 
   let tempPassword: string | null = null;

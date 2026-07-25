@@ -20646,14 +20646,35 @@ export class DatabaseStorage implements IStorage {
     let temporaryPassword = '';
     
     if (existingUser) {
-      // User already exists - update their role to opinion_author and link to application
+      // SECURITY: `applicantEmail` comes from the PUBLIC opinion-author
+      // application form and is never verified, so this branch can land on any
+      // account whose address the applicant happened to type. It used to
+      // OVERWRITE that account's `role` column and its public profile (bio,
+      // city, job title, photo) with applicant-supplied content — i.e. anyone
+      // could get a staff member's role changed and their public bio rewritten
+      // by naming their email on a form and waiting for an admin to approve.
+      //
+      // A staff account is never the intended target of this flow: refuse and
+      // make the admin link it deliberately.
+      const STAFF_ROLES = new Set([
+        'admin', 'system_admin', 'superadmin', 'editor', 'chief_editor',
+        'content_manager', 'moderator', 'comments_moderator', 'reporter',
+      ]);
+      if (existingUser.role && STAFF_ROLES.has(existingUser.role)) {
+        throw new Error(
+          "البريد مرتبط بحساب منسوب قائم — لا يمكن اعتماد الطلب عليه. راجع الحساب يدويًا.",
+        );
+      }
+
+      // For an ordinary reader account: grant the role through RBAC below, but
+      // do NOT rewrite the legacy `role` column or overwrite profile fields
+      // that the account owner set themselves. Only fill what is still empty.
       const [updatedUser] = await db.update(users)
         .set({
-          role: 'opinion_author',
-          jobTitle: application.jobTitle || existingUser.jobTitle,
-          bio: application.bio || existingUser.bio,
-          city: application.city || existingUser.city,
-          profileImageUrl: application.profilePhotoUrl || existingUser.profileImageUrl,
+          jobTitle: existingUser.jobTitle || application.jobTitle,
+          bio: existingUser.bio || application.bio,
+          city: existingUser.city || application.city,
+          profileImageUrl: existingUser.profileImageUrl || application.profilePhotoUrl,
           isProfileComplete: true,
         })
         .where(eq(users.id, existingUser.id))
