@@ -7830,16 +7830,9 @@ router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) =>
     if (!admin) {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
-    // Global stats are heavy (~18 aggregate queries over 900k+ articles).
-    // Cache 60s so repeat dashboard opens are instant (mirrors the web route).
-    const { memoryCache } = await import("../memoryCache");
-    const cacheKey = "mobile:admin:fullstats";
-    const cached = memoryCache.get<any>(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-    const { storage } = await import("../storage");
-    const s = await storage.getAdminDashboardStats();
+    // Shares SWR cache with web GET /api/admin/dashboard/stats (5m fresh / 15m stale).
+    const { getCachedAdminDashboardStats } = await import("../services/adminDashboardStatsService");
+    const s = await getCachedAdminDashboardStats();
     const payload = {
       success: true,
       articles: {
@@ -7858,7 +7851,6 @@ router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) =>
       aiImages: { total: s.aiImages.total, thisWeek: s.aiImages.thisWeek },
       smartBlocks: { total: s.smartBlocks.total },
     };
-    memoryCache.set(cacheKey, payload, 60000);
     res.json(payload);
   } catch (error) {
     console.error("[Mobile API] GET /admin/dashboard/full-stats error:", error);

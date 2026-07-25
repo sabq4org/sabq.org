@@ -14725,61 +14725,8 @@ Respond in valid JSON format only:
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      // Check cache first (60 second TTL for dashboard stats)
-      const cacheKey = 'admin:dashboard:stats';
-      const cached = memoryCache.get(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const stats = await storage.getAdminDashboardStats();
-      
-      // Trim response data for performance - only include essential fields
-      const trimmedStats = {
-        ...stats,
-        recentArticles: stats.recentArticles.map((article: any) => ({
-          id: article.id,
-          title: article.title,
-          slug: article.slug,
-              englishSlug: article.englishSlug || undefined,
-          status: article.status,
-          publishedAt: article.publishedAt,
-          views: article.views,
-          author: article.author ? {
-            firstName: article.author.firstName,
-            lastName: article.author.lastName,
-            email: article.author.email,
-          } : undefined,
-        })),
-        topArticles: stats.topArticles.map((article: any) => ({
-          id: article.id,
-          title: article.title,
-          slug: article.slug,
-              englishSlug: article.englishSlug || undefined,
-          status: article.status,
-          publishedAt: article.publishedAt,
-          views: article.views,
-          category: article.category ? {
-            nameAr: article.category.nameAr,
-          } : undefined,
-        })),
-        recentComments: stats.recentComments.map((comment: any) => ({
-          id: comment.id,
-          content: comment.content ? comment.content.substring(0, 100) : '',
-          articleId: comment.articleId,
-          createdAt: comment.createdAt,
-          status: comment.status,
-          user: comment.user ? {
-            firstName: comment.user.firstName,
-            lastName: comment.user.lastName,
-            email: comment.user.email,
-          } : undefined,
-        })),
-      };
-
-      // Cache for 60 seconds
-      memoryCache.set(cacheKey, trimmedStats, CACHE_TTL.SHORT);
-      
+      const { getCachedAdminDashboardStats } = await import("./services/adminDashboardStatsService");
+      const trimmedStats = await getCachedAdminDashboardStats();
       res.json(trimmedStats);
     } catch (error) {
       console.error("Error fetching admin dashboard stats:", error);
