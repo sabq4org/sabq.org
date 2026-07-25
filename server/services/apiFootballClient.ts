@@ -52,6 +52,22 @@ const DEFAULT_MAX_QUEUE_WAIT_MS = 6_000;
 const OUTAGE_FAILURE_THRESHOLD = 8;
 /** مدة التوقف عن محاولة المزوّد بعد اعتباره ساقطًا. */
 const OUTAGE_COOLDOWN_MS = 30_000;
+/**
+ * حادثة صباح 2026-07-25 (الثالثة بنفس الآلية): العطل الجزئي — نجاح متقطع وسط
+ * الإخفاقات — كان يصفّر العداد المتتالي فلا ينفتح القاطع أبدًا، ويظل كل نداء
+ * فاشل يحرق دوره ومهلته ويحتجز طلبًا واردًا. لذلك نافذة منزلقة إضافية:
+ * بلوغ هذا العدد من إخفاقات النقل خلال OUTAGE_WINDOW_MS يفتح القاطع ولو
+ * تخللتها ردود ناجحة.
+ */
+const OUTAGE_WINDOW_MS = 30_000;
+const OUTAGE_WINDOW_THRESHOLD = 12;
+/**
+ * سقف صريح لعدد المنتظرين المتزامنين في طابور المعدّل. كل منتظر هو غالبًا
+ * طلب HTTP وارد يحتجز مقبسًا؛ سقف الانتظار الزمني وحده يسمح بتراكم مئات
+ * المنتظرين «القانونيين» في لحظة ازدحام + عطل، وهو ما يخنق قبول الاتصالات
+ * الجديدة (\u200F502 dial timeout من راوتر Railway). فوق السقف: رفض فوري.
+ */
+const DEFAULT_MAX_PENDING_WAITERS = 80;
 
 /** الحدّ الفعلي بالدقيقة كما رصدناه من ترويسات المزوّد (يتكيّف مع الخطة تلقائيًا). */
 let observedRpm: number | null = null;
@@ -59,17 +75,14 @@ let observedRpm: number | null = null;
 let cooldownUntil = 0;
 /** أزمنة الإرسال المجدولة داخل النافذة (مرتّبة تصاعديًا تقريبًا). */
 const scheduled: number[] = [];
-/**
- * أزمنة إخفاقات النقل داخل النافذة. كان العدّاد «متتاليًا» ويُصفَّر عند أي
- * نجاح — وست خدمات تنادي المزوّد بالتوازي، فيكفي نجاح واحد متداخل ليمنع
- * العدّاد من بلوغ العتبة إطلاقًا. النتيجة: القاطع لم يُفتح ولا مرة رغم مئات
- * الإخفاقات (لوق 2026-07-25 05:06–05:08: فشل ونجاح متناوبان بلا أي تهدئة).
- * العدّ الآن على نافذة زمنية، وهو ما يقيس «نسبة الإخفاق» فعليًا.
- */
-const transportFailures: number[] = [];
-const FAILURE_WINDOW_MS = 30_000;
+/** إخفاقات نقل متتالية (تعذّر الاتصال أو انتهاء المهلة) — تُصفّر عند أول رد. */
+let consecutiveTransportFailures = 0;
+/** أزمنة إخفاقات النقل داخل النافذة المنزلقة — لا يصفّرها النجاح المتقطع. */
+let transportFailureTimes: number[] = [];
 /** لا محاولات إطلاقًا قبل هذا الوقت — يُرفع عندما نعتبر المزوّد ساقطًا. */
 let outageUntil = 0;
+/** عدد المنتظرين حاليًا داخل acquireSlot — حارس استنفاد المقابس. */
+let pendingWaiters = 0;
 
 function envMs(name: string, fallback: number): number {
   const value = Number.parseInt((process.env[name] || "").trim(), 10);
@@ -106,31 +119,52 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
       `[${tag}] API-Football queue saturated (${wait}ms > ${maxWait}ms) for ${path}`,
     );
   }
+  if (wait > 0) {
+    const maxPending = envMs("APIFOOTBALL_MAX_PENDING_WAITERS", DEFAULT_MAX_PENDING_WAITERS);
+    if (pendingWaiters >= maxPending) {
+      throw new Error(
+        `[${tag}] API-Football wait room full (${pendingWaiters} pending) for ${path}`,
+      );
+    }
+    scheduled.push(at);
+    pendingWaiters += 1;
+    try {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    } finally {
+      pendingWaiters -= 1;
+    }
+    return;
+  }
   scheduled.push(at);
-  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+}
+
+function pruneFailureWindow(now: number): void {
+  while (transportFailureTimes.length && transportFailureTimes[0] <= now - OUTAGE_WINDOW_MS) {
+    transportFailureTimes.shift();
+  }
 }
 
 function noteTransportFailure(): void {
   const now = Date.now();
-  while (transportFailures.length && transportFailures[0] <= now - FAILURE_WINDOW_MS) {
-    transportFailures.shift();
-  }
-  transportFailures.push(now);
-  if (transportFailures.length >= OUTAGE_FAILURE_THRESHOLD) {
+  consecutiveTransportFailures += 1;
+  transportFailureTimes.push(now);
+  pruneFailureWindow(now);
+  if (
+    consecutiveTransportFailures >= OUTAGE_FAILURE_THRESHOLD ||
+    transportFailureTimes.length >= OUTAGE_WINDOW_THRESHOLD
+  ) {
     outageUntil = now + OUTAGE_COOLDOWN_MS;
-    transportFailures.length = 0;
+    transportFailureTimes = [];
     console.warn(
-      `[API-Football] قاطع الدائرة فُتح — ${OUTAGE_FAILURE_THRESHOLD} إخفاق نقل خلال ${FAILURE_WINDOW_MS / 1000}ث؛ توقف ${OUTAGE_COOLDOWN_MS / 1000}ث`,
+      `[API-Football] circuit OPEN — cooling down ${OUTAGE_COOLDOWN_MS}ms (consecutive=${consecutiveTransportFailures})`,
     );
   }
 }
 
-/**
- * النجاح لا يمسح النافذة (وإلا عاد عيب «المتتالية» من الباب الخلفي) — يكتفي
- * بإسقاط أقدم إخفاق حتى يتعافى القاطع تدريجيًا مع تحسّن نسبة النجاح.
- */
 function noteTransportSuccess(): void {
-  transportFailures.shift();
+  // يصفّر المتتالي فقط — النافذة المنزلقة تبقى، فالنجاح المتقطع أثناء عطل
+  // جزئي لا يمنع فتح القاطع (درس حادثة صباح 2026-07-25).
+  consecutiveTransportFailures = 0;
 }
 
 function noteResponseHeaders(response: Response): void {
@@ -188,7 +222,7 @@ export async function apiFootballGet(
           // هوية صريحة: المزوّد خلف Cloudflare (v3.football.api-sports.io →
           // 172.66.164.245). طلب بلا User-Agent من عنوان مركز بيانات بمعدّل
           // مرتفع يطابق ملف الحجب الآلي على الحافة، فتُقطع الاتصالات بينما
-          // صفحة حالة المزوّد خضراء 100%.
+          // صفحة حالة المزوّد خضراء 100% (لقطة 2026-07-25: 90 يومًا بلا عطل).
           "User-Agent": "sabq.org/1.0 (+https://sabq.org)",
           Accept: "application/json",
         },
@@ -197,11 +231,13 @@ export async function apiFootballGet(
     } catch (error) {
       // تعذّر الاتصال أو انتهت المهلة — لم يصل الطلب للمزوّد أصلًا.
       //
-      // «fetch failed» هي رسالة undici العامة ولا تقول شيئًا. السبب الحقيقي
-      // يكون دائمًا في error.cause: ECONNRESET (الحافة تقطعنا) أو EAI_AGAIN
-      // (فشل DNS في الحاوية) أو UND_ERR_CONNECT_TIMEOUT (لا يُفتح TCP أصلًا —
-      // استنزاف مقابس عندنا) أو ECONNREFUSED (حجب صريح). كان الكود يقرأ
-      // .message فقط ويرمي cause، فبقي سبب حوادث 2026-07-24 مجهولًا.
+      // «fetch failed» رسالة undici العامة ولا تقول شيئًا. السبب الحقيقي في
+      // error.cause دائمًا: ECONNRESET (الحافة تقطعنا) أو EAI_AGAIN (فشل DNS
+      // في الحاوية) أو UND_ERR_CONNECT_TIMEOUT (لا يُفتح TCP أصلًا — استنزاف
+      // مقابس عندنا) أو ECONNREFUSED (حجب صريح). كان الكود يقرأ .message فقط
+      // ويرمي cause، ولهذا بقي سبب حوادث 2026-07-24/25 مجهولًا وبُنيت
+      // الحواجز (#1199، #1201) على فرضية «تعطّل المزوّد» التي تكذّبها لوحة
+      // حالته. هذه الحقول تحسم الأمر من أول سطر في السجل.
       noteTransportFailure();
       const err = error as any;
       const cause = err?.cause;
