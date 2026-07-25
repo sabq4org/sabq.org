@@ -1111,23 +1111,40 @@ export interface SplScorer {
 export async function getTopScorers(comp: SaudiCompetition, seasonOverride?: number): Promise<SplScorer[]> {
   if (!comp.hasScorers) return [];
   const season = seasonOverride ?? await seasonFor(comp);
-  return withSWR(`spl:scorers:${comp.id}:${season}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+  const cacheKey = `spl:scorers:${comp.id}:${season}`;
+  return withSWR(cacheKey, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = await apiGet("players/topscorers", { league: comp.id, season });
-    const tr = await resolveNames(rows.map((r: any) => r.player?.name));
-    return rows.slice(0, 15).map((row: any, index: number): SplScorer => {
-      const stats = row.statistics?.[0] ?? {};
-      return {
-        rank: index + 1,
-        id: row.player?.id ?? 0,
-        name: localizeSplPlayerName(row.player?.id, row.player?.name ?? "", tr),
-        photo: row.player?.photo ?? "",
-        team: localizeTeam(stats.team),
-        goals: stats.goals?.total ?? 0,
-        assists: stats.goals?.assists ?? 0,
-        penalties: stats.penalty?.scored ?? 0,
-        matches: stats.games?.appearences ?? 0,
-      };
-    });
+    const nameList = rows.map((r: any) => r.player?.name);
+    // لا نحبس على ترجمة AI داخل الطلب — كانت تضيف ثواني فوق طابور API-Football
+    // عند فتح لوحة الهدّافين (خصوصًا مع /assists بالتوازي).
+    const tr = await resolveNames(nameList, { skipAi: true });
+    const mapRows = (translator: typeof tr): SplScorer[] =>
+      rows.slice(0, 15).map((row: any, index: number): SplScorer => {
+        const stats = row.statistics?.[0] ?? {};
+        return {
+          rank: index + 1,
+          id: row.player?.id ?? 0,
+          name: localizeSplPlayerName(row.player?.id, row.player?.name ?? "", translator),
+          photo: row.player?.photo ?? "",
+          team: localizeTeam(stats.team),
+          goals: stats.goals?.total ?? 0,
+          assists: stats.goals?.assists ?? 0,
+          penalties: stats.penalty?.scored ?? 0,
+          matches: stats.games?.appearences ?? 0,
+        };
+      });
+    const result = mapRows(tr);
+    // withSWR يضيف ‎:en — نطابق المفتاح عند الترقية اليدوية.
+    const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
+    const incomplete = !isEnglishSports() && nameList.some((n) => n && tr(n) === n);
+    if (incomplete) {
+      void resolveNames(nameList)
+        .then((tr2) => {
+          swrCache.set(storeKey, mapRows(tr2), CACHE_TTL.LONG, CACHE_TTL.LONG * 2);
+        })
+        .catch(() => {});
+    }
+    return result;
   });
 }
 
@@ -2803,22 +2820,36 @@ export interface SplAssister {
 export async function getTopAssists(comp: SaudiCompetition, seasonOverride?: number): Promise<SplAssister[]> {
   if (!comp.hasScorers) return [];
   const season = seasonOverride ?? await seasonFor(comp);
-  return withSWR(`spl:assists:${comp.id}:${season}`, ASSISTS_TTL, ASSISTS_TTL * 2, async () => {
+  const cacheKey = `spl:assists:${comp.id}:${season}`;
+  return withSWR(cacheKey, ASSISTS_TTL, ASSISTS_TTL * 2, async () => {
     const rows = await apiGet("players/topassists", { league: comp.id, season });
-    const tr = await resolveNames(rows.map((r: any) => r.player?.name));
-    return rows.slice(0, 15).map((row: any, index: number): SplAssister => {
-      const stats = row.statistics?.[0] ?? {};
-      return {
-        rank: index + 1,
-        id: row.player?.id ?? 0,
-        name: localizeSplPlayerName(row.player?.id, row.player?.name ?? "", tr),
-        photo: row.player?.photo ?? "",
-        team: localizeTeam(stats.team),
-        goals: stats.goals?.total ?? 0,
-        assists: stats.goals?.assists ?? 0,
-        matches: stats.games?.appearences ?? 0,
-      };
-    });
+    const nameList = rows.map((r: any) => r.player?.name);
+    const tr = await resolveNames(nameList, { skipAi: true });
+    const mapRows = (translator: typeof tr): SplAssister[] =>
+      rows.slice(0, 15).map((row: any, index: number): SplAssister => {
+        const stats = row.statistics?.[0] ?? {};
+        return {
+          rank: index + 1,
+          id: row.player?.id ?? 0,
+          name: localizeSplPlayerName(row.player?.id, row.player?.name ?? "", translator),
+          photo: row.player?.photo ?? "",
+          team: localizeTeam(stats.team),
+          goals: stats.goals?.total ?? 0,
+          assists: stats.goals?.assists ?? 0,
+          matches: stats.games?.appearences ?? 0,
+        };
+      });
+    const result = mapRows(tr);
+    const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
+    const incomplete = !isEnglishSports() && nameList.some((n) => n && tr(n) === n);
+    if (incomplete) {
+      void resolveNames(nameList)
+        .then((tr2) => {
+          swrCache.set(storeKey, mapRows(tr2), ASSISTS_TTL, ASSISTS_TTL * 2);
+        })
+        .catch(() => {});
+    }
+    return result;
   });
 }
 
@@ -3872,23 +3903,37 @@ export interface SplCardLeader {
 async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red", seasonOverride?: number): Promise<SplCardLeader[]> {
   const season = seasonOverride ?? await seasonFor(comp);
   const path = kind === "yellow" ? "players/topyellowcards" : "players/topredcards";
-  return withSWR(`spl:${path}:${comp.id}:${season}`, CARDS_TTL, CARDS_TTL * 2, async () => {
+  const cacheKey = `spl:${path}:${comp.id}:${season}`;
+  return withSWR(cacheKey, CARDS_TTL, CARDS_TTL * 2, async () => {
     const rows = await apiGet(path, { league: comp.id, season });
-    const tr = await resolveNames(rows.map((r: any) => r.player?.name));
-    return rows.slice(0, 10).map((row: any, index: number): SplCardLeader => {
-      const st = row.statistics?.[0] ?? {};
-      return {
-        rank: index + 1,
-        id: row.player?.id ?? 0,
-        name: localizeSplPlayerName(row.player?.id, row.player?.name ?? "", tr),
-        photo: row.player?.photo ?? "",
-        team: localizeSplTeamName(st.team?.id, st.team?.name ?? ""),
-        teamLogo: st.team?.logo ?? "",
-        yellow: (st.cards?.yellow ?? 0) + (st.cards?.yellowred ?? 0),
-        red: st.cards?.red ?? 0,
-        matches: st.games?.appearences ?? 0,
-      };
-    });
+    const nameList = rows.map((r: any) => r.player?.name);
+    const tr = await resolveNames(nameList, { skipAi: true });
+    const mapRows = (translator: typeof tr): SplCardLeader[] =>
+      rows.slice(0, 10).map((row: any, index: number): SplCardLeader => {
+        const st = row.statistics?.[0] ?? {};
+        return {
+          rank: index + 1,
+          id: row.player?.id ?? 0,
+          name: localizeSplPlayerName(row.player?.id, row.player?.name ?? "", translator),
+          photo: row.player?.photo ?? "",
+          team: localizeSplTeamName(st.team?.id, st.team?.name ?? ""),
+          teamLogo: st.team?.logo ?? "",
+          yellow: (st.cards?.yellow ?? 0) + (st.cards?.yellowred ?? 0),
+          red: st.cards?.red ?? 0,
+          matches: st.games?.appearences ?? 0,
+        };
+      });
+    const result = mapRows(tr);
+    const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
+    const incomplete = !isEnglishSports() && nameList.some((n) => n && tr(n) === n);
+    if (incomplete) {
+      void resolveNames(nameList)
+        .then((tr2) => {
+          swrCache.set(storeKey, mapRows(tr2), CARDS_TTL, CARDS_TTL * 2);
+        })
+        .catch(() => {});
+    }
+    return result;
   });
 }
 
