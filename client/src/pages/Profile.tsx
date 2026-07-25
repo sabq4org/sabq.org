@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Link } from "wouter";
+import { Link, Redirect, useLocation, useRoute, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
 import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
@@ -32,8 +32,6 @@ import {
   Heart,
   Bookmark,
   FileText,
-  Settings,
-  Bell,
   Shield,
   Loader2,
   Upload,
@@ -51,16 +49,16 @@ import {
   IdCard,
   Check,
   Download,
-  Wallet,
   Edit,
   Clock,
   Eye,
   Lock,
   ChevronDown,
+  Newspaper,
+  CreditCard,
 } from "lucide-react";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
-import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
 
@@ -170,13 +168,66 @@ function SavedArticlesList({
   );
 }
 
+
+const PROFILE_TABS = [
+  { id: "overview", label: "نظرة عامة", icon: Eye, legacy: [] as string[] },
+  { id: "saved", label: "محفوظاتي", icon: Bookmark, legacy: ["bookmarks"] },
+  { id: "activity", label: "نشاطي", icon: TrendingUp, legacy: ["journey"] },
+  { id: "network", label: "متابعاتي", icon: Users, legacy: ["followers"] },
+  { id: "cards", label: "بطاقاتي", icon: CreditCard, legacy: ["wallet"] },
+] as const;
+
+type ProfileTabId = (typeof PROFILE_TABS)[number]["id"];
+
+function normalizeProfileTab(raw: string | null | undefined): ProfileTabId | "settings" | null {
+  if (!raw) return null;
+  if (raw === "settings") return "settings";
+  for (const tab of PROFILE_TABS) {
+    if (tab.id === raw || (tab.legacy as readonly string[]).includes(raw)) {
+      return tab.id;
+    }
+  }
+  return null;
+}
+
 export default function Profile() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("bookmarks");
+  const [, params] = useRoute("/profile/:segment");
+  const search = useSearch();
+  const [, setLocation] = useLocation();
+  const queryTab = useMemo(() => {
+    try {
+      return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("tab");
+    } catch {
+      return null;
+    }
+  }, [search]);
+
+  const routeTab = normalizeProfileTab(params?.segment) ?? normalizeProfileTab(queryTab);
+  const [activeTab, setActiveTabState] = useState<ProfileTabId>(
+    routeTab && routeTab !== "settings" ? routeTab : "overview",
+  );
   const [savedView, setSavedView] = useState<"bookmarks" | "likes" | "history">("bookmarks");
   const [networkView, setNetworkView] = useState<"followers" | "following">("followers");
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoyaltyCardExpanded, setIsLoyaltyCardExpanded] = useState(false);
+
+  useEffect(() => {
+    if (routeTab === "settings") return;
+    if (routeTab && routeTab !== activeTab) {
+      setActiveTabState(routeTab);
+    }
+  }, [routeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setActiveTab = (tab: string) => {
+    const normalized = normalizeProfileTab(tab) ?? "overview";
+    if (normalized === "settings") {
+      setLocation("/settings");
+      return;
+    }
+    setActiveTabState(normalized);
+    const path = normalized === "overview" ? "/profile" : `/profile/${normalized}`;
+    setLocation(path);
+  };
 
   const { data: user } = useQuery<UserType>({
     queryKey: ["/api/auth/user"],
@@ -218,7 +269,6 @@ export default function Profile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setIsEditingProfile(false);
       toast({
         title: "تم التحديث بنجاح",
         description: "تم حفظ بياناتك الشخصية",
@@ -462,7 +512,7 @@ export default function Profile() {
       if (!res.ok) throw new Error('Failed to fetch followers');
       return res.json();
     },
-    enabled: !!user && activeTab === 'followers' && networkView === 'followers',
+    enabled: !!user && activeTab === 'network' && networkView === 'followers',
   });
   const followers = Array.isArray(followersRaw) ? followersRaw : [];
 
@@ -484,7 +534,7 @@ export default function Profile() {
       if (!res.ok) throw new Error('Failed to fetch following');
       return res.json();
     },
-    enabled: !!user && activeTab === 'followers' && networkView === 'following',
+    enabled: !!user && activeTab === 'network' && networkView === 'following',
   });
   const following = Array.isArray(followingRaw) ? followingRaw : [];
 
@@ -730,6 +780,10 @@ export default function Profile() {
     return 'م';
   };
 
+  if (routeTab === "settings") {
+    return <Redirect to="/settings" />;
+  }
+
   if (!user) {
     return (
       <div className="min-h-screen bg-background">
@@ -798,13 +852,7 @@ export default function Profile() {
         const heroLifetime = loyaltyPoints?.lifetimePoints ?? 0;
         const heroTier = computeTier(heroLifetime);
         const heroLevel = loyaltyPoints?.rankLevel ?? heroTier.level;
-        const navItems = [
-          { id: "bookmarks", label: "محفوظاتي", icon: Bookmark },
-          { id: "journey", label: "رحلتي", icon: Trophy },
-          { id: "followers", label: "شبكتي", icon: Users },
-          { id: "wallet", label: "المحفظة", icon: Wallet },
-          { id: "settings", label: "الإعدادات", icon: Settings },
-        ] as const;
+        const navItems = PROFILE_TABS;
 
         return (
           <>
@@ -883,7 +931,7 @@ export default function Profile() {
                           </span>
                         )}
                       </div>
-                      {user.bio && !isEditingProfile && (
+                      {user.bio && (
                         <p className="max-w-xl text-sm leading-relaxed text-foreground/75">
                           {user.bio}
                         </p>
@@ -893,11 +941,13 @@ export default function Profile() {
                           variant="default"
                           size="sm"
                           className="min-w-0 flex-1 gap-2 sm:flex-none"
-                          onClick={() => setIsEditingProfile(!isEditingProfile)}
+                          asChild
                           data-testid="button-edit-profile"
                         >
-                          <Edit className="h-4 w-4" />
-                          {isEditingProfile ? "إلغاء التعديل" : "تعديل الملف"}
+                          <Link href="/settings/account">
+                            <Edit className="h-4 w-4" />
+                            تعديل بياناتي
+                          </Link>
                         </Button>
                         {hasRole(user, "editor", "admin", "system_admin") && (
                           <Button variant="ghost" size="sm" className="gap-2" asChild data-testid="button-go-to-dashboard">
@@ -1019,7 +1069,7 @@ export default function Profile() {
                 </div>
 
                 <AnimatePresence>
-                  {isEditingProfile && (
+                  {false && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
@@ -1127,7 +1177,6 @@ export default function Profile() {
                               type="button"
                               variant="outline"
                               onClick={() => {
-                                setIsEditingProfile(false);
                                 form.reset();
                               }}
                               data-testid="button-cancel-edit"
@@ -1162,7 +1211,7 @@ export default function Profile() {
                         role="tab"
                         aria-selected={active}
                         aria-controls={`profile-panel-${item.id}`}
-                        data-testid={`tab-${item.id === "followers" ? "followers" : item.id === "bookmarks" ? "bookmarks" : item.id}`}
+                        data-testid={`tab-${item.id === "network" ? "followers" : item.id === "saved" ? "bookmarks" : item.id}`}
                         className={cn(
                           "relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
                           active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
@@ -1181,8 +1230,46 @@ export default function Profile() {
                   })}
                 </div>
 
+
+                <TabsContent id="profile-panel-overview" value="overview" className="mt-0 space-y-6 focus-visible:outline-none">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight">نظرة عامة</h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">هويتك ونشاطك السريع في سبق</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Link href="/profile/saved" className="rounded-xl border border-border/60 bg-card p-4 hover:border-primary/40 transition-colors">
+                      <Bookmark className="h-5 w-5 text-primary mb-2" />
+                      <p className="font-semibold">محفوظاتي</p>
+                      <p className="text-xs text-muted-foreground mt-1">{bookmarkedArticles.length.toLocaleString("en-US")} مادة محفوظة</p>
+                    </Link>
+                    <Link href="/daily-brief" className="rounded-xl border border-border/60 bg-card p-4 hover:border-primary/40 transition-colors">
+                      <Newspaper className="h-5 w-5 text-primary mb-2" />
+                      <p className="font-semibold">ملخص اليوم</p>
+                      <p className="text-xs text-muted-foreground mt-1">تحليل ذكي لنشاطك خلال 24 ساعة</p>
+                    </Link>
+                    <Link href="/focus/weekly" className="rounded-xl border border-border/60 bg-card p-4 hover:border-primary/40 transition-colors">
+                      <Eye className="h-5 w-5 text-primary mb-2" />
+                      <p className="font-semibold">تقرير التركيز الأسبوعي</p>
+                      <p className="text-xs text-muted-foreground mt-1">جلسات القراءة المركّزة لآخر 7 أيام</p>
+                    </Link>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold">آخر ما حفظتَه</h3>
+                      <Link href="/profile/saved" className="text-xs font-medium text-primary">عرض الكل</Link>
+                    </div>
+                    <SavedArticlesList
+                      articles={bookmarkedArticles.slice(0, 4)}
+                      isLoading={isLoadingBookmarks}
+                      emptyIcon={Bookmark}
+                      emptyText="لم تحفظ أي مقالات بعد"
+                      emptyHint="احفظ المقالات المهمة لقراءتها لاحقًا"
+                    />
+                  </div>
+                </TabsContent>
+
                 {/* محفوظاتي أولاً */}
-                <TabsContent id="profile-panel-bookmarks" value="bookmarks" className="mt-0 space-y-5 focus-visible:outline-none">
+                <TabsContent id="profile-panel-saved" value="saved" className="mt-0 space-y-5 focus-visible:outline-none">
                   <div className="space-y-4" data-testid="profile-saved-heading">
                     <div>
                       <h2 className="text-xl font-bold tracking-tight">محفوظاتي</h2>
@@ -1255,12 +1342,29 @@ export default function Profile() {
                   )}
                 </TabsContent>
 
-                <TabsContent id="profile-panel-journey" value="journey" className="mt-0 space-y-10 focus-visible:outline-none">
+                <TabsContent id="profile-panel-activity" value="activity" className="mt-0 space-y-10 focus-visible:outline-none">
                   <div>
-                    <h2 className="text-xl font-bold tracking-tight">رحلتي في سبق</h2>
+                    <h2 className="text-xl font-bold tracking-tight">نشاطي</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      قراءة · تفاعل · تقدّم الولاء — بلا لوحات متكدّسة
+                      قراءة · تفاعل · تقدّم الولاء والتقارير
                     </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Link href="/daily-brief" className="flex items-start gap-3 rounded-xl border border-border/60 p-4 hover:border-primary/40 transition-colors">
+                      <Newspaper className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">ملخصي اليومي</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">تحليل AI لنشاط قراءتك خلال اليوم</p>
+                      </div>
+                    </Link>
+                    <Link href="/focus/weekly" className="flex items-start gap-3 rounded-xl border border-border/60 p-4 hover:border-primary/40 transition-colors">
+                      <Eye className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">تقرير التركيز الأسبوعي</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">ملخص جلسات وضع التركيز لآخر سبعة أيام</p>
+                      </div>
+                    </Link>
                   </div>
 
                   {/* Compact stats as newspaper figures */}
@@ -1456,10 +1560,10 @@ export default function Profile() {
                   </div>
                 </TabsContent>
 
-                <TabsContent id="profile-panel-followers" value="followers" className="mt-0 space-y-5 focus-visible:outline-none">
+                <TabsContent id="profile-panel-network" value="network" className="mt-0 space-y-5 focus-visible:outline-none">
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <h2 className="text-xl font-bold tracking-tight">شبكتي</h2>
+                      <h2 className="text-xl font-bold tracking-tight">متابعاتي</h2>
                       <p className="mt-0.5 text-sm text-muted-foreground">من يتابعك ومن تتابع</p>
                     </div>
                     <div className="flex gap-4 text-xs">
@@ -1510,7 +1614,7 @@ export default function Profile() {
                               )}
                             </div>
                             <Button variant="ghost" size="sm" asChild data-testid={`button-view-profile-${follower.id}`}>
-                              <Link href={`/user/${follower.id}`}>عرض</Link>
+                              <Link href={`/profile/${follower.id}`}>عرض</Link>
                             </Button>
                           </li>
                         ))}
@@ -1539,7 +1643,7 @@ export default function Profile() {
                             )}
                           </div>
                           <Button variant="ghost" size="sm" asChild data-testid={`button-view-profile-${followed.id}`}>
-                            <Link href={`/user/${followed.id}`}>عرض</Link>
+                            <Link href={`/profile/${followed.id}`}>عرض</Link>
                           </Button>
                           <Button
                             variant="ghost"
@@ -1558,9 +1662,9 @@ export default function Profile() {
                   )}
                 </TabsContent>
 
-                <TabsContent id="profile-panel-wallet" value="wallet" className="mt-0 space-y-8 focus-visible:outline-none">
+                <TabsContent id="profile-panel-cards" value="cards" className="mt-0 space-y-8 focus-visible:outline-none">
                   <div>
-                    <h2 className="text-xl font-bold tracking-tight">المحفظة</h2>
+                    <h2 className="text-xl font-bold tracking-tight">بطاقاتي</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">بطاقات رقمية لـ Apple Wallet</p>
                   </div>
                   <div className="divide-y divide-border/60 border-y border-border/50">
@@ -1628,26 +1732,6 @@ export default function Profile() {
                   </div>
                 </TabsContent>
 
-                <TabsContent id="profile-panel-settings" value="settings" className="mt-0 space-y-8 focus-visible:outline-none">
-                  <div>
-                    <h2 className="text-xl font-bold tracking-tight">الإعدادات</h2>
-                    <p className="mt-0.5 text-sm text-muted-foreground">الخصوصية والأمان</p>
-                  </div>
-                  <div className="space-y-2 border-y border-border/50 py-5">
-                    <h3 className="flex items-center gap-2 text-sm font-semibold">
-                      <Bell className="h-4 w-4" />
-                      إعدادات الإشعارات
-                    </h3>
-                    <p className="text-sm text-muted-foreground">قريبًا: خيارات تخصيص الإشعارات</p>
-                  </div>
-                  <div className="space-y-3">
-                    <h3 className="flex items-center gap-2 text-sm font-semibold">
-                      <Shield className="h-4 w-4" />
-                      الخصوصية والأمان
-                    </h3>
-                    <TwoFactorSettings />
-                  </div>
-                </TabsContent>
               </Tabs>
             </main>
           </>

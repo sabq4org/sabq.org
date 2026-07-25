@@ -1,8 +1,40 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-19",
+  "updatedAt": "2026-07-25",
   "systems": [
+    {
+      "id": "account-center",
+      "nameAr": "مركز العضوية الموحد",
+      "nameEn": "Account Center",
+      "status": "active",
+      "category": "engagement",
+      "summary": "تجربة عضوية الويب: قائمة الحساب، /profile (هوية ونشاط)، /settings (مركز إعدادات واحد)، وإعادة توجيه المسارات القديمة.",
+      "docPath": "docs/systems/account-center/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/auth-rbac/SYSTEM.md",
+        "docs/systems/loyalty/SYSTEM.md",
+        "docs/systems/push-notifications/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "client/src/nav/accountMenuItems.ts",
+        "client/src/components/UserAccountMenu.tsx",
+        "client/src/pages/Profile.tsx",
+        "client/src/pages/ProfileSegmentRouter.tsx",
+        "client/src/pages/profile/**",
+        "client/src/pages/settings/**",
+        "client/src/pages/NotificationSettings.tsx",
+        "client/src/pages/PreferencesCenter.tsx",
+        "client/src/components/TwoFactorSettings.tsx",
+        "server/routes/accountSecurity.ts",
+        "server/services/accountSecurityService.ts",
+        "docs/systems/account-center/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": null,
+      "owners": ["platform"],
+      "lastReviewed": "2026-07-25"
+    },
     {
       "id": "loyalty",
       "nameAr": "نظام الولاء",

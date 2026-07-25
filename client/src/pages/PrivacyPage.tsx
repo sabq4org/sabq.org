@@ -124,7 +124,7 @@ export default function PrivacyPage() {
             <span>ملتزمون بنظام حماية البيانات الشخصية في المملكة</span>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/notification-settings">
+            <Link href="/settings/notifications">
               <Button variant="outline" size="sm" className="gap-2" data-testid="button-manage-preferences-top">
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                 إدارة التفضيلات
@@ -269,7 +269,7 @@ export default function PrivacyPage() {
                     <h3 className="text-sm font-extrabold text-foreground mb-2">كيف تتحكم؟</h3>
                     <ul className="space-y-2.5 text-[13.5px] text-muted-foreground leading-relaxed">
                       <li>
-                        <Link href="/notification-settings" className="text-primary font-semibold hover:underline underline-offset-2">
+                        <Link href="/settings/notifications" className="text-primary font-semibold hover:underline underline-offset-2">
                           إعدادات الإشعارات
                         </Link>
                         {" — "}التخصيص والتوصيات والهضم اليومي.
@@ -358,7 +358,7 @@ export default function PrivacyPage() {
                       <ArrowUpLeft className="w-4 h-4" aria-hidden="true" />
                     </Button>
                   </Link>
-                  <Link href="/notification-settings">
+                  <Link href="/settings/notifications">
                     <Button variant="outline" className="gap-2" data-testid="button-manage-preferences">
                       <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                       إدارة تفضيلاتك

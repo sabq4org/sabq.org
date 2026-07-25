@@ -205,7 +205,9 @@ const TagsManagement = lazy(() => retryImport(() => import("@/pages/TagsManageme
 
 // === LAZY IMPORTS (Profile & User) ===
 const Profile = lazy(() => retryImport(() => import("@/pages/Profile")));
+const ProfileSegmentRouter = lazy(() => retryImport(() => import("@/pages/ProfileSegmentRouter")));
 const PreferencesCenter = lazy(() => retryImport(() => import("@/pages/PreferencesCenter")));
+const SettingsCenter = lazy(() => retryImport(() => import("@/pages/settings/SettingsCenter")));
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
 const CompleteProfile = lazy(() => retryImport(() => import("@/pages/CompleteProfile")));
@@ -640,6 +642,8 @@ function Router() {
         <Route path="/en/profile">{() => <LazyRoute component={EnglishProfile} />}</Route>
         <Route path="/en/daily-brief">{() => <LazyRoute component={EnglishDailyBrief} />}</Route>
         <Route path="/en/notification-settings">{() => <LazyRoute component={EnglishNotificationSettings} />}</Route>
+        <Route path="/en/settings/:section">{() => <Redirect to="/settings/notifications" />}</Route>
+        <Route path="/en/settings">{() => <Redirect to="/settings" />}</Route>
         <Route path="/en/reporter/:slug">{() => <LazyRoute component={EnglishReporterProfile} />}</Route>
         
         {/* Urdu Version Routes */}
@@ -957,13 +961,15 @@ function Router() {
         <Route path="/dashboard/themes/:id">{() => <LazyRoute component={ThemeEditor} />}</Route>
         <Route path="/dashboard/themes">{() => <LazyRoute component={ThemeManager} />}</Route>
         <Route path="/dashboard/appearance">{() => <LazyRoute component={DashboardAppearancePage} />}</Route>
-        <Route path="/profile/:userId">{() => <LazyRoute component={PublicProfile} />}</Route>
+        <Route path="/profile/:segment">{() => <LazyRoute component={ProfileSegmentRouter} />}</Route>
         <Route path="/profile">{() => <LazyRoute component={Profile} />}</Route>
         {/* محفظة العضو — مسار عام خارج لوحة التحكم */}
         <Route path="/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
         <Route path="/dashboard/loyalty">{() => <Redirect to="/loyalty" />}</Route>
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
+        <Route path="/settings/:section">{() => <LazyRoute component={SettingsCenter} />}</Route>
+        <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
         <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
@@ -971,6 +977,7 @@ function Router() {
         <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>
         <Route path="/notification-settings">{() => <LazyRoute component={NotificationSettings} />}</Route>
+        <Route path="/ur/notification-settings">{() => <Redirect to="/settings/notifications" />}</Route>
         
         {/* Publisher Dashboard Routes */}
         <Route path="/dashboard/publisher">{() => <LazyRoute component={PublisherDashboard} />}</Route>
@@ -1178,7 +1185,7 @@ function Router() {
         <Route path="/dashboard/notification-admin">{() => <LazyRoute component={NotificationAdmin} />}</Route>
         <Route path="/dashboard/email-templates">{() => <LazyRoute component={EmailTemplatesPage} />}</Route>
         <Route path="/notifications">{() => <LazyRoute component={UserNotifications} />}</Route>
-        <Route path="/recommendation-settings">{() => <Redirect to="/notification-settings" />}</Route>
+        <Route path="/recommendation-settings">{() => <Redirect to="/settings/notifications" />}</Route>
         <Route path="/my-follows">{() => <LazyRoute component={MyFollows} />}</Route>
         <Route path="/my-keywords">{() => <LazyRoute component={MyKeywords} />}</Route>
         <Route path="/dashboard/story-admin">{() => <LazyRoute component={StoryAdmin} />}</Route>

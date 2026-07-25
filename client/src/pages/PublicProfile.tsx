@@ -27,7 +27,8 @@ import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 export default function PublicProfile() {
   const { toast } = useToast();
   const [, params] = useRoute("/profile/:userId");
-  const userId = params?.userId;
+  const [, segmentParams] = useRoute("/profile/:segment");
+  const userId = params?.userId ?? segmentParams?.segment;
   const [activeTab, setActiveTab] = useState("followers");
 
   // Fetch current user

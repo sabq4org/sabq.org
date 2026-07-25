@@ -35,13 +35,28 @@ describe("isNoindexPath — prefixes", () => {
     "/ifox/anything",
     "/gulf-cup/majlis",
     "/gulf-cup/majlis/123",
+    "/settings",
+    "/settings/",
+    "/settings/security",
+    "/settings/notifications",
+    "/en/settings/account",
   ])("%s is noindex", (p) => expect(isNoindexPath(p)).toBe(true));
 
   it("does NOT match prefix lookalikes (boundary check)", () => {
     expect(isNoindexPath("/dashboardx")).toBe(false);
     expect(isNoindexPath("/administrator-news")).toBe(false);
     expect(isNoindexPath("/payments-explained")).toBe(false);
+    expect(isNoindexPath("/settingsx")).toBe(false);
   });
+});
+
+describe("isNoindexPath — account-center redirects stay private", () => {
+  it.each([
+    "/notification-settings",
+    "/recommendation-settings",
+    "/preferences",
+    "/loyalty",
+  ])("%s is noindex", (p) => expect(isNoindexPath(p)).toBe(true));
 });
 
 describe("isNoindexPath — public surfaces stay public", () => {

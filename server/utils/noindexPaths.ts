@@ -17,6 +17,7 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/profile', '/bookmarks', '/reading-history',
   '/my-follows', '/my-keywords', '/my-votes',
   '/notification-settings', '/recommendation-settings',
+  '/preferences', '/loyalty',
   '/en/profile', '/en/notification-settings',
   '/ur/profile',
 ]);
@@ -27,8 +28,11 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/ifox',
   '/onboarding',
   '/payment',
+  '/settings',
   '/en/dashboard',
+  '/en/settings',
   '/ur/dashboard',
+  '/ur/settings',
   // مجالس التوقعات تحمل دعوات وواجهات عضوية شخصية؛ تبقى قابلة للمشاركة لكن
   // لا تُفهرس ولا تُخزّن كغلاف HTML مشترك على الحافة.
   '/gulf-cup/majlis',

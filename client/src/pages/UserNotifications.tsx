@@ -372,7 +372,7 @@ export default function UserNotifications() {
                   الإشعارات
                 </h1>
                 
-                <Link href="/recommendation-settings">
+                <Link href="/settings/notifications">
                   <Button
                     variant="ghost"
                     size="icon"

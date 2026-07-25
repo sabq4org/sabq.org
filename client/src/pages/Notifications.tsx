@@ -185,7 +185,7 @@ export default function Notifications() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link href="/recommendation-settings">
+            <Link href="/settings/notifications">
               <Button
                 variant="outline"
                 data-testid="button-recommendation-settings"

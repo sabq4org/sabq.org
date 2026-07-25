@@ -200,7 +200,7 @@ export function UrduHeader({ user, onMenuClick }: UrduHeaderProps) {
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <a href="/ur/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings-mobile">
+                      <a href="/settings/notifications" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings-mobile">
                         <span className="flex-1">اطلاعات کی ترتیبات</span>
                         <Bell className="ml-2 h-4 w-4" />
                       </a>
@@ -287,7 +287,7 @@ export function UrduHeader({ user, onMenuClick }: UrduHeaderProps) {
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <a href="/ur/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings">
+                      <a href="/settings/notifications" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings">
                         <span className="flex-1">اطلاعات کی ترتیبات</span>
                         <Bell className="ml-2 h-4 w-4" />
                       </a>

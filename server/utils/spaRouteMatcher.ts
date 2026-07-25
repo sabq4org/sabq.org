@@ -19,7 +19,8 @@ export const VALID_PREFIXES = new Set([
   // Auth & User
   'login', 'register', 'logout', 'profile', 'verify-email', 
   'forgot-password', 'reset-password', 'set-password', '2fa-verify',
-  // User settings
+  // User settings & account center
+  'settings', 'preferences', 'loyalty',
   'notification-settings', 'recommendation-settings', 'bookmarks',
   'reading-history', 'my-follows', 'my-keywords', 'my-votes',
   // Static pages
@@ -98,7 +99,7 @@ export function isValidSpaRoute(urlPath: string): boolean {
       const validSecondLevel = new Set([
         'article', 'category', 'keyword', 'reporter', 'news', 'opinion',
         'categories', 'dashboard', 'admin', 'profile', 'about', 'contact',
-        'terms', 'privacy', 'daily-brief', 'moment-by-moment', 'notification-settings'
+        'terms', 'privacy', 'daily-brief', 'moment-by-moment', 'notification-settings', 'settings'
       ]);
       if (validSecondLevel.has(secondSegment)) {
         return true;

@@ -81,6 +81,7 @@ import correspondentApplicationsRouter from "./correspondentApplications";
 import publisherPortalRouter from "./publisherPortal";
 import smartBlocksRouter from "./smartBlocks";
 import wcNumbersReportRouter from "./wcNumbersReport";
+import accountSecurityRouter from "./accountSecurity";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -172,4 +173,5 @@ export function registerSplitRoutes(app: Express) {
   // Smart Blocks / Homepage Stage — قبل معالجات routes.ts القديمة لنفس المسارات
   app.use(smartBlocksRouter);
   app.use(wcNumbersReportRouter);
+  app.use(accountSecurityRouter);
 }
