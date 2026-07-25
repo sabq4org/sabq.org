@@ -2192,6 +2192,38 @@ export interface SplSquad {
   players: SplSquadPlayer[];
 }
 
+// ---- تسخين بطاقات لاعبي التشكيلة ----
+
+/** سقف اللاعبين المُسخَّنين لكل تشكيلة — ميزانية حصة (راجع sportsMatchWarmupJob). */
+const PLAYER_CARD_WARM_MAX = 26;
+/** تباعد بين لاعب وآخر أثناء التسخين حتى لا نزاحم طلبات الوارد على طابور المعدّل. */
+const PLAYER_CARD_WARM_SPACING_MS = 200;
+
+/**
+ * تسخين بطاقات لاعبي تشكيلة بعد جلبها (إصابة كاش أو جلب بارد — الداخلي SWR
+ * يرد فورًا للطازج فلا تكلفة تُذكر في الحالة المستقرة). الدافع: صفحة اللاعب
+ * كانت ترد 503 «يُحمَّل حاليًا» عند أول نقرة لأن جلب البطاقة البارد (4 نداءات
+ * API-Football) يتجاوز مهلة المسار 3ث تحت الازدحام؛ من يتصفح تشكيلة نادٍ هو
+ * تحديدًا من سينقر لاعبيه، فيصيب كاشًا دافئًا.
+ *
+ * تسلسلي بتوازٍ 1 + تباعد، وكل الأخطاء تُبتلع: عند تشبّع الطابور يرفض
+ * acquireSlot فورًا فيتوقف التسخين عمليًا — حماية ذاتية لا تحتاج منطقًا إضافيًا.
+ * لا نسخّن form/market: أقسام lazy تتحلل بأناقة (تُخفى) وتملأ كاشها بالخلفية.
+ */
+function warmSquadPlayerCards(players: SplSquadPlayer[]): void {
+  const ids = players
+    .map((p) => p.id)
+    .filter((id) => Number.isFinite(id) && id > 0)
+    .slice(0, PLAYER_CARD_WARM_MAX);
+  if (ids.length === 0) return;
+  void (async () => {
+    for (const id of ids) {
+      await getPlayerCard(id).catch(() => null);
+      await new Promise((r) => setTimeout(r, PLAYER_CARD_WARM_SPACING_MS));
+    }
+  })().catch(() => {});
+}
+
 /** معلومات النادي (الملعب، سنة التأسيس) — اسم النادي بالخريطة الثابتة */
 async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
   return withSWR(`spl:teaminfo:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
@@ -2239,7 +2271,7 @@ async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
 /** تشكيلة النادي مرتّبة حسب المركز ثم الرقم */
 export async function getSquad(teamId: number): Promise<SplSquad | null> {
   const cacheKey = `spl:squad:${teamId}`;
-  return withSWR(cacheKey, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+  const squad = await withSWR(cacheKey, SQUAD_TTL, SQUAD_TTL * 2, async () => {
     const rows = await apiGet("players/squads", { team: teamId });
     const entry = rows[0];
     if (!entry) return null;
@@ -2281,6 +2313,11 @@ export async function getSquad(teamId: number): Promise<SplSquad | null> {
     }
     return result;
   });
+  // تسخين بطاقات اللاعبين بعد كل جلب للتشكيلة (طازجة كانت أو مجدَّدة) —
+  // كاش البطاقة (ساعة) أقصر من كاش التشكيلة (يوم) فالزيارات اللاحقة تجد
+  // بطاقات منتهية؛ النداءات الطازجة رخيصة (فحص ذاكرة) والمنتهية وحدها تجلب.
+  if (squad?.players?.length) warmSquadPlayerCards(squad.players);
+  return squad;
 }
 
 export interface SplTeamProfile {
