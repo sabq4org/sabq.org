@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import { db } from "../db";
 import { sendEmailNotification } from "./email";
+import { withCache, memoryCache } from "../memoryCache";
 import {
   articles,
   categories,
@@ -470,6 +471,7 @@ export async function deletePortalArticle(
       reason: `publisher-portal-delete:${articleId}`,
     });
   }
+  invalidatePortalOverviewCache(publisher.id);
 
   return {
     ok: true,
@@ -525,6 +527,7 @@ export async function submitPortalArticle(userId: string, articleId: string): Pr
       isBreaking: false,
       reason: `publisher-auto-publish:${articleId}`,
     });
+    invalidatePortalOverviewCache(publisher.id);
     await notifyPublisherUser(userId, {
       title: "نُشر خبرك",
       body: `«${published.title}» نُشر مباشرة وخُصم من رصيد باقتكم.`,
@@ -540,6 +543,7 @@ export async function submitPortalArticle(userId: string, articleId: string): Pr
       updatedAt: now,
     })
     .where(eq(articles.id, articleId));
+  invalidatePortalOverviewCache(publisher.id);
   return { ok: true, published: false, message: "أُرسلت المادة للمراجعة التحريرية" };
 }
 
@@ -716,6 +720,18 @@ export async function getPortalOverview(userId: string) {
   const publisher = await resolvePublisherForUser(userId);
   if (!publisher) return null;
 
+  // لوحة الوكالة كانت ~2.2ث بعد الإقلاع (5+ استعلامات). كاش دقيقة يكفي للأرقام.
+  return withCache(`publisher:portal:overview:${publisher.id}`, 60_000, async () => {
+    return buildPortalOverview(publisher);
+  });
+}
+
+/** إبطال كاش نظرة عامة بعد نشر/حذف حتى لا تبقى الأرقام دقيقة واحدة خاطئة. */
+export function invalidatePortalOverviewCache(publisherId: string): void {
+  memoryCache.delete(`publisher:portal:overview:${publisherId}`);
+}
+
+async function buildPortalOverview(publisher: Publisher) {
   const condition = publisherArticlesCondition(publisher);
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

@@ -319,7 +319,7 @@ export async function sendRecommendationNotification(
   try {
     // Validate articleIds array
     if (!articleIds || articleIds.length === 0) {
-      console.error(`❌ [REC NOTIFICATION] No article IDs provided for recommendation`);
+      console.warn(`[REC NOTIFICATION] No article IDs provided for recommendation`);
       return { success: false, reason: 'No articles to recommend' };
     }
 
@@ -336,7 +336,7 @@ export async function sendRecommendationNotification(
       );
 
     if (validArticles.length === 0) {
-      console.error(`❌ [REC NOTIFICATION] None of the recommended articles are published anymore`);
+      console.warn(`[REC NOTIFICATION] None of the recommended articles are published anymore`);
       return { success: false, reason: 'No valid published articles to recommend' };
     }
 

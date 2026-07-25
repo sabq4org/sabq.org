@@ -2148,6 +2148,8 @@ export async function getMatchSeoMeta(fixtureId: number): Promise<SplMatchSeoMet
 
 const SQUAD_TTL = 24 * 60 * 60 * 1000; // التشكيلة شبه ثابتة خلال الموسم
 const PLAYER_CARD_TTL = 60 * 60 * 1000; // الملف شبه ثابت؛ أرقام الموسم تتجدد كل ساعة
+/** جسر خفيف (ملف+أندية فقط) لـ market/form — لا ينتظر بطاقة اللاعب الكاملة. */
+const PLAYER_BRIDGE_TTL = PLAYER_CARD_TTL;
 
 export interface SplTeamInfo {
   id: number;
@@ -2275,6 +2277,18 @@ export interface SplTeamProfile {
  * withExtras=true (تُجلب فقط في صفحة النادي، لا في الاستهلاك الداخلي).
  */
 export async function getTeamProfile(teamId: number, opts?: { withExtras?: boolean }): Promise<SplTeamProfile | null> {
+  const withExtras = opts?.withExtras === true;
+  // غلاف SWR على الصفحة كاملة — كان كل طلب بارد يعيد تجميع standings×N + تشكيلة
+  // فيصل ~4ث في APM حتى مع كاش الأجزاء.
+  return withSWR(
+    `spl:teamprofile:v3:${teamId}:${withExtras ? "x" : "b"}`,
+    CACHE_TTL.MEDIUM,
+    CACHE_TTL.MEDIUM * 2,
+    async () => buildTeamProfile(teamId, withExtras),
+  );
+}
+
+async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<SplTeamProfile | null> {
   const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStandings);
 
   // معلومات النادي + التشكيلة لا تعتمدان على البطولة، فنبدأهما فورًا بالتوازي مع
@@ -2284,31 +2298,40 @@ export async function getTeamProfile(teamId: number, opts?: { withExtras?: boole
     getSquad(teamId).catch(() => null),
   ]);
 
-  // اكتشاف بطولة النادي وصفّه: نجلب جداول البطولات بالتوازي بدل التسلسل.
-  // قبل الموسم قد تكون الجداول الجديدة فارغة، فالتسلسل كان يمرّ على كل
-  // البطولات الأربع متتاليًا (٨+ نداءات) ويبطّئ الصفحة عدة ثوانٍ.
+  // روشن أولًا (أغلب أندية البوابة) — تجنّب فتح 4 جداول على طابور المعدّل دفعة واحدة.
   let comp: SaudiCompetition | null = null;
   let standing: SplStandingRow | null = null;
-  const tables = await Promise.all(
-    leagueComps.map((c) =>
-      getStandings(c)
-        .catch(() => [] as SplStandingRow[])
-        .then((table) => ({ c, table }))
-    )
-  );
-  for (const { c, table } of tables) {
+  const pro = leagueComps.find((c) => c.slug === "pro-league");
+  const others = leagueComps.filter((c) => c.slug !== "pro-league");
+  if (pro) {
+    const table = await getStandings(pro).catch(() => [] as SplStandingRow[]);
     const row = table.find((r) => r.team.id === teamId);
     if (row) {
-      comp = c;
+      comp = pro;
       standing = row;
-      break;
+    }
+  }
+  if (!comp && others.length > 0) {
+    const tables = await Promise.all(
+      others.map((c) =>
+        getStandings(c)
+          .catch(() => [] as SplStandingRow[])
+          .then((table) => ({ c, table })),
+      ),
+    );
+    for (const { c, table } of tables) {
+      const row = table.find((r) => r.team.id === teamId);
+      if (row) {
+        comp = c;
+        standing = row;
+        break;
+      }
     }
   }
 
   // الإثراء يُجلب فقط حين يطلبه المستهلك (?with=stats)، حتى لا تُكلّف النقطة
   // الأساسية نداءات إضافية. المباريات (تعتمد على البطولة) + الإثراء يُجلبان
   // بالتوازي مع بعضهما وبعد معرفة البطولة، ومع نتيجة basePromise الجارية.
-  const withExtras = opts?.withExtras === true;
   const [[info, squad], fixturesAll, [stats, coach, topScorers]] = await Promise.all([
     basePromise,
     comp ? getFixtures(comp).catch(() => [] as SplFixture[]) : Promise.resolve([] as SplFixture[]),
@@ -2589,6 +2612,44 @@ export interface SplPlayerMarket {
 
 const EMPTY_MARKET: SplPlayerMarket = { available: false, value: null, currency: "€", peak: null, history: [] };
 
+/** هوية خفيفة للمطابقة مع TheSports/SportMonks — بدون ألقاب/إحصاء/ترجمة. */
+interface SplPlayerBridge {
+  clubId: number | null;
+  nameEn: string;
+  number: number | null;
+  firstname: string | null;
+  lastname: string | null;
+  dob: string | null;
+}
+
+async function getPlayerBridge(playerId: number): Promise<SplPlayerBridge | null> {
+  return withSWR(`spl:player-bridge:${playerId}`, PLAYER_BRIDGE_TTL, PLAYER_BRIDGE_TTL * 2, async () => {
+    const [profileRows, careerRows] = await Promise.all([
+      apiGet("players/profiles", { player: playerId }).catch(() => [] as any[]),
+      apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
+    ]);
+    const p = profileRows[0]?.player;
+    if (!p?.id) return null;
+
+    const clubStops = (careerRows as any[])
+      .filter((row) => row?.team?.id && row.team.national !== true && row.team.name !== p.nationality)
+      .map((row) => ({
+        id: row.team.id as number,
+        last: Math.max(0, ...((row.seasons ?? []) as number[]).filter((s: number) => Number.isFinite(s))),
+      }))
+      .sort((a, b) => b.last - a.last);
+
+    return {
+      clubId: clubStops[0]?.id ?? null,
+      nameEn: String(p.name ?? "").trim(),
+      number: typeof p.number === "number" ? p.number : null,
+      firstname: p.firstname ?? null,
+      lastname: p.lastname ?? null,
+      dob: p.birth?.date ?? null,
+    };
+  });
+}
+
 // تطبيع اسم للمطابقة بين API-Football وTheSports (إنجليزي): إزالة التشكيل/علامات.
 function normName(s: string): string {
   return s
@@ -2606,21 +2667,18 @@ function normName(s: string): string {
  * تاريخ القيمة (player/market/list)، ونتراجع للقيمة الحالية على مستوى البطولة
  * (player/with_stat/list) عند غياب التاريخ. أفضل جهد: أي تعذّر/IP غير مُدرَج →
  * available:false فتُخفى الواجهة. كاش 24 ساعة.
+ *
+ * لا يستدعي getPlayerCard — كان ينتظر الألقاب/الترجمة/إحصاء الموسم ويصل إلى
+ * ~17ث عند فتح صفحة اللاعب بالتوازي مع /player و/form على طابور API-Football.
  */
 export async function getPlayerMarketValue(playerId: number): Promise<SplPlayerMarket> {
   if (!isSaudiLeagueConfigured()) return EMPTY_MARKET;
   return withSWR(`spl:market:${playerId}`, MARKET_TTL, MARKET_TTL * 2, async () => {
-    // النادي الحالي من بطاقة اللاعب (أحدث ناد في المسيرة — صحيح بعد الانتقالات)،
-    // والاسم/الرقم الإنجليزيان من الملف الشخصي (للمطابقة في قائمة TheSports).
-    const [card, profileRows] = await Promise.all([
-      getPlayerCard(playerId).catch(() => null),
-      apiGet("players/profiles", { player: playerId }).catch(() => [] as any[]),
-    ]);
-    const clubId = card?.currentTeam?.id;
-    if (!clubId) return EMPTY_MARKET;
-    const p = profileRows[0]?.player;
-    const playerNameEn = String(p?.name ?? "").trim();
-    const playerNumber: number | null = typeof p?.number === "number" ? p.number : null;
+    const bridge = await getPlayerBridge(playerId).catch(() => null);
+    const clubId = bridge?.clubId;
+    if (!clubId || !bridge) return EMPTY_MARKET;
+    const playerNameEn = bridge.nameEn;
+    const playerNumber = bridge.number;
 
     // نحلّ بطولة النادي ومعرّف TheSports عبر بطولات الترتيب (روشن أولًا) — أول إصابة.
     const resolved = await resolveSplClubUuid(clubId);
@@ -2693,13 +2751,12 @@ export interface SplPlayerForm {
 export async function getPlayerForm(playerId: number): Promise<SplPlayerForm> {
   if (!isSaudiLeagueConfigured() || !isSportmonksConfigured()) return { available: false, matches: [] };
   return withSWR(`spl:form:${playerId}`, PLAYER_FORM_TTL, PLAYER_FORM_TTL * 2, async () => {
-    const profileRows = await apiGet("players/profiles", { player: playerId }).catch(() => [] as any[]);
-    const p = profileRows[0]?.player;
-    if (!p) return { available: false, matches: [] };
+    const bridge = await getPlayerBridge(playerId).catch(() => null);
+    if (!bridge) return { available: false, matches: [] };
     const form = await smGetPlayerForm({
-      firstname: p.firstname ?? null,
-      lastname: p.lastname ?? null,
-      dob: p.birth?.date ?? null,
+      firstname: bridge.firstname,
+      lastname: bridge.lastname,
+      dob: bridge.dob,
     }).catch(() => ({ available: false, matches: [] }));
     if (!form.available || form.matches.length === 0) return { available: false, matches: [] };
     const tr = await resolveNames(form.matches.map((m) => m.opponent)).catch(() => null);

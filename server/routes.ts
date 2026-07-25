@@ -13631,7 +13631,22 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "الموجز غير متوفر لهذا المقال" });
       }
 
-      // Select active TTS provider (ElevenLabs preferred for Saudi/Gulf voice, Google fallback)
+      // كاش صوت جاهز — بدون must-revalidate حتى لا يُعاد التوليد في كل زيارة.
+      const updatedKey = article.updatedAt instanceof Date
+        ? article.updatedAt.toISOString()
+        : String(article.updatedAt ?? "");
+      const audioCacheKey = `summary-audio:v2:${article.id}:${updatedKey}`;
+      const cachedAudio = memoryCache.get<{ buffer: Buffer; provider: string }>(audioCacheKey);
+      if (cachedAudio) {
+        res.setHeader("X-TTS-Provider", cachedAudio.provider);
+        res.setHeader("X-TTS-Cache", "HIT");
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", cachedAudio.buffer.length.toString());
+        res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400");
+        res.setHeader("ETag", `"${article.id}-${updatedKey}-${cachedAudio.provider}"`);
+        return res.send(cachedAudio.buffer);
+      }
+
       const explicit = (process.env.TTS_PROVIDER || '').toLowerCase();
       let audioBuffer: Buffer | null = null;
       let usedProvider = '';
@@ -13641,32 +13656,34 @@ Respond in valid JSON format only:
       );
 
       if (explicit !== 'google') {
-        const { getElevenLabsService } = await import("./services/elevenlabs");
-        const elevenLabsService = getElevenLabsService();
-        if (elevenLabsService) {
-          try {
-            audioBuffer = await Promise.race([
-              elevenLabsService.textToSpeech({
-                text: textToConvert,
-                model: 'eleven_flash_v2_5',
-                voiceSettings: {
-                  stability: 0.75,
-                  similarity_boost: 0.75,
-                  style: 0.30,
-                  use_speaker_boost: true
-                }
-              }),
-              timeoutPromise(30000)
-            ]);
-            usedProvider = 'elevenlabs';
-          } catch (eErr) {
-            const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
-            // نفاد رصيد ElevenLabs حالة متوقَّعة (نعتمد على Google كبديل)؛ لا نُسجّلها
-            // كخطأ حتى لا تُغرق السجلّات في كل طلب صوت. الأخطاء الأخرى تبقى تحذيرًا.
-            if (eMsg.includes('quota_exceeded')) {
-              console.log('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
-            } else {
-              console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
+        const { getElevenLabsService, isElevenLabsQuotaCoolingDown } = await import("./services/elevenlabs");
+        if (isElevenLabsQuotaCoolingDown()) {
+          // تخطٍ فوري — كان كل طلب ينتظر فشل ElevenLabs ثم Google (~1.2ث+).
+        } else {
+          const elevenLabsService = getElevenLabsService();
+          if (elevenLabsService) {
+            try {
+              audioBuffer = await Promise.race([
+                elevenLabsService.textToSpeech({
+                  text: textToConvert,
+                  model: 'eleven_flash_v2_5',
+                  voiceSettings: {
+                    stability: 0.75,
+                    similarity_boost: 0.75,
+                    style: 0.30,
+                    use_speaker_boost: true
+                  }
+                }, 8_000),
+                timeoutPromise(8_000)
+              ]);
+              usedProvider = 'elevenlabs';
+            } catch (eErr) {
+              const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
+              if (eMsg.includes('quota_exceeded') || /quota|payment_required|credits/i.test(eMsg)) {
+                console.warn('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
+              } else {
+                console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
+              }
             }
           }
         }
@@ -13684,18 +13701,18 @@ Respond in valid JSON format only:
             voiceId: 'ar-XA-Wavenet-C',
             voiceSettings: { stability: 0.6, speed: 1.0 }
           }),
-          timeoutPromise(30000)
+          timeoutPromise(15000)
         ]);
         usedProvider = 'google';
       }
-      res.setHeader("X-TTS-Provider", usedProvider);
 
-      // Set response headers for audio with cache busting support
+      memoryCache.set(audioCacheKey, { buffer: audioBuffer, provider: usedProvider }, CACHE_TTL.LONG);
+      res.setHeader("X-TTS-Provider", usedProvider);
+      res.setHeader("X-TTS-Cache", "MISS");
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Content-Length", audioBuffer.length.toString());
-      res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate"); // Cache 24h but always revalidate via ETag
-      // Include provider in ETag so switching TTS providers invalidates old cached audio
-      res.setHeader("ETag", `"${article.id}-${article.updatedAt}-${usedProvider}"`);
+      res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400");
+      res.setHeader("ETag", `"${article.id}-${updatedKey}-${usedProvider}"`);
       res.send(audioBuffer);
     } catch (error) {
       console.error("Error generating summary audio:", error);
@@ -22503,6 +22520,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(404).json({ message: "المراسل غير موجود" });
       }
 
+      // ملف عام شبه ثابت — CF يمتص التكرار بعد أول تعبئة للكاش الداخلي.
+      res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       res.json(profile);
     } catch (error: any) {
       console.error("Error fetching reporter profile:", error);
@@ -22528,6 +22547,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(404).json({ message: "Reporter not found" });
       }
 
+      res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       res.json(profile);
     } catch (error: any) {
       console.error("Error fetching reporter profile:", error);
