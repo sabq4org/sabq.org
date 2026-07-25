@@ -12884,10 +12884,7 @@ Respond in valid JSON format only:
           ],
         };
 
-        const emptyPulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = {
-          topInterest: null,
-          worldCup: null,
-        };
+        const emptyPulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
         const pulse = await bestEffortWithin(
           getNewsPulseExtras(monthAgo, prevMonthStart),
           {
