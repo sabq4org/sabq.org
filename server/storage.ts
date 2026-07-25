@@ -1,5 +1,5 @@
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
-import { db, withStatementTimeout } from "./db";
+import { db } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
 import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
@@ -3981,9 +3981,15 @@ export class DatabaseStorage implements IStorage {
 
     const reporterAlias = aliasedTable(users, 'reporter');
 
-    // مهلة 15 ث: هذا الاستعلام بلغ 47 ث تحت الضغط (pg_stat_statements) وكل
-    // نسخة عالقة تحتجز اتصال pool؛ الإلغاء من جهة الخادم يحرره فورًا.
-    const results = await withStatementTimeout(15_000, (tx) => tx
+    // ملاحظة انحدار 2026-07-25: كان هذا الاستعلام ملفوفًا بـwithStatementTimeout،
+    // وهي معاملة صريحة (BEGIN/SET LOCAL/COMMIT). على نقطة Neon `-pooler` يعمل
+    // PgBouncer في وضع transaction pooling، فالمعاملة تُثبّت اتصال خادم طوال
+    // مدتها بينما الاستعلام المفرد يحرره فور انتهائه. لفّ أسخن استعلام في
+    // التطبيق بمعاملة خفّض التوازي الفعلي عند الـpooler وأنتج موجة
+    // «timeout exceeded when trying to connect». سقف زمن الاستعلام يُضبط الآن
+    // على مستوى الدور في Neon (ALTER ROLE ... SET statement_timeout) فيسري بلا
+    // معاملة ولا اتصال إضافي. لا تُعِد لفّ هذا المسار.
+    const results = await db
       .select({
         article: articleListSelect,
         category: categoryBasicSelect,
@@ -4003,7 +4009,7 @@ export class DatabaseStorage implements IStorage {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       // «إنعاش»: COALESCE يقدّم الخبر المُنعش دون تغيير تاريخ نشره الظاهر
       .orderBy(desc(articles.displayOrder), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
-      .limit(filters?.limit || 500));
+      .limit(filters?.limit || 500);
 
     return results.map((r) => ({
       ...r.article,
@@ -8422,8 +8428,8 @@ export class DatabaseStorage implements IStorage {
         })
         .from(smartBlocks),
 
-      // Get recent articles (latest 5) — مهلة 15 ث (بلغ 13.6 ث تحت الضغط)
-      withStatementTimeout(15_000, (tx) => tx
+      // Get recent articles (latest 5) — بلا معاملة (راجع ملاحظة الانحدار في getArticles)
+      db
         .select({
           article: articleCardSelect,
           category: categoryBasicSelect,
@@ -8433,7 +8439,7 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
         .orderBy(desc(articles.createdAt))
-        .limit(5)),
+        .limit(5),
 
       // Get recent comments (latest 5)
       db
@@ -8446,8 +8452,8 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(comments.createdAt))
         .limit(5),
 
-      // Get top articles (most viewed, top 5) — مهلة 15 ث (فرز views بلا فهرس)
-      withStatementTimeout(15_000, (tx) => tx
+      // Get top articles (most viewed, top 5) — بلا معاملة (راجع ملاحظة الانحدار في getArticles)
+      db
         .select({
           article: articleCardSelect,
           category: categoryBasicSelect,
@@ -8458,7 +8464,7 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(users, eq(articles.authorId, users.id))
         .where(eq(articles.status, "published"))
         .orderBy(desc(articles.views))
-        .limit(5)),
+        .limit(5),
     ]);
 
     const recentArticles: ArticleWithDetails[] = recentArticlesData.map((r) => ({

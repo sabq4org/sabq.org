@@ -59,8 +59,15 @@ let observedRpm: number | null = null;
 let cooldownUntil = 0;
 /** أزمنة الإرسال المجدولة داخل النافذة (مرتّبة تصاعديًا تقريبًا). */
 const scheduled: number[] = [];
-/** إخفاقات نقل متتالية (تعذّر الاتصال أو انتهاء المهلة) — تُصفّر عند أول رد. */
-let consecutiveTransportFailures = 0;
+/**
+ * أزمنة إخفاقات النقل داخل النافذة. كان العدّاد «متتاليًا» ويُصفَّر عند أي
+ * نجاح — وست خدمات تنادي المزوّد بالتوازي، فيكفي نجاح واحد متداخل ليمنع
+ * العدّاد من بلوغ العتبة إطلاقًا. النتيجة: القاطع لم يُفتح ولا مرة رغم مئات
+ * الإخفاقات (لوق 2026-07-25 05:06–05:08: فشل ونجاح متناوبان بلا أي تهدئة).
+ * العدّ الآن على نافذة زمنية، وهو ما يقيس «نسبة الإخفاق» فعليًا.
+ */
+const transportFailures: number[] = [];
+const FAILURE_WINDOW_MS = 30_000;
 /** لا محاولات إطلاقًا قبل هذا الوقت — يُرفع عندما نعتبر المزوّد ساقطًا. */
 let outageUntil = 0;
 
@@ -104,14 +111,26 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
 }
 
 function noteTransportFailure(): void {
-  consecutiveTransportFailures += 1;
-  if (consecutiveTransportFailures >= OUTAGE_FAILURE_THRESHOLD) {
-    outageUntil = Date.now() + OUTAGE_COOLDOWN_MS;
+  const now = Date.now();
+  while (transportFailures.length && transportFailures[0] <= now - FAILURE_WINDOW_MS) {
+    transportFailures.shift();
+  }
+  transportFailures.push(now);
+  if (transportFailures.length >= OUTAGE_FAILURE_THRESHOLD) {
+    outageUntil = now + OUTAGE_COOLDOWN_MS;
+    transportFailures.length = 0;
+    console.warn(
+      `[API-Football] قاطع الدائرة فُتح — ${OUTAGE_FAILURE_THRESHOLD} إخفاق نقل خلال ${FAILURE_WINDOW_MS / 1000}ث؛ توقف ${OUTAGE_COOLDOWN_MS / 1000}ث`,
+    );
   }
 }
 
+/**
+ * النجاح لا يمسح النافذة (وإلا عاد عيب «المتتالية» من الباب الخلفي) — يكتفي
+ * بإسقاط أقدم إخفاق حتى يتعافى القاطع تدريجيًا مع تحسّن نسبة النجاح.
+ */
 function noteTransportSuccess(): void {
-  consecutiveTransportFailures = 0;
+  transportFailures.shift();
 }
 
 function noteResponseHeaders(response: Response): void {
@@ -164,14 +183,36 @@ export async function apiFootballGet(
     let response: Response;
     try {
       response = await fetch(url, {
-        headers: { "x-apisports-key": apiKey },
+        headers: {
+          "x-apisports-key": apiKey,
+          // هوية صريحة: المزوّد خلف Cloudflare (v3.football.api-sports.io →
+          // 172.66.164.245). طلب بلا User-Agent من عنوان مركز بيانات بمعدّل
+          // مرتفع يطابق ملف الحجب الآلي على الحافة، فتُقطع الاتصالات بينما
+          // صفحة حالة المزوّد خضراء 100%.
+          "User-Agent": "sabq.org/1.0 (+https://sabq.org)",
+          Accept: "application/json",
+        },
         signal: AbortSignal.timeout(envMs("APIFOOTBALL_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS)),
       });
     } catch (error) {
       // تعذّر الاتصال أو انتهت المهلة — لم يصل الطلب للمزوّد أصلًا.
+      //
+      // «fetch failed» هي رسالة undici العامة ولا تقول شيئًا. السبب الحقيقي
+      // يكون دائمًا في error.cause: ECONNRESET (الحافة تقطعنا) أو EAI_AGAIN
+      // (فشل DNS في الحاوية) أو UND_ERR_CONNECT_TIMEOUT (لا يُفتح TCP أصلًا —
+      // استنزاف مقابس عندنا) أو ECONNREFUSED (حجب صريح). كان الكود يقرأ
+      // .message فقط ويرمي cause، فبقي سبب حوادث 2026-07-24 مجهولًا.
       noteTransportFailure();
+      const err = error as any;
+      const cause = err?.cause;
+      const detail = cause
+        ? [cause.code, cause.errno, cause.syscall, cause.name, cause.message]
+            .filter(Boolean)
+            .join(" ")
+        : "";
       throw new Error(
-        `[${tag}] API-Football transport failure for ${path}: ${(error as Error)?.message ?? error}`,
+        `[${tag}] API-Football transport failure for ${path}: ${err?.message ?? error}` +
+          (detail ? ` (cause: ${detail})` : " (cause: غير متاح)"),
       );
     }
     noteTransportSuccess();

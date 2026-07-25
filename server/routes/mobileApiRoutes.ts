@@ -5836,12 +5836,6 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
     const safeInstallationId =
       data.installationId && data.installationId.length > 0 ? data.installationId : undefined;
 
-    const existing = await db
-      .select({ id: pushDevices.id })
-      .from(pushDevices)
-      .where(eq(pushDevices.deviceToken, data.token))
-      .limit(1);
-
     // Defensive truncation. The `push_devices.locale` column is varchar(10);
     // some iOS versions return a fully-qualified locale identifier like
     // "ar_SA@calendar=gregorian;numbers=latn" that overflows it. We only
@@ -5892,24 +5886,33 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       console.log(`[Mobile API] /push-token deactivated ${deactivated.length} old tokens for user=${session.userId}`);
     }
 
+    // upsert ذري على القيد الفريد device_token.
+    //
+    // كان الكود يقرأ الصف أولًا ثم يقرر UPDATE أو INSERT — وهذه نافذة سباق
+    // حقيقية: تطبيق iOS يسجّل الرمز عند الإقلاع وعند العودة للمقدمة، فيصل
+    // طلبان متزامنان يريان كلاهما «غير موجود» فيصطدم الثاني بـ
+    // push_devices_device_token_key (لوق 2026-07-25 05:10). ON CONFLICT يزيل
+    // النافذة كليًا ويوفّر ذهابًا وإيابًا إلى القاعدة في كل نداء.
     const persist = async (values: Record<string, unknown>) => {
-      if (existing.length > 0) {
-        await db.update(pushDevices)
-          .set(values as any)
-          .where(eq(pushDevices.id, existing[0].id));
-      } else {
-        await db.insert(pushDevices).values({
-          ...values,
-          deviceToken: data.token,
-        } as any);
-      }
+      await db.insert(pushDevices)
+        .values({ ...values, deviceToken: data.token } as any)
+        .onConflictDoUpdate({
+          target: pushDevices.deviceToken,
+          set: values as any,
+        });
     };
 
     try {
       await persist(baseWithInstall);
     } catch (err: any) {
-      if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
-      console.warn("[Mobile API] /push-token: installation_id missing — saving without it");
+      // الشرط القديم كان `/installation_id/i.test(err.message)` — ورسالة
+      // DrizzleQueryError تحتوي **نص الاستعلام كاملًا**، وفيه اسم العمود
+      // "installation_id". فأي خطأ على هذا الإدراج كان يطابق التعبير فتُعاد
+      // المحاولة بلا داعٍ ويُطبع لوق مضلل «installation_id missing». الفحص
+      // الصحيح على كود PostgreSQL: 42703 = undefined_column.
+      const code = err?.cause?.code ?? err?.code;
+      if (code !== "42703") throw err;
+      console.warn("[Mobile API] /push-token: عمود installation_id غير موجود — الحفظ بدونه");
       await persist(baseValues);
     }
 

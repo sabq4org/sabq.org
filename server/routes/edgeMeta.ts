@@ -78,6 +78,22 @@ const router = Router();
 // cheap insurance against that churn. Tune via EDGE_REDIRECT_CACHE_MAX if needed.
 const EDGE_REDIRECT_CACHE_MAX = Number(process.env.EDGE_REDIRECT_CACHE_MAX) || 50_000;
 const edgeRedirectCache = new MemoryCache(EDGE_REDIRECT_CACHE_MAX, "edgeSlugRedirectCache");
+
+// كاش /api/edge/seo-meta — نفس منطق edgeRedirectCache أعلاه، وكان غائبًا عنه.
+// عامل Cloudflare ينادي هذه النقطة في كل مشاهدة صفحة HTML تمامًا كأخته
+// slug-redirect، لكن كل نداء كان يمرّ إلى ROUTE_HANDLERS ومنها إلى قاعدة
+// البيانات بلا أي كاش داخلي — ترويسة Cache-Control وحدها لا تحمي الأصل حين
+// تتنوّع المسارات. قياس 2026-07-25 (05:06–05:08 UTC): 178 نداءً بطيئًا في 2.5
+// دقيقة، بمتوسط 2.4 ث وأقصى 5.4 ث — ربع كل الطلبات البطيئة في تلك النافذة.
+//
+// المفتاح هو المسار المُطبَّع، والقيمة كائن meta صغير. التخزين مقسوم زمنيًا:
+// المسارات المطابقة لمعالج (مقال/قسم/كاتب) تعيش MATCH_TTL، والافتراضي/غير
+// المطابق (وهو ما تولّده فحوصات الزواحف بعدد غير محدود) يعيش MISS_TTL قصيرًا
+// حتى لا يزاحم المحتوى الحقيقي داخل السقف.
+const EDGE_META_CACHE_MAX = Number(process.env.EDGE_META_CACHE_MAX) || 20_000;
+const EDGE_META_MATCH_TTL = 120_000;
+const EDGE_META_MISS_TTL = 30_000;
+const edgeMetaCache = new MemoryCache(EDGE_META_CACHE_MAX, "edgeSeoMetaCache");
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
 const reporterUsers = aliasedTable(users, "reporter_user");
 const reporterStaff = aliasedTable(staff, "reporter_staff");
@@ -2608,25 +2624,37 @@ router.get("/api/edge/seo-meta", async (req, res) => {
     const path = String(req.query.path || "");
     if (!path.startsWith("/")) return res.json(defaultMeta(path));
 
+    // المسار وحده يحدد الرد (لا ترويسات ولا جلسة) — فالكاش الداخلي آمن.
+    const cacheKey = `edge:seo-meta:${path}`;
+    const cached = edgeMetaCache.get<Record<string, unknown>>(cacheKey);
+    if (cached !== null) return res.json(cached);
+
     // Localized landing pages (English/Urdu) with no dynamic handler — emit the
     // correct-language title/description instead of the Arabic default. Keys are
     // exact paths, so they never shadow the slug-based dynamic handlers below.
     const staticMeta = staticPageMeta(path);
-    if (staticMeta) return res.json(staticMeta);
+    if (staticMeta) {
+      edgeMetaCache.set(cacheKey, staticMeta, EDGE_META_MATCH_TTL);
+      return res.json(staticMeta);
+    }
 
     for (const handler of ROUTE_HANDLERS) {
       const match = path.match(handler.pattern);
       if (!match) continue;
       const meta = await handler.handle(match);
-      if (meta) return res.json(meta);
+      if (meta) {
+        edgeMetaCache.set(cacheKey, meta as Record<string, unknown>, EDGE_META_MATCH_TTL);
+        return res.json(meta);
+      }
       // Pattern matched but row not found → fall through to default 404-ish meta.
-      return res.json({
-        ...defaultMeta(path),
-        robots: "noindex, follow",
-      });
+      const missing = { ...defaultMeta(path), robots: "noindex, follow" };
+      edgeMetaCache.set(cacheKey, missing, EDGE_META_MISS_TTL);
+      return res.json(missing);
     }
 
-    return res.json(defaultMeta(path));
+    const fallback = defaultMeta(path);
+    edgeMetaCache.set(cacheKey, fallback, EDGE_META_MISS_TTL);
+    return res.json(fallback);
   } catch (err) {
     console.error("[edge/seo-meta] error:", err);
     return res.status(500).json({ error: "internal" });
