@@ -120,7 +120,7 @@
     "hijri-converter": "^1.1.1",
     "input-otp": "^1.4.2",
     "ioredis": "^5.10.0",
-    "isomorphic-dompurify": "^2.30.0",
+    "isomorphic-dompurify": "^3.19.0",
     "jsonwebtoken": "^9.0.2",
     "leaflet": "^1.9.4",
     "livekit-client": "^2.20.2",
