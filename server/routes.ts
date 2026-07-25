@@ -121,6 +121,7 @@ import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
+import { bestEffortWithin } from "./utils/bestEffortDeadline";
 import { getOrBuildSitemapXml } from "./services/sitemapCacheService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
@@ -12883,8 +12884,20 @@ Respond in valid JSON format only:
           ],
         };
 
-        let pulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
-        try { pulse = await getNewsPulseExtras(monthAgo, prevMonthStart); } catch (e) { console.warn("[news/analytics] pulse extras failed", e); }
+        const emptyPulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
+        const pulse = await bestEffortWithin(
+          getNewsPulseExtras(monthAgo, prevMonthStart),
+          {
+            fallback: emptyPulse,
+            // نبض الرياضة إضافة اختيارية للأخبار. لا نسمح لطابور مزوّد خارجي
+            // (خصوصًا عند إقلاع حاوية بكاش بارد) بتعطيل التحليلات الأساسية.
+            timeoutMs: 1_000,
+            onTimeout: () => console.warn(
+              "[news/analytics] pulse extras exceeded 1000ms; serving core analytics",
+            ),
+            onError: (error) => console.warn("[news/analytics] pulse extras failed", error),
+          },
+        );
         return {
           period: { today: todayC, week: weekC, month: monthC },
           growth: {
