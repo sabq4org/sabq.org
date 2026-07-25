@@ -8251,6 +8251,25 @@ export class DatabaseStorage implements IStorage {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    // KPI اختيارية: فشل جدول/عمود (مثل deep_analyses.status الناقص في الإنتاج)
+    // لا يُسقط Promise.all بالكامل وإلا تظهر «تعذر تحميل نبض غرفة الأخبار».
+    const softKpi = async <T,>(
+      label: string,
+      promise: Promise<T[]>,
+      fallback: T,
+    ): Promise<T[]> => {
+      try {
+        const rows = await promise;
+        return rows.length > 0 ? rows : [fallback];
+      } catch (err: any) {
+        console.warn(
+          `[getAdminDashboardStats] optional KPI "${label}" failed:`,
+          err?.cause?.message || err?.message || err,
+        );
+        return [fallback];
+      }
+    };
+
     // Execute all independent queries in parallel for better performance
     const [
       [articleStats],
@@ -8325,13 +8344,16 @@ export class DatabaseStorage implements IStorage {
         })
         .from(categories),
 
-      // Get AB tests stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          running: sql<number>`count(*) filter (where ${experiments.status} = 'running')`,
-        })
-        .from(experiments),
+      softKpi(
+        "abTests",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            running: sql<number>`count(*) filter (where ${experiments.status} = 'running')`,
+          })
+          .from(experiments),
+        { total: 0, running: 0 },
+      ),
 
       // Reactions total (separate from today so today can use a createdAt range scan)
       db
@@ -8357,62 +8379,84 @@ export class DatabaseStorage implements IStorage {
         .from(readingHistory)
         .where(gte(readingHistory.readAt, weekAgo)),
 
-      // Get audio newsletters stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          published: sql<number>`count(*) filter (where ${audioNewsletters.status} = 'published')`,
-          totalListens: sql<number>`coalesce(sum(${audioNewsletters.totalListens}), 0)`,
-        })
-        .from(audioNewsletters),
+      softKpi(
+        "audioNewsletters",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            published: sql<number>`count(*) filter (where ${audioNewsletters.status} = 'published')`,
+            totalListens: sql<number>`coalesce(sum(${audioNewsletters.totalListens}), 0)`,
+          })
+          .from(audioNewsletters),
+        { total: 0, published: 0, totalListens: 0 },
+      ),
 
-      // Get deep analyses stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          published: sql<number>`count(*) filter (where ${deepAnalyses.status} = 'published')`,
-        })
-        .from(deepAnalyses),
+      // الإنتاج قد يفتقد deep_analyses.status — لا تُسقط الداشبورد
+      softKpi(
+        "deepAnalyses",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            published: sql<number>`count(*) filter (where ${deepAnalyses.status} = 'published')`,
+          })
+          .from(deepAnalyses),
+        { total: 0, published: 0 },
+      ),
 
-      // Get publishers stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          active: sql<number>`count(*) filter (where ${publishers.isActive} = true)`,
-        })
-        .from(publishers),
+      softKpi(
+        "publishers",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            active: sql<number>`count(*) filter (where ${publishers.isActive} = true)`,
+          })
+          .from(publishers),
+        { total: 0, active: 0 },
+      ),
 
-      // Get media library stats
-      db
-        .select({
-          totalFiles: sql<number>`count(*)`,
-          totalSize: sql<number>`coalesce(sum(${mediaFiles.size}), 0)`,
-        })
-        .from(mediaFiles),
+      softKpi(
+        "mediaLibrary",
+        db
+          .select({
+            totalFiles: sql<number>`count(*)`,
+            totalSize: sql<number>`coalesce(sum(${mediaFiles.size}), 0)`,
+          })
+          .from(mediaFiles),
+        { totalFiles: 0, totalSize: 0 },
+      ),
 
-      // Get AI tasks stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          pending: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'pending')`,
-          completed: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'completed')`,
-        })
-        .from(aiScheduledTasks),
+      softKpi(
+        "aiTasks",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            pending: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'pending')`,
+            completed: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'completed')`,
+          })
+          .from(aiScheduledTasks),
+        { total: 0, pending: 0, completed: 0 },
+      ),
 
-      // Get AI images stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          thisWeek: sql<number>`count(*) filter (where ${aiImageGenerations.createdAt} >= ${weekAgo})`,
-        })
-        .from(aiImageGenerations),
+      softKpi(
+        "aiImages",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            thisWeek: sql<number>`count(*) filter (where ${aiImageGenerations.createdAt} >= ${weekAgo})`,
+          })
+          .from(aiImageGenerations),
+        { total: 0, thisWeek: 0 },
+      ),
 
-      // Get smart blocks stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-        })
-        .from(smartBlocks),
+      softKpi(
+        "smartBlocks",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+          })
+          .from(smartBlocks),
+        { total: 0 },
+      ),
 
       // Get recent articles (latest 5) — بلا معاملة (راجع ملاحظة الانحدار في getArticles)
       db
