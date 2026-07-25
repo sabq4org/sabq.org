@@ -304,17 +304,6 @@ const SystemAnnouncementsManagement = lazy(() => retryImport(() => import("@/pag
 const ContactMessageDetail = lazy(() => retryImport(() => import("@/pages/ContactMessageDetail")));
 
 // === LAZY IMPORTS (Audio) ===
-const AudioNewslettersDashboard = lazy(() => retryImport(() => import("@/pages/AudioNewslettersDashboard")));
-const AudioNewsletterEditor = lazy(() => retryImport(() => import("@/pages/AudioNewsletterEditor")));
-const AudioNewslettersArchive = lazy(() => retryImport(() => import("@/pages/AudioNewslettersArchive")));
-const AudioNewsletterDetail = lazy(() => retryImport(() => import("@/pages/AudioNewsletterDetail")));
-const AudioNewslettersPublic = lazy(() => retryImport(() => import("@/pages/AudioNewslettersPublic")));
-const AudioNewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/AudioNewsletterAnalytics")));
-const AudioNewsletterTtsSettings = lazy(() => retryImport(() => import("@/pages/AudioNewsletterTtsSettings")));
-const AudioNewsletterVoiceCompare = lazy(() => retryImport(() => import("@/pages/AudioNewsletterVoiceCompare")));
-const AudioNewsletterTtsStats = lazy(() => retryImport(() => import("@/pages/AudioNewsletterTtsStats")));
-const AudioBriefsDashboard = lazy(() => retryImport(() => import("@/pages/AudioBriefsDashboard")));
-const AudioBriefEditor = lazy(() => retryImport(() => import("@/pages/AudioBriefEditor")));
 
 // === LAZY IMPORTS (Surveys) ===
 const SurveyRespond = lazy(() => retryImport(() => import("@/pages/SurveyRespond")));
@@ -807,8 +796,6 @@ function Router() {
         <Route path="/entity/:slug">{() => <LazyRoute component={EntityDetail} />}</Route>
         
         {/* Audio Newsletters public pages */}
-        <Route path="/audio-newsletters">{() => <LazyRoute component={AudioNewslettersPublic} />}</Route>
-        <Route path="/audio-newsletters/:id">{() => <LazyRoute component={AudioNewsletterDetail} />}</Route>
         
         <Route path="/dashboard/muqtarab">{() => <LazyRoute component={DashboardMuqtarab} />}</Route>
         <Route path="/dashboard/muqtarab/angles/:angleId/topics">{() => <LazyRoute component={TopicsManagement} />}</Route>
@@ -818,18 +805,8 @@ function Router() {
         <Route path="/dashboard/smart-blocks">{() => <LazyRoute component={SmartBlocksPage} />}</Route>
         
         {/* Audio Newsletters dashboard */}
-        <Route path="/dashboard/audio-newsletters">{() => <LazyRoute component={AudioNewslettersDashboard} />}</Route>
-        <Route path="/dashboard/audio-newsletters/analytics">{() => <LazyRoute component={AudioNewsletterAnalytics} />}</Route>
-        <Route path="/dashboard/audio-newsletters/tts-settings">{() => <LazyRoute component={AudioNewsletterTtsSettings} />}</Route>
-        <Route path="/dashboard/audio-newsletters/voice-compare">{() => <LazyRoute component={AudioNewsletterVoiceCompare} />}</Route>
-        <Route path="/dashboard/audio-newsletters/tts-stats">{() => <LazyRoute component={AudioNewsletterTtsStats} />}</Route>
-        <Route path="/dashboard/audio-newsletters/create">{() => <LazyRoute component={AudioNewsletterEditor} />}</Route>
-        <Route path="/dashboard/audio-newsletters/:id/edit">{() => <LazyRoute component={AudioNewsletterEditor} />}</Route>
         
         {/* Audio Briefs dashboard */}
-        <Route path="/dashboard/audio-briefs">{() => <LazyRoute component={AudioBriefsDashboard} />}</Route>
-        <Route path="/dashboard/audio-briefs/create">{() => <LazyRoute component={AudioBriefEditor} />}</Route>
-        <Route path="/dashboard/audio-briefs/:id">{() => <LazyRoute component={AudioBriefEditor} />}</Route>
         
         {/* Internal Announcements dashboard */}
         <Route path="/dashboard/announcements">{() => <LazyRoute component={AnnouncementsList} />}</Route>

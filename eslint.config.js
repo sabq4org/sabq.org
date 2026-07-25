@@ -100,17 +100,21 @@ export default tseslint.config(
     // ratchet's intent — no new FEATURES in the monolith — is unchanged, and
     // the next extraction must ratchet this back down.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36620 }] },
+    rules: { "max-lines": ["error", { max: 36300 }] },
   },
   {
     files: ["server/storage.ts"],
-    rules: { "max-lines": ["error", { max: 21240 }] },
+    rules: { "max-lines": ["error", { max: 21100 }] },
   },
   {
     // Third emerging monolith: mobileApiRoutes.ts is the /api/v1 surface and had
     // no ceiling while it grew past 9.8k lines. Cap it here (current size + ~100
     // slack) so new endpoints go in their own module. When an extraction shrinks
     // it, RATCHET this down — same rule as the two monoliths above.
+    // RATCHETED DOWN 2026-07-25: the audio-newsletter and audio-brief features
+    // were removed, shrinking routes.ts by ~400 lines and storage.ts by ~200.
+    // Ceilings follow the files down, per the rule above.
+    //
     // Re-baselined 2026-07-25 (security audit remediation): the mobile Bearer
     // session verifier now joins alialhazmi so a ban, deletion or role revocation
     // takes effect immediately instead of after the session's 30-day life

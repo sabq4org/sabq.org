@@ -40,7 +40,6 @@ import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
 import muqtarabWriterRouter from "./muqtarabWriter";
 import { registerAnnouncementRoutes } from "./announcements";
-import { registerAudioBriefRoutes } from "./audioBriefs";
 import { registerShortsRoutes } from "./shorts";
 import { registerCalendarRoutes } from "./calendar";
 import { registerTaskRoutes } from "./tasks";
@@ -74,7 +73,6 @@ import articleResurfaceRouter from "./articleResurface";
 import articlePrClientReportRouter from "./articlePrClientReport";
 import keywordRouter from "./keywordRoutes";
 import editorAlertsRouter from "./editorAlerts";
-import audioNewsletterRoutes from "./audioNewsletterRoutes";
 import dashboardPulseRouter from "./dashboardPulse";
 import adminToolsRouter from "./adminToolsRoutes";
 import { systemsCatalogRouter } from "./systemsCatalog";
@@ -90,11 +88,7 @@ import wcNumbersReportRouter from "./wcNumbersReport";
  * behavior is identical to the original inline definitions.
  */
 export function registerSplitRoutes(app: Express) {
-  // Must run after setupAuth (caller guarantees that). Mount before the legacy
-  // /api/audio-newsletters/:slug handlers still living in routes.ts so TTS
-  // settings / voices / providers are not swallowed as slugs or 401'd.
-  app.use("/api/audio-newsletters", audioNewsletterRoutes);
-
+  // Must run after setupAuth (caller guarantees that).
   app.use(systemSettingsRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
@@ -138,7 +132,6 @@ export function registerSplitRoutes(app: Express) {
   app.use(muqtarabAIRouter);
   app.use(muqtarabWriterRouter);
   registerAnnouncementRoutes(app);
-  registerAudioBriefRoutes(app);
   registerShortsRoutes(app);
   registerCalendarRoutes(app);
   registerTaskRoutes(app);

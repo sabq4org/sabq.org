@@ -1557,13 +1557,6 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting push worker after failover:", error);
           }
           try {
-            const { initializeAudioNewsletterJobs } = await import("./jobs/audioNewsletterJob");
-            initializeAudioNewsletterJobs();
-            console.log("[Server] ✅ Audio newsletter jobs started after failover");
-          } catch (error) {
-            console.error("[Server] Error starting audio newsletter jobs after failover:", error);
-          }
-          try {
             if (
               process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false'
               && runNewsletterSchedulerInWeb
@@ -1608,150 +1601,6 @@ if (!(globalThis as any).__sabqServer) {
         });
       }
 
-      // Register job queue handlers for TTS generation
-      if (shouldRunBackgroundJobs) {
-        setImmediate(async () => {
-          try {
-            const { jobQueue } = await import("./services/job-queue");
-            const { getElevenLabsService } = await import("./services/elevenlabs");
-            const { ObjectStorageService } = await import("./objectStorage");
-            const { storage } = await import("./storage");
-
-          jobQueue.onExecute(async (job) => {
-            if (job.type === 'generate-tts') {
-              console.log(`[JobQueue] Executing TTS generation job ${job.id}`);
-              
-              const { newsletterId } = job.data;
-              const newsletter = await storage.getAudioNewsletterById(newsletterId);
-
-              if (!newsletter) {
-                throw new Error('النشرة الصوتية غير موجودة');
-              }
-
-              // Update status to processing
-              await storage.updateAudioNewsletter(newsletter.id, {
-                generationStatus: 'processing',
-                generationError: null,
-              });
-
-              const elevenLabs = getElevenLabsService();
-              const objectStorage = new ObjectStorageService();
-
-              if (!elevenLabs) {
-                await storage.updateAudioNewsletter(newsletter.id, {
-                  generationStatus: 'failed',
-                  generationError: 'ElevenLabs service is not available - missing API key',
-                });
-                throw new Error('ElevenLabs service is not configured');
-              }
-
-              // Build script from articles
-              const articlesData = newsletter.articles?.map(na => ({
-                title: na.article?.title || '',
-                excerpt: na.article?.excerpt || undefined,
-                aiSummary: na.article?.aiSummary || undefined,
-              })) || [];
-
-              const script = elevenLabs.buildNewsletterScript({
-                title: newsletter.title,
-                description: newsletter.description || undefined,
-                articles: articlesData,
-              });
-
-              console.log(`[JobQueue] Generating TTS for newsletter ${newsletter.id}`);
-              console.log(`[JobQueue] Script length: ${script.length} characters`);
-
-              // Generate audio
-              const audioBuffer = await elevenLabs.textToSpeech({
-                text: script,
-                voiceId: newsletter.voiceId || undefined,
-                model: newsletter.voiceModel || undefined,
-                voiceSettings: newsletter.voiceSettings || undefined,
-              });
-
-              // Upload to object storage
-              const audioPath = `audio-newsletters/${newsletter.id}.mp3`;
-              const uploadedFile = await objectStorage.uploadFile(
-                audioPath,
-                audioBuffer,
-                'audio/mpeg'
-              );
-
-              // Update newsletter with audio details
-              await storage.updateAudioNewsletter(newsletter.id, {
-                audioUrl: uploadedFile.url,
-                fileSize: audioBuffer.length,
-                duration: Math.floor(audioBuffer.length / 16000), // Rough estimate
-                generationStatus: 'completed',
-                generationError: null,
-              });
-
-              console.log(`[JobQueue] Successfully generated audio for newsletter ${newsletter.id}`);
-            } else if (job.type === 'generate-audio-brief') {
-              console.log(`[JobQueue] Executing audio brief generation job ${job.id}`);
-              
-              const { briefId } = job.data;
-              const brief = await storage.getAudioNewsBriefById(briefId);
-
-              if (!brief) {
-                throw new Error('الخبر الصوتي غير موجود');
-              }
-
-              // Update status to processing
-              await storage.updateAudioNewsBrief(briefId, {
-                generationStatus: 'processing',
-              });
-
-              const elevenLabs = getElevenLabsService();
-              const objectStorage = new ObjectStorageService();
-
-              if (!elevenLabs) {
-                await storage.updateAudioNewsBrief(briefId, {
-                  generationStatus: 'failed',
-                });
-                throw new Error('ElevenLabs service is not configured');
-              }
-
-              console.log(`[JobQueue] Generating TTS for audio brief ${briefId}`);
-              console.log(`[JobQueue] Content length: ${brief.content.length} characters`);
-
-              // Generate audio
-              const audioBuffer = await elevenLabs.textToSpeech({
-                text: brief.content,
-                voiceId: brief.voiceId || undefined,
-                voiceSettings: brief.voiceSettings || undefined,
-              });
-
-              // Upload to object storage
-              const audioPath = `audio-briefs/brief_${briefId}_${Date.now()}.mp3`;
-              const uploadedFile = await objectStorage.uploadFile(
-                audioPath,
-                audioBuffer,
-                'audio/mpeg'
-              );
-
-              // Get audio duration (rough estimate: ~150 words per minute for Arabic)
-              const wordCount = brief.content.split(/\s+/).length;
-              const estimatedDuration = Math.ceil((wordCount / 150) * 60);
-
-              // Update brief with audio details
-              await storage.updateAudioNewsBrief(briefId, {
-                audioUrl: uploadedFile.url,
-                duration: estimatedDuration,
-                generationStatus: 'completed',
-              });
-
-              console.log(`[JobQueue] Successfully generated audio for brief ${briefId}`);
-            }
-          });
-
-            console.log("[Server] ✅ Job queue handlers registered successfully");
-          } catch (error) {
-            console.error("[Server] ⚠️  Error registering job queue handlers:", error);
-            console.error("[Server] Server will continue running without job queue");
-          }
-        });
-      }
 
       // ============================================
       // DELAYED BACKGROUND JOBS - تأخير الوظائف الخلفية
@@ -1828,19 +1677,6 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY + 19000);
       }
       
-      // Start Audio Newsletter Jobs (scheduled generation and retries) - delayed
-      if (shouldRunBackgroundJobs) {
-        setTimeout(async () => {
-          try {
-            const { initializeAudioNewsletterJobs } = await import("./jobs/audioNewsletterJob");
-            initializeAudioNewsletterJobs();
-            console.log("[Server] ✅ Audio newsletter jobs started successfully");
-          } catch (error) {
-            console.error("[Server] ⚠️  Error starting audio newsletter jobs:", error);
-            console.error("[Server] Server will continue running without audio newsletter automation");
-          }
-        }, BACKGROUND_JOB_DELAY + 20000); // +20s stagger
-      }
 
       const enableNewsletterScheduler = process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false';
       
