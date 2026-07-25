@@ -36041,6 +36041,13 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
 
   // Enhanced search endpoint for news search (title priority, then content)
+  // single-flight لنفس الاستعلام — يمنع عاصفة FTS عند الكتابة الحية (debounce ناقص).
+  if (!(globalThis as any).__sabqSearchInflight) {
+    (globalThis as any).__sabqSearchInflight = new Map<string, Promise<unknown>>();
+  }
+  const searchInflightMap: Map<string, Promise<unknown>> =
+    (globalThis as any).__sabqSearchInflight;
+
   app.get("/api/search", async (req, res) => {
     try {
       const q = String(req.query.q || "").trim();
@@ -36052,17 +36059,27 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.json({ results: [], query: q });
       }
 
-      const cacheKey = `search:${q}:${limit}:${page}`;
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
+      // مفتاح موحّد (بدون تشكيل) حتى لا يتفتت الكاش بين «تقني» و«تَقْنِي».
       const normalizeArabic = (text: string) => text.replace(/[\u064B-\u065F\u0670]/g, '');
       const normalizedQuery = normalizeArabic(q);
+      const cacheKey = `search:v2:${normalizedQuery.toLowerCase()}:${limit}:${page}`;
+      const cached = memoryCache.get(cacheKey);
+      if (cached) {
+        res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+        return res.json(cached);
+      }
 
+      const existing = searchInflightMap.get(cacheKey);
+      if (existing) {
+        const shared = await existing;
+        res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+        return res.json(shared);
+      }
+
+      const compute = (async () => {
       const words = normalizedQuery.trim().split(/\s+/).filter(w => w.length > 1);
-      if (!words.length) return res.json({ results: [], query: q });
-      // plainto_tsquery يبني tsquery تلقائياً من نص خام (آمن مع أي input، لا
-      // syntax errors كما كان يحصل مع to_tsquery على الكلمات العربية المفردة).
+      if (!words.length) return { results: [], query: q };
+
       const compactQuery = normalizedQuery.replace(/\s+/g, '');
 
       // Pure-numeric queries (e.g. "4220449") are the source of the 7s+ slow
@@ -36077,6 +36094,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const useFts = !isNumericQuery && compactQuery.length >= 5;
 
       let results: any[] = [];
+      const startedAt = Date.now();
+      // ميزانية إجمالية — كانت تصل ~2.5ث بتكديس مهلات FTS ثم العنوان.
+      const BUDGET_MS = 1_800;
 
       const recentCut = new Date();
       recentCut.setFullYear(recentCut.getFullYear() - 2);
@@ -36084,8 +36104,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const searchTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
         Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('search_timeout')), ms))]);
 
+      const remaining = () => Math.max(200, BUDGET_MS - (Date.now() - startedAt));
+
       // Primary FTS query (recent articles, AND-mode for precision)
-      if (useFts) try {
+      if (useFts && remaining() > 400) try {
+        const primaryMs = Math.min(1_500, remaining());
         const recentResults: any = await searchTimeout(executeWithStatementTimeout(sql`
           -- Keep FTS selection and pagination as separate optimization fences.
           -- Otherwise Postgres can walk the date index and filter search_vector
@@ -36111,30 +36134,26 @@ Sitemap: https://sabq.org/sitemap-news.xml
           JOIN articles a ON a.id = m.id
           LEFT JOIN categories c ON c.id = a.category_id
           ORDER BY m.published_at DESC
-        `, 3000), 4000);
+        `, primaryMs), primaryMs + 500);
 
         const rows = recentResults?.rows || recentResults;
         results = (Array.isArray(rows) ? rows : []).map((r: any) => ({ ...r, matchType: 'title' }));
       } catch (ftsError: any) {
         if (ftsError?.message === 'search_timeout') {
-          console.warn(`[Search] Primary FTS timed out (3s) for: "${q}"`);
+          console.warn(`[Search] Primary FTS timed out for: "${q}"`);
         } else {
-          // Drizzle يلفّ خطأ PG؛ السبب الفعلي على cause (code/message).
           const c = (ftsError as any)?.cause;
           console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message, c?.code ? { pgCode: c.code, pgMessage: c.message } : '');
         }
-        // Don't wipe results — they were already empty.
       }
-      // Supplemental: search older articles only if recent yielded few results.
-      // Errors here MUST NOT wipe the primary results. Skipped for numeric
-      // queries (handled by the trigram title fallback below).
-      if (useFts && results.length < Math.min(limit, 5)) {
+      // Supplemental: only if recent yielded few results AND budget remains.
+      if (useFts && results.length < Math.min(limit, 5) && remaining() > 500) {
         try {
           const existingIds = results.map(r => r.id);
-          const remaining = Math.min(limit - results.length, 10);
+          const remLimit = Math.min(limit - results.length, 10);
+          const suppMs = Math.min(1_000, remaining());
 
           const allTimeResults: any = await searchTimeout(executeWithStatementTimeout(sql`
-            -- Use the same GIN-first plan for the older-article fallback.
             WITH matched AS MATERIALIZED (
               SELECT id, published_at
               FROM articles
@@ -36147,7 +36166,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
               SELECT id, published_at
               FROM matched
               ORDER BY published_at DESC
-              LIMIT ${remaining}
+              LIMIT ${remLimit}
             )
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
@@ -36157,23 +36176,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
             JOIN articles a ON a.id = m.id
             LEFT JOIN categories c ON c.id = a.category_id
             ORDER BY m.published_at DESC
-          `, 2000), 3000);
+          `, suppMs), suppMs + 400);
           const allRows = allTimeResults?.rows || allTimeResults;
           results = [...results, ...(Array.isArray(allRows) ? allRows : []).map((r: any) => ({ ...r, matchType: 'content' }))];
         } catch (suppErr: any) {
           if (suppErr?.message === 'search_timeout') {
             console.warn(`[Search] Supplemental FTS skipped (timeout) for: "${q}"`);
           }
-          // Keep whatever results we already have.
         }
       }
 
-      // Fallback: direct title ILIKE search (powered by the pg_trgm GIN index
-      // idx_articles_title_trgm). Runs when FTS returns nothing, and is the ONLY
-      // pass for numeric queries — keeps cost low and avoids stacked timeouts.
-      if (results.length === 0 && page === 0) {
+      // Fallback: title ILIKE via trigram — only when empty and budget left.
+      if (results.length === 0 && page === 0 && remaining() > 300) {
         try {
           const likePattern = `%${normalizedQuery.toLowerCase().replace(/[%_\\]/g, c => '\\' + c)}%`;
+          const titleMs = Math.min(1_200, remaining());
           const titleResults = await searchTimeout(executeWithStatementTimeout(sql`
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
@@ -36185,12 +36202,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
               AND lower(a.title) LIKE ${likePattern}
           ORDER BY a.published_at DESC NULLS LAST
               LIMIT ${limit}
-          `, 2500), 3500);
+          `, titleMs), titleMs + 400);
           const tRows = (titleResults as any).rows || titleResults;
           results = (Array.isArray(tRows) ? tRows : []).map((r: any) => ({ ...r, matchType: 'title' }));
         } catch (likeErr: any) {
           if (likeErr?.message === 'search_timeout') {
-            console.warn(`[Search] Title fallback timed out (3s) for: "${q}"`);
+            console.warn(`[Search] Title fallback timed out for: "${q}"`);
           }
         }
       }
@@ -36204,8 +36221,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
       };
 
       memoryCache.set(cacheKey, response, page === 0 ? CACHE_TTL.SHORT : CACHE_TTL.SHORT / 2);
+      return response;
+      })();
 
-      res.json(response);
+      searchInflightMap.set(cacheKey, compute);
+      try {
+        const response = await compute;
+        res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+        res.json(response);
+      } finally {
+        searchInflightMap.delete(cacheKey);
+      }
     } catch (error) {
       console.error("Error in search:", error);
       res.status(500).json({ message: "فشل في البحث" });

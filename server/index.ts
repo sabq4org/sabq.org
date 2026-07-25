@@ -1372,7 +1372,15 @@ if (!(globalThis as any).__sabqServer) {
           // /sitemap-index.xml are never linked — a 404 is correct, and the log is
           // just noise from bots/stale URLs. Indexing is unaffected.
           const isNoisy404 =
-            urlPath === '/service-worker.js' || /^\/sitemap[\w-]*\.xml$/i.test(urlPath);
+            urlPath === '/service-worker.js' ||
+            urlPath === '/sw.js' ||
+            /^\/sitemap[\w-]*\.xml$/i.test(urlPath) ||
+            // ماسحات تبحث عن أسرار/إعدادات مسربة — 404 صحيح والضوضاء فقط تملأ اللوق.
+            /(?:^|\/)(?:secrets?|credentials?|service[-_]?account(?:[-_]?key)?|firebase(?:[-_](?:admin(?:sdk)?|credentials|config))?|gcp(?:[-_](?:credentials|key))?|google[-_]?credentials|aws-exports|amplifyconfiguration|auth|config|env|settings|key|sa|appsettings(?:\.[A-Za-z]+)?|local\.settings|openapi|swagger)\.(?:json|js)$/i.test(urlPath) ||
+            /(?:^|\/)\.(?:vscode|docker|env|claude|cursor|mcp|config|openclaw|continue|hermes|git)\//i.test(urlPath) ||
+            /(?:^|\/)(?:__env|runtime-config|app-config|env)\.(?:js|json)$/i.test(urlPath) ||
+            urlPath === '/__/firebase/init.json' ||
+            urlPath === '/api/openapi.json';
           if (!isNoisy404) {
             console.warn(`[Static 404] Missing asset: ${urlPath}`);
           }
