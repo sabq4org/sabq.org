@@ -69,6 +69,8 @@
 ## أداء صفحة اللاعب (`/api/sports/player/:id*`) — 2026-07-25
 - `/market` و`/form` يستخدمان جسرًا خفيفًا `spl:player-bridge` (ملف+أندية فقط) — **لا** ينتظران `getPlayerCard` الكاملة (كانت تضيف ألقاب/ترجمة/إحصاء وتصل إلى ~17ث عند فتح الصفحة بالتوازي).
 - مهلة مسار: بطاقة لاعب/نادي 3ث؛ market 3.5ث؛ form/transfers 2.5–3ث → 503 أو `available:false` / قوائم فارغة (الجلب يكمل في الخلفية ويملأ SWR). عبر `bestEffortWithin`.
+- **`?with=extras`:** البطاقة + history/transfers/injuries تبدأ معًا (`Promise.all`) لا بالتسلسل — كان الجدار ≈ 3ث+2.5ث.
+- تعريب المسار الحار (`getSquad` / `getPlayerCard` / `getTeamTransfers` / مدرب/هدّافو النادي): `skipAi` فورًا + ترقية SWR خلفية عند اكتمال الترجمة (نفس نمط الهدّافين).
 - **صفحة النادي:** `getTeamProfile` خلف `spl:teamprofile:v3:*` (SWR) + اكتشاف الترتيب يبدأ بروشن ثم البقية (لا 4 جداول دفعة على البرود).
 - سجلات `[REC NOTIFICATION] None of the recommended…` صارت `warn` لا `error` — كانت تملأ لوق Railway بمئات «أخطاء» كاذبة.
 

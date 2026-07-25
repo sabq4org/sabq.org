@@ -18530,8 +18530,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .filter((e: any) => e && typeof e.id === "string" && typeof e.timestamp === "number")
         .slice(0, 200);
 
-      let saved = 0;
-      for (const e of clean) {
+      if (clean.length === 0) return res.json({ saved: 0 });
+
+      // دفعة واحدة بدل حتى 200 INSERT متسلسل (~1s+ على Neon تحت ضغط).
+      const valueRows = clean.map((e: any) => {
         const ts = new Date(e.timestamp);
         const kws = Array.isArray(e.keywords)
           ? e.keywords.filter((k: any) => typeof k === "string").slice(0, 20)
@@ -18540,23 +18542,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const kwsLiteral = kws.length === 0
           ? sql`ARRAY[]::text[]`
           : sql`ARRAY[${sql.join(kws.map((k: string) => sql`${k}`), sql`, `)}]::text[]`;
-        await db.execute(sql`
-          INSERT INTO user_reading_history
-            (user_id, article_id, category_id, category_name, keywords, timestamp, time_spent)
-          VALUES (${userId}, ${e.id},
+        return sql`(${userId}, ${e.id},
                   ${e.categoryId || null}, ${e.categoryName || null},
-                  ${kwsLiteral}, ${ts}, ${timeSpent})
-          ON CONFLICT (user_id, article_id) DO UPDATE SET
-            category_id = COALESCE(EXCLUDED.category_id, user_reading_history.category_id),
-            category_name = COALESCE(EXCLUDED.category_name, user_reading_history.category_name),
-            keywords = CASE WHEN array_length(EXCLUDED.keywords, 1) IS NOT NULL
-                            THEN EXCLUDED.keywords ELSE user_reading_history.keywords END,
-            timestamp = GREATEST(EXCLUDED.timestamp, user_reading_history.timestamp),
-            time_spent = GREATEST(EXCLUDED.time_spent, user_reading_history.time_spent)
-        `);
-        saved++;
-      }
-      res.json({ saved });
+                  ${kwsLiteral}, ${ts}, ${timeSpent})`;
+      });
+
+      await db.execute(sql`
+        INSERT INTO user_reading_history
+          (user_id, article_id, category_id, category_name, keywords, timestamp, time_spent)
+        VALUES ${sql.join(valueRows, sql`, `)}
+        ON CONFLICT (user_id, article_id) DO UPDATE SET
+          category_id = COALESCE(EXCLUDED.category_id, user_reading_history.category_id),
+          category_name = COALESCE(EXCLUDED.category_name, user_reading_history.category_name),
+          keywords = CASE WHEN array_length(EXCLUDED.keywords, 1) IS NOT NULL
+                          THEN EXCLUDED.keywords ELSE user_reading_history.keywords END,
+          timestamp = GREATEST(EXCLUDED.timestamp, user_reading_history.timestamp),
+          time_spent = GREATEST(EXCLUDED.time_spent, user_reading_history.time_spent)
+      `);
+      res.json({ saved: clean.length });
     } catch (error) {
       console.error("Error saving reading history:", error);
       res.status(500).json({ message: "Failed to save reading history" });
