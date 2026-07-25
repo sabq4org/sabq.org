@@ -111,6 +111,20 @@ const deployBranch =
   process.env.VERCEL_GIT_COMMIT_REF ||
   null;
 
+// لقطة موارد العملية عند الطلب — نفس أرقام سطر [Runtime] الدوري لكن فورًا.
+// تُقرأ وقت البطء مباشرة: fd يتصاعد ⇒ تسرّب مقابس؛ pool.waiting>0 ⇒ تشبّع
+// المسبح؛ loopLag مرتفع ⇒ حجب حلقة الأحداث. لا أسرار فيها.
+app.get("/api/diagnostics", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { runtimeSnapshot } = require("./utils/runtimeDiagnostics");
+    res.status(200).json(runtimeSnapshot());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "unavailable" });
+  }
+});
+
 app.get("/api/version", (_req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
   res.status(200).json({
@@ -923,6 +937,9 @@ if (!(globalThis as any).__sabqServer) {
       : { port, host: "0.0.0.0" };
   server.listen(listenOpts, () => {
     console.log(`[Server] ✅ Listening on port ${port}`);
+    void import("./utils/runtimeDiagnostics")
+      .then((m) => m.startRuntimeDiagnostics())
+      .catch((e) => console.warn("[Runtime] تعذّر تشغيل القياس:", e?.message));
   });
 }
 
