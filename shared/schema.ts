@@ -652,6 +652,17 @@ export const users = pgTable("users", {
   mediaLicenseSubmittedAt: timestamp("media_license_submitted_at"),
   /** تاريخ انتهاء الترخيص — إلزامي عند الإدخال لمعرفة المنتهي */
   mediaLicenseExpiresAt: timestamp("media_license_expires_at"),
+  /** ملاحظة الإدارة عند رفض الملف (صورة غير الترخيص، غير واضحة، …) — تظهر للكاتب/المراسل */
+  mediaLicenseAdminNote: text("media_license_admin_note"),
+  /** عند التعيين: الملف مرفوض ويُطلب إعادة الرفع */
+  mediaLicenseCorrectionRequestedAt: timestamp("media_license_correction_requested_at"),
+  mediaLicenseCorrectionRequestedBy: varchar("media_license_correction_requested_by"),
+  /**
+   * دورة مراجعة ملف الترخيص:
+   * approved | needs_correction | pending_review
+   * null = تراث: إن وُجد ملف يُعامل كـ approved
+   */
+  mediaLicenseReviewStatus: varchar("media_license_review_status", { length: 32 }),
   
   // Reporter notification preferences
   notifyOnPublish: boolean("notify_on_publish").default(true).notNull(),

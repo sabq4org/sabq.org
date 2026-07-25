@@ -2271,7 +2271,7 @@ export async function getSquad(teamId: number): Promise<SplSquad | null> {
     };
     const result = { team, players: mapPlayers(tr) };
     const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
-    const incomplete = !isEnglishSports() && nameList.some((n: string) => n && tr(n) === n);
+    const incomplete = !isEnglishSports() && nameList.some((n: string | null | undefined) => n && tr(n) === n);
     if (incomplete) {
       void resolveNames(nameList)
         .then((tr2) => {

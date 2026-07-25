@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X, BadgeCheck, Search, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MediaLicenseAdminActions } from "@/components/MediaLicenseAdminActions";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -43,6 +44,9 @@ type WriterSummary = {
     hasLicense: boolean;
     expired: boolean;
     expiringSoon: boolean;
+    needsCorrection: boolean;
+    pendingReview: boolean;
+    adminNote: string | null;
     number: string | null;
     submittedAt: string | null;
     expiresAt: string | null;
@@ -50,7 +54,13 @@ type WriterSummary = {
   };
 };
 
-type LicenseFilter = "all" | "licensed" | "expired" | "missing";
+type LicenseFilter =
+  | "all"
+  | "licensed"
+  | "expired"
+  | "missing"
+  | "needs_correction"
+  | "pending_review";
 
 type WriterArticlesResponse = {
   writer: { id: string; name: string; profileImageUrl: string | null } | null;
@@ -185,8 +195,14 @@ export default function OpinionWritersPage() {
     const twoMonthsAgo = now - 60 * 24 * 60 * 60 * 1000;
     const licensed = writers.filter((w) => w.mediaLicense?.hasLicense).length;
     const expiredLicense = writers.filter((w) => w.mediaLicense?.expired).length;
+    const needsCorrection = writers.filter((w) => w.mediaLicense?.needsCorrection).length;
+    const pendingReview = writers.filter((w) => w.mediaLicense?.pendingReview).length;
     const missingLicense = writers.filter(
-      (w) => !w.mediaLicense?.hasLicense && !w.mediaLicense?.expired,
+      (w) =>
+        !w.mediaLicense?.hasLicense &&
+        !w.mediaLicense?.expired &&
+        !w.mediaLicense?.needsCorrection &&
+        !w.mediaLicense?.pendingReview,
     ).length;
     return {
       total: writers.length,
@@ -202,6 +218,8 @@ export default function OpinionWritersPage() {
       ).length,
       licensed,
       expiredLicense,
+      needsCorrection,
+      pendingReview,
       missingLicense,
     };
   }, [writers]);
@@ -211,9 +229,16 @@ export default function OpinionWritersPage() {
     const filtered = writers.filter((w) => {
       if (licenseFilter === "licensed" && !w.mediaLicense?.hasLicense) return false;
       if (licenseFilter === "expired" && !w.mediaLicense?.expired) return false;
+      if (licenseFilter === "needs_correction" && !w.mediaLicense?.needsCorrection)
+        return false;
+      if (licenseFilter === "pending_review" && !w.mediaLicense?.pendingReview)
+        return false;
       if (
         licenseFilter === "missing" &&
-        (w.mediaLicense?.hasLicense || w.mediaLicense?.expired)
+        (w.mediaLicense?.hasLicense ||
+          w.mediaLicense?.expired ||
+          w.mediaLicense?.needsCorrection ||
+          w.mediaLicense?.pendingReview)
       )
         return false;
       if (!q) return true;
@@ -224,12 +249,14 @@ export default function OpinionWritersPage() {
       );
     });
 
-    // الأولوية: منتهٍ → جدّد (قريب الانتهاء) → بدون ترخيص → ساري (الأقرب انتهاءً أولاً)
+    // الأولوية: تحت المراجعة → منتهٍ → يحتاج تصحيحاً → جدّد → بدون → ساري
     const licenseRank = (w: WriterSummary) => {
-      if (w.mediaLicense?.expired) return 0;
-      if (w.mediaLicense?.expiringSoon) return 1;
-      if (!w.mediaLicense?.hasLicense) return 2;
-      return 3;
+      if (w.mediaLicense?.pendingReview) return 0;
+      if (w.mediaLicense?.expired) return 1;
+      if (w.mediaLicense?.needsCorrection) return 2;
+      if (w.mediaLicense?.expiringSoon) return 3;
+      if (!w.mediaLicense?.hasLicense) return 4;
+      return 5;
     };
     const expiresMs = (w: WriterSummary) => {
       const raw = w.mediaLicense?.expiresAt;
@@ -565,7 +592,15 @@ export default function OpinionWritersPage() {
                 [
                   { id: "all" as const, label: "الكل" },
                   { id: "licensed" as const, label: `ساري (${kpis.licensed})` },
+                  {
+                    id: "pending_review" as const,
+                    label: `تحت المراجعة (${kpis.pendingReview})`,
+                  },
                   { id: "expired" as const, label: `منتهٍ (${kpis.expiredLicense})` },
+                  {
+                    id: "needs_correction" as const,
+                    label: `يحتاج تصحيحاً (${kpis.needsCorrection})`,
+                  },
                   { id: "missing" as const, label: `بدون ترخيص (${kpis.missingLicense})` },
                 ] as const
               ).map((tab) => (
@@ -639,10 +674,26 @@ export default function OpinionWritersPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 align-middle">
-                            {license?.hasLicense || license?.expired ? (
-                              <div className="flex max-w-[11rem] flex-col gap-1">
-                                <div className="flex items-center gap-1">
-                                  {license.expired ? (
+                            <div className="flex max-w-[13rem] flex-col gap-1">
+                              <div className="flex items-center gap-1">
+                                {license?.pendingReview ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-sky-100 text-sky-950 hover:bg-sky-100 dark:bg-sky-900/40 dark:text-sky-100"
+                                    title="أعاد رفع الملف — اطّلع ثم اعتمد أو ارفض"
+                                    data-testid={`badge-pending-review-${writer.id}`}
+                                  >
+                                    تحت المراجعة
+                                  </Badge>
+                                ) : license?.needsCorrection ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-amber-100 text-amber-950 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-100"
+                                    title={license.adminNote || "مطلوب إعادة رفع ملف الترخيص"}
+                                    data-testid={`badge-needs-correction-${writer.id}`}
+                                  >
+                                    يحتاج تصحيحاً
+                                  </Badge>
+                                ) : license?.hasLicense || license?.expired ? (
+                                  license.expired ? (
                                     <Badge
                                       className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200"
                                       data-testid={`badge-expired-license-${writer.id}`}
@@ -662,60 +713,79 @@ export default function OpinionWritersPage() {
                                       <BadgeCheck className="h-3 w-3" />
                                       مرخّص
                                     </Badge>
-                                  )}
-                                  {license.hasFile && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 shrink-0 text-muted-foreground"
-                                      title="عرض ملف الترخيص"
-                                      onClick={() =>
-                                        window.open(
-                                          apiUrl(
-                                            `/api/admin/opinion-writers/${writer.id}/media-license-file`,
-                                          ),
-                                          "_blank",
-                                          "noopener",
-                                        )
-                                      }
-                                      data-testid={`button-view-license-${writer.id}`}
-                                    >
-                                      <FileText className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
-                                </div>
-                                <div
-                                  className={cn(
-                                    "text-[11px] tabular-nums leading-none",
-                                    !license.expiresAt ||
-                                      license.expiringSoon ||
-                                      license.expired
-                                      ? "font-semibold text-red-700 dark:text-red-300"
-                                      : "text-muted-foreground",
-                                  )}
-                                >
-                                  {license.expiresAt
-                                    ? `حتى ${format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}`
-                                    : "بلا تاريخ انتهاء"}
-                                </div>
-                                {license.number && (
-                                  <div
-                                    className="truncate text-[11px] tabular-nums text-muted-foreground leading-none"
-                                    dir="ltr"
-                                    title={license.number}
+                                  )
+                                ) : (
+                                  <Badge
+                                    className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200"
+                                    data-testid={`badge-unlicensed-${writer.id}`}
                                   >
-                                    {license.number}
-                                  </div>
+                                    غير مرخّص
+                                  </Badge>
                                 )}
+                                {license?.hasFile && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 shrink-0 text-muted-foreground"
+                                    title="عرض ملف الترخيص"
+                                    onClick={() =>
+                                      window.open(
+                                        apiUrl(
+                                          `/api/admin/opinion-writers/${writer.id}/media-license-file`,
+                                        ),
+                                        "_blank",
+                                        "noopener",
+                                      )
+                                    }
+                                    data-testid={`button-view-license-${writer.id}`}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                <MediaLicenseAdminActions
+                                  personName={writer.name}
+                                  invalidateQueryKey={["/api/admin/opinion-writers"]}
+                                  correctionEndpoint={`/api/admin/opinion-writers/${writer.id}/media-license-correction`}
+                                  approveEndpoint={`/api/admin/opinion-writers/${writer.id}/media-license-approve`}
+                                  rejectEndpoint={`/api/admin/opinion-writers/${writer.id}/media-license-reject`}
+                                  existingNote={license?.adminNote}
+                                  needsCorrection={license?.needsCorrection}
+                                  pendingReview={license?.pendingReview}
+                                  hasFile={license?.hasFile}
+                                  testIdPrefix={writer.id}
+                                />
                               </div>
-                            ) : (
-                              <Badge
-                                className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200"
-                                data-testid={`badge-unlicensed-${writer.id}`}
-                              >
-                                غير مرخّص
-                              </Badge>
-                            )}
+                              {(license?.hasLicense ||
+                                license?.expired ||
+                                license?.needsCorrection ||
+                                license?.pendingReview) && (
+                                <>
+                                  <div
+                                    className={cn(
+                                      "text-[11px] tabular-nums leading-none",
+                                      !license?.expiresAt ||
+                                        license?.expiringSoon ||
+                                        license?.expired
+                                        ? "font-semibold text-red-700 dark:text-red-300"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {license?.expiresAt
+                                      ? `حتى ${format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}`
+                                      : "بلا تاريخ انتهاء"}
+                                  </div>
+                                  {license?.number && (
+                                    <div
+                                      className="truncate text-[11px] tabular-nums text-muted-foreground leading-none"
+                                      dir="ltr"
+                                      title={license.number}
+                                    >
+                                      {license.number}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <Select
