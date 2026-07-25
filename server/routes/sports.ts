@@ -1562,7 +1562,9 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       let timedOut = false;
-      const player = await bestEffortWithin(getPlayerCard(id), {
+      const wantExtras = req.query.with === "extras";
+      // extras كانت تنتظر انتهاء البطاقة (~3ث) ثم تضيف ~2.5ث — ابدأها معًا.
+      const playerPromise = bestEffortWithin(getPlayerCard(id), {
         fallback: null,
         timeoutMs: 3_000,
         onTimeout: () => {
@@ -1570,6 +1572,24 @@ export function registerSportsRoutes(app: Express) {
           console.warn(`[Sports] player card deadline exceeded for ${id}`);
         },
       });
+      const extrasPromise = wantExtras
+        ? Promise.all([
+            bestEffortWithin(getPlayerSeasonHistory(id).catch(() => []), {
+              fallback: [] as Awaited<ReturnType<typeof getPlayerSeasonHistory>>,
+              timeoutMs: 2_500,
+            }),
+            bestEffortWithin(getPlayerTransfers(id).catch(() => []), {
+              fallback: [] as Awaited<ReturnType<typeof getPlayerTransfers>>,
+              timeoutMs: 2_500,
+            }),
+            bestEffortWithin(getPlayerInjuries(id).catch(() => []), {
+              fallback: [] as Awaited<ReturnType<typeof getPlayerInjuries>>,
+              timeoutMs: 2_500,
+            }),
+          ])
+        : null;
+
+      const [player, extras] = await Promise.all([playerPromise, extrasPromise]);
       if (!player) {
         if (timedOut) {
           res.status(503).json({ message: "ملف اللاعب يُحمَّل حاليًا" });
@@ -1579,23 +1599,8 @@ export function registerSportsRoutes(app: Express) {
         return;
       }
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
-      // الموجة 2: عند ?with=extras تُضمَّن سلسلة المواسم + الانتقالات + الإصابات
-      // في نفس الاستجابة (تقلّل طلبات صفحة اللاعب). كلها تتدهور بسلاسة إلى [].
-      if (req.query.with === "extras") {
-        const [history, transfers, injuries] = await Promise.all([
-          bestEffortWithin(getPlayerSeasonHistory(id).catch(() => []), {
-            fallback: [],
-            timeoutMs: 2_500,
-          }),
-          bestEffortWithin(getPlayerTransfers(id).catch(() => []), {
-            fallback: [],
-            timeoutMs: 2_500,
-          }),
-          bestEffortWithin(getPlayerInjuries(id).catch(() => []), {
-            fallback: [],
-            timeoutMs: 2_500,
-          }),
-        ]);
+      if (extras) {
+        const [history, transfers, injuries] = extras;
         res.json({ ...player, history, transfers, injuries });
         return;
       }
