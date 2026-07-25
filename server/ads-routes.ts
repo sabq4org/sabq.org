@@ -590,9 +590,28 @@ router.put("/campaigns/:id", requireAdvertiser, async (req, res) => {
     if (req.body.dailyBudget !== undefined) allowedFields.dailyBudget = req.body.dailyBudget;
     if (req.body.startDate !== undefined) allowedFields.startDate = new Date(req.body.startDate);
     if (req.body.endDate !== undefined) allowedFields.endDate = req.body.endDate ? new Date(req.body.endDate) : null;
-    if (req.body.status !== undefined) allowedFields.status = req.body.status;
     if (req.body.bidAmount !== undefined) allowedFields.bidAmount = req.body.bidAmount;
-    if (req.body.rejectionReason !== undefined) allowedFields.rejectionReason = req.body.rejectionReason;
+
+    // `status` and `rejectionReason` are the review verdict — they belong to
+    // the admin, not to the advertiser being reviewed. The ownership check
+    // above only blocks editing a campaign that is ALREADY active, so without
+    // this split an advertiser could approve their own draft by sending
+    // status:"active" (and forge the admin's rejection note).
+    const isAdsAdmin = ["admin", "superadmin"].includes(userRole);
+    if (isAdsAdmin) {
+      if (req.body.status !== undefined) allowedFields.status = req.body.status;
+      if (req.body.rejectionReason !== undefined) allowedFields.rejectionReason = req.body.rejectionReason;
+    } else if (req.body.status !== undefined) {
+      // An advertiser may only move their own campaign between the two
+      // pre-review states: keep working on it, or submit it for review.
+      const ADVERTISER_STATUSES = ["draft", "pending"];
+      if (!ADVERTISER_STATUSES.includes(req.body.status)) {
+        return res.status(403).json({
+          error: "لا يمكنك تغيير حالة الحملة — الاعتماد يتم من إدارة الإعلانات",
+        });
+      }
+      allowedFields.status = req.body.status;
+    }
     
     allowedFields.updatedAt = new Date();
     

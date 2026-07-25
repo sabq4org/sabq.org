@@ -34873,7 +34873,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
         subject: z.enum(["استفسار عام", "شراكات إعلامية", "شكوى", "اقتراح", "أخرى"]),
         message: z.string().min(10),
         
-        attachments: z.array(z.object({ name: z.string(), size: z.number(), type: z.string(), url: z.string() })).optional().default([]),
+        // `url` must be exactly what POST /api/contact/upload returns — a
+        // relative path under the contact-attachments prefix. It was a free
+        // `z.string()`, and the dashboard renders it as a raw href
+        // (client/src/pages/ContactMessageDetail.tsx), so an anonymous
+        // submitter could plant `javascript:…` and have it run in an admin's
+        // session, or point the "attachment" at any external host.
+        attachments: z.array(z.object({
+          name: z.string().max(300),
+          size: z.number(),
+          type: z.string().max(150),
+          url: z.string().regex(
+            /^\/public-objects\/contact-attachments\/[A-Za-z0-9._-]+$/,
+            "مسار مرفق غير صالح",
+          ),
+        })).max(10).optional().default([]),
       });
 
       const validatedData = contactSchema.parse(req.body);
@@ -34892,8 +34906,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       // إرسال نسخة من الرسالة إلى بريد الصحيفة
       try {
+        // `att.name` is the submitter's original filename — escape it before it
+        // goes into outbound HTML from the sabq.org domain.
+        const escapeHtmlText = (s: string) => String(s)
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
         const attachmentsList = validatedData.attachments.length > 0
-          ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${att.url}">${att.name}</a></li>`).join("")}</ul></div>`
+          ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${escapeHtmlText(att.url)}">${escapeHtmlText(att.name)}</a></li>`).join("")}</ul></div>`
           : "";
 
         const { sendEmailNotification } = await import("./services/email");

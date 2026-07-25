@@ -5,6 +5,7 @@ import bcrypt from "bcrypt";
 import { db } from "../db";
 import { storeCustomers, storeCartItems, storeCustomerSessions, advertiserProfiles } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
+import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 
 const router = Router();
 
@@ -203,10 +204,22 @@ router.post("/auth/login", async (req: Request, res: Response) => {
           return res.status(403).json({ success: false, error: "حساب المعلن موقوف" });
         }
 
+        // NOTE: this bootstraps a store identity from a self-registered,
+        // email-unverified advertiser profile. It is far weaker than the
+        // removed sync branch — it only fires when NO store account exists,
+        // so there is no existing account to steal — but it does mean an
+        // unverified address can claim a store identity. Closing that
+        // properly needs email verification on advertiser registration.
+        if (await isLockedOut(`store-login:adv:${advertiser.id}`, 10)) {
+          return res.status(429).json({ success: false, error: "محاولات كثيرة جدًا. حاول لاحقًا." });
+        }
+
         const isValidPassword = await bcrypt.compare(body.password, advertiser.password);
         if (!isValidPassword) {
+          await recordFailure(`store-login:adv:${advertiser.id}`);
           return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
         }
+        await clearFailures(`store-login:adv:${advertiser.id}`);
 
         const [newCustomer] = await db
           .insert(storeCustomers)
@@ -237,29 +250,32 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, error: "الحساب موقوف" });
     }
 
+    // Per-account lockout — this route had no throttle of any kind, and it
+    // doubles as an oracle for advertiser passwords via the bootstrap branch
+    // above. Mirrors the guard used by /api/v1 login and 2FA verify.
+    if (await isLockedOut(`store-login:${customer.id}`, 10)) {
+      return res.status(429).json({ success: false, error: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
+    // SECURITY: a store login authenticates against the store customer's OWN
+    // credential — nothing else.
+    //
+    // This branch used to fall back to the advertiser profile with the same
+    // email and, on a match, OVERWRITE the store customer's passwordHash with
+    // the advertiser's. Combined with `POST /api/advertiser/register` — which
+    // is unauthenticated and never verifies the address (advertiserAuth.ts:28;
+    // `isVerified` defaults false and is never set) — that was a pre-auth
+    // takeover of any store account: register an advertiser profile on the
+    // victim's email with a password you choose, then "log in" to the store as
+    // them, permanently replacing their password and receiving a 30-day
+    // session.
     const isValidPassword = await bcrypt.compare(body.password, customer.passwordHash);
     if (!isValidPassword) {
-      const [advertiser] = await db
-        .select()
-        .from(advertiserProfiles)
-        .where(eq(advertiserProfiles.email, emailLower))
-        .limit(1);
-
-      if (advertiser) {
-        const isAdvertiserPasswordValid = await bcrypt.compare(body.password, advertiser.password);
-        if (isAdvertiserPasswordValid) {
-          await db
-            .update(storeCustomers)
-            .set({ passwordHash: advertiser.password, updatedAt: new Date() })
-            .where(eq(storeCustomers.id, customer.id));
-          console.log(`[Store Auth] Synced password from advertiser profile for: ${emailLower}`);
-        } else {
-          return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
-        }
-      } else {
-        return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
-      }
+      await recordFailure(`store-login:${customer.id}`);
+      return res.status(401).json({ success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
     }
+
+    await clearFailures(`store-login:${customer.id}`);
 
     const token = generateSessionToken();
     const expiresAt = getSessionExpiry();
