@@ -7,12 +7,16 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
+import { cn } from "@/lib/utils";
 
 type MediaLicenseStatus = {
   submitted: boolean;
   valid: boolean;
   expired: boolean;
   expiringSoon: boolean;
+  needsCorrection?: boolean;
+  pendingReview?: boolean;
+  adminNote?: string | null;
   licenseNumber: string | null;
   submittedAt: string | null;
   expiresAt: string | null;
@@ -257,6 +261,9 @@ export function WriterMediaLicenseCard({
         valid: result.valid,
         expired: result.expired,
         expiringSoon: result.expiringSoon,
+        needsCorrection: result.needsCorrection ?? false,
+        pendingReview: result.pendingReview ?? false,
+        adminNote: result.adminNote ?? null,
         licenseNumber: result.licenseNumber,
         submittedAt: result.submittedAt,
         expiresAt: result.expiresAt,
@@ -266,8 +273,12 @@ export function WriterMediaLicenseCard({
       setLicenseFile(null);
       setForceShowForm(false);
       toast({
-        title: "شكراً لك",
-        description: result.message || "تم استلام بيانات الترخيص بنجاح",
+        title: result.pendingReview ? "تم الإرسال للمراجعة" : "شكراً لك",
+        description:
+          result.message ||
+          (result.pendingReview
+            ? "وصلنا ملفك وهو تحت مراجعة الإدارة"
+            : "تم استلام بيانات الترخيص بنجاح"),
       });
     },
     onError: (error: Error) => {
@@ -320,6 +331,51 @@ export function WriterMediaLicenseCard({
       );
     }
     return null;
+  }
+
+  if (data.pendingReview && !forceShowForm) {
+    return (
+      <section
+        id={WRITER_MEDIA_LICENSE_ANCHOR}
+        className="rounded-xl border border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40"
+        dir="rtl"
+        data-testid="writer-media-license-pending-review"
+      >
+        <div className="flex items-start gap-3 p-4 sm:p-5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+            <Loader2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <p className="text-base font-bold tracking-tight text-sky-900 dark:text-sky-100">
+              ترخيصك تحت المراجعة
+            </p>
+            <p className="text-sm leading-relaxed text-sky-950/90 dark:text-sky-50/90">
+              وصلنا ملفك وهو بانتظار موافقة الإدارة بعد الاطلاع على صورة الترخيص.
+              {data.licenseNumber ? (
+                <>
+                  {" "}
+                  الرقم: <span dir="ltr" className="font-medium">{data.licenseNumber}</span>.
+                </>
+              ) : null}
+            </p>
+            {data.adminNote ? (
+              <p className="rounded-lg bg-white/70 p-2 text-xs text-sky-900/80 dark:bg-black/20 dark:text-sky-100/80">
+                آخر ملاحظة من الإدارة: {data.adminNote}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setForceShowForm(true)}
+              data-testid="button-writer-license-reupload-while-pending"
+            >
+              استبدال الملف المرفوع
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (data.valid && !forceShowForm) {
@@ -442,15 +498,35 @@ export function WriterMediaLicenseCard({
     );
   }
 
-  const isRenewal = data.expired || forceShowForm || data.expiringSoon;
+  const needsCorrection = Boolean(data.needsCorrection);
+  const pendingReview = Boolean(data.pendingReview);
+  const isRenewal =
+    data.expired || forceShowForm || data.expiringSoon || needsCorrection || pendingReview;
 
   return (
     <section
       id={WRITER_MEDIA_LICENSE_ANCHOR}
-      className="rounded-xl border border-border bg-card"
+      className={cn(
+        "rounded-xl border bg-card",
+        needsCorrection
+          ? "border-amber-400 dark:border-amber-700"
+          : "border-border",
+      )}
       dir="rtl"
       data-testid="writer-media-license-card"
     >
+      {needsCorrection && data.adminNote ? (
+        <div
+          className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-950/40 sm:px-5"
+          data-testid="writer-media-license-correction-note"
+        >
+          <p className="font-bold text-amber-900 dark:text-amber-100">مطلوب تصحيح ملف الترخيص</p>
+          <p className="mt-1 leading-relaxed text-amber-950/90 dark:text-amber-50/90">{data.adminNote}</p>
+          <p className="mt-2 text-xs text-amber-800/80 dark:text-amber-200/70">
+            أعد رفع صورة واضحة لبطاقة الترخيص المهني (وليس صورة أخرى) مع الرقم وتاريخ الانتهاء.
+          </p>
+        </div>
+      ) : null}
       <div className="border-b border-border px-4 py-4 sm:px-5">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -459,12 +535,16 @@ export function WriterMediaLicenseCard({
           <div className="min-w-0 flex-1 space-y-2.5">
             <div className="space-y-1.5">
               <p className="text-base font-bold tracking-tight">
-                {isRenewal
-                  ? "ترخيصك منتهٍ أو ناقص تاريخ الانتهاء — حدّث بياناتك"
-                  : "الترخيص المهني يعزّز حضورك ومصداقيتك"}
+                {needsCorrection
+                  ? "أعد رفع ملف الترخيص حسب ملاحظة الإدارة"
+                  : isRenewal
+                    ? "ترخيصك منتهٍ أو ناقص تاريخ الانتهاء — حدّث بياناتك"
+                    : "الترخيص المهني يعزّز حضورك ومصداقيتك"}
               </p>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وتاريخ انتهائه وإرفاق صورة منه.
+                {needsCorrection
+                  ? "لن يُحتسب الترخيص سارياً حتى تعيد رفع الملف الصحيح."
+                  : "وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وتاريخ انتهائه وإرفاق صورة منه."}
               </p>
             </div>
             {!isRenewal && <LicenseDeadlineCountdown deadline={data.deadline} />}
@@ -544,6 +624,8 @@ export function WriterMediaLicenseCard({
               <Loader2 className="h-4 w-4 animate-spin" />
               جاري الإرسال...
             </>
+          ) : needsCorrection ? (
+            "إعادة رفع الترخيص"
           ) : isRenewal ? (
             "تحديث الترخيص"
           ) : (

@@ -5,6 +5,7 @@ import { articles, roles, userRoles, users } from "@shared/schema";
 import {
   mediaLicenseFlags,
   getMediaLicenseFileKey,
+  resolveMediaLicenseReviewStatus,
 } from "./mediaLicenseService";
 
 export { getMediaLicenseFileKey as getReporterMediaLicenseFileKey };
@@ -21,6 +22,9 @@ export type ReporterSummary = {
     hasLicense: boolean;
     expired: boolean;
     expiringSoon: boolean;
+    needsCorrection: boolean;
+    pendingReview: boolean;
+    adminNote: string | null;
     number: string | null;
     submittedAt: string | null;
     expiresAt: string | null;
@@ -53,6 +57,9 @@ async function fetchReporterUsers(reporterId?: string) {
       mediaLicenseFileKey: users.mediaLicenseFileKey,
       mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
       mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
+      mediaLicenseAdminNote: users.mediaLicenseAdminNote,
+      mediaLicenseCorrectionRequestedAt: users.mediaLicenseCorrectionRequestedAt,
+      mediaLicenseReviewStatus: users.mediaLicenseReviewStatus,
     })
     .from(users)
     .where(reporterId ? and(isReporter, eq(users.id, reporterId)) : isReporter)
@@ -69,10 +76,14 @@ export async function listReporters(): Promise<ReporterSummary[]> {
     const submitted = Boolean(
       r.mediaLicenseNumber && r.mediaLicenseFileKey && r.mediaLicenseSubmittedAt,
     );
+    const reviewStatus = resolveMediaLicenseReviewStatus(r);
+    const needsCorrection = reviewStatus === "needs_correction";
+    const pendingReview = reviewStatus === "pending_review";
     const licenseFlags = mediaLicenseFlags(submitted, r.mediaLicenseExpiresAt ?? null, now);
     const submittedAt = r.mediaLicenseSubmittedAt;
     const submittedAtIso =
       submittedAt && !Number.isNaN(submittedAt.getTime()) ? submittedAt.toISOString() : null;
+    const hasLicense = licenseFlags.hasLicense && reviewStatus === "approved";
 
     return {
       id: r.id,
@@ -83,9 +94,15 @@ export async function listReporters(): Promise<ReporterSummary[]> {
       city: r.city,
       lastLoginAt: r.lastLoginAt ? r.lastLoginAt.toISOString() : null,
       mediaLicense: {
-        hasLicense: licenseFlags.hasLicense,
+        hasLicense,
         expired: licenseFlags.expired,
-        expiringSoon: licenseFlags.expiringSoon,
+        expiringSoon: licenseFlags.expiringSoon && reviewStatus === "approved",
+        needsCorrection,
+        pendingReview,
+        adminNote:
+          needsCorrection || pendingReview
+            ? r.mediaLicenseAdminNote?.trim() || null
+            : null,
         number: r.mediaLicenseNumber ?? null,
         submittedAt: submittedAtIso,
         expiresAt: licenseFlags.expiresAtIso,

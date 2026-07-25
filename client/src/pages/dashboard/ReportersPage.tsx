@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Mic, BadgeCheck, Search, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MediaLicenseAdminActions } from "@/components/MediaLicenseAdminActions";
 
 type ReporterSummary = {
   id: string;
@@ -25,6 +26,9 @@ type ReporterSummary = {
     hasLicense: boolean;
     expired: boolean;
     expiringSoon: boolean;
+    needsCorrection: boolean;
+    pendingReview: boolean;
+    adminNote: string | null;
     number: string | null;
     submittedAt: string | null;
     expiresAt: string | null;
@@ -32,7 +36,13 @@ type ReporterSummary = {
   };
 };
 
-type LicenseFilter = "all" | "licensed" | "expired" | "missing";
+type LicenseFilter =
+  | "all"
+  | "licensed"
+  | "expired"
+  | "missing"
+  | "needs_correction"
+  | "pending_review";
 
 function formatDate(iso: string | null | undefined, withTime = true) {
   if (!iso) return "—";
@@ -60,8 +70,14 @@ export default function ReportersPage() {
     const licensed = reporters.filter((r) => r.mediaLicense?.hasLicense).length;
     const expiredLicense = reporters.filter((r) => r.mediaLicense?.expired).length;
     const expiringSoon = reporters.filter((r) => r.mediaLicense?.expiringSoon).length;
+    const needsCorrection = reporters.filter((r) => r.mediaLicense?.needsCorrection).length;
+    const pendingReview = reporters.filter((r) => r.mediaLicense?.pendingReview).length;
     const missingLicense = reporters.filter(
-      (r) => !r.mediaLicense?.hasLicense && !r.mediaLicense?.expired,
+      (r) =>
+        !r.mediaLicense?.hasLicense &&
+        !r.mediaLicense?.expired &&
+        !r.mediaLicense?.needsCorrection &&
+        !r.mediaLicense?.pendingReview,
     ).length;
     const activeWeek = reporters.filter((r) => {
       const lastLogin = r.lastLoginAt ? new Date(r.lastLoginAt).getTime() : 0;
@@ -72,6 +88,8 @@ export default function ReportersPage() {
       licensed,
       expiredLicense,
       expiringSoon,
+      needsCorrection,
+      pendingReview,
       missingLicense,
       activeWeek,
     };
@@ -87,9 +105,16 @@ export default function ReportersPage() {
         !r.mediaLicense?.expiringSoon
       )
         return false;
+      if (licenseFilter === "needs_correction" && !r.mediaLicense?.needsCorrection)
+        return false;
+      if (licenseFilter === "pending_review" && !r.mediaLicense?.pendingReview)
+        return false;
       if (
         licenseFilter === "missing" &&
-        (r.mediaLicense?.hasLicense || r.mediaLicense?.expired)
+        (r.mediaLicense?.hasLicense ||
+          r.mediaLicense?.expired ||
+          r.mediaLicense?.needsCorrection ||
+          r.mediaLicense?.pendingReview)
       )
         return false;
       if (!q) return true;
@@ -102,10 +127,12 @@ export default function ReportersPage() {
     });
 
     const licenseRank = (r: ReporterSummary) => {
-      if (r.mediaLicense?.expired) return 0;
-      if (r.mediaLicense?.expiringSoon) return 1;
-      if (!r.mediaLicense?.hasLicense) return 2;
-      return 3;
+      if (r.mediaLicense?.pendingReview) return 0;
+      if (r.mediaLicense?.expired) return 1;
+      if (r.mediaLicense?.needsCorrection) return 2;
+      if (r.mediaLicense?.expiringSoon) return 3;
+      if (!r.mediaLicense?.hasLicense) return 4;
+      return 5;
     };
     const expiresMs = (r: ReporterSummary) => {
       const raw = r.mediaLicense?.expiresAt;
@@ -202,8 +229,16 @@ export default function ReportersPage() {
                   { id: "all" as const, label: "الكل" },
                   { id: "licensed" as const, label: `ساري (${kpis.licensed})` },
                   {
+                    id: "pending_review" as const,
+                    label: `تحت المراجعة (${kpis.pendingReview})`,
+                  },
+                  {
                     id: "expired" as const,
                     label: `منتهٍ/جدّد (${kpis.expiredLicense + kpis.expiringSoon})`,
+                  },
+                  {
+                    id: "needs_correction" as const,
+                    label: `يحتاج تصحيحاً (${kpis.needsCorrection})`,
                   },
                   { id: "missing" as const, label: `بدون ترخيص (${kpis.missingLicense})` },
                 ] as const
@@ -258,10 +293,26 @@ export default function ReportersPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 align-middle">
-                            {license?.hasLicense || license?.expired ? (
-                              <div className="flex max-w-[11rem] flex-col gap-1">
-                                <div className="flex items-center gap-1">
-                                  {license.expired ? (
+                            <div className="flex max-w-[13rem] flex-col gap-1">
+                              <div className="flex items-center gap-1">
+                                {license?.pendingReview ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-sky-100 text-sky-950 hover:bg-sky-100"
+                                    title="أعاد رفع الملف — اطّلع ثم اعتمد أو ارفض"
+                                    data-testid={`badge-pending-review-${reporter.id}`}
+                                  >
+                                    تحت المراجعة
+                                  </Badge>
+                                ) : license?.needsCorrection ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-amber-100 text-amber-950 hover:bg-amber-100"
+                                    title={license.adminNote || "مطلوب إعادة رفع ملف الترخيص"}
+                                    data-testid={`badge-needs-correction-${reporter.id}`}
+                                  >
+                                    يحتاج تصحيحاً
+                                  </Badge>
+                                ) : license?.hasLicense || license?.expired ? (
+                                  license.expired ? (
                                     <Badge className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100">
                                       منتهٍ
                                     </Badge>
@@ -277,56 +328,75 @@ export default function ReportersPage() {
                                       <BadgeCheck className="h-3 w-3" />
                                       مرخّص
                                     </Badge>
-                                  )}
-                                  {license.hasFile && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 shrink-0 text-muted-foreground"
-                                      title="عرض ملف الترخيص"
-                                      onClick={() =>
-                                        window.open(
-                                          apiUrl(
-                                            `/api/admin/reporters/${reporter.id}/media-license-file`,
-                                          ),
-                                          "_blank",
-                                          "noopener",
-                                        )
-                                      }
-                                    >
-                                      <FileText className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
-                                </div>
-                                <div
-                                  className={cn(
-                                    "text-[11px] tabular-nums leading-none",
-                                    !license.expiresAt ||
-                                      license.expiringSoon ||
-                                      license.expired
-                                      ? "font-semibold text-red-700"
-                                      : "text-muted-foreground",
-                                  )}
-                                >
-                                  {license.expiresAt
-                                    ? `حتى ${format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}`
-                                    : "بلا تاريخ انتهاء"}
-                                </div>
-                                {license.number && (
-                                  <div
-                                    className="truncate text-[11px] tabular-nums leading-none text-muted-foreground"
-                                    dir="ltr"
-                                    title={license.number}
-                                  >
-                                    {license.number}
-                                  </div>
+                                  )
+                                ) : (
+                                  <Badge className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100">
+                                    غير مرخّص
+                                  </Badge>
                                 )}
+                                {license?.hasFile && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 shrink-0 text-muted-foreground"
+                                    title="عرض ملف الترخيص"
+                                    onClick={() =>
+                                      window.open(
+                                        apiUrl(
+                                          `/api/admin/reporters/${reporter.id}/media-license-file`,
+                                        ),
+                                        "_blank",
+                                        "noopener",
+                                      )
+                                    }
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                <MediaLicenseAdminActions
+                                  personName={reporter.name}
+                                  invalidateQueryKey={["/api/admin/reporters"]}
+                                  correctionEndpoint={`/api/admin/reporters/${reporter.id}/media-license-correction`}
+                                  approveEndpoint={`/api/admin/reporters/${reporter.id}/media-license-approve`}
+                                  rejectEndpoint={`/api/admin/reporters/${reporter.id}/media-license-reject`}
+                                  existingNote={license?.adminNote}
+                                  needsCorrection={license?.needsCorrection}
+                                  pendingReview={license?.pendingReview}
+                                  hasFile={license?.hasFile}
+                                  testIdPrefix={reporter.id}
+                                />
                               </div>
-                            ) : (
-                              <Badge className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100">
-                                غير مرخّص
-                              </Badge>
-                            )}
+                              {(license?.hasLicense ||
+                                license?.expired ||
+                                license?.needsCorrection ||
+                                license?.pendingReview) && (
+                                <>
+                                  <div
+                                    className={cn(
+                                      "text-[11px] tabular-nums leading-none",
+                                      !license?.expiresAt ||
+                                        license?.expiringSoon ||
+                                        license?.expired
+                                        ? "font-semibold text-red-700"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {license?.expiresAt
+                                      ? `حتى ${format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}`
+                                      : "بلا تاريخ انتهاء"}
+                                  </div>
+                                  {license?.number && (
+                                    <div
+                                      className="truncate text-[11px] tabular-nums leading-none text-muted-foreground"
+                                      dir="ltr"
+                                      title={license.number}
+                                    >
+                                      {license.number}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm">
                             {reporter.city || <span className="text-muted-foreground">—</span>}

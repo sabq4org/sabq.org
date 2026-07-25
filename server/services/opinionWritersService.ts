@@ -14,6 +14,7 @@ import {
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
   mediaLicenseFlags,
+  resolveMediaLicenseReviewStatus,
 } from "./mediaLicenseService";
 
 export { OPINION_WRITERS_PER_DAY_CAP };
@@ -65,11 +66,16 @@ export type OpinionWriterSummary = {
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
   /** الترخيص المهني (هيئة تنظيم الإعلام) المرفوع من مساحة الكاتب */
   mediaLicense: {
-    /** مرسل وضمن الصلاحية */
+    /** مرسل وضمن الصلاحية ومعتمد من الإدارة */
     hasLicense: boolean;
     expired: boolean;
     /** ساري ويتبقّى شهران أو أقل */
     expiringSoon: boolean;
+    /** الإدارة طلبت إعادة رفع الملف */
+    needsCorrection: boolean;
+    /** أعاد الرفع وينتظر موافقة الإدارة */
+    pendingReview: boolean;
+    adminNote: string | null;
     number: string | null;
     submittedAt: string | null;
     expiresAt: string | null;
@@ -173,6 +179,9 @@ async function fetchWriterUsers(writerId?: string) {
       mediaLicenseFileKey: users.mediaLicenseFileKey,
       mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
       mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
+      mediaLicenseAdminNote: users.mediaLicenseAdminNote,
+      mediaLicenseCorrectionRequestedAt: users.mediaLicenseCorrectionRequestedAt,
+      mediaLicenseReviewStatus: users.mediaLicenseReviewStatus,
       scheduleWeekday: opinionWriterSchedules.weekday,
       schedulePublishTime: opinionWriterSchedules.publishTime,
       scheduleActive: opinionWriterSchedules.active,
@@ -295,7 +304,11 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
     const submitted = Boolean(
       w.mediaLicenseNumber && w.mediaLicenseFileKey && w.mediaLicenseSubmittedAt,
     );
+    const reviewStatus = resolveMediaLicenseReviewStatus(w);
+    const needsCorrection = reviewStatus === "needs_correction";
+    const pendingReview = reviewStatus === "pending_review";
     const licenseFlags = mediaLicenseFlags(submitted, w.mediaLicenseExpiresAt ?? null, now);
+    const hasLicense = licenseFlags.hasLicense && reviewStatus === "approved";
 
     return {
       id: w.id,
@@ -330,9 +343,15 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       nextSlot: toIsoOrNull(nextSlot),
       commitment,
       mediaLicense: {
-        hasLicense: licenseFlags.hasLicense,
+        hasLicense,
         expired: licenseFlags.expired,
-        expiringSoon: licenseFlags.expiringSoon,
+        expiringSoon: licenseFlags.expiringSoon && reviewStatus === "approved",
+        needsCorrection,
+        pendingReview,
+        adminNote:
+          needsCorrection || pendingReview
+            ? w.mediaLicenseAdminNote?.trim() || null
+            : null,
         number: w.mediaLicenseNumber ?? null,
         submittedAt: toIsoOrNull(w.mediaLicenseSubmittedAt),
         expiresAt: licenseFlags.expiresAtIso,
