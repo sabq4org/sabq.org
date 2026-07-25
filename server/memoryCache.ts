@@ -300,6 +300,12 @@ export function getTotalSseCount(): number {
 }
 
 export class MemoryCache {
+  // سجل ثابت بكل النسخ الحيّة — يتيح لقياس الموارد ([Runtime]) طباعة حجم كل
+  // كاش بالاسم دون أن يعرف بوجودها مسبقًا. أُضيف لاصطياد تسرّب الذاكرة
+  // 2026-07-25 (heap تضاعف ×3 بينما fd/sockets/pool ثابتة): كاش يحمل قيمًا
+  // كبيرة تحت سقفه قد يفسّر مئات الميغابايت.
+  static readonly _instances: MemoryCache[] = [];
+
   private cache: Map<string, CacheEntry<any>> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly maxEntries: number;
@@ -310,6 +316,12 @@ export class MemoryCache {
     this.maxEntries = maxEntries;
     this.name = name;
     this.startCleanup();
+    MemoryCache._instances.push(this);
+  }
+
+  /** لقطة حجم لهذا الكاش — للقياس فقط. */
+  sizeInfo(): { name: string; size: number; max: number } {
+    return { name: this.name, size: this.cache.size, max: this.maxEntries };
   }
 
   private startCleanup() {
@@ -544,16 +556,26 @@ interface SWRCacheEntry<T> {
 }
 
 export class StaleWhileRevalidateCache {
+  static readonly _instances: StaleWhileRevalidateCache[] = [];
+
   private cache: Map<string, SWRCacheEntry<any>> = new Map();
   private refreshing: Set<string> = new Set(); // Track in-flight refreshes
   // single-flight: وعد الجلب الجاري لكل مفتاح. المتنافسون على نفس المفتاح
   // ينتظرون نفس الوعد بدل الاستقصاء ثم بدء جلب مكرر بعد 6 ثوانٍ.
   private inflight: Map<string, Promise<any>> = new Map();
   private readonly maxEntries: number;
+  private readonly name: string;
   private lastEvictionLogAt = 0;
 
-  constructor(maxEntries: number = 5000) {
+  constructor(maxEntries: number = 5000, name: string = 'swrCache') {
     this.maxEntries = maxEntries;
+    this.name = name;
+    StaleWhileRevalidateCache._instances.push(this);
+  }
+
+  /** لقطة حجم لهذا الكاش (يشمل الوعود المعلّقة) — للقياس فقط. */
+  sizeInfo(): { name: string; size: number; max: number; inflight: number } {
+    return { name: this.name, size: this.cache.size, max: this.maxEntries, inflight: this.inflight.size };
   }
 
   get<T>(key: string): { data: T | null; isStale: boolean; shouldRefresh: boolean } {
@@ -689,6 +711,18 @@ export class StaleWhileRevalidateCache {
 }
 
 export const swrCache = new StaleWhileRevalidateCache();
+
+/**
+ * أحجام كل الكاشات الحيّة مرتّبة تنازليًا — يستهلكها قياس الموارد لطباعة
+ * أكبرها في سطر [Runtime]. كاش يقترب حجمه من سقفه ويحمل قيمًا كبيرة هو أول
+ * المشتبهين في تسرّب الذاكرة.
+ */
+export function cacheSizes(): { name: string; size: number; max: number; inflight?: number }[] {
+  const out: { name: string; size: number; max: number; inflight?: number }[] = [];
+  for (const c of MemoryCache._instances) out.push(c.sizeInfo());
+  for (const c of StaleWhileRevalidateCache._instances) out.push(c.sizeInfo());
+  return out.sort((a, b) => b.size - a.size);
+}
 
 /**
  * Stale-While-Revalidate cache wrapper for high-traffic endpoints
