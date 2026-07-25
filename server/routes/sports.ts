@@ -276,12 +276,33 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const season = parseSeason(req);
-      const [yellow, red] = await Promise.all([
-        getTopYellowCards(comp, season).catch(() => []),
-        getTopRedCards(comp, season).catch(() => []),
-      ]);
+      let timedOut = false;
+      const board = await bestEffortWithin(
+        Promise.all([
+          getTopYellowCards(comp, season).catch(() => []),
+          getTopRedCards(comp, season).catch(() => []),
+        ]).then(([yellow, red]) => ({ yellow, red })),
+        {
+          fallback: null,
+          timeoutMs: 3_000,
+          onTimeout: () => {
+            timedOut = true;
+            console.warn(`[Sports] cards deadline exceeded for ${comp.slug}`);
+          },
+        },
+      );
+      if (board == null) {
+        if (timedOut) {
+          res.set("Cache-Control", "private, no-store");
+          res.set("Retry-After", "2");
+          res.status(503).json({ message: "متصدّرو البطاقات يُحمَّلون حاليًا" });
+          return;
+        }
+        res.status(502).json({ message: "تعذر جلب متصدّري البطاقات حاليًا" });
+        return;
+      }
       res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, yellow, red });
+      res.json({ configured: true, yellow: board.yellow, red: board.red });
     } catch (error) {
       console.error("[Sports] cards failed:", error);
       res.status(502).json({ message: "تعذر جلب متصدّري البطاقات حاليًا" });
@@ -553,6 +574,8 @@ export function registerSportsRoutes(app: Express) {
   });
 
   // الهدّافون (أعلى 15؛ يرد [] لمن لا يدعمها).
+  // مهلة أفضل جهد: كاش بارد + طابور API-Football كان يعلّق الطلب ~5ث (APM).
+  // عند المهلة 503 + Retry-After حتى يعيد العميل بعد امتلاء SWR — لا نكاش قائمة فارغة.
   app.get("/api/sports/:comp/scorers", async (req, res) => {
     const comp = resolve(req, res);
     if (!comp) return;
@@ -561,8 +584,27 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
+      let timedOut = false;
+      const scorers = await bestEffortWithin(getTopScorers(comp, parseSeason(req)), {
+        fallback: null,
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          console.warn(`[Sports] scorers deadline exceeded for ${comp.slug}`);
+        },
+      });
+      if (scorers == null) {
+        if (timedOut) {
+          res.set("Cache-Control", "private, no-store");
+          res.set("Retry-After", "2");
+          res.status(503).json({ message: "قائمة الهدافين تُحمَّل حاليًا" });
+          return;
+        }
+        res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
+        return;
+      }
       res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, scorers: await getTopScorers(comp, parseSeason(req)) });
+      res.json({ configured: true, scorers });
     } catch (error) {
       console.error("[Sports] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
@@ -596,8 +638,27 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
+      let timedOut = false;
+      const assists = await bestEffortWithin(getTopAssists(comp, parseSeason(req)), {
+        fallback: null,
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          console.warn(`[Sports] assists deadline exceeded for ${comp.slug}`);
+        },
+      });
+      if (assists == null) {
+        if (timedOut) {
+          res.set("Cache-Control", "private, no-store");
+          res.set("Retry-After", "2");
+          res.status(503).json({ message: "قائمة صنّاع الأهداف تُحمَّل حاليًا" });
+          return;
+        }
+        res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });
+        return;
+      }
       res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, assists: await getTopAssists(comp, parseSeason(req)) });
+      res.json({ configured: true, assists });
     } catch (error) {
       console.error("[Sports] assists failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });

@@ -72,6 +72,10 @@
 - **صفحة النادي:** `getTeamProfile` خلف `spl:teamprofile:v3:*` (SWR) + اكتشاف الترتيب يبدأ بروشن ثم البقية (لا 4 جداول دفعة على البرود).
 - سجلات `[REC NOTIFICATION] None of the recommended…` صارت `warn` لا `error` — كانت تملأ لوق Railway بمئات «أخطاء» كاذبة.
 
+## أداء لوحات الهدّافين/الصناعة/البطاقات — 2026-07-25
+- `GET /api/sports/:comp/scorers|assists|cards`: مهلة أفضل جهد 3ث → عند تجاوزها `503` + `Retry-After: 2` + `no-store` (لا تُكاش قائمة فارغة في CDN/React Query). الجلب يكمل ويملأ SWR.
+- داخل `getTopScorers` / `getTopAssists` / بطاقات: تعريب `skipAi` فورًا + ترقية كاش خلفية عند اكتمال الترجمة (نفس نمط الانتقالات/مركز المباراة).
+
 ## عند التعديل
 - [ ] قرأت هذا الملف
 - [ ] إن لمس التوقعات: اقرأ أيضاً `predictions-core/SYSTEM.md`
