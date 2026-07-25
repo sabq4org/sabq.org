@@ -570,7 +570,15 @@ export const sessions = pgTable(
     sess: jsonb("sess").notNull(),
     expire: timestamp("expire").notNull(),
   },
-  (table) => [index("IDX_session_expire").on(table.expire)],
+  (table) => [
+    index("IDX_session_expire").on(table.expire),
+    // إبطال جلسات مستخدم واحد يستعلم بـ (sess #>> '{passport,user}'). بلا هذا
+    // الفهرس كان الاستعلام مسحًا كاملًا للجدول مع استخراج JSON من كل صف، على
+    // مسبح الجلسات المُصغَّر عمدًا (max=4) — أحد نصفَي تجمّد 2026-07-24/25.
+    // أُنشئ على الإنتاج يدويًا بـCONCURRENTLY؛ يُعلَن هنا بنفس الاسم حتى لا
+    // يحذفه db:push لاحقًا.
+    index("idx_sessions_passport_user").on(sql`(${table.sess} #>> '{passport,user}')`),
+  ],
 );
 
 // Users table with email/password authentication

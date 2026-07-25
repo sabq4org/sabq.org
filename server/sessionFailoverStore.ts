@@ -1,4 +1,40 @@
 import session from "express-session";
+import { getRedisSessionAdapter } from "./redis";
+
+/**
+ * عمر مفتاح الفهرس العكسي. يُجدَّد مع كل كتابة جلسة، فيبقى حيًّا ما دام
+ * المستخدم نشطًا ويختفي تلقائيًا بعده. أطول قليلًا من عمر الجلسة احتياطًا.
+ */
+const USER_SESSION_INDEX_TTL_S = 8 * 24 * 60 * 60;
+
+/**
+ * فهرس عكسي usess:<userId> → مجموعة معرّفات جلسات المستخدم.
+ *
+ * سببه: invalidateAllUserSessions كانت تمشّط مفاتيح Redis كلها (SCAN sess:*)
+ * مع GET متسلسل لكل مفتاح للعثور على جلسات مستخدم واحد. وRedis أحادي الخيط،
+ * فكل أمر آخر — بما فيه قراءة الجلسة التي يفعلها express-session في **كل**
+ * طلب وارد — يقف في الطابور خلف التمشيط. النتيجة تجمّد عام: طلبات غير
+ * مترابطة تنتهي جميعها في نفس المللي ثانية، ونقاطٌ مكاشة في الذاكرة تستغرق
+ * ثانية ونصفًا لأن الطلب لم يصل إلى معالجها أصلًا (سجلات 2026-07-24/25).
+ *
+ * بهذا الفهرس يصبح الإبطال SMEMBERS واحدًا ثم DEL واحدًا — بعدد جلسات
+ * المستخدم لا بعدد جلسات الموقع كله.
+ *
+ * أفضل جهد ولا يُنتظر: فشله يعيدنا إلى التمشيط المحدود بميزانية، لا أكثر.
+ */
+function indexUserSession(sid: string, sess: session.SessionData): void {
+  const userId = (sess as any)?.passport?.user;
+  if (typeof userId !== "string" || userId.length === 0) return;
+  const redis = getRedisSessionAdapter();
+  if (!redis) return;
+  const key = `usess:${userId}`;
+  void redis
+    .sadd(key, sid)
+    .then(() => redis.expire(key, USER_SESSION_INDEX_TTL_S))
+    .catch(() => {
+      /* الفهرس تحسين لا ضمانة — الإبطال يسقط إلى التمشيط عند غيابه */
+    });
+}
 
 type StoreCallback = (err?: any, session?: session.SessionData | null) => void;
 type SimpleCallback = (err?: any) => void;
@@ -65,6 +101,7 @@ export class SessionFailoverStore extends session.Store {
     this.primary.set(sid, sess, (err) => {
       if (!err) {
         this.clearFailoverFlag();
+        indexUserSession(sid, sess);
         callback?.(err);
         return;
       }

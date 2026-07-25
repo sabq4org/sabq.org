@@ -577,29 +577,86 @@ export async function invalidateAllUserSessions(
     console.error("[Session] Postgres session purge failed:", e);
   }
 
-  // Redis session store (connect-redis, prefix `sess:`). Scan + match passport.user.
-  // Use the session adapter (present whenever REDIS_URL is set, even mid-reconnect)
-  // rather than getRedisClient (null until fully ready) so the purge isn't skipped.
+  // Redis session store (connect-redis, prefix `sess:`).
+  //
+  // كان هذا المقطع يمشّط مفاتيح Redis كلها (SCAN sess:*) مع GET **متسلسل**
+  // لكل مفتاح. مع N جلسة نشطة فهذه N رحلة ذهاب وإياب متتابعة، وRedis أحادي
+  // الخيط: كل أمر آخر يقف في الطابور خلفها — بما فيه قراءة الجلسة التي
+  // يجريها express-session في **كل** طلب وارد قبل أي مسار. أثر ذلك في
+  // سجلات 2026-07-24/25 كان تجمّدًا عامًا: طلبات لمسارات لا تجمعها صلة
+  // تنتهي كلها في نفس المللي ثانية (1258/1263/1260/1262/1262)، ونقاط مكاشة
+  // في ذاكرة العملية تستغرق ثانية ونصفًا لأن الطلب لم يبلغ معالجها أصلًا.
+  // والدالة موصولة بأربعة عشر موضعًا (حظر، حذف، تزويد إداري، اعتماد مراسل)
+  // لا بإعادة تعيين كلمة المرور النادرة وحدها كما افترض التعليق الأصلي.
+  //
+  // المسار السريع الآن: الفهرس العكسي usess:<userId> الذي يبنيه
+  // SessionFailoverStore.set — SMEMBERS واحد ثم DEL واحد، بعدد جلسات
+  // المستخدم لا بعدد جلسات الموقع.
   try {
     const redis = getRedisSessionAdapter();
     if (redis) {
-      const keepKey = opts?.exceptWebSid ? `sess:${opts.exceptWebSid}` : null;
-      let cursor = "0";
-      do {
-        const [next, keys] = (await redis.scan(cursor, "MATCH", "sess:*", "COUNT", 200)) as [string, string[]];
-        cursor = next;
-        for (const key of keys) {
-          if (key === keepKey) continue;
-          const raw = await redis.get(key);
-          if (!raw) continue;
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed?.passport?.user === userId) await redis.del(key);
-          } catch {
-            /* skip non-JSON session payloads */
-          }
+      const indexKey = `usess:${userId}`;
+      let indexedSids: string[] = [];
+      try {
+        indexedSids = await redis.smembers(indexKey);
+      } catch {
+        /* الفهرس غير متاح — نسقط إلى التمشيط المحدود أدناه */
+      }
+
+      if (indexedSids.length > 0) {
+        const doomed = indexedSids
+          .filter((sid) => sid !== opts?.exceptWebSid)
+          .map((sid) => `sess:${sid}`);
+        if (doomed.length > 0) await redis.del(doomed);
+        await redis.del(indexKey);
+        // الجلسة المستثناة (تغيير ذاتي لكلمة المرور) تبقى مفهرسة.
+        if (opts?.exceptWebSid) {
+          void redis.sadd(indexKey, opts.exceptWebSid).catch(() => {});
         }
-      } while (cursor !== "0");
+      } else {
+        // احتياطي: جلسات أُنشئت قبل وجود الفهرس. تمشيط بـMGET على دفعات
+        // (رحلة واحدة لكل دفعة بدل رحلة لكل مفتاح) وبميزانية صارمة —
+        // تجاوزها يُسجَّل ولا يُمدَّد، فحجب Redis أسوأ من إبطال ناقص.
+        const keepKey = opts?.exceptWebSid ? `sess:${opts.exceptWebSid}` : null;
+        const startedAt = Date.now();
+        const budgetMs = Number(process.env.SESSION_PURGE_BUDGET_MS) || 1_500;
+        const maxKeys = Number(process.env.SESSION_PURGE_MAX_KEYS) || 20_000;
+        let scanned = 0;
+        let cursor = "0";
+        do {
+          const [next, keys] = (await redis.scan(
+            cursor,
+            "MATCH",
+            "sess:*",
+            "COUNT",
+            500,
+          )) as [string, string[]];
+          cursor = next;
+          if (keys.length > 0) {
+            scanned += keys.length;
+            const values = await redis.mget(keys);
+            const doomed: string[] = [];
+            for (let i = 0; i < keys.length; i++) {
+              const key = keys[i];
+              if (key === keepKey) continue;
+              const raw = values[i];
+              if (!raw) continue;
+              try {
+                if (JSON.parse(raw)?.passport?.user === userId) doomed.push(key);
+              } catch {
+                /* skip non-JSON session payloads */
+              }
+            }
+            if (doomed.length > 0) await redis.del(doomed);
+          }
+          if (scanned >= maxKeys || Date.now() - startedAt > budgetMs) {
+            console.warn(
+              `[Session] نفدت ميزانية تمشيط الجلسات (فُحص ${scanned} مفتاحًا في ${Date.now() - startedAt}ms) — توقف قبل إكمال إبطال ${userId}`,
+            );
+            break;
+          }
+        } while (cursor !== "0");
+      }
     }
   } catch (e) {
     console.error("[Session] Redis session purge failed:", e);
