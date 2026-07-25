@@ -191,16 +191,6 @@ import {
   type SmartBlock,
   type InsertSmartBlock,
   type UpdateSmartBlock,
-  type AudioNewsletter,
-  type InsertAudioNewsletter,
-  type UpdateAudioNewsletter,
-  type AudioNewsletterArticle,
-  type InsertAudioNewsletterArticle,
-  type AudioNewsletterListen,
-  type InsertAudioNewsletterListen,
-  type AudioNewsletterWithDetails,
-  type AudioNewsBrief,
-  type InsertAudioNewsBrief,
   audioNewsBriefs,
   type InternalAnnouncement,
   type InsertInternalAnnouncement,
@@ -1364,33 +1354,18 @@ export interface IStorage {
   // ============================================
   // Audio News Briefs Operations - الأخبار الصوتية السريعة
   // ============================================
-  createAudioNewsBrief(data: InsertAudioNewsBrief): Promise<AudioNewsBrief>;
-  getAudioNewsBriefById(id: string): Promise<AudioNewsBrief | null>;
-  getAllAudioNewsBriefs(): Promise<AudioNewsBrief[]>;
-  getPublishedAudioNewsBriefs(limit?: number): Promise<AudioNewsBrief[]>;
-  updateAudioNewsBrief(id: string, data: Partial<InsertAudioNewsBrief>): Promise<AudioNewsBrief>;
-  deleteAudioNewsBrief(id: string): Promise<void>;
-  publishAudioNewsBrief(id: string): Promise<AudioNewsBrief>;
 
   // ============================================
   // Audio Newsletters Operations - النشرات الصوتية
   // ============================================
   
   // Audio Newsletter CRUD operations
-  createAudioNewsletter(data: InsertAudioNewsletter): Promise<AudioNewsletter>;
-  getAudioNewsletterById(id: string): Promise<AudioNewsletterWithDetails | null>;
-  getAudioNewsletterBySlug(slug: string): Promise<AudioNewsletterWithDetails | null>;
-  getAllAudioNewsletters(filters?: { status?: string; limit?: number; offset?: number }): Promise<AudioNewsletterWithDetails[]>;
-  updateAudioNewsletter(id: string, data: UpdateAudioNewsletter): Promise<AudioNewsletter>;
-  deleteAudioNewsletter(id: string): Promise<void>;
 
   // Articles in newsletter
   addArticlesToNewsletter(newsletterId: string, articleIds: string[]): Promise<void>;
   removeArticleFromNewsletter(newsletterId: string, articleId: string): Promise<void>;
-  getNewsletterArticles(newsletterId: string): Promise<(AudioNewsletterArticle & { article?: Article })[]>;
 
   // Listen tracking
-  trackListen(data: InsertAudioNewsletterListen): Promise<AudioNewsletterListen>;
   getNewsletterAnalytics(newsletterId: string): Promise<{
     totalListens: number;
     uniqueListeners: number;
@@ -12602,163 +12577,22 @@ export class DatabaseStorage implements IStorage {
   // Audio News Briefs Operations - الأخبار الصوتية السريعة
   // ============================================
 
-  async createAudioNewsBrief(data: InsertAudioNewsBrief): Promise<AudioNewsBrief> {
-    const [brief] = await db.insert(audioNewsBriefs).values(data as any).returning();
-    return brief;
-  }
 
-  async getAudioNewsBriefById(id: string): Promise<AudioNewsBrief | null> {
-    const brief = await db.query.audioNewsBriefs.findFirst({
-      where: eq(audioNewsBriefs.id, id),
-    });
-    return brief || null;
-  }
 
-  async getAllAudioNewsBriefs(): Promise<AudioNewsBrief[]> {
-    return db.query.audioNewsBriefs.findMany({
-      orderBy: [desc(audioNewsBriefs.createdAt)],
-    });
-  }
 
-  async getPublishedAudioNewsBriefs(limit = 10): Promise<AudioNewsBrief[]> {
-    return db.query.audioNewsBriefs.findMany({
-      where: eq(audioNewsBriefs.status, 'published'),
-      orderBy: [desc(audioNewsBriefs.publishedAt)],
-      limit,
-    });
-  }
 
-  async updateAudioNewsBrief(id: string, data: Partial<InsertAudioNewsBrief>): Promise<AudioNewsBrief> {
-    const [updated] = await db.update(audioNewsBriefs)
-      .set({ ...data as any, updatedAt: new Date() })
-      .where(eq(audioNewsBriefs.id, id))
-      .returning();
-    return updated;
-  }
 
-  async deleteAudioNewsBrief(id: string): Promise<void> {
-    await db.delete(audioNewsBriefs).where(eq(audioNewsBriefs.id, id));
-  }
 
-  async publishAudioNewsBrief(id: string): Promise<AudioNewsBrief> {
-    const [published] = await db.update(audioNewsBriefs)
-      .set({ 
-        status: 'published', 
-        publishedAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(audioNewsBriefs.id, id))
-      .returning();
-    return published;
-  }
 
   // ============================================
   // Audio Newsletters Operations - النشرات الصوتية
   // ============================================
 
-  async createAudioNewsletter(data: InsertAudioNewsletter): Promise<AudioNewsletter> {
-    const [newsletter] = await db
-      .insert(audioNewsletters)
-      .values(data as any)
-      .returning();
-    return newsletter;
-  }
 
-  async getAudioNewsletterById(id: string): Promise<AudioNewsletterWithDetails | null> {
-    const [newsletter] = await db
-      .select()
-      .from(audioNewsletters)
-      .where(eq(audioNewsletters.id, id));
 
-    if (!newsletter) return null;
 
-    // Get articles with details
-    const articlesList = await db
-      .select()
-      .from(audioNewsletterArticles)
-      .leftJoin(articles, eq(audioNewsletterArticles.articleId, articles.id))
-      .where(eq(audioNewsletterArticles.newsletterId, id))
-      .orderBy(asc(audioNewsletterArticles.order));
 
-    const articlesWithDetails = articlesList.map((row) => ({
-      ...row.audio_newsletter_articles,
-      article: row.articles || undefined,
-    }));
 
-    // Get listen count
-    const [listensCount] = await db
-      .select({ count: sql<number>`cast(count(*) as integer)` })
-      .from(audioNewsletterListens)
-      .where(eq(audioNewsletterListens.newsletterId, id));
-
-    return {
-      ...newsletter,
-      articles: articlesWithDetails,
-      _count: {
-        articles: articlesWithDetails.length,
-        listens: listensCount?.count || 0,
-      },
-    };
-  }
-
-  async getAudioNewsletterBySlug(slug: string): Promise<AudioNewsletterWithDetails | null> {
-    const [newsletter] = await db
-      .select()
-      .from(audioNewsletters)
-      .where(eq(audioNewsletters.slug, slug));
-
-    if (!newsletter) return null;
-
-    return this.getAudioNewsletterById(newsletter.id);
-  }
-
-  async getAllAudioNewsletters(filters?: { 
-    status?: string; 
-    limit?: number; 
-    offset?: number 
-  }): Promise<AudioNewsletterWithDetails[]> {
-    let query = db
-      .select()
-      .from(audioNewsletters)
-      .orderBy(desc(audioNewsletters.publishedAt), desc(audioNewsletters.createdAt));
-
-    if (filters?.status) {
-      query = query.where(eq(audioNewsletters.status, filters.status)) as any;
-    }
-
-    if (filters?.limit) {
-      query = query.limit(filters.limit) as any;
-    }
-
-    if (filters?.offset) {
-      query = query.offset(filters.offset) as any;
-    }
-
-    const newsletters = await query;
-
-    // Fetch details for each newsletter
-    const newslettersWithDetails = await Promise.all(
-      newsletters.map(async (newsletter) => {
-        const details = await this.getAudioNewsletterById(newsletter.id);
-        return details!;
-      })
-    );
-
-    return newslettersWithDetails;
-  }
-
-  async updateAudioNewsletter(id: string, data: UpdateAudioNewsletter): Promise<AudioNewsletter> {
-    const [updated] = await db
-      .update(audioNewsletters)
-      .set({ ...data, updatedAt: new Date() } as any)
-      .where(eq(audioNewsletters.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteAudioNewsletter(id: string): Promise<void> {
-    await db.delete(audioNewsletters).where(eq(audioNewsletters.id, id));
-  }
 
   async addArticlesToNewsletter(newsletterId: string, articleIds: string[]): Promise<void> {
     // Get current max order
@@ -12793,48 +12627,7 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async getNewsletterArticles(newsletterId: string): Promise<(AudioNewsletterArticle & { article?: Article })[]> {
-    const results = await db
-      .select()
-      .from(audioNewsletterArticles)
-      .leftJoin(articles, eq(audioNewsletterArticles.articleId, articles.id))
-      .where(eq(audioNewsletterArticles.newsletterId, newsletterId))
-      .orderBy(asc(audioNewsletterArticles.order));
 
-    return results.map((row) => ({
-      ...row.audio_newsletter_articles,
-      article: row.articles || undefined,
-    }));
-  }
-
-  async trackListen(data: InsertAudioNewsletterListen): Promise<AudioNewsletterListen> {
-    // Insert listen event
-    const [listen] = await db
-      .insert(audioNewsletterListens)
-      .values(data as any)
-      .returning();
-
-    // Atomic analytics update using SQL subqueries (fixes race conditions)
-    await db
-      .update(audioNewsletters)
-      .set({
-        totalListens: sql`${audioNewsletters.totalListens} + 1`,
-        uniqueListeners: sql`(
-          SELECT COUNT(DISTINCT COALESCE(${audioNewsletterListens.userId}, ${audioNewsletterListens.sessionId}))
-          FROM ${audioNewsletterListens}
-          WHERE ${audioNewsletterListens.newsletterId} = ${data.newsletterId}
-        )`,
-        averageCompletionRate: sql`(
-          SELECT COALESCE(AVG(${audioNewsletterListens.completionPercentage}), 0)
-          FROM ${audioNewsletterListens}
-          WHERE ${audioNewsletterListens.newsletterId} = ${data.newsletterId}
-        )`,
-        updatedAt: new Date()
-      })
-      .where(eq(audioNewsletters.id, data.newsletterId));
-
-    return listen;
-  }
 
   async getNewsletterAnalytics(newsletterId: string): Promise<{
     totalListens: number;
