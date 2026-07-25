@@ -1003,6 +1003,9 @@ if (!(globalThis as any).__sabqServer) {
     void import("./utils/runtimeDiagnostics")
       .then((m) => m.startRuntimeDiagnostics())
       .catch((e) => console.warn("[Runtime] تعذّر تشغيل القياس:", e?.message));
+    void import("./utils/processWatchdog")
+      .then((m) => m.startProcessWatchdog(server))
+      .catch((e) => console.warn("[Watchdog] تعذّر تشغيل الحارس:", e?.message));
   });
 }
 

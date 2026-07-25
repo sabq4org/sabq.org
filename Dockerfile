@@ -121,4 +121,8 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
 
-CMD ["node", "dist/index.js"]
+# --max-old-space-size: سقف صريح لكومة V8. تسرّب فجر 2026-07-25 رفع RSS إلى
+# 3.1GB وحوّل العملية إلى zombie تحت وقفات GC لساعات بلا انهيار — بسقفٍ أدنى
+# تنهار العملية سريعًا وتلتقطها restartPolicyType=ON_FAILURE فتعود خلال ثوانٍ.
+# حارس server/utils/processWatchdog.ts يخرج برشاقة قبل هذا السقف أصلًا.
+CMD ["node", "--max-old-space-size=3072", "dist/index.js"]

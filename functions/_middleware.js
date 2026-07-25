@@ -274,7 +274,7 @@ function htmlCacheKey(requestUrl, commit, variant) {
   return new Request(u.toString(), { method: "GET" });
 }
 
-async function proxyToApi(request, apiOrigin) {
+async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
   // Pages Functions re-issue the request with `fetch()` to API_ORIGIN. Cloudflare
@@ -294,6 +294,11 @@ async function proxyToApi(request, apiOrigin) {
     redirect: "manual",
   };
   if (request.method !== "GET" && request.method !== "HEAD") init.body = request.body;
+  // Bounded wait for cacheable anonymous GETs only (callers opt in): a HUNG
+  // origin (the 2026-07-25 dawn incident mode — not a fast 502) would otherwise
+  // pin the reader for the platform's full subrequest limit before the
+  // last-good fallback could kick in. Writes are never aborted this way.
+  if (timeoutMs > 0) init.signal = AbortSignal.timeout(timeoutMs);
   return fetch(target, init);
 }
 
@@ -487,6 +492,41 @@ function apiCacheKey(requestUrl) {
   }
   u.search = cleanParams.toString();
   return new Request(u.toString(), { method: "GET" });
+}
+
+// ── stale-if-error: «آخر نسخة سليمة» ────────────────────────────────────────
+// Dawn 2026-07-25 outage: the origin hung for ~4 hours and every anonymous
+// reader saw errors, even though the edge had served the exact same JSON
+// seconds earlier — the 30–60s TTL meant the copy was already evicted when it
+// was needed most. Alongside the fresh entry we now store a second, long-lived
+// "last-good" copy under a marker key, and serve it ONLY when the origin fails
+// (network error / timeout / 5xx). Sessioned requests never reach this path —
+// getApiCacheTtl() returns 0 for them — so nothing personalized is ever stored
+// or replayed. Worst case for readers: minutes-old content instead of a 502.
+const API_LAST_GOOD_TTL_S = 86400;
+const API_PROXY_TIMEOUT_MS = 10_000;
+
+function apiLastGoodKey(cacheKeyReq) {
+  const u = new URL(cacheKeyReq.url);
+  u.searchParams.set("__sabq_last_good", "1");
+  return new Request(u.toString(), { method: "GET" });
+}
+
+async function serveApiLastGood(cacheKeyReq, reason) {
+  try {
+    const hit = await caches.default.match(apiLastGoodKey(cacheKeyReq));
+    if (!hit) return null;
+    const headers = new Headers(hit.headers);
+    headers.set("x-edge-cache", "STALE");
+    headers.set("X-Sabq-Stale", "1");
+    headers.set("X-Sabq-Stale-Reason", reason);
+    // Short client cache: keeps a dead origin from being hammered without
+    // pinning staleness after recovery.
+    headers.set("Cache-Control", "public, max-age=30");
+    return new Response(hit.body, { status: 200, statusText: "OK", headers });
+  } catch (_) {
+    return null;
+  }
 }
 
 // NOTE: a "/assets/* → 404" guard used to live here to intercept deleted chunks
@@ -700,30 +740,56 @@ export async function onRequest(context) {
     }
 
     try {
-      const res = await proxyToApi(request, apiOrigin);
-      
+      const res = await proxyToApi(
+        request,
+        apiOrigin,
+        useApiCache ? API_PROXY_TIMEOUT_MS : 0,
+      );
+
       if (useApiCache && apiCacheKeyReq && res.status === 200) {
         if (!res.headers.has("set-cookie")) {
           const cachedHeaders = new Headers(res.headers);
           cachedHeaders.set("Cache-Control", `public, max-age=${apiCacheTtl}, s-maxage=${apiCacheTtl}`);
-          
+
           const responseToCache = new Response(res.clone().body, {
             status: res.status,
             statusText: res.statusText,
             headers: cachedHeaders,
           });
-          
+
           context.waitUntil(
             caches.default.put(apiCacheKeyReq, responseToCache).catch((err) => {
               console.error("[pages-fn] api cache put error:", err);
             })
           );
+
+          // «آخر نسخة سليمة» — تُقدَّم فقط عند فشل الأصل (انظر serveApiLastGood).
+          const lastGoodHeaders = new Headers(res.headers);
+          lastGoodHeaders.set("Cache-Control", `public, s-maxage=${API_LAST_GOOD_TTL_S}`);
+          const lastGoodCopy = new Response(res.clone().body, {
+            status: 200,
+            headers: lastGoodHeaders,
+          });
+          context.waitUntil(
+            caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {})
+          );
         }
       }
-      
+
+      // Origin answered but is sick (5xx) → prefer the last-good copy.
+      if (useApiCache && apiCacheKeyReq && res.status >= 500) {
+        const stale = await serveApiLastGood(apiCacheKeyReq, `upstream-${res.status}`);
+        if (stale) return stale;
+      }
+
       return res;
     } catch (err) {
       console.error("[pages-fn] proxy error:", err);
+      // Origin unreachable or timed out → last-good copy beats a 502.
+      if (useApiCache && apiCacheKeyReq) {
+        const stale = await serveApiLastGood(apiCacheKeyReq, "unreachable");
+        if (stale) return stale;
+      }
       return new Response("Bad gateway", { status: 502 });
     }
   }
