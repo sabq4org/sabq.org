@@ -217,14 +217,38 @@ export async function apiFootballGet(
     let response: Response;
     try {
       response = await fetch(url, {
-        headers: { "x-apisports-key": apiKey },
+        headers: {
+          "x-apisports-key": apiKey,
+          // هوية صريحة: المزوّد خلف Cloudflare (v3.football.api-sports.io →
+          // 172.66.164.245). طلب بلا User-Agent من عنوان مركز بيانات بمعدّل
+          // مرتفع يطابق ملف الحجب الآلي على الحافة، فتُقطع الاتصالات بينما
+          // صفحة حالة المزوّد خضراء 100% (لقطة 2026-07-25: 90 يومًا بلا عطل).
+          "User-Agent": "sabq.org/1.0 (+https://sabq.org)",
+          Accept: "application/json",
+        },
         signal: AbortSignal.timeout(envMs("APIFOOTBALL_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS)),
       });
     } catch (error) {
       // تعذّر الاتصال أو انتهت المهلة — لم يصل الطلب للمزوّد أصلًا.
+      //
+      // «fetch failed» رسالة undici العامة ولا تقول شيئًا. السبب الحقيقي في
+      // error.cause دائمًا: ECONNRESET (الحافة تقطعنا) أو EAI_AGAIN (فشل DNS
+      // في الحاوية) أو UND_ERR_CONNECT_TIMEOUT (لا يُفتح TCP أصلًا — استنزاف
+      // مقابس عندنا) أو ECONNREFUSED (حجب صريح). كان الكود يقرأ .message فقط
+      // ويرمي cause، ولهذا بقي سبب حوادث 2026-07-24/25 مجهولًا وبُنيت
+      // الحواجز (#1199، #1201) على فرضية «تعطّل المزوّد» التي تكذّبها لوحة
+      // حالته. هذه الحقول تحسم الأمر من أول سطر في السجل.
       noteTransportFailure();
+      const err = error as any;
+      const cause = err?.cause;
+      const detail = cause
+        ? [cause.code, cause.errno, cause.syscall, cause.name, cause.message]
+            .filter(Boolean)
+            .join(" ")
+        : "";
       throw new Error(
-        `[${tag}] API-Football transport failure for ${path}: ${(error as Error)?.message ?? error}`,
+        `[${tag}] API-Football transport failure for ${path}: ${err?.message ?? error}` +
+          (detail ? ` (cause: ${detail})` : " (cause: غير متاح)"),
       );
     }
     noteTransportSuccess();
