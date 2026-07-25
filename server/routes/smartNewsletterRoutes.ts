@@ -38,6 +38,71 @@ import { requireRole } from '../rbac';
  *   - base64-encoded digest
  * All three formats are handled and compared using constant-time equality.
  */
+/**
+ * Resolve which subscription the caller is allowed to act on.
+ *
+ * SECURITY: these endpoints used to take a bare `email` from the request and
+ * act on whoever owned it — so anyone could unsubscribe any reader, rewrite
+ * their language/interests, or probe whether a given address is subscribed
+ * (subscriber enumeration). An email address is an identifier, not a
+ * credential.
+ *
+ * Two legitimate ways to prove you own a subscription:
+ *  - the `token` carried by every unsubscribe/preferences link we mail out,
+ *    which is the subscription row's own unguessable uuid
+ *    (server/services/newsletterDeliveryQueue.ts sets `unsubscribeToken:
+ *    subscriber.id`), or
+ *  - being signed in as the owner of that address.
+ *
+ * Returns the subscription row, or a ready-to-send denial. The denial is
+ * deliberately uniform so it cannot be used to test whether an address exists.
+ */
+async function resolveSubscriber(
+  req: any,
+  emailFromRequest?: string,
+): Promise<
+  | { ok: true; subscription: typeof newsletterSubscriptions.$inferSelect }
+  | { ok: false; httpStatus: number; message: string }
+> {
+  const denied = {
+    ok: false as const,
+    httpStatus: 403,
+    message: 'رابط غير صالح. استخدم رابط إلغاء الاشتراك من رسالة النشرة، أو سجّل الدخول.',
+  };
+
+  const token = typeof req.body?.token === 'string'
+    ? req.body.token
+    : typeof req.query?.token === 'string'
+      ? req.query.token
+      : null;
+
+  if (token) {
+    const [row] = await db
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, token))
+      .limit(1);
+    return row ? { ok: true, subscription: row } : denied;
+  }
+
+  const sessionEmail = req.user?.email;
+  if (sessionEmail) {
+    // A signed-in reader may only act on their own address, whether or not
+    // they also passed one in the body.
+    if (emailFromRequest && emailFromRequest.toLowerCase() !== sessionEmail.toLowerCase()) {
+      return denied;
+    }
+    const [row] = await db
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.email, sessionEmail))
+      .limit(1);
+    return row ? { ok: true, subscription: row } : denied;
+  }
+
+  return denied;
+}
+
 function verifyMailerLiteSignature(rawBody: Buffer, signatureHeader: string): boolean {
   const secret = process.env.MAILERLITE_WEBHOOK_SECRET;
   if (!secret) {
@@ -281,17 +346,22 @@ export function registerSmartNewsletterRoutes(app: Express) {
     try {
       const { email } = req.params;
 
-      // Check local subscription
-      const [localSub] = await db
-        .select()
-        .from(newsletterSubscriptions)
-        .where(eq(newsletterSubscriptions.email, email))
-        .limit(1);
+      // This answered "is <email> subscribed?" for any address, which is a
+      // subscriber-enumeration oracle over the whole reader base. Require the
+      // same proof of ownership as unsubscribe/update.
+      const resolved = await resolveSubscriber(req, email);
+      if (!resolved.ok) {
+        return res.status(resolved.httpStatus).json({
+          success: false,
+          message: resolved.message,
+        });
+      }
+      const localSub = resolved.subscription;
 
-      // Check MailerLite status
+      // Check MailerLite status — for the resolved subscription's own address.
       let mailerliteSub = null;
       if (isMailerLiteConfigured()) {
-        const mlResult = await getMailerLiteSubscriber(email);
+        const mlResult = await getMailerLiteSubscriber(localSub.email);
         if (mlResult.success && mlResult.data) {
           mailerliteSub = {
             status: mlResult.data.status,
@@ -299,14 +369,6 @@ export function registerSmartNewsletterRoutes(app: Express) {
             fields: mlResult.data.fields,
           };
         }
-      }
-
-      if (!localSub && !mailerliteSub) {
-        return res.status(404).json({
-          success: false,
-          subscribed: false,
-          message: 'هذا البريد غير مشترك في النشرة الذكية',
-        });
       }
 
       res.json({
@@ -335,30 +397,20 @@ export function registerSmartNewsletterRoutes(app: Express) {
    */
   app.put('/api/smart-newsletter/update', async (req: any, res) => {
     try {
-      const { email, ...updates } = req.body;
-      
-      if (!email) {
-        return res.status(400).json({
+      const { email, token: _token, ...updates } = req.body;
+
+      // Same rule as unsubscribe: the address is not the credential.
+      const resolved = await resolveSubscriber(req, email);
+      if (!resolved.ok) {
+        return res.status(resolved.httpStatus).json({
           success: false,
-          message: 'البريد الإلكتروني مطلوب',
+          message: resolved.message,
         });
       }
+      const existing = resolved.subscription;
+      const subscriberEmail = existing.email;
 
       const data = updateSubscriptionSchema.parse(updates);
-
-      // Find local subscription
-      const [existing] = await db
-        .select()
-        .from(newsletterSubscriptions)
-        .where(eq(newsletterSubscriptions.email, email))
-        .limit(1);
-
-      if (!existing) {
-        return res.status(404).json({
-          success: false,
-          message: 'هذا البريد غير مشترك في النشرة',
-        });
-      }
 
       // Update local subscription
       const [updated] = await db
@@ -377,7 +429,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
       // Sync updates to MailerLite
       if (isMailerLiteConfigured()) {
-        const mlSub = await getMailerLiteSubscriber(email);
+        const mlSub = await getMailerLiteSubscriber(subscriberEmail);
         if (mlSub.success && mlSub.data) {
           await updateMailerLiteSubscriber(mlSub.data.id, {
             firstName: data.firstName,
@@ -414,35 +466,31 @@ export function registerSmartNewsletterRoutes(app: Express) {
     try {
       const { email, reason } = req.body;
 
-      if (!email) {
-        return res.status(400).json({
+      const resolved = await resolveSubscriber(req, email);
+      if (!resolved.ok) {
+        return res.status(resolved.httpStatus).json({
           success: false,
-          message: 'البريد الإلكتروني مطلوب',
+          message: resolved.message,
         });
       }
+      const existing = resolved.subscription;
+      // Everything downstream must act on the resolved row's address, never on
+      // the one the caller typed.
+      const subscriberEmail = existing.email;
 
-      // Update local subscription
-      const [existing] = await db
-        .select()
-        .from(newsletterSubscriptions)
-        .where(eq(newsletterSubscriptions.email, email))
-        .limit(1);
-
-      if (existing) {
-        await db
-          .update(newsletterSubscriptions)
-          .set({
-            status: 'unsubscribed',
-            unsubscribedAt: new Date(),
-            unsubscribeReason: reason || null,
-            updatedAt: new Date(),
-          })
-          .where(eq(newsletterSubscriptions.id, existing.id));
-      }
+      await db
+        .update(newsletterSubscriptions)
+        .set({
+          status: 'unsubscribed',
+          unsubscribedAt: new Date(),
+          unsubscribeReason: reason || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(newsletterSubscriptions.id, existing.id));
 
       // Unsubscribe from MailerLite
       if (isMailerLiteConfigured()) {
-        const mlSub = await getMailerLiteSubscriber(email);
+        const mlSub = await getMailerLiteSubscriber(subscriberEmail);
         if (mlSub.success && mlSub.data) {
           await unsubscribeFromMailerLite(mlSub.data.id);
         }
@@ -450,11 +498,11 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
       // Send unsubscribe confirmation email
       const unsubscribeResult = await sendNewsletterUnsubscribeEmail({
-        to: email,
+        to: subscriberEmail,
       });
-      
+
       if (!unsubscribeResult.success) {
-        console.warn(`⚠️ Unsubscribe email failed for ${email}:`, unsubscribeResult.error);
+        console.warn(`⚠️ Unsubscribe email failed for ${subscriberEmail}:`, unsubscribeResult.error);
       }
 
       res.json({

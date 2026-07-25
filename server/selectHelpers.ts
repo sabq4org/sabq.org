@@ -254,6 +254,31 @@ export const userPublicSelect = {
 } as const;
 
 /**
+ * Byline fields for a joined author/reporter, bound to a table or alias.
+ *
+ * SECURITY: a bare `db.select()` over a join that includes `users` returns the
+ * WHOLE row — `passwordHash`, `twoFactorSecret`, `twoFactorBackupCodes`,
+ * `phoneNumber`, `fcmToken`. Public article endpoints serialize that object
+ * straight to the client, so every join against `users` on a public surface
+ * must project through this helper. Takes the table so it also works for
+ * `aliasedTable(users, 'reporter')`.
+ *
+ * Excludes email deliberately: it is staff PII and was never needed for a
+ * byline — callers fall back to a generic label when no name is set.
+ */
+export function userBylineSelect(t: typeof users) {
+  return {
+    id: t.id,
+    firstName: t.firstName,
+    lastName: t.lastName,
+    firstNameEn: t.firstNameEn,
+    lastNameEn: t.lastNameEn,
+    profileImageUrl: t.profileImageUrl,
+    bio: t.bio,
+  } as const;
+}
+
+/**
  * Basic user fields with email
  * Used in: admin lists, user management
  */

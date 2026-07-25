@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { users } from "@shared/schema";
 import { isAuthenticated } from "../auth";
 import { logActivity } from "../rbac";
+import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 import { sendSMSOTP, verifySMSOTP } from "../twilio";
 import { generateSecret, generateQRCode, verifyToken, generateBackupCodes, verifyBackupCode } from "../twoFactor";
 
@@ -49,13 +50,41 @@ export function registerTwoFactorRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // Setup 2FA - Generate secret and QR code
-  app.get("/api/2fa/setup", isAuthenticated, async (req: any, res) => {
+  // POST, not GET, and password-gated — deliberately.
+  //
+  // This handler MUTATES: it overwrites twoFactorSecret and twoFactorBackupCodes.
+  // As a GET it was exempt from CSRF (SAFE_METHODS in server/csrf.ts), and in
+  // production the session cookie is SameSite=none (cross-subdomain frontend),
+  // so a page the victim merely visits could silently rotate their TOTP secret
+  // and backup codes — their authenticator app stops matching and they are
+  // locked out of their own account. Requiring the password matches the two
+  // sibling routes that already do (/2fa/disable, /2fa/backup-codes).
+  app.post("/api/2fa/setup", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      const { password } = req.body ?? {};
+
+      if (!password) {
+        return res.status(400).json({ message: "كلمة المرور مطلوبة" });
+      }
+
       const [user] = await db.select().from(users).where(eq(users.id, userId));
-      
+
       if (!user.email) {
         return res.status(400).json({ message: "البريد الإلكتروني مطلوب" });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash || "");
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "كلمة المرور غير صحيحة" });
+      }
+
+      // Re-enrolling an already-protected account silently invalidates the
+      // factor that is currently guarding it. Disable first, deliberately.
+      if (user.twoFactorEnabled) {
+        return res.status(409).json({
+          message: "المصادقة الثنائية مفعّلة بالفعل. عطّلها أولاً قبل إعادة الإعداد.",
+        });
       }
 
       // Generate new secret
@@ -216,6 +245,15 @@ export function registerTwoFactorRoutes(app: Express) {
         return res.status(400).json({ message: "المستخدم غير موجود أو المصادقة الثنائية غير مفعلة" });
       }
 
+      // Per-account lockout. `strictLimiter` above is keyed on getRealIp(),
+      // which reads attacker-supplied client-IP headers, so on its own it
+      // bounds nothing for someone who already has the password and is
+      // guessing the 6-digit code. The mobile /api/v1 twin already does this
+      // (audit #4, PR #1170); the web path was missed.
+      if (await isLockedOut(`2fa:${userId}`, 10)) {
+        return res.status(429).json({ message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+      }
+
       let isValid = false;
 
       // Try backup code first
@@ -250,8 +288,11 @@ export function registerTwoFactorRoutes(app: Express) {
       }).catch(() => { /* never block on log */ });
 
       if (!isValid) {
+        await recordFailure(`2fa:${userId}`);
         return res.status(400).json({ message: "الرمز غير صحيح" });
       }
+
+      await clearFailures(`2fa:${userId}`);
 
       // Log the user in
       req.login(user, (err: any) => {
@@ -381,12 +422,21 @@ export function registerTwoFactorRoutes(app: Express) {
         return res.status(400).json({ message: "رقم الجوال غير موجود" });
       }
 
+      // Same per-account bound as the TOTP path — an SMS OTP is just as
+      // guessable, and strictLimiter is keyed on a spoofable header.
+      if (await isLockedOut(`2fa:${userId}`, 10)) {
+        return res.status(429).json({ message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+      }
+
       // Verify SMS OTP
       const verification = await verifySMSOTP(user.phoneNumber, code);
 
       if (!verification.valid) {
+        await recordFailure(`2fa:${userId}`);
         return res.status(400).json({ message: verification.message });
       }
+
+      await clearFailures(`2fa:${userId}`);
 
       // Log the user in
       req.login(user, (err: any) => {

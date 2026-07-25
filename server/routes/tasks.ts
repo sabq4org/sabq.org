@@ -21,7 +21,9 @@ import {
   insertSubtaskSchema,
   insertTaskCommentSchema,
   insertTaskAttachmentSchema,
+  subtasks,
 } from "@shared/schema";
+import { pickTableColumns } from "../utils/sanitizeBody";
 
 const taskLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -438,9 +440,16 @@ export function registerTaskRoutes(app: Express) {
       // Validate PATCH body with partial schema
       const updateSchema = insertTaskSchema.partial();
       const validatedData = updateSchema.parse(req.body);
-      
+
       // Convert validated date strings to Date objects
       const processedBody: any = { ...validatedData };
+
+      // `createdById` was writable here: an assignee holding only
+      // tasks.edit_own could name themselves the creator, which is the
+      // ownership signal the delete route and this very check rely on.
+      // `completedAt` is stamped by the completion flow, not the client.
+      delete processedBody.createdById;
+      delete processedBody.completedAt;
       
       if (validatedData.dueDate) {
         const parsedDate = new Date(validatedData.dueDate as string);
@@ -647,7 +656,13 @@ export function registerTaskRoutes(app: Express) {
       // Store old subtask snapshot before update
       const oldSubtask = { ...subtask };
       
-      const updatedSubtask = await storage.updateSubtask(id, req.body);
+      // Raw req.body reached the UPDATE: `taskId` moved the subtask under a
+      // different (possibly unauthorised) parent task, escaping the ownership
+      // check above, and `completedById` forged who ticked it off.
+      const updates = pickTableColumns(subtasks, req.body, {
+        allow: ["title", "description", "isCompleted", "displayOrder"],
+      });
+      const updatedSubtask = await storage.updateSubtask(id, updates);
       
       // Log activity with before/after values
       await storage.logTaskActivity({
@@ -759,7 +774,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/comments - Get task comments
-  app.get("/api/tasks/:id/comments", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/comments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -775,7 +790,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/tasks/:id/comments - Create comment
-  app.post("/api/tasks/:id/comments", taskLimiter, requireAuth, async (req, res) => {
+  app.post("/api/tasks/:id/comments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -823,7 +838,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/task-comments/:id - Delete comment
-  app.delete("/api/task-comments/:id", taskLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/task-comments/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -860,7 +875,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/attachments - Get task attachments
-  app.get("/api/tasks/:id/attachments", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/attachments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -876,7 +891,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/tasks/:id/attachments - Upload attachment
-  app.post("/api/tasks/:id/attachments", taskLimiter, requireAuth, upload.single('file'), async (req, res) => {
+  app.post("/api/tasks/:id/attachments", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), upload.single('file'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -932,7 +947,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/task-attachments/:id - Delete attachment
-  app.delete("/api/task-attachments/:id", taskLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/task-attachments/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -969,7 +984,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/activity - Get task activity log
-  app.get("/api/tasks/:id/activity", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/activity", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id} = req.params;
       

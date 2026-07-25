@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCanonical } from "@/hooks/useCanonical";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import {
   Heart,
   Bookmark,
@@ -134,8 +134,8 @@ export default function EnglishArticleDetail() {
           text: article.excerpt || article.aiSummary || "",
           url: window.location.href,
         });
-      } catch (err) {
-        console.log("Share cancelled");
+      } catch {
+        // User dismissed the native share sheet — not an error.
       }
     } else {
       navigator.clipboard.writeText(window.location.href);
@@ -164,7 +164,7 @@ export default function EnglishArticleDetail() {
   // Track article view via POST request (works even when GET is cached by CDN)
   useEffect(() => {
     if (article?.id) {
-      fetch(`/api/en/articles/${article.id}/view`, { method: 'POST' }).catch(() => {});
+      fetch(apiUrl(`/api/en/articles/${article.id}/view`), { method: 'POST' }).catch(() => {});
     }
   }, [article?.id]);
 
@@ -262,7 +262,7 @@ export default function EnglishArticleDetail() {
                         ? `${article.author.firstNameEn} ${article.author.lastNameEn}`
                         : article.author.firstName && article.author.lastName
                           ? `${article.author.firstName} ${article.author.lastName}`
-                          : article.author.email}
+                          : "Sabq"}
                     </p>
                     <p className="text-xs">Reporter</p>
                   </div>
@@ -310,7 +310,7 @@ export default function EnglishArticleDetail() {
                   ? `${article.author.firstNameEn} ${article.author.lastNameEn}`
                   : article.author.firstName && article.author.lastName
                     ? `${article.author.firstName} ${article.author.lastName}`
-                    : article.author.email)
+                    : "Sabq")
                 : null}
               publishedAt={article.publishedAt}
               articleSlug={params.slug}

@@ -5,7 +5,8 @@ import { objectStorageClient } from "../objectStorage";
 import { nanoid } from "nanoid";
 import { twilioClient, sendWhatsAppMessage, sendWhatsAppMessageWithDetails, extractTokenFromMessage, removeTokenFromMessage, validateTwilioSignature, updateLastInboundTime, isWithin24HourWindow } from "../services/whatsapp";
 import { requireAuth, requireRole } from "../rbac";
-import { insertWhatsappTokenSchema, mediaFiles, articleMediaAssets } from "@shared/schema";
+import { insertWhatsappTokenSchema, mediaFiles, articleMediaAssets, whatsappTokens } from "@shared/schema";
+import { pickTableColumns } from "../utils/sanitizeBody";
 import crypto from "crypto";
 import { db } from "../db";
 import { addMessagePart, shouldForceProcess, AGGREGATION_WINDOW_SECONDS, processAggregatedMessage } from "../services/whatsappMessageAggregator";
@@ -1712,17 +1713,28 @@ router.post("/tokens", requireAuth, requireRole('admin', 'manager'), async (req:
 router.patch("/tokens/:id", requireAuth, requireRole('admin', 'manager'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
-    
-    console.log("[WhatsApp Agent] PATCH /tokens/:id - Received updates:", JSON.stringify(updates, null, 2));
-    
-    delete updates.token;
-    delete updates.usageCount;
-    delete updates.lastUsedAt;
-    delete updates.createdAt;
-    
-    console.log("[WhatsApp Agent] PATCH /tokens/:id - After cleanup:", JSON.stringify(updates, null, 2));
-    
+
+    // An allowlist, not a denylist: the previous `delete` calls covered four
+    // fields and let `userId` through, so a token could be re-pointed at
+    // another account while keeping its privilege flags.
+    const updates = pickTableColumns(whatsappTokens, req.body, {
+      allow: [
+        "label",
+        "phoneNumber",
+        "autoPublish",
+        "allowedLanguages",
+        "isActive",
+        "isAdmin",
+        "canDeleteAny",
+        "canArchiveAny",
+        "canEditAny",
+        "canMarkBreaking",
+        "expiresAt",
+      ],
+    });
+
+    console.log("[WhatsApp Agent] PATCH /tokens/:id - Allowed updates:", JSON.stringify(updates, null, 2));
+
     const updated = await storage.updateWhatsappToken(id, updates);
     
     console.log("[WhatsApp Agent] PATCH /tokens/:id - Updated token:", JSON.stringify(updated, null, 2));

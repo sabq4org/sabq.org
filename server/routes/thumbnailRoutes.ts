@@ -13,6 +13,7 @@ import {
   regenerateFocalPointThumbnails
 } from "../services/thumbnailService";
 import { generateArticleSmartThumbnail } from "../services/aiSmartThumbnailService";
+import { authorizeArticleWrite } from "../services/articleAccessService";
 
 const router = Router();
 
@@ -24,11 +25,22 @@ const router = Router();
 router.post("/generate", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const { articleId, imageUrl, method = 'crop', style, title, excerpt } = req.body;
-    
+
     if (!imageUrl) {
       return res.status(400).json({
         error: "imageUrl is required"
       });
+    }
+
+    // isAuthenticated alone let any logged-in reader point this at any article
+    // and overwrite its thumbnail (and the AI-thumbnail metadata) with an
+    // arbitrary image URL. `articleId` is optional here — an unsaved draft
+    // generates a thumbnail without touching a row — so only check when set.
+    if (articleId) {
+      const access = await authorizeArticleWrite((req.user as any).id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ error: access.message });
+      }
     }
     
     // Validate method
@@ -98,13 +110,21 @@ router.post("/generate", isAuthenticated, async (req: Request, res: Response) =>
 router.post("/generate-responsive", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const { articleId, imageUrl } = req.body;
-    
+
     if (!imageUrl) {
       return res.status(400).json({
         error: "imageUrl is required"
       });
     }
-    
+
+    // Same gap as /generate — this one persists onto the article too.
+    if (articleId) {
+      const access = await authorizeArticleWrite((req.user as any).id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ error: access.message });
+      }
+    }
+
     console.log(`[Thumbnail API] Generating responsive thumbnails`);
     
     const thumbnails = await generateResponsiveThumbnails(imageUrl, articleId);

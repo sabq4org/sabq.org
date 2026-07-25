@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCanonical } from "@/hooks/useCanonical";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import {
   Heart,
   Bookmark,
@@ -134,8 +134,8 @@ export default function UrduArticleDetail() {
           text: article.excerpt || article.aiSummary || "",
           url: window.location.href,
         });
-      } catch (err) {
-        console.log("Share cancelled");
+      } catch {
+        // User dismissed the native share sheet — not an error.
       }
     } else {
       navigator.clipboard.writeText(window.location.href);
@@ -149,7 +149,7 @@ export default function UrduArticleDetail() {
   // Track article view via POST request (works even when GET is cached by CDN)
   useEffect(() => {
     if (article?.id) {
-      fetch(`/api/ur/articles/${article.id}/view`, { method: 'POST' }).catch(() => {});
+      fetch(apiUrl(`/api/ur/articles/${article.id}/view`), { method: 'POST' }).catch(() => {});
     }
   }, [article?.id]);
 
@@ -257,7 +257,7 @@ export default function UrduArticleDetail() {
                     <p className="font-medium text-foreground" data-testid="text-author-name">
                       {article.author.firstName && article.author.lastName
                         ? `${article.author.firstName} ${article.author.lastName}`
-                        : article.author.email}
+                        : "سبق"}
                     </p>
                     <p className="text-xs">رپورٹر</p>
                   </div>
@@ -454,7 +454,7 @@ export default function UrduArticleDetail() {
               authorName={article.author
                 ? (article.author.firstName && article.author.lastName
                   ? `${article.author.firstName} ${article.author.lastName}`
-                  : article.author.email)
+                  : "سبق")
                 : null}
               publishedAt={article.publishedAt}
               articleSlug={params.slug}

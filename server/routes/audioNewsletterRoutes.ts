@@ -266,7 +266,7 @@ router.get('/public/:id', async (req, res) => {
 });
 
 // Get all newsletters with pagination and filters
-router.get('/newsletters', rbacRequireAuth, async (req, res) => {
+router.get('/newsletters', requirePermission("audio_newsletters.view"), async (req, res) => {
   try {
     const {
       page = '1',
@@ -374,7 +374,7 @@ router.get('/newsletters', rbacRequireAuth, async (req, res) => {
 });
 
 // Get single newsletter with full details
-router.get('/newsletters/:id', rbacRequireAuth, async (req, res) => {
+router.get('/newsletters/:id', requirePermission("audio_newsletters.view"), async (req, res) => {
   try {
     const newsletter = await db.query.audioNewsletters.findFirst({
       where: eq(audioNewsletters.id, req.params.id),
@@ -510,7 +510,7 @@ router.post('/newsletters', requirePermission("audio_newsletters.create"), async
 });
 
 // Update newsletter
-router.patch('/newsletters/:id', requirePermission("articles.create"), async (req, res) => {
+router.patch('/newsletters/:id', requirePermission("audio_newsletters.create"), async (req, res) => {
   try {
     const validatedData = updateNewsletterSchema.parse(req.body);
 
@@ -566,7 +566,7 @@ router.patch('/newsletters/:id', requirePermission("articles.create"), async (re
 });
 
 // Delete newsletter
-router.delete('/newsletters/:id', requirePermission("articles.create"), async (req, res) => {
+router.delete('/newsletters/:id', requirePermission("audio_newsletters.delete"), async (req, res) => {
   try {
     await db
       .delete(audioNewsletters)
@@ -646,7 +646,7 @@ router.get('/jobs/:jobId', rbacRequireAuth, async (req, res) => {
 });
 
 // Cancel job
-router.post('/jobs/:jobId/cancel', requirePermission("articles.create"), async (req, res) => {
+router.post('/jobs/:jobId/cancel', requirePermission("audio_newsletters.create"), async (req, res) => {
   const cancelled = await audioNewsletterService.cancelJob(req.params.jobId);
   
   if (!cancelled) {
@@ -657,7 +657,7 @@ router.post('/jobs/:jobId/cancel', requirePermission("articles.create"), async (
 });
 
 // Get all active jobs
-router.get('/jobs', requirePermission("articles.create"), async (req, res) => {
+router.get('/jobs', requirePermission("audio_newsletters.view"), async (req, res) => {
   const jobs = audioNewsletterService.getActiveJobs();
   
   res.json({

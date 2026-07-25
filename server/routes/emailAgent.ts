@@ -495,7 +495,16 @@ setInterval(cleanupProcessedEmails, 5 * 60 * 1000);
 function verifyInboundWebhookSecret(req: Request): { ok: boolean; reason?: string } {
   const inboundSecret = process.env.SENDGRID_INBOUND_SECRET;
   if (!inboundSecret) {
-    console.warn("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — webhook is unauthenticated. Set this env var to enable shared-secret validation.");
+    // The backward-compatibility window above is now closed in production:
+    // failing OPEN here meant an unauthenticated endpoint that accepts file
+    // uploads, writes to the database and spends GPT-4o Vision credit, gated
+    // on nothing but URL obscurity. Outside production the permissive path
+    // stays so local and preview runs don't need the secret.
+    if (process.env.NODE_ENV === "production") {
+      console.error("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — rejecting inbound webhook. Set this env var on the backend.");
+      return { ok: false, reason: "webhook secret not configured" };
+    }
+    console.warn("[Email Agent] SENDGRID_INBOUND_SECRET not set — accepting unauthenticated webhook (non-production only).");
     return { ok: true };
   }
   const provided = String(req.query.token || req.get("x-webhook-token") || "");

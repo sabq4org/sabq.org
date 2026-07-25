@@ -13,6 +13,7 @@ import {
 } from "../rbac";
 import { generateCalendarEventIdeas, generateArticleDraft } from "../services/calendarAi";
 import { createNotification } from "../notificationEngine";
+import { authorizeAssignmentWrite } from "../services/calendarAssignmentService";
 import {
   insertCalendarEventSchema,
   updateCalendarEventSchema,
@@ -399,7 +400,14 @@ export function registerCalendarRoutes(app: Express) {
     try {
       const { id } = req.params;
       const userId = req.user!.id;
-      
+
+      // requireAuth alone let any account — including a self-registered public
+      // reader — retarget any newsroom coverage assignment.
+      const access = await authorizeAssignmentWrite(userId, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const validatedData = updateCalendarAssignmentSchema.parse(req.body);
       const updated = await storage.updateCalendarAssignment(id, validatedData as any);
 
@@ -428,6 +436,12 @@ export function registerCalendarRoutes(app: Express) {
     try {
       const { id } = req.params;
       const userId = req.user!.id;
+
+      // Same gap as the PATCH sibling: anyone could close out anyone's coverage.
+      const access = await authorizeAssignmentWrite(userId, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
 
       const updated = await storage.completeCalendarAssignment(id);
 

@@ -12,6 +12,10 @@ import {
   verifyImageMagicBytes,
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
+import { isSafeRedirectUrl } from "./utils/safeRedirect";
+import { toPublicUser } from "./utils/publicUser";
+import { denyPublish } from "./services/publishGate";
+import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
@@ -24,7 +28,7 @@ import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
 } from "./services/articleAnalyticsSearchService";
-import { pickTableColumns } from "./utils/sanitizeBody";
+import { pickTableColumns, ARTICLE_SERVER_OWNED_COLUMNS } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache, invalidateAllUserSessions } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
@@ -125,7 +129,7 @@ import { bestEffortWithin } from "./utils/bestEffortDeadline";
 import { getOrBuildSitemapXml } from "./services/sitemapCacheService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
-import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
+import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
@@ -287,6 +291,8 @@ import {
   smartTerms,
   articleSmartLinks,
   enArticles,
+  deepAnalyses,
+  userPreferences,
   enCategories,
   enComments,
   enReactions,
@@ -947,6 +953,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const result = await findOrCreatePhoneUser(e164);
       if (!result.ok) return res.status(result.status).json({ message: result.message });
 
+      // SECURITY: honour 2FA here exactly as /api/login does. Passing the OTP
+      // proves control of the phone number, not of the second factor — without
+      // this branch, an account protected by TOTP could be entered with the
+      // phone step alone, which is a complete 2FA bypass for anyone who can
+      // receive that number's SMS.
+      if ((result.user as any).twoFactorEnabled) {
+        (req.session as any).pending2FAUserId = result.user.id;
+        return req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("❌ phone login session save error:", saveErr);
+            return res.status(500).json({ message: "خطأ في حفظ الجلسة" });
+          }
+          return res.json({
+            requires2FA: true,
+            message: "يرجى إدخال رمز التحقق بخطوتين",
+          });
+        });
+      }
+
       // جلسة كوكيز عبر Passport (نفس نمط /api/register).
       req.logIn(result.user as any, (err) => {
         if (err) {
@@ -1447,8 +1472,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.error("[auth/user] resolvePublisherForUser failed:", err);
       }
 
-      // SECURITY: Never send passwordHash to client
-      const { passwordHash, twoFactorSecret, ...safeUser } = user;
+      // SECURITY: never send credential columns to a client. This used to
+      // strip only passwordHash + twoFactorSecret by hand and shipped
+      // twoFactorBackupCodes and fcmToken; toPublicUser covers all four and is
+      // drift-tested against the schema.
+      const safeUser = toPublicUser(user);
       const payload = {
         ...safeUser,
         role,
@@ -1497,7 +1525,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const user = await storage.updateUser(userId, data);
       memoryCache.delete(`auth-user:${userId}`);
-      res.json(user);
+      // toPublicUser: storage.updateUser returns the raw row (bare .returning()).
+      res.json(toPublicUser(user));
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ message: "فشل في تحديث البيانات" });
@@ -1562,7 +1591,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json({ 
         success: true,
         profileImageUrl: objectPath,
-        user
+        user: toPublicUser(user)
       });
     } catch (error) {
       console.error("Error updating profile image:", error);
@@ -3152,7 +3181,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json({ 
         success: true,
         profileImageUrl: publicUrl,
-        user
+        user: toPublicUser(user)
       });
     } catch (error: any) {
       console.error("Error uploading avatar:", error);
@@ -7299,23 +7328,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
       }
-      // Check publish permission if status is "published"
-      if (parsed.data.status === 'published') {
-        // Publisher-agency accounts have a publishing window (publishers.
-        // publishing_ends_at); once it passes, publishing is blocked even
-        // though the role/permission still allows it.
-        const gate = await getPublishingGate(req.user.id);
-        if (gate.publisher && !gate.allowed) {
-          return res.status(403).json({ message: gate.message, code: gate.code });
-        }
-
-        const userPermissions = await getUserPermissions(req.user.id);
-        // الناشر الموثوق (auto_publish) ينشر من المحرر الأساسي دون
-        // articles.publish العامة — بوابته المفتوحة هي التفويض
-        const canPublish = userPermissions.includes("articles.publish")
-          || (gate.allowed && gate.publisher?.autoPublish === true);
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
+      // Publishing gate — covers "scheduled" as well as "published", plus the
+      // publisher publishing-window check. See server/services/publishGate.ts.
+      {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -7812,11 +7830,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // If status is being changed to published, check publish permission
-      if (parsed.data.status === "published" && existingArticle.status !== "published") {
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles" });
+      // Any move into a publishing status: "scheduled" counts, since the
+      // scheduler promotes it with no check of its own. See publishGate.ts.
+      if (parsed.data.status !== existingArticle.status) {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -13111,6 +13130,21 @@ Respond in valid JSON format only:
       if (!article) {
         return res.status(404).json({ message: "المقال غير موجود" });
       }
+
+      // `isAuthenticated` alone made this a read-any-article endpoint: a
+      // self-registered reader could pull drafts, scheduled/embargoed pieces
+      // and retracted articles in full by id. Published articles stay open
+      // (they're public anyway); anything else needs desk access or ownership.
+      if (article.status !== "published") {
+        const permissions = await getUserPermissions(userId);
+        const canSeeUnpublished =
+          permissions.includes("articles.view") ||
+          (await authorizeArticleWrite(userId, articleId, permissions)).ok;
+        if (!canSeeUnpublished) {
+          return res.status(403).json({ message: "غير مصرح لك بمعاينة هذا المقال" });
+        }
+      }
+
       res.json({ ...article, isPreview: true });
     } catch (error) {
       console.error("Error fetching article preview:", error);
@@ -14078,7 +14112,13 @@ Respond in valid JSON format only:
   app.post("/api/articles/:id/analyze-seo", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const articleId = req.params.id;
-      
+
+      // articles.edit_own with no ownership check behaved as edit_any.
+      const access = await authorizeArticleWrite(req.user.id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const [article] = await db
         .select()
         .from(articles)
@@ -14526,6 +14566,12 @@ Respond in valid JSON format only:
           });
         }
         
+        // The permission gate above is article-agnostic.
+        const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
+
         const dataToUpdate = {
           ...parsed.data,
           altText: parsed.data.altText || "صورة الخبر",
@@ -14557,6 +14603,12 @@ Respond in valid JSON format only:
     async (req: any, res) => {
     try {
         const { id } = req.params;
+
+        // `media.delete` is not article-scoped; edit_any short-circuits.
+        const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
 
         // Look up asset BEFORE deleting so we can purge the right article URLs.
         const existing = await storage.getArticleMediaAssetById(id);
@@ -15099,11 +15151,11 @@ Respond in valid JSON format only:
         }
       }
 
-      // If status is being changed to published, check publish permission
-      if (parsed.data.status === "published" && existingArticle.status !== "published") {
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles" });
+      // "scheduled" counts as publishing — see publishGate.ts.
+      if (parsed.data.status !== existingArticle.status) {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -16108,6 +16160,13 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Invalid article data", errors: parsed.error });
       }
 
+      // The role check above admits `reporter` and `status` comes from the
+      // body; the scheduledAt check earlier doesn't cover status="scheduled".
+      const denial = await denyPublish(userId, parsed.data.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+      }
+
       const article = await storage.createArticle(parsed.data);
 
       // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
@@ -16331,12 +16390,22 @@ Respond in valid JSON format only:
       // Mass-assignment guard: restrict to real article columns (drops
       // unknown keys + id/createdAt/updatedAt). `republish` is a control flag,
       // not a column, so it's read from req.body directly.
-      const articleData: any = pickTableColumns(articles, req.body);
-      
+      const articleData: any = pickTableColumns(articles, req.body, {
+        omit: ARTICLE_SERVER_OWNED_COLUMNS,
+      });
+
       // Remove republish flag from data (it's only for control logic)
       const shouldRepublish = req.body.republish === true;
       delete articleData.republish;
-      
+
+      // Legacy path had no publish gate at all.
+      if (articleData.status && articleData.status !== article.status) {
+        const denial = await denyPublish(userId, articleData.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        }
+      }
+
       // Handle publishedAt timestamp logic
       if (shouldRepublish) {
         // Explicitly requested to update publish time
@@ -18387,7 +18456,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.put("/api/user/preferences", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const updatedPrefs = await storage.updateUserFullPreferences(userId, req.body);
+      // WHERE is bound to the session user, but `...prefs` carried `userId`
+      // from the body into the SET, re-pointing the row at another account.
+      const prefs = pickTableColumns(userPreferences, req.body, { omit: ["userId"] });
+      const updatedPrefs = await storage.updateUserFullPreferences(userId, prefs);
       res.json(updatedPrefs);
     } catch (error) {
       console.error("Error updating user preferences:", error);
@@ -21725,6 +21797,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const { id } = req.params;
 
+      // articles.ai_generate says nothing about WHICH article.
+      const access = await authorizeArticleWrite(req.user.id, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       // Get article
       const [article] = await db
         .select()
@@ -21917,6 +21995,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (validated.mode === "saved") {
         // Existing flow: generate SEO for saved article
         const { articleId, language } = validated;
+
+        // articles.ai_generate is not article-scoped.
+        const access = await authorizeArticleWrite(req.user.id, articleId);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
 
         // Fetch article using storage method
         const article = await storage.getArticleForSeo(articleId, language);
@@ -22881,10 +22965,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/audio-newsletters - List published newsletters (public)
   app.get("/api/audio-newsletters", async (req: any, res) => {
     try {
-      const { status = 'published', limit = 20, offset = 0 } = req.query;
+      const { limit = 20, offset = 0 } = req.query;
 
+      // SECURITY: `status` is not read from the query. It used to be, with
+      // "published" as a mere default, so `?status=draft` on this
+      // unauthenticated endpoint listed unpublished newsletters. Staff listing
+      // lives at GET /api/audio-newsletters/newsletters, behind a permission.
       const newsletters = await storage.getAllAudioNewsletters({
-        status: status as string,
+        status: 'published',
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
       });
@@ -26556,7 +26644,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/entity-types - إنشاء نوع كيان جديد
-  app.post("/api/entity-types", requireAuth, async (req: any, res) => {
+  app.post("/api/entity-types", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertEntityTypeSchema.safeParse(req.body);
       if (!result.success) {
@@ -26600,7 +26688,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-entities - إنشاء كيان جديد
-  app.post("/api/smart-entities", requireAuth, async (req: any, res) => {
+  app.post("/api/smart-entities", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertSmartEntitySchema.safeParse(req.body);
       if (!result.success) {
@@ -26627,7 +26715,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // PATCH /api/smart-entities/:id - تحديث كيان
-  app.patch("/api/smart-entities/:id", requireAuth, async (req: any, res) => {
+  app.patch("/api/smart-entities/:id", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const { id } = req.params;
       const entity = await storage.updateSmartEntity(id, req.body);
@@ -26650,7 +26738,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/smart-entities/:id - حذف كيان
-  app.delete("/api/smart-entities/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/smart-entities/:id", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const { id } = req.params;
       await storage.deleteSmartEntity(id);
@@ -26689,7 +26777,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-terms - إنشاء مصطلح جديد
-  app.post("/api/smart-terms", requireAuth, async (req: any, res) => {
+  app.post("/api/smart-terms", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertSmartTermSchema.safeParse(req.body);
       if (!result.success) {
@@ -26829,7 +26917,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-entities/upload-image - رفع صورة كيان
-  app.post("/api/smart-entities/upload-image", requireAuth, upload.single('image'), async (req: any, res) => {
+  app.post("/api/smart-entities/upload-image", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), upload.single('image'), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "الصورة مطلوبة" });
@@ -27601,7 +27689,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -27772,13 +27860,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET English Articles (with filters)
   app.get("/api/en/articles", async (req, res) => {
     try {
-      const { categoryId, status = "published", limit = 20, offset = 0 } = req.query;
-      
-      // Build conditions array
-      const conditions: any[] = [];
-      if (status) {
-        conditions.push(eq(enArticles.status, status as string));
-      }
+      const { categoryId, limit = 20, offset = 0 } = req.query;
+
+      // SECURITY: `status` is NOT taken from the query here.
+      // It used to be (`status = "published"` was only a default), so
+      // `?status=draft` on this unauthenticated endpoint dumped unpublished
+      // drafts and embargoed pieces. The staff-facing listing that legitimately
+      // filters by status is GET /api/en/dashboard/articles, which is behind
+      // requireAuth + requirePermission("articles.view").
+      const conditions: any[] = [eq(enArticles.status, "published")];
       if (categoryId) {
         conditions.push(eq(enArticles.categoryId, categoryId as string));
       }
@@ -27837,7 +27927,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — this is a public listing and the
+            // author is a staff member. The byline needs a name, not an address.
             firstName: displayAuthor.firstNameEn || displayAuthor.firstName,
             lastName: displayAuthor.lastNameEn || displayAuthor.lastName,
             firstNameEn: displayAuthor.firstNameEn,
@@ -28037,8 +28128,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const baseCacheKey = `en:article:base:${slug}`;
       const baseData = await withCache(baseCacheKey, CACHE_TTL.SHORT, async () => {
         const reporterAlias = aliasedTable(users, 'reporter');
+        // Project the joined author/reporter explicitly — a bare .select()
+        // returns the whole `users` row (passwordHash, twoFactorSecret,
+        // twoFactorBackupCodes) and this endpoint is public.
         const results = await db
-          .select()
+          .select({
+            en_articles: enArticles,
+            en_categories: enCategories,
+            users: userBylineSelect(users),
+            reporter: userBylineSelect(reporterAlias),
+          })
           .from(enArticles)
           .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
           .leftJoin(users, eq(enArticles.authorId, users.id))
@@ -28056,8 +28155,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return {
           article: art,
           category: r.en_categories,
-          authorData: r.users,
-          reporterData: r.reporter,
+          // A column-object projection over a leftJoin yields {id:null,…}
+          // instead of null when the join misses, so collapse it — otherwise
+          // an empty reporter would win over a real author below.
+          authorData: r.users?.id ? r.users : null,
+          reporterData: r.reporter?.id ? r.reporter : null,
           reactionsCount: Number(reactionsCountResult[0].count),
           commentsCount: Number(commentsCountResult[0].count),
         };
@@ -28403,7 +28505,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
     try {
       const validatedData = insertEnArticleSchema.parse(req.body);
-      
+
+      // The role list admits `reporter`/`opinion_author` but says nothing
+      // about publishing.
+      const denial = await denyPublish(user.id, validatedData.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+      }
+
       // Set published_at if status is published
       const articleData = {
         ...validatedData,
@@ -28458,8 +28567,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
       }
 
+      // No publish gate existed here.
+      if (req.body.status && req.body.status !== existing[0].status) {
+        const denial = await denyPublish(user.id, req.body.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        }
+      }
+
       const updateData: any = {
-        ...pickTableColumns(enArticles, req.body),
+        // Without the omit list this accepted every enArticles column: `views`
+        // (ranking inflation), `authorId` (byline theft), `reviewStatus`
+        // (forged editorial approval), `publishedAt`.
+        ...pickTableColumns(enArticles, req.body, {
+          omit: [...ARTICLE_SERVER_OWNED_COLUMNS, "publishedAt"],
+        }),
         updatedAt: new Date(),
       };
 
@@ -29045,12 +29167,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Get Urdu articles (published)
   app.get("/api/ur/articles", async (req, res) => {
     try {
-      const { categoryId, status = "published", limit = 20, offset = 0 } = req.query;
-      
-      const conditions: any[] = [];
-      if (status) {
-        conditions.push(eq(urArticles.status, status as string));
-      }
+      const { categoryId, limit = 20, offset = 0 } = req.query;
+
+      // Same as the English twin: `status` is never taken from the query on
+      // this public listing. Staff filtering lives on
+      // GET /api/ur/dashboard/articles (requireAuth + articles.view).
+      const conditions: any[] = [eq(urArticles.status, "published")];
       if (categoryId) {
         conditions.push(eq(urArticles.categoryId, categoryId as string));
       }
@@ -29104,7 +29226,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -29130,16 +29252,24 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // Create alias for reporter
       const reporterAlias = aliasedTable(users, 'reporter');
 
-      // Get article with category, author, and reporter joins
+      // Get article with category, author, and reporter joins.
+      // Author/reporter are projected explicitly: a bare .select() returns the
+      // whole `users` row (passwordHash, twoFactorSecret, twoFactorBackupCodes)
+      // and this endpoint is public.
       const results = await db
-        .select()
+        .select({
+          ur_articles: urArticles,
+          ur_categories: urCategories,
+          users: userBylineSelect(users),
+          reporter: userBylineSelect(reporterAlias),
+        })
         .from(urArticles)
         .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
         .leftJoin(users, eq(urArticles.authorId, users.id))
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(eq(urArticles.slug, req.params.slug))
         .limit(1);
-      
+
       if (!results || results.length === 0) {
         return res.status(404).json({ message: "Article not found" });
       }
@@ -29148,8 +29278,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const result: any = results[0];
       const article = result.ur_articles;
       const category = result.ur_categories;
-      const authorData = result.users;
-      const reporterData = result.reporter;
+      // A column-object projection over a leftJoin yields {id:null,…} instead
+      // of null when the join misses — collapse it so an empty reporter can't
+      // win over a real author.
+      const authorData = result.users?.id ? result.users : null;
+      const reporterData = result.reporter?.id ? result.reporter : null;
 
       // Run all queries in parallel for better performance
       const [
@@ -29269,8 +29402,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .select({
           article: urArticles,
           category: urCategories,
-          author: users,
-          reporter: reporterAlias,
+          // Byline columns only — `author: users` would ship the whole row
+          // (passwordHash, twoFactorSecret) for up to five staff per call.
+          author: userBylineSelect(users),
+          reporter: userBylineSelect(reporterAlias),
         })
         .from(urArticles)
         .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
@@ -29283,7 +29418,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const related = results.map((r) => ({
         ...r.article,
         category: r.category || undefined,
-        author: r.reporter || r.author || undefined,
+        // ?.id — a column-object projection over a leftJoin yields {id:null,…}
+        // rather than null, so an empty reporter would shadow a real author.
+        author: (r.reporter?.id ? r.reporter : null) || (r.author?.id ? r.author : null) || undefined,
       }));
 
       res.json(related);
@@ -29445,7 +29582,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -29545,7 +29682,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -30092,15 +30229,13 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       if (existingArticle) {
         return res.status(409).json({ message: "Article slug already exists" });
-      // Check publish permission if status is "published"
-      if (parsed.data?.status === 'published') {
-        const userPermissions = await getUserPermissions(req.user.id);
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
-        }
       }
 
+      // The old check sat INSIDE the block above, after its unconditional
+      // `return` — dead code that never ran once.
+      const denial = await denyPublish(userId, parsed.data.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
       }
 
       const [article] = await db
@@ -30177,6 +30312,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
         if (existingArticle && existingArticle.id !== articleId) {
           return res.status(409).json({ message: "Article slug already exists" });
+        }
+      }
+
+      // No publish gate existed here.
+      if (parsed.data.status && parsed.data.status !== oldArticle.status) {
+        const denial = await denyPublish(userId, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -30729,7 +30872,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.post("/api/shortlinks", shortLinksLimiter, async (req: any, res) => {
     try {
       const validatedData = insertShortLinkSchema.parse(req.body);
-      
+
+      // Unauthenticated + CSRF-exempt, and GET /s/:code renders the target
+      // into an <a href> on sabq.org. `z.string().url()` accepts any scheme.
+      if (!isSafeRedirectUrl(validatedData.originalUrl)) {
+        return res.status(400).json({
+          message: "الرابط غير مسموح — يجب أن يكون رابط http(s) على نطاق سبق",
+        });
+      }
+
       if (validatedData.articleId) {
         const existingLink = await storage.getShortLinkByArticle(validatedData.articleId);
         if (existingLink) {
@@ -30806,6 +30957,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(410).send("انتهت صلاحية هذا الرابط");
       }
 
+      // Also at the sink: rows planted before the check above still exist.
+      if (!isSafeRedirectUrl(shortLink.originalUrl)) {
+        console.warn(`[shortlinks] blocked unsafe destination on /s/${code}: ${shortLink.originalUrl}`);
+        return res.status(410).send("هذا الرابط غير صالح");
+      }
+
       const clickData: InsertShortLinkClick = {
         shortLinkId: shortLink.id,
         ipAddress: req.ip,
@@ -30868,9 +31025,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const safeRedirectUrl = escapeHtml(redirectUrl);
 
       // For crawlers: serve meta tags without redirect; for browsers: instant redirect
+      // JSON.stringify for the JS string: `&quot;` is never decoded inside
+      // <script>, so HTML escaping there corrupts without encoding.
       const redirectMeta = isCrawler ? '' : `
   <meta http-equiv="refresh" content="0;url=${safeRedirectUrl}">
-  <script>window.location.href="${safeRedirectUrl}";</script>`;
+  <script>window.location.href=${JSON.stringify(redirectUrl)};</script>`;
 
       const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -31013,12 +31172,34 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get Deep Analysis by ID
-  app.get("/api/deep-analysis/:id", requireAuth, async (req, res) => {
+  // Desk access for the editorial deep-analysis surfaces. The public,
+  // published-only view is /api/omq; these two routes are the newsroom's.
+  const ANALYSIS_DESK_PERMISSIONS = ["articles.view", "articles.edit_any", "articles.publish"];
+
+  async function hasAnalysisDeskAccess(userId?: string): Promise<boolean> {
+    if (!userId) return false;
+    const permissions = await getUserPermissions(userId);
+    return ANALYSIS_DESK_PERMISSIONS.some((p) => permissions.includes(p));
+  }
+
+  async function canSeeUnpublishedAnalysis(userId: string | undefined, analysis: any): Promise<boolean> {
+    if (!userId) return false;
+    if (analysis?.createdBy === userId) return true;
+    return hasAnalysisDeskAccess(userId);
+  }
+
+  app.get("/api/deep-analysis/:id", requireAuth, async (req: any, res) => {
     try {
       const analysis = await storage.getDeepAnalysis(req.params.id);
       
       if (!analysis) {
         return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // requireAuth alone let any self-registered reader read unpublished
+      // analyses by id. The published ones are already public via /api/omq.
+      if (analysis.status !== 'published' && !(await canSeeUnpublishedAnalysis(req.user?.id, analysis))) {
+        return res.status(403).json({ error: 'غير مصرح لك بعرض هذا التحليل' });
       }
 
       res.json(analysis);
@@ -31031,13 +31212,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // List Deep Analyses
-  app.get("/api/deep-analysis", requireAuth, async (req, res) => {
+  app.get("/api/deep-analysis", requireAuth, async (req: any, res) => {
     try {
       const { createdBy, status, categoryId, limit, offset } = req.query;
-      
+
+      // Same gap on the listing: `status` came straight from the query with no
+      // default, so `?status=draft` enumerated every unpublished analysis.
+      // Non-editorial callers are pinned to published.
+      const isEditorial = await hasAnalysisDeskAccess(req.user?.id);
+      const effectiveStatus = isEditorial ? (status as string | undefined) : 'published';
+
       const result = await storage.listDeepAnalyses({
         createdBy: createdBy as string | undefined,
-        status: status as string | undefined,
+        status: effectiveStatus,
         categoryId: categoryId as string | undefined,
         limit: limit ? parseInt(limit as string) : 20,
         offset: offset ? parseInt(offset as string) : 0,
@@ -31135,7 +31322,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(403).json({ error: 'Not authorized to update this analysis' });
       }
 
-      const updated = await storage.updateDeepAnalysis(req.params.id, req.body);
+      // Anyone can create an analysis to own, so the ownership check above
+      // is not a publishing authorisation.
+      if (req.body?.status && req.body.status !== analysis.status) {
+        const denial = await denyPublish((req.user as any).id, req.body.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ error: denial.message, code: denial.code });
+        }
+      }
+
+      // Raw req.body reached the UPDATE: `createdBy` was client-settable.
+      const updates = pickTableColumns(deepAnalyses, req.body, {
+        omit: ["createdBy", "generationTime"],
+      });
+
+      const updated = await storage.updateDeepAnalysis(req.params.id, updates);
       res.json(updated);
     } catch (error: any) {
       console.error('Error updating deep analysis:', error);
@@ -34746,7 +34947,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
         subject: z.enum(["استفسار عام", "شراكات إعلامية", "شكوى", "اقتراح", "أخرى"]),
         message: z.string().min(10),
         
-        attachments: z.array(z.object({ name: z.string(), size: z.number(), type: z.string(), url: z.string() })).optional().default([]),
+        // `url` must be exactly what POST /api/contact/upload returns — a
+        // relative path under the contact-attachments prefix. It was a free
+        // `z.string()`, and the dashboard renders it as a raw href
+        // (client/src/pages/ContactMessageDetail.tsx), so an anonymous
+        // submitter could plant `javascript:…` and have it run in an admin's
+        // session, or point the "attachment" at any external host.
+        attachments: z.array(z.object({
+          name: z.string().max(300),
+          size: z.number(),
+          type: z.string().max(150),
+          url: z.string().regex(
+            /^\/public-objects\/contact-attachments\/[A-Za-z0-9._-]+$/,
+            "مسار مرفق غير صالح",
+          ),
+        })).max(10).optional().default([]),
       });
 
       const validatedData = contactSchema.parse(req.body);
@@ -34765,8 +34980,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       // إرسال نسخة من الرسالة إلى بريد الصحيفة
       try {
+        // `att.name` is the submitter's original filename — escape it before it
+        // goes into outbound HTML from the sabq.org domain.
+        const escapeHtmlText = (s: string) => String(s)
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
         const attachmentsList = validatedData.attachments.length > 0
-          ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${att.url}">${att.name}</a></li>`).join("")}</ul></div>`
+          ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${escapeHtmlText(att.url)}">${escapeHtmlText(att.name)}</a></li>`).join("")}</ul></div>`
           : "";
 
         const { sendEmailNotification } = await import("./services/email");
