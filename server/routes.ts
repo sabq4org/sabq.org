@@ -26967,8 +26967,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/sitemap.xml", async (_req, res) => {
     try {
       const baseUrl = "https://sabq.org";
-      // ذاكرة ← Redis ← توليد (getOrBuildSitemapXml) — طبقة Redis تنجو من
-      // النشرات وتُشارك بين النسخ؛ بدونها كل إقلاع يعيد التوليد من القاعدة.
+      // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
+      // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
       const indexXml = await getOrBuildSitemapXml('index', 30 * 60 * 1000, async () => {
         // Most-recent published article → a <lastmod> hint on the
         // frequently-changing news + article-bucket children so Google
@@ -27163,7 +27163,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           return res.status(404).send("Not found");
         }
 
-        // كاش 6 ساعات (ذاكرة ← Redis): الـ buckets أرشيفية — اكتشاف الجديد
+        // كاش Redis لمدة 6 ساعات: الـ buckets أرشيفية — اكتشاف الجديد
         // مسؤولية sitemap-news.xml (آخر 48 ساعة، كاش 3 دقائق) لا هذه الملفات
         const xml = await getOrBuildSitemapXml(`${cachePrefix}_${bucket}`, 6 * 60 * 60 * 1000,
           () => generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets));
