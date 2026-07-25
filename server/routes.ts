@@ -13112,6 +13112,21 @@ Respond in valid JSON format only:
       if (!article) {
         return res.status(404).json({ message: "المقال غير موجود" });
       }
+
+      // `isAuthenticated` alone made this a read-any-article endpoint: a
+      // self-registered reader could pull drafts, scheduled/embargoed pieces
+      // and retracted articles in full by id. Published articles stay open
+      // (they're public anyway); anything else needs desk access or ownership.
+      if (article.status !== "published") {
+        const permissions = await getUserPermissions(userId);
+        const canSeeUnpublished =
+          permissions.includes("articles.view") ||
+          (await authorizeArticleWrite(userId, articleId, permissions)).ok;
+        if (!canSeeUnpublished) {
+          return res.status(403).json({ message: "غير مصرح لك بمعاينة هذا المقال" });
+        }
+      }
+
       res.json({ ...article, isPreview: true });
     } catch (error) {
       console.error("Error fetching article preview:", error);
@@ -22932,10 +22947,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/audio-newsletters - List published newsletters (public)
   app.get("/api/audio-newsletters", async (req: any, res) => {
     try {
-      const { status = 'published', limit = 20, offset = 0 } = req.query;
+      const { limit = 20, offset = 0 } = req.query;
 
+      // SECURITY: `status` is not read from the query. It used to be, with
+      // "published" as a mere default, so `?status=draft` on this
+      // unauthenticated endpoint listed unpublished newsletters. Staff listing
+      // lives at GET /api/audio-newsletters/newsletters, behind a permission.
       const newsletters = await storage.getAllAudioNewsletters({
-        status: status as string,
+        status: 'published',
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
       });
@@ -27670,7 +27689,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -27841,13 +27860,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET English Articles (with filters)
   app.get("/api/en/articles", async (req, res) => {
     try {
-      const { categoryId, status = "published", limit = 20, offset = 0 } = req.query;
-      
-      // Build conditions array
-      const conditions: any[] = [];
-      if (status) {
-        conditions.push(eq(enArticles.status, status as string));
-      }
+      const { categoryId, limit = 20, offset = 0 } = req.query;
+
+      // SECURITY: `status` is NOT taken from the query here.
+      // It used to be (`status = "published"` was only a default), so
+      // `?status=draft` on this unauthenticated endpoint dumped unpublished
+      // drafts and embargoed pieces. The staff-facing listing that legitimately
+      // filters by status is GET /api/en/dashboard/articles, which is behind
+      // requireAuth + requirePermission("articles.view").
+      const conditions: any[] = [eq(enArticles.status, "published")];
       if (categoryId) {
         conditions.push(eq(enArticles.categoryId, categoryId as string));
       }
@@ -27906,7 +27927,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — this is a public listing and the
+            // author is a staff member. The byline needs a name, not an address.
             firstName: displayAuthor.firstNameEn || displayAuthor.firstName,
             lastName: displayAuthor.lastNameEn || displayAuthor.lastName,
             firstNameEn: displayAuthor.firstNameEn,
@@ -29145,12 +29167,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Get Urdu articles (published)
   app.get("/api/ur/articles", async (req, res) => {
     try {
-      const { categoryId, status = "published", limit = 20, offset = 0 } = req.query;
-      
-      const conditions: any[] = [];
-      if (status) {
-        conditions.push(eq(urArticles.status, status as string));
-      }
+      const { categoryId, limit = 20, offset = 0 } = req.query;
+
+      // Same as the English twin: `status` is never taken from the query on
+      // this public listing. Staff filtering lives on
+      // GET /api/ur/dashboard/articles (requireAuth + articles.view).
+      const conditions: any[] = [eq(urArticles.status, "published")];
       if (categoryId) {
         conditions.push(eq(urArticles.categoryId, categoryId as string));
       }
@@ -29204,7 +29226,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -29560,7 +29582,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -29660,7 +29682,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -31150,12 +31172,34 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get Deep Analysis by ID
-  app.get("/api/deep-analysis/:id", requireAuth, async (req, res) => {
+  // Desk access for the editorial deep-analysis surfaces. The public,
+  // published-only view is /api/omq; these two routes are the newsroom's.
+  const ANALYSIS_DESK_PERMISSIONS = ["articles.view", "articles.edit_any", "articles.publish"];
+
+  async function hasAnalysisDeskAccess(userId?: string): Promise<boolean> {
+    if (!userId) return false;
+    const permissions = await getUserPermissions(userId);
+    return ANALYSIS_DESK_PERMISSIONS.some((p) => permissions.includes(p));
+  }
+
+  async function canSeeUnpublishedAnalysis(userId: string | undefined, analysis: any): Promise<boolean> {
+    if (!userId) return false;
+    if (analysis?.createdBy === userId) return true;
+    return hasAnalysisDeskAccess(userId);
+  }
+
+  app.get("/api/deep-analysis/:id", requireAuth, async (req: any, res) => {
     try {
       const analysis = await storage.getDeepAnalysis(req.params.id);
       
       if (!analysis) {
         return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // requireAuth alone let any self-registered reader read unpublished
+      // analyses by id. The published ones are already public via /api/omq.
+      if (analysis.status !== 'published' && !(await canSeeUnpublishedAnalysis(req.user?.id, analysis))) {
+        return res.status(403).json({ error: 'غير مصرح لك بعرض هذا التحليل' });
       }
 
       res.json(analysis);
@@ -31168,13 +31212,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // List Deep Analyses
-  app.get("/api/deep-analysis", requireAuth, async (req, res) => {
+  app.get("/api/deep-analysis", requireAuth, async (req: any, res) => {
     try {
       const { createdBy, status, categoryId, limit, offset } = req.query;
-      
+
+      // Same gap on the listing: `status` came straight from the query with no
+      // default, so `?status=draft` enumerated every unpublished analysis.
+      // Non-editorial callers are pinned to published.
+      const isEditorial = await hasAnalysisDeskAccess(req.user?.id);
+      const effectiveStatus = isEditorial ? (status as string | undefined) : 'published';
+
       const result = await storage.listDeepAnalyses({
         createdBy: createdBy as string | undefined,
-        status: status as string | undefined,
+        status: effectiveStatus,
         categoryId: categoryId as string | undefined,
         limit: limit ? parseInt(limit as string) : 20,
         offset: offset ? parseInt(offset as string) : 0,

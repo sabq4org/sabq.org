@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import Redis from "ioredis";
-import { requireAuth } from "../rbac";
+import { requireAuth, requireAnyPermission } from "../rbac";
 import { isLeader } from "../leaderElection";
 
 const router: Router = Router();
@@ -375,7 +375,11 @@ router.delete("/api/editor-presence/leave", requireAuth, leaveHandler);
 // sendBeacon on page unload can only POST, so accept both.
 router.post("/api/editor-presence/leave", requireAuth, leaveHandler);
 
-router.get("/api/editor-presence/stream", requireAuth, async (req: Request, res: Response) => {
+// The stream carries live draft headlines and summaries of what the newsroom
+// is writing right now — that is desk information, not "any logged-in user"
+// information. requireAuth alone exposed the editorial pipeline to every
+// self-registered reader.
+router.get("/api/editor-presence/stream", requireAuth, requireAnyPermission("articles.view", "articles.edit_any", "articles.edit_own"), async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");

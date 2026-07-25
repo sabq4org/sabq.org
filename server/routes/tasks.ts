@@ -774,7 +774,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/comments - Get task comments
-  app.get("/api/tasks/:id/comments", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/comments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -790,7 +790,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/tasks/:id/comments - Create comment
-  app.post("/api/tasks/:id/comments", taskLimiter, requireAuth, async (req, res) => {
+  app.post("/api/tasks/:id/comments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -838,7 +838,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/task-comments/:id - Delete comment
-  app.delete("/api/task-comments/:id", taskLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/task-comments/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -875,7 +875,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/attachments - Get task attachments
-  app.get("/api/tasks/:id/attachments", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/attachments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -891,7 +891,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/tasks/:id/attachments - Upload attachment
-  app.post("/api/tasks/:id/attachments", taskLimiter, requireAuth, upload.single('file'), async (req, res) => {
+  app.post("/api/tasks/:id/attachments", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), upload.single('file'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -947,7 +947,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/task-attachments/:id - Delete attachment
-  app.delete("/api/task-attachments/:id", taskLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/task-attachments/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -984,7 +984,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/activity - Get task activity log
-  app.get("/api/tasks/:id/activity", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/activity", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id} = req.params;
       
