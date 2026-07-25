@@ -111,6 +111,69 @@ const deployBranch =
   process.env.VERCEL_GIT_COMMIT_REF ||
   null;
 
+// لقطة موارد العملية عند الطلب — نفس أرقام سطر [Runtime] الدوري لكن فورًا.
+// تُقرأ وقت البطء مباشرة: fd يتصاعد ⇒ تسرّب مقابس؛ pool.waiting>0 ⇒ تشبّع
+// المسبح؛ loopLag مرتفع ⇒ حجب حلقة الأحداث. لا أسرار فيها.
+app.get("/api/diagnostics", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { runtimeSnapshot } = require("./utils/runtimeDiagnostics");
+    res.status(200).json(runtimeSnapshot());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "unavailable" });
+  }
+});
+
+// لقطة heap — الأداة الحاسمة لتسمية الكائن المتسرّب. تُنتج ملف
+// .heapsnapshot يُفتح في Chrome DevTools ← Memory. الطريقة: خذ لقطتين
+// (مبكرة ومتأخرة بعشرين دقيقة) وحمّلهما، ثم في عرض «Comparison» رتّب
+// بـ«# Delta» — المُنشئ في الأعلى هو المتسرّب.
+//
+// محمية بسرّ إلزامي (HEAP_SNAPSHOT_TOKEN): اللقطة نسخة كاملة من ذاكرة
+// العملية — فيها أسرار وtokens وPII — فلا تُكشف بلا سرّ. غيابه ⇒ 404 (لا
+// نكشف وجود النقطة أصلًا). المقارنة timing-safe.
+//
+// تحذير تشغيلي: أخذ اللقطة يُجبر GC كاملًا ويجمّد حلقة الأحداث ثوانيَ
+// (heap بحجم ~1.5GB ⇒ 2–5ث). خذها بوعي وقت تحمّل خفيف إن أمكن.
+app.get("/api/diagnostics/heap", async (req, res) => {
+  const secret = process.env.HEAP_SNAPSHOT_TOKEN;
+  if (!secret) return res.status(404).end();
+
+  const provided = String(req.query.token || "");
+  try {
+    const { timingSafeEqual } = await import("node:crypto");
+    const a = Buffer.from(provided);
+    const b = Buffer.from(secret);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+  } catch {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  try {
+    const v8 = await import("node:v8");
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="sabq-heap-${Math.round(process.uptime())}s.heapsnapshot"`,
+    );
+    console.warn("[Runtime] أخذ لقطة heap — قد تتجمّد حلقة الأحداث ثوانيَ");
+    const stream = v8.getHeapSnapshot();
+    stream.pipe(res);
+    stream.on("error", () => {
+      try {
+        res.destroy();
+      } catch {
+        /* noop */
+      }
+    });
+  } catch (err: any) {
+    if (!res.headersSent) res.status(500).json({ error: err?.message || "snapshot failed" });
+  }
+});
+
 app.get("/api/version", (_req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
   res.status(200).json({
@@ -937,6 +1000,9 @@ if (!(globalThis as any).__sabqServer) {
       : { port, host: "0.0.0.0" };
   server.listen(listenOpts, () => {
     console.log(`[Server] ✅ Listening on port ${port}`);
+    void import("./utils/runtimeDiagnostics")
+      .then((m) => m.startRuntimeDiagnostics())
+      .catch((e) => console.warn("[Runtime] تعذّر تشغيل القياس:", e?.message));
   });
 }
 
@@ -1465,6 +1531,8 @@ if (!(globalThis as any).__sabqServer) {
       }
 
       const enableBackgroundWorkers = process.env.ENABLE_BACKGROUND_WORKERS === "true";
+      // كأس العالم انتهى: وظائفه معطّلة افتراضيًا. WORLD_CUP_LIVE_ENABLED=true لبطولة قادمة.
+      const wcLive = process.env.WORLD_CUP_LIVE_ENABLED === "true";
       // النشرة الثقيلة لها process مستقل. لا تعِد تشغيلها داخل API إلا كخيار
       // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
       const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
@@ -1996,8 +2064,12 @@ if (!(globalThis as any).__sabqServer) {
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
-            startWorldCupNewsJob();
+            if (wcLive) {
+              const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
+              startWorldCupNewsJob();
+            } else {
+              console.log("[WC] بطولة منتهية — أخبار المونديال معطّلة (WORLD_CUP_LIVE_ENABLED != true)");
+            }
           } catch (error) {
             console.error("[Server] Error starting world cup news job:", error);
           }
@@ -2061,8 +2133,12 @@ if (!(globalThis as any).__sabqServer) {
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { startWcPredictionsJob } = await import("./jobs/wcPredictionsJob");
-            startWcPredictionsJob();
+            if (wcLive) {
+              const { startWcPredictionsJob } = await import("./jobs/wcPredictionsJob");
+              startWcPredictionsJob();
+            } else {
+              console.log("[WC] بطولة منتهية — تسوية توقّعات المونديال معطّلة (WORLD_CUP_LIVE_ENABLED != true)");
+            }
           } catch (error) {
             console.error("[Server] Error starting world cup predictions job:", error);
           }

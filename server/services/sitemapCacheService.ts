@@ -1,40 +1,29 @@
 /**
- * كاش خرائط الموقع — طبقتان: ذاكرة العملية ثم Redis.
+ * كاش خرائط الموقع في Redis فقط.
  *
- * لماذا: كاش الذاكرة يتبخر مع كل نشرة/إعادة تشغيل (وأيام النشر المتتابع
- * يتبخر كل دقائق)، فيعيد كل pod توليد 70 ملف bucket من جديد — كان هذا
- * أكبر مستهلك قراءة في القاعدة (170M صف معادة عبر pg_stat_statements،
- * تقرير مراجعة Neon 2026-07-22). Redis يحفظ النسخة عبر النشرات ويشاركها
- * بين النسخ، والفشل فيه صامت: التوليد المباشر يبقى المسار الاحتياطي.
+ * ملفات الـ bucket كبيرة جدًا (نحو 12MiB للملف العربي في الإنتاج). إبقاء
+ * نسخة ثانية منها في Map داخل عملية Node كان يرفع الـ working set بمئات
+ * الميغابايت كلما مرّت العناكب على الدلاء. Redis يحفظ النسخة عبر النشرات
+ * ويشاركها بين النسخ، بينما single-flight أدناه يمنع توليد المفتاح نفسه
+ * مرتين بالتوازي من دون الاحتفاظ بالـ XML بعد اكتمال الطلب.
  *
  * لا يستورد db (ADR-001) — التوليد يصل جاهزًا عبر دالة build.
  */
 import { getRedisClient } from "../redis";
 
 const REDIS_PREFIX = "sitemap:xml:";
-const memory = new Map<string, { xml: string; ts: number }>();
+const inflight = new Map<string, Promise<string | null>>();
 
-/**
- * ذاكرة ← Redis ← توليد، والكتابة للطبقتين. يعيد null فقط إذا أعاد
- * المولد null (مثل bucket خارج النطاق) — بلا تخزين حينها.
- */
-export async function getOrBuildSitemapXml(
+async function readThroughRedis(
   key: string,
   ttlMs: number,
   build: () => Promise<string | null>,
 ): Promise<string | null> {
-  const now = Date.now();
-  const mem = memory.get(key);
-  if (mem && now - mem.ts < ttlMs) return mem.xml;
-
   const redis = getRedisClient();
   if (redis) {
     try {
       const cached = await redis.get(REDIS_PREFIX + key);
-      if (cached) {
-        memory.set(key, { xml: cached, ts: now });
-        return cached;
-      }
+      if (cached) return cached;
     } catch {
       // انقطاع Redis لا يعطل الخرائط — نولّد مباشرة
     }
@@ -43,15 +32,38 @@ export async function getOrBuildSitemapXml(
   const xml = await build();
   if (xml === null) return null;
 
-  memory.set(key, { xml, ts: now });
   if (redis) {
     try {
       await redis.set(REDIS_PREFIX + key, xml, {
         expiration: { type: "PX", value: Math.max(1000, Math.floor(ttlMs)) },
       });
     } catch {
-      // best-effort — النسخة التالية ستحاول مجددًا
+      // best-effort — الطلب التالي سيحاول مجددًا
     }
   }
   return xml;
+}
+
+/**
+ * Redis ← توليد. الطلبات المتزامنة للمفتاح نفسه تشترك في Promise واحد،
+ * ويُحذف فور settlement حتى لا يتحول single-flight إلى كاش ذاكرة دائم.
+ * يعيد null فقط إذا أعاد المولد null (مثل bucket خارج النطاق).
+ */
+export function getOrBuildSitemapXml(
+  key: string,
+  ttlMs: number,
+  build: () => Promise<string | null>,
+): Promise<string | null> {
+  const pending = inflight.get(key);
+  if (pending) return pending;
+
+  const task = readThroughRedis(key, ttlMs, build);
+  inflight.set(key, task);
+
+  const clear = () => {
+    if (inflight.get(key) === task) inflight.delete(key);
+  };
+  void task.then(clear, clear);
+
+  return task;
 }

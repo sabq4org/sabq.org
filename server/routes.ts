@@ -127,7 +127,7 @@ import { invalidatePublishedContent, invalidateArticleWrite } from "./services/c
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import { getOrBuildSitemapXml } from "./services/sitemapCacheService";
 import pLimit from 'p-limit';
-import { db, executeWithStatementTimeout, withStatementTimeout } from "./db";
+import { db, executeWithStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
@@ -7001,10 +7001,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
-      // البحث بالعنوان/المقتطف بلغ 47 ث تحت الضغط وعدّ النتائج 24 ث
-      // (pg_stat_statements) — مهلة 15 ث تلغي الاستعلام من جهة الخادم وتحرر
-      // اتصال الـpool بدل خنق بقية الطلبات.
-      const { results, total } = await withStatementTimeout(15_000, async (tx) => {
+      // انحدار 2026-07-25: كان هذا ملفوفًا بـwithStatementTimeout (معاملة صريحة).
+      // على نقطة Neon `-pooler` يعمل PgBouncer في وضع transaction pooling،
+      // فالمعاملة تُثبّت اتصال خادم طوال مدتها بينما الاستعلام المفرد يحرره فورًا.
+      // سقف زمن الاستعلام يُضبط الآن على مستوى الدور في Neon، فلا حاجة للمعاملة.
+      const { results, total } = await (async () => {
+        const tx = db;
         let query = tx
           .select({
             article: articleAdminSelect,
@@ -7056,7 +7058,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           .offset(offset);
 
         return { results: rows, total: Number(countResult?.count || 0) };
-      });
+      })();
 
       const formattedArticles = results.map((row) => ({
         ...row.article,
@@ -27053,8 +27055,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/sitemap.xml", async (_req, res) => {
     try {
       const baseUrl = "https://sabq.org";
-      // ذاكرة ← Redis ← توليد (getOrBuildSitemapXml) — طبقة Redis تنجو من
-      // النشرات وتُشارك بين النسخ؛ بدونها كل إقلاع يعيد التوليد من القاعدة.
+      // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
+      // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
       const indexXml = await getOrBuildSitemapXml('index', 30 * 60 * 1000, async () => {
         // Most-recent published article → a <lastmod> hint on the
         // frequently-changing news + article-bucket children so Google
@@ -27249,7 +27251,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           return res.status(404).send("Not found");
         }
 
-        // كاش 6 ساعات (ذاكرة ← Redis): الـ buckets أرشيفية — اكتشاف الجديد
+        // كاش Redis لمدة 6 ساعات: الـ buckets أرشيفية — اكتشاف الجديد
         // مسؤولية sitemap-news.xml (آخر 48 ساعة، كاش 3 دقائق) لا هذه الملفات
         const xml = await getOrBuildSitemapXml(`${cachePrefix}_${bucket}`, 6 * 60 * 60 * 1000,
           () => generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets));
