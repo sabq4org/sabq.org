@@ -3074,7 +3074,7 @@ function formatArticleForMobile(row: any, baseUrl: string) {
   };
 }
 
-import { memoryCache as sharedMemoryCache } from "../memoryCache";
+import { memoryCache as sharedMemoryCache, withSWR, CACHE_TTL } from "../memoryCache";
 
 function getCached(key: string) {
   return sharedMemoryCache.get(key);
@@ -3138,14 +3138,40 @@ router.get("/articles", async (req: Request, res: Response) => {
     }
     if (breaking === "true") conditions.push(eq(articles.newsType, "breaking"));
     if (featured === "true") conditions.push(eq(articles.isFeatured, true));
-    if (q) conditions.push(ilike(articles.title, `%${q}%`));
 
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(...conditions));
+    // بحث العنوان (q): كان `ilike + ORDER BY published_at + LIMIT` في استعلام
+    // واحد — المخطط يمشي على فهرس التاريخ ويرشّح صفًا صفًا، فتستغرق الكلمات
+    // النادرة ثواني (متوسط مقيس 5.1s). الحل: صفّ المرشحين أولًا بلا ترتيب
+    // (يستعمل فهرس trgm عبر Bitmap Scan)، ثم رتّب الدفعة الصغيرة بالتاريخ.
+    // سقف 1000 مرشح يكفي أعمق صفحات الموبايل (50 × 20 صفحة).
+    const SEARCH_CANDIDATE_CAP = 1000;
+    let searchIds: string[] | null = null;
+    if (q) {
+      const candidates = await db
+        .select({ id: articles.id })
+        .from(articles)
+        .where(and(...conditions, ilike(articles.title, `%${q}%`)))
+        .limit(SEARCH_CANDIDATE_CAP);
+      searchIds = candidates.map((c) => c.id);
+      if (searchIds.length === 0) {
+        res.json({ articles: [], total: 0, limit, offset, hasMore: false });
+        return;
+      }
+      conditions.push(inArray(articles.id, searchIds));
+    }
 
-    const total = Number(countResult?.count || 0);
+    // العدّاد: عند البحث نعرف العدد من قائمة المرشحين نفسها (بسقفها) بدل
+    // count(*) ثانٍ كان يكلف 2.7s لكل كتابة حرف في حقل البحث.
+    let total: number;
+    if (searchIds) {
+      total = searchIds.length;
+    } else {
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(articles)
+        .where(and(...conditions));
+      total = Number(countResult?.count || 0);
+    }
 
     const results = await db
       .select({
@@ -3206,12 +3232,21 @@ router.get("/news/paginated", async (req: Request, res: Response) => {
       or(isNull(articles.source), ne(articles.source, "ai")),
     ];
 
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(...conditions));
-
-    const total = Number(countResult?.count || 0);
+    // العدّاد الإجمالي ثابت عمليًا بين النشرات — كان يُنفَّذ count(*) على كل
+    // طلب من كل جهاز iOS (~370 ألف مرة في 6 أيام، تدقيق 2026-07-25). نفس
+    // مفتاح SWR المستخدم في ويب /api/news/paginated فيتشاركان النتيجة.
+    const total = await withSWR(
+      "news-paginated-total",
+      CACHE_TTL.SHORT,
+      CACHE_TTL.SHORT * 2,
+      async () => {
+        const [countResult] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(articles)
+          .where(and(...conditions));
+        return Number(countResult?.count || 0);
+      },
+    );
 
     const results = await db
       .select({

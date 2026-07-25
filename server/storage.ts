@@ -3923,17 +3923,10 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(articles.authorId, filters.authorId));
     }
 
-    if (filters?.searchQuery) {
-      const searchPattern = `%${filters.searchQuery}%`;
-      conditions.push(
-        or(
-          // Matches idx_articles_title_trgm (GIN on lower(title)) for
-          // published searches while preserving case-insensitive semantics.
-          sql`lower(${articles.title}) LIKE lower(${searchPattern})`,
-          ilike(articles.excerpt, searchPattern),
-        )
-      );
-    }
+    // شرط البحث يُحل لاحقًا عبر مسار المرشحين (انظر أسفل بناء الشروط) —
+    // دمجه مباشرة مع ORDER BY يدفع المخطط لمشي فهرس الترتيب والترشيح صفًا
+    // صفًا (قياس 2026-07-25: متوسط 44s للكلمات النادرة).
+    const searchPattern = filters?.searchQuery ? `%${filters.searchQuery}%` : null;
 
     // Exclude opinion articles from regular news feeds
     conditions.push(
@@ -3955,6 +3948,25 @@ export class DatabaseStorage implements IStorage {
           )
         );
       }
+    }
+
+    // مسار المرشحين للبحث: صفِّ المطابقات أولًا بلا ترتيب — فيستعمل المخطط
+    // فهارس trgm (title/excerpt) عبر Bitmap Scan — ثم رتّب الدفعة الصغيرة في
+    // الاستعلام الرئيسي. سقف 1000 مرشح يغطي limit الأقصى (500) مرتين.
+    if (searchPattern) {
+      const candidates = await db
+        .select({ id: articles.id })
+        .from(articles)
+        .where(and(
+          ...conditions.filter((c): c is SQL<unknown> => Boolean(c)),
+          or(
+            sql`lower(${articles.title}) LIKE lower(${searchPattern})`,
+            ilike(articles.excerpt, searchPattern),
+          ),
+        ))
+        .limit(1000);
+      if (candidates.length === 0) return [];
+      conditions.push(inArray(articles.id, candidates.map((c) => c.id)));
     }
 
     const reporterAlias = aliasedTable(users, 'reporter');

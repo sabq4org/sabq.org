@@ -1030,7 +1030,8 @@ export const articles = pgTable("articles", {
   // لا يطابق title ILIKE. أُنشئت يدوياً CONCURRENTLY في الإنتاج 2026-07-23.
   index("idx_articles_title_trgm_raw").using("gin", table.title.op("gin_trgm_ops")),
   index("idx_articles_excerpt_trgm").using("gin", table.excerpt.op("gin_trgm_ops")),
-  index("idx_articles_subtitle_trgm").using("gin", table.subtitle.op("gin_trgm_ops")),
+  // idx_articles_subtitle_trgm حُذف من الإنتاج 2026-07-25: ظل 176MB بصفر
+  // استخدام منذ إنشائه — لا يوجد مسار بحث يطابق subtitle وحدها.
   // فهرس يدوي إضافي في الإنتاج (فهرس تعبير — لا يُعبَّر بأمان في Drizzle):
   //   idx_articles_sitemap_bucket ON ((abs(hashtext(id::text)) % 50), status, published_at DESC)
   // يخدم خرائط الموقع المجزأة (routes.ts: generateArticleSitemap) بدل مسح
