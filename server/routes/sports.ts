@@ -12,6 +12,7 @@
  */
 import type { Express, Request, Response } from "express";
 import { applyProvisionalTable } from "../services/liveStandings";
+import { bestEffortWithin } from "../utils/bestEffortDeadline";
 import {
   generateMatchPreview,
   generateMatchStory,
@@ -1243,8 +1244,21 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const withExtras = req.query.with === "stats";
-      const profile = await getTeamProfile(id, { withExtras });
+      let timedOut = false;
+      const profile = await bestEffortWithin(getTeamProfile(id, { withExtras }), {
+        fallback: null,
+        // بعد SWR على الملف الكامل: 3ث كافية؛ أطول من ذلك = طابور مزوّد محتجز.
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          console.warn(`[Sports] team profile deadline exceeded for ${id}`);
+        },
+      });
       if (!profile) {
+        if (timedOut) {
+          res.status(503).json({ message: "صفحة النادي تُحمَّل حاليًا" });
+          return;
+        }
         res.status(404).json({ message: "النادي غير موجود" });
         return;
       }
@@ -1363,12 +1377,17 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const transfers = await getTeamTransfers(id);
+      const empty = { arrivals: [] as Awaited<ReturnType<typeof getTeamTransfers>>["arrivals"], departures: [] as Awaited<ReturnType<typeof getTeamTransfers>>["departures"] };
+      const transfers = await bestEffortWithin(getTeamTransfers(id), {
+        fallback: empty,
+        timeoutMs: 3_000,
+        onTimeout: () => console.warn(`[Sports] team transfers deadline exceeded for ${id}`),
+      });
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
       res.json(transfers);
     } catch (error) {
       console.error("[Sports] team transfers failed:", error);
-      res.status(502).json({ message: "تعذر جلب انتقالات النادي حاليًا" });
+      res.json({ arrivals: [], departures: [] });
     }
   });
 
@@ -1481,8 +1500,20 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const player = await getPlayerCard(id);
+      let timedOut = false;
+      const player = await bestEffortWithin(getPlayerCard(id), {
+        fallback: null,
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          console.warn(`[Sports] player card deadline exceeded for ${id}`);
+        },
+      });
       if (!player) {
+        if (timedOut) {
+          res.status(503).json({ message: "ملف اللاعب يُحمَّل حاليًا" });
+          return;
+        }
         res.status(404).json({ message: "ملف اللاعب غير متاح" });
         return;
       }
@@ -1491,9 +1522,18 @@ export function registerSportsRoutes(app: Express) {
       // في نفس الاستجابة (تقلّل طلبات صفحة اللاعب). كلها تتدهور بسلاسة إلى [].
       if (req.query.with === "extras") {
         const [history, transfers, injuries] = await Promise.all([
-          getPlayerSeasonHistory(id).catch(() => []),
-          getPlayerTransfers(id).catch(() => []),
-          getPlayerInjuries(id).catch(() => []),
+          bestEffortWithin(getPlayerSeasonHistory(id).catch(() => []), {
+            fallback: [],
+            timeoutMs: 2_500,
+          }),
+          bestEffortWithin(getPlayerTransfers(id).catch(() => []), {
+            fallback: [],
+            timeoutMs: 2_500,
+          }),
+          bestEffortWithin(getPlayerInjuries(id).catch(() => []), {
+            fallback: [],
+            timeoutMs: 2_500,
+          }),
         ]);
         res.json({ ...player, history, transfers, injuries });
         return;
@@ -1517,7 +1557,13 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const market = await getPlayerMarketValue(id);
+      const empty = { available: false, value: null, currency: "€", peak: null, history: [] };
+      const market = await bestEffortWithin(getPlayerMarketValue(id), {
+        fallback: empty,
+        // كان يبلغ 17ث خلف بطاقة اللاعب الكاملة + TheSports؛ نخفي القسم ونكمل الجلب للكاش.
+        timeoutMs: 3_500,
+        onTimeout: () => console.warn(`[Sports] player market deadline exceeded for ${id}`),
+      });
       res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
       res.json(market);
     } catch (error) {
@@ -1538,7 +1584,11 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const form = await getPlayerForm(id);
+      const form = await bestEffortWithin(getPlayerForm(id), {
+        fallback: { available: false, matches: [] },
+        timeoutMs: 2_500,
+        onTimeout: () => console.warn(`[Sports] player form deadline exceeded for ${id}`),
+      });
       res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
       res.json(form);
     } catch (error) {

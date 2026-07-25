@@ -2502,6 +2502,9 @@ async function getIfoxCategoryIds(): Promise<string[]> {
   return ids;
 }
 
+/** single-flight لملف المراسل — يمنع عاصفة استعلامات عند فتح نفس الصفحة متزامناً. */
+const reporterProfileInflight = new Map<string, Promise<ReporterProfile | undefined>>();
+
 function reporterPublicSelect(reporterAlias: any) {
   return {
     id: reporterAlias.id,
@@ -4586,37 +4589,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }> {
-    const now = new Date();
+    // استعلام واحد بدل 4 COUNT متتالية + كاش قصير (كان يُسجَّل ~2.5s في APM)
+    return withCache("admin:articles:metrics", CACHE_TTL.SHORT, async () => {
+      const now = new Date();
+      const [row] = await db
+        .select({
+          published: sql<number>`count(*) filter (where ${articles.status} = 'published')`,
+          draft: sql<number>`count(*) filter (where ${articles.status} = 'draft')`,
+          archived: sql<number>`count(*) filter (where ${articles.status} = 'archived')`,
+          scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled' and ${articles.scheduledAt} >= ${now})`,
+        })
+        .from(articles);
 
-    const [publishedResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(eq(articles.status, 'published'));
-
-    const [scheduledResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(
-        eq(articles.status, 'scheduled'),
-        gte(articles.scheduledAt, now)
-      ));
-
-    const [draftResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(eq(articles.status, 'draft'));
-
-    const [archivedResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(eq(articles.status, 'archived'));
-
-    return {
-      published: Number(publishedResult.count),
-      scheduled: Number(scheduledResult.count),
-      draft: Number(draftResult.count),
-      archived: Number(archivedResult.count),
-    };
+      return {
+        published: Number(row?.published ?? 0),
+        scheduled: Number(row?.scheduled ?? 0),
+        draft: Number(row?.draft ?? 0),
+        archived: Number(row?.archived ?? 0),
+      };
+    });
   }
 
   async archiveArticle(id: string, userId: string): Promise<Article> {
@@ -11743,164 +11734,159 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReporterProfile(slug: string, windowDays: number = 90, language: 'ar' | 'en' = 'ar'): Promise<ReporterProfile | undefined> {
-    // Get reporter basic info
+    // كاش أطول + single-flight: صفحة «صحيفة سبق» كانت تسحب كل مقالات 90 يوماً (~2ث).
+    const cacheKey = `reporter:profile:v3:${language}:${slug}:${windowDays}`;
+    const cached = memoryCache.get<ReporterProfile>(cacheKey);
+    if (cached !== null) return cached;
+
+    const existing = reporterProfileInflight.get(cacheKey);
+    if (existing) return existing;
+
+    const compute = this.computeReporterProfile(slug, windowDays, language, cacheKey);
+    reporterProfileInflight.set(cacheKey, compute);
+    try {
+      return await compute;
+    } finally {
+      reporterProfileInflight.delete(cacheKey);
+    }
+  }
+
+  private async computeReporterProfile(
+    slug: string,
+    windowDays: number,
+    language: 'ar' | 'en',
+    cacheKey: string,
+  ): Promise<ReporterProfile | undefined> {
     const reporter = await this.getReporterBySlug(slug);
-    if (!reporter) return undefined;
+    if (!reporter?.userId) return undefined;
 
     const windowDate = new Date();
     windowDate.setDate(windowDate.getDate() - windowDays);
+    const owner = or(eq(articles.reporterId, reporter.userId), eq(articles.authorId, reporter.userId));
+    const published = eq(articles.status, 'published');
 
-    // Get reporter's articles with detailed stats
-    const reporterArticles = await db
-      .select({
-        id: articles.id,
-        title: articles.title,
-        slug: articles.slug,
-        publishedAt: articles.publishedAt,
-        newsType: articles.newsType,
-        views: articles.views,
-        categoryId: categories.id,
-        categoryNameAr: categories.nameAr,
-        categoryNameEn: categories.nameEn,
-        categorySlug: categories.slug,
-        categoryColor: categories.color,
-        categoryIcon: categories.icon,
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-          eq(articles.status, 'published'),
-          gte(articles.publishedAt, windowDate)
-        )
-      )
-      .orderBy(desc(articles.displayOrder), desc(articles.publishedAt))
-      .execute();
+    // لا نجلب كل مقالات النافذة: آخر 5 للعرض + تجميع يومي في SQL للسلسلة الزمنية.
+    // نُسقط AVG(reading_history) من المسار الحار — مسح ثقيل بلا فهرس مناسب؛ نستخدم افتراضياً.
+    const [
+      lastArticleRows,
+      allTimeStatsResult,
+      likesResult,
+      categoryStatsResult,
+      followersResult,
+      dailyRows,
+    ] = await Promise.all([
+      db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          publishedAt: articles.publishedAt,
+          newsType: articles.newsType,
+          views: articles.views,
+          categoryId: categories.id,
+          categoryNameAr: categories.nameAr,
+          categoryNameEn: categories.nameEn,
+          categorySlug: categories.slug,
+          categoryColor: categories.color,
+          categoryIcon: categories.icon,
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(and(owner, published))
+        .orderBy(desc(articles.displayOrder), desc(articles.publishedAt))
+        .limit(5),
+      db
+        .select({
+          count: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
+          totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+        })
+        .from(articles)
+        .where(and(owner, published)),
+      db
+        .select({
+          totalLikes: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        })
+        .from(reactions)
+        .innerJoin(articles, eq(reactions.articleId, articles.id))
+        .where(and(owner, eq(reactions.type, 'like'))),
+      db
+        .select({
+          categoryId: categories.id,
+          categoryNameAr: categories.nameAr,
+          categoryNameEn: categories.nameEn,
+          categorySlug: categories.slug,
+          categoryColor: categories.color,
+          articlesCount: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
+          totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+        })
+        .from(articles)
+        .innerJoin(categories, eq(articles.categoryId, categories.id))
+        .where(and(owner, published))
+        .groupBy(categories.id, categories.nameAr, categories.nameEn, categories.slug, categories.color)
+        .orderBy(desc(sql`COUNT(DISTINCT ${articles.id})`))
+        .limit(5),
+      db
+        .select({
+          followersCount: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        })
+        .from(socialFollows)
+        .where(eq(socialFollows.followingId, reporter.userId)),
+      db
+        .select({
+          date: sql<string>`to_char(date_trunc('day', ${articles.publishedAt}), 'YYYY-MM-DD')`,
+          views: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+        })
+        .from(articles)
+        .where(and(owner, published, gte(articles.publishedAt, windowDate)))
+        .groupBy(sql`date_trunc('day', ${articles.publishedAt})`)
+        .orderBy(sql`date_trunc('day', ${articles.publishedAt})`),
+    ]);
 
-    // Get TOTAL article count (all time, not just within window)
-    // Count articles where user is either reporter_id OR author_id (matching discover page logic)
-    const allTimeStatsResult = await db
-      .select({
-        count: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
-        totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
-      })
-      .from(articles)
-      .where(
-        and(
-          or(
-            or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-            eq(articles.authorId, reporter.userId!)
-          ),
-          eq(articles.status, 'published')
-        )
-      )
-      .execute();
-    
     const totalArticles = allTimeStatsResult[0]?.count || 0;
     const totalViews = Number(allTimeStatsResult[0]?.totalViews) || 0;
-
-    // Get likes count for reporter's articles
-    const likesResult = await db
-      .select({
-        totalLikes: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-      })
-      .from(reactions)
-      .innerJoin(articles, eq(reactions.articleId, articles.id))
-      .where(
-        and(
-          or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-          eq(reactions.type, 'like')
-        )
-      )
-      .execute();
-    
     const totalLikes = likesResult[0]?.totalLikes || 0;
+    const avgCompletionRate = 75;
+    const avgReadTimeMin = 4;
+    const followersCount = followersResult[0]?.followersCount || 0;
 
-    // Get comments count for last articles
-    const commentsResult = await db
-      .select({
-        articleId: comments.articleId,
-        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-      })
-      .from(comments)
-      .where(
-        inArray(
-          comments.articleId,
-          reporterArticles.slice(0, 5).map(a => a.id)
-        )
-      )
-      .groupBy(comments.articleId)
-      .execute();
+    const lastIds = lastArticleRows.map((a) => a.id);
+    const commentsResult = lastIds.length
+      ? await db
+          .select({
+            articleId: comments.articleId,
+            count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          })
+          .from(comments)
+          .where(inArray(comments.articleId, lastIds))
+          .groupBy(comments.articleId)
+      : [];
+    const commentsMap = new Map(commentsResult.map((r) => [r.articleId, r.count || 0]));
 
-    const commentsMap = new Map(commentsResult.map(r => [r.articleId, r.count || 0]));
-
-    // Get reading history for average read time
-    // Note: reading_history table has read_duration (in seconds)
-    const readingStats = await db
-      .select({
-        avgReadTime: sql<number>`CAST(AVG(read_duration) / 60.0 AS REAL)`,
-      })
-      .from(readingHistory)
-      .innerJoin(articles, eq(readingHistory.articleId, articles.id))
-      .where(eq(articles.reporterId, reporter.userId!))
-      .execute();
-
-    // Use default values for completion rate (not tracked in reading_history)
-    const avgCompletionRate = 75; // Default reasonable value
-    const avgReadTimeMin = Math.round(readingStats[0]?.avgReadTime || 4);
-
-    // Prepare last 5 articles with full details
-    const lastArticles: ReporterArticle[] = reporterArticles.slice(0, 5).map(a => ({
+    const lastArticles: ReporterArticle[] = lastArticleRows.map((a) => ({
       id: a.id,
       title: a.title,
       slug: a.slug,
       publishedAt: a.publishedAt,
-      category: a.categoryId ? {
-        // Always fallback to Arabic if English is missing
-        name: language === 'en' 
-          ? (a.categoryNameEn || a.categoryNameAr || '') 
-          : (a.categoryNameAr || ''),
-        slug: a.categorySlug || '',
-        color: a.categoryColor,
-        icon: a.categoryIcon,
-      } : null,
+      category: a.categoryId
+        ? {
+            name:
+              language === 'en'
+                ? a.categoryNameEn || a.categoryNameAr || ''
+                : a.categoryNameAr || '',
+            slug: a.categorySlug || '',
+            color: a.categoryColor,
+            icon: a.categoryIcon,
+          }
+        : null,
       isBreaking: a.newsType === 'breaking',
       views: a.views || 0,
-      likes: 0, // Will calculate separately if needed
+      likes: 0,
       comments: commentsMap.get(a.id) || 0,
       readingTime: avgReadTimeMin,
     }));
 
-    // Get top categories - query ALL articles (reporter_id OR author_id, no date filter)
-    const categoryStatsResult = await db
-      .select({
-        categoryId: categories.id,
-        categoryNameAr: categories.nameAr,
-        categoryNameEn: categories.nameEn,
-        categorySlug: categories.slug,
-        categoryColor: categories.color,
-        articlesCount: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
-        totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
-      })
-      .from(articles)
-      .innerJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          or(
-            or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-            eq(articles.authorId, reporter.userId!)
-          ),
-          eq(articles.status, 'published')
-        )
-      )
-      .groupBy(categories.id, categories.nameAr, categories.nameEn, categories.slug, categories.color)
-      .orderBy(desc(sql`COUNT(DISTINCT ${articles.id})`))
-      .limit(5)
-      .execute();
-
-    const topCategories = categoryStatsResult.map(cat => ({
-      name: language === 'en' ? (cat.categoryNameEn || cat.categoryNameAr || '') : (cat.categoryNameAr || ''),
+    const topCategories = categoryStatsResult.map((cat) => ({
+      name: language === 'en' ? cat.categoryNameEn || cat.categoryNameAr || '' : cat.categoryNameAr || '',
       slug: cat.categorySlug || '',
       color: cat.categoryColor,
       articles: cat.articlesCount || 0,
@@ -11908,94 +11894,47 @@ export class DatabaseStorage implements IStorage {
       sharePct: totalArticles > 0 ? Math.round(((cat.articlesCount || 0) / totalArticles) * 100) : 0,
     }));
 
-    // Generate time series data (simplified - daily aggregates)
-    const timeseries: ReporterTimeseries[] = [];
-    const dailyStats = reporterArticles.reduce((acc, a) => {
-      if (!a.publishedAt) return acc;
-      
-      const dateStr = a.publishedAt.toISOString().split('T')[0];
-      if (!acc[dateStr]) {
-        acc[dateStr] = { views: 0, likes: 0 };
-      }
-      acc[dateStr].views += a.views || 0;
-      
-      return acc;
-    }, {} as Record<string, { views: number; likes: number }>);
+    const timeseries: ReporterTimeseries[] = dailyRows
+      .filter((r) => !!r.date)
+      .map((r) => ({
+        date: r.date,
+        views: Number(r.views) || 0,
+        likes: 0,
+      }));
 
-    Object.entries(dailyStats).forEach(([date, stats]) => {
-      timeseries.push({
-        date,
-        views: stats.views,
-        likes: stats.likes,
-      });
-    });
-
-    timeseries.sort((a, b) => a.date.localeCompare(b.date));
-
-    // Helper function to check if text contains Arabic characters
     const hasArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
-    
-    // Generate badges
     const badges: Array<{ key: string; label: string }> = [];
-    
     if (reporter.isVerified) {
-      badges.push({ 
-        key: 'verified', 
-        label: language === 'en' ? 'Verified' : 'موثق' 
-      });
+      badges.push({ key: 'verified', label: language === 'en' ? 'Verified' : 'موثق' });
     }
-    
     if (totalArticles >= 20) {
-      badges.push({ 
-        key: 'active_contributor', 
-        label: language === 'en' ? 'Active Contributor' : 'كاتب نشط' 
+      badges.push({
+        key: 'active_contributor',
+        label: language === 'en' ? 'Active Contributor' : 'كاتب نشط',
       });
     }
-    
-    if (reporter.specializations.length > 0) {
+    const specs = reporter.specializations ?? [];
+    if (specs.length > 0) {
       if (language === 'en') {
-        // For English, find first non-Arabic specialization
-        const firstEnglishSpec = reporter.specializations.find(spec => !hasArabic(spec));
+        const firstEnglishSpec = specs.find((spec) => !hasArabic(spec));
         if (firstEnglishSpec) {
-          badges.push({ 
-            key: 'specialist', 
-            label: `Specialized in ${firstEnglishSpec}` 
-          });
+          badges.push({ key: 'specialist', label: `Specialized in ${firstEnglishSpec}` });
         }
-        // If all specializations are in Arabic, skip the badge entirely
       } else {
-        // For Arabic, use first specialization
-        badges.push({ 
-          key: 'specialist', 
-          label: `متخصص في ${reporter.specializations[0]}` 
-        });
+        badges.push({ key: 'specialist', label: `متخصص في ${specs[0]}` });
       }
     }
 
-    // Get followers count (only if reporter has a linked userId)
-    let followersCount = 0;
-    if (reporter.userId) {
-      const followersResult = await db
-        .select({
-          followersCount: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        })
-        .from(socialFollows)
-        .where(eq(socialFollows.followingId, reporter.userId))
-        .execute();
-      
-      followersCount = followersResult[0]?.followersCount || 0;
-    }
-
-    return {
+    const profile: ReporterProfile = {
       id: reporter.id,
-      userId: reporter.userId!,
+      userId: reporter.userId,
       slug: reporter.slug,
-      fullName: language === 'en' ? (reporter.name || reporter.nameAr) : (reporter.nameAr || reporter.name),
-      title: language === 'en' ? (reporter.title || reporter.titleAr) : (reporter.titleAr || reporter.title),
+      fullName: language === 'en' ? reporter.name || reporter.nameAr : reporter.nameAr || reporter.name,
+      title: language === 'en' ? reporter.title || reporter.titleAr : reporter.titleAr || reporter.title,
       avatarUrl: reporter.profileImage,
-      bio: language === 'en' ? (reporter.bio || reporter.bioAr) : (reporter.bioAr || reporter.bio),
+      bio: language === 'en' ? reporter.bio || reporter.bioAr : reporter.bioAr || reporter.bio,
       isVerified: reporter.isVerified,
-      tags: reporter.specializations,
+      tags: specs,
       kpis: {
         totalArticles,
         totalViews,
@@ -12006,12 +11945,12 @@ export class DatabaseStorage implements IStorage {
       },
       lastArticles,
       topCategories,
-      timeseries: {
-        windowDays,
-        daily: timeseries,
-      },
+      timeseries: { windowDays, daily: timeseries },
       badges,
     };
+
+    memoryCache.set(cacheKey, profile, CACHE_TTL.MEDIUM);
+    return profile;
   }
 
   // Activity Logs operations

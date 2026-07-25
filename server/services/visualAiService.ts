@@ -10,9 +10,12 @@
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import { assertSafeImageUrl } from "../utils/safeImageUrl";
+import { parseVisualAiJson } from "./visualAiJson";
 import pRetry from "p-retry";
 import https from "https";
 import http from "http";
+
+export { parseVisualAiJson } from "./visualAiJson";
 
 // Initialize Gemini client with API key
 const apiKey = process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
@@ -165,10 +168,10 @@ export async function analyzeImage(request: ImageAnalysisRequest): Promise<Image
     
     if (request.generateAltText) {
       promptParts.push(`
-توليد Alt Text بثلاث لغات:
-- عربي: وصف دقيق ومختصر للصورة (25-50 كلمة)
-- English: Precise and concise description (25-50 words)
-- اردو: ایک درست اور مختصر تفصیل (25-50 الفاظ)
+توليد Alt Text بثلاث لغات (قصير جداً — 12-25 كلمة لكل لغة، لا أكثر):
+- عربي: وصف دقيق ومختصر
+- English: Precise and concise
+- اردو: درست اور مختصر
       `);
     }
     
@@ -215,14 +218,15 @@ ${promptParts.join('\n\n')}
   "matchingSuggestions": ["Use image with more focus on technology"]
 }
 
-ملاحظة: اجب بـ JSON فقط بدون أي نص إضافي.
+ملاحظة: اجب بـ JSON فقط بدون أي نص إضافي وبدون أسوار markdown. اجعل الأوصاف قصيرة حتى لا يُقطع الرد.
 `;
     
-    // Call Gemini 3 Pro Image with retry logic
-    const response = await pRetry(
+    // توليد + تحليل داخل نفس حلقة إعادة المحاولة (فشل JSON يُعاد توليده)
+    const analysisData = await pRetry(
       async () => {
+        let response: any;
         try {
-          return await geminiClient.models.generateContent({
+          response = await geminiClient.models.generateContent({
             model: "gemini-3-pro-image-preview",
             contents: [
               {
@@ -242,7 +246,8 @@ ${promptParts.join('\n\n')}
             ],
             config: {
               temperature: 0.2, // Low temperature for more consistent JSON
-              maxOutputTokens: 2048,
+              // 2048 كان يقطع الردود الثلاثية اللغات → JSON ناقص
+              maxOutputTokens: 4096,
             }
           });
         } catch (error: any) {
@@ -254,6 +259,29 @@ ${promptParts.join('\n\n')}
           abortError.name = 'AbortError';
           throw abortError;
         }
+
+        const candidate = response.candidates?.[0];
+        const finishReason = candidate?.finishReason || candidate?.finish_reason;
+        const textPart = candidate?.content?.parts?.find((part: any) => part.text);
+
+        if (!textPart?.text) {
+          throw new Error("No response from AI model");
+        }
+
+        const parsed = parseVisualAiJson(textPart.text);
+        if (!parsed) {
+          console.error(
+            `[Visual AI] Failed to parse JSON response (finishReason=${finishReason}):`,
+            textPart.text.slice(0, 500),
+          );
+          throw new Error("Failed to parse AI JSON");
+        }
+
+        if (finishReason && String(finishReason).toUpperCase().includes("MAX")) {
+          console.warn(`[Visual AI] Response truncated (finishReason=${finishReason}); used repaired/partial JSON`);
+        }
+
+        return parsed;
       },
       {
         retries: 3,
@@ -267,34 +295,6 @@ ${promptParts.join('\n\n')}
     );
     
     const processingTime = Date.now() - startTime;
-    
-    // Extract text response
-    const candidate = response.candidates?.[0];
-    const textPart = candidate?.content?.parts?.find((part: any) => part.text);
-    
-    if (!textPart?.text) {
-      console.error(`[Visual AI] No text response from Gemini`);
-      return {
-        success: false,
-        processingTime,
-        error: "No response from AI model"
-      };
-    }
-    
-    // Parse JSON response
-    let analysisData: any;
-    try {
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonText = textPart.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      analysisData = JSON.parse(jsonText);
-    } catch (error) {
-      console.error(`[Visual AI] Failed to parse JSON response:`, textPart.text);
-      return {
-        success: false,
-        processingTime,
-        error: "Failed to parse AI response"
-      };
-    }
     
     console.log(`[Visual AI] Analysis completed in ${processingTime}ms`);
     

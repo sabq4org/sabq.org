@@ -91,9 +91,11 @@ const edgeRedirectCache = new MemoryCache(EDGE_REDIRECT_CACHE_MAX, "edgeSlugRedi
 // المطابق (وهو ما تولّده فحوصات الزواحف بعدد غير محدود) يعيش MISS_TTL قصيرًا
 // حتى لا يزاحم المحتوى الحقيقي داخل السقف.
 const EDGE_META_CACHE_MAX = Number(process.env.EDGE_META_CACHE_MAX) || 20_000;
-const EDGE_META_MATCH_TTL = 120_000;
+const EDGE_META_MATCH_TTL = 300_000; // 5 دقائق — كان 120ث؛ يقلّل ضرب الأصل بعد إقلاع بارد
 const EDGE_META_MISS_TTL = 30_000;
 const edgeMetaCache = new MemoryCache(EDGE_META_CACHE_MAX, "edgeSeoMetaCache");
+/** single-flight لنفس المسار — يمنع عاصفة DB عند فوات الكاش المتزامن (CF + زواحف). */
+const edgeMetaInflight = new Map<string, Promise<Record<string, unknown>>>();
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
 const reporterUsers = aliasedTable(users, "reporter_user");
 const reporterStaff = aliasedTable(staff, "reporter_staff");
@@ -2636,42 +2638,54 @@ router.get("/api/edge/indexing-status", async (_req, res) => {
 });
 
 router.get("/api/edge/seo-meta", async (req, res) => {
-  res.set("Cache-Control", "public, max-age=60, s-maxage=60");
+  // مثل slug-redirect: CF يمتص التكرار؛ s-maxage=60 كان يعيد ضرب الأصل كل دقيقة.
+  res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
   try {
-    const path = String(req.query.path || "");
-    if (!path.startsWith("/")) return res.json(defaultMeta(path));
+    const raw = String(req.query.path || "");
+    if (!raw.startsWith("/")) return res.json(defaultMeta(raw));
 
-    // المسار وحده يحدد الرد (لا ترويسات ولا جلسة) — فالكاش الداخلي آمن.
+    // طبّع المسار (بدون ?utm_*/#) حتى لا يتفتت الكاش — نفس منطق slug-redirect.
+    const path = raw.replace(/[?#].*$/, "");
+
     const cacheKey = `edge:seo-meta:${path}`;
     const cached = edgeMetaCache.get<Record<string, unknown>>(cacheKey);
     if (cached !== null) return res.json(cached);
 
-    // Localized landing pages (English/Urdu) with no dynamic handler — emit the
-    // correct-language title/description instead of the Arabic default. Keys are
-    // exact paths, so they never shadow the slug-based dynamic handlers below.
-    const staticMeta = staticPageMeta(path);
-    if (staticMeta) {
-      edgeMetaCache.set(cacheKey, staticMeta, EDGE_META_MATCH_TTL);
-      return res.json(staticMeta);
-    }
+    const inflight = edgeMetaInflight.get(cacheKey);
+    if (inflight) return res.json(await inflight);
 
-    for (const handler of ROUTE_HANDLERS) {
-      const match = path.match(handler.pattern);
-      if (!match) continue;
-      const meta = await handler.handle(match);
-      if (meta) {
-        edgeMetaCache.set(cacheKey, meta as Record<string, unknown>, EDGE_META_MATCH_TTL);
-        return res.json(meta);
+    const compute = (async (): Promise<Record<string, unknown>> => {
+      const staticMeta = staticPageMeta(path);
+      if (staticMeta) {
+        edgeMetaCache.set(cacheKey, staticMeta, EDGE_META_MATCH_TTL);
+        return staticMeta;
       }
-      // Pattern matched but row not found → fall through to default 404-ish meta.
-      const missing = { ...defaultMeta(path), robots: "noindex, follow" };
-      edgeMetaCache.set(cacheKey, missing, EDGE_META_MISS_TTL);
-      return res.json(missing);
-    }
 
-    const fallback = defaultMeta(path);
-    edgeMetaCache.set(cacheKey, fallback, EDGE_META_MISS_TTL);
-    return res.json(fallback);
+      for (const handler of ROUTE_HANDLERS) {
+        const match = path.match(handler.pattern);
+        if (!match) continue;
+        const meta = await handler.handle(match);
+        if (meta) {
+          const payload = meta as Record<string, unknown>;
+          edgeMetaCache.set(cacheKey, payload, EDGE_META_MATCH_TTL);
+          return payload;
+        }
+        const missing = { ...defaultMeta(path), robots: "noindex, follow" };
+        edgeMetaCache.set(cacheKey, missing, EDGE_META_MISS_TTL);
+        return missing;
+      }
+
+      const fallback = defaultMeta(path);
+      edgeMetaCache.set(cacheKey, fallback, EDGE_META_MISS_TTL);
+      return fallback;
+    })();
+
+    edgeMetaInflight.set(cacheKey, compute);
+    try {
+      return res.json(await compute);
+    } finally {
+      edgeMetaInflight.delete(cacheKey);
+    }
   } catch (err) {
     console.error("[edge/seo-meta] error:", err);
     return res.status(500).json({ error: "internal" });
