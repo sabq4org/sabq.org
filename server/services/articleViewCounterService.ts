@@ -50,8 +50,20 @@ export function bufferArticleViewIncrement(articleId: string, increment: number)
   pending.set(articleId, (pending.get(articleId) || 0) + Math.floor(increment));
 }
 
-/** تحديث دفعة واحدة — عبارة قصيرة مستقلة، فشلها لا يُسقط بقية الدفعات. */
-async function flushChunk(chunk: [string, number][]): Promise<void> {
+type ViewUpdateStatus = {
+  id: string;
+  article_exists: boolean;
+  updated: boolean;
+};
+
+/**
+ * تحديث دفعة واحدة دون انتظار صفوف المقالات المقفلة.
+ *
+ * محرر المقال قد يحتفظ بقفل على صف ساخن. UPDATE جماعي عادي ينتظر ذلك الصف
+ * ويحبس معه بقية الدفعة حتى statement_timeout. نقفل فقط الصفوف المتاحة عبر
+ * SKIP LOCKED، ثم نعيد وحدها الزيادات التي لم تحصل على القفل للمحاولة التالية.
+ */
+async function flushChunk(chunk: [string, number][]): Promise<[string, number][]> {
   const params: any[] = [];
   const values = chunk
     .map(([id, inc], i) => {
@@ -61,13 +73,41 @@ async function flushChunk(chunk: [string, number][]): Promise<void> {
     })
     .join(", ");
 
-  await pool.query(
-    `UPDATE articles AS a
-       SET views = COALESCE(a.views, 0) + v.inc
-      FROM (VALUES ${values}) AS v(id, inc)
-     WHERE a.id = v.id`,
+  const result = await pool.query(
+    `WITH input(id, inc) AS (
+       VALUES ${values}
+     ),
+     locked AS MATERIALIZED (
+       SELECT a.id
+         FROM articles AS a
+         JOIN input AS i ON i.id = a.id
+          FOR UPDATE OF a SKIP LOCKED
+     ),
+     updated AS (
+       UPDATE articles AS a
+          SET views = COALESCE(a.views, 0) + i.inc
+         FROM input AS i
+         JOIN locked AS l ON l.id = i.id
+        WHERE a.id = i.id
+        RETURNING a.id
+     )
+     SELECT i.id,
+            EXISTS (SELECT 1 FROM articles AS existing WHERE existing.id = i.id) AS article_exists,
+            (u.id IS NOT NULL) AS updated
+       FROM input AS i
+       LEFT JOIN updated AS u ON u.id = i.id`,
     params,
-  );
+  ) as { rows: ViewUpdateStatus[] };
+
+  const statuses = new Map(result.rows.map((row) => [row.id, row]));
+  return chunk.filter(([id]) => {
+    const status = statuses.get(id);
+    if (status?.updated) return false;
+    // المقال المحذوف لا يمكن تحديثه ولا ينبغي إبقاؤه في طابور أبدي.
+    if (status && !status.article_exists) return false;
+    // غياب نتيجة غير متوقع؛ إعادة الصف أكثر أمانًا من إسقاط العدّاد بصمت.
+    return true;
+  });
 }
 
 export async function flushArticleViewCounters(): Promise<void> {
@@ -77,12 +117,17 @@ export async function flushArticleViewCounters(): Promise<void> {
   pending.clear();
   const startedAt = Date.now();
   let failedRows = 0;
+  let deferredRows = 0;
 
   try {
     for (let i = 0; i < batch.length; i += CHUNK_SIZE) {
       const chunk = batch.slice(i, i + CHUNK_SIZE);
       try {
-        await flushChunk(chunk);
+        const deferred = await flushChunk(chunk);
+        deferredRows += deferred.length;
+        for (const [id, inc] of deferred) {
+          pending.set(id, (pending.get(id) || 0) + inc);
+        }
       } catch (err: any) {
         // فشل دفعة واحدة لا يُسقط الباقي — تُعاد وحدها إلى الانتظار.
         failedRows += chunk.length;
@@ -98,9 +143,9 @@ export async function flushArticleViewCounters(): Promise<void> {
     flushing = false;
     const elapsed = Date.now() - startedAt;
     // سطر مرئي فقط عند وجود ما يستحق النظر — الحجم هو ما كان مجهولًا.
-    if (elapsed > 1_000 || failedRows > 0) {
+    if (elapsed > 1_000 || failedRows > 0 || deferredRows > 0) {
       console.warn(
-        `[ArticleViewCounter] دفق ${batch.length} مقالًا في ${elapsed}ms (فشل ${failedRows}، متبقٍ ${pending.size})`,
+        `[ArticleViewCounter] دفق ${batch.length} مقالًا في ${elapsed}ms (فشل ${failedRows}، مؤجل بقفل ${deferredRows}، متبقٍ ${pending.size})`,
       );
     }
     if (droppedSinceWarn > 0) {
