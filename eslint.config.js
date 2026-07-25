@@ -111,8 +111,13 @@ export default tseslint.config(
     // no ceiling while it grew past 9.8k lines. Cap it here (current size + ~100
     // slack) so new endpoints go in their own module. When an extraction shrinks
     // it, RATCHET this down — same rule as the two monoliths above.
+    // Re-baselined 2026-07-25 (security audit remediation): the mobile Bearer
+    // session verifier now joins alialhazmi so a ban, deletion or role revocation
+    // takes effect immediately instead of after the session's 30-day life
+    // (audit #19/#68). Guards inside existing handlers — no new endpoints. The
+    // ratchet's intent is unchanged; the next extraction must lower this.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10046 }] },
+    rules: { "max-lines": ["error", { max: 10120 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through
