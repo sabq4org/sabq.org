@@ -6914,14 +6914,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Build where conditions array
       const whereConditions: (SQL<unknown> | undefined)[] = [];
 
-      if (search) {
-        whereConditions.push(
-          or(
-            ilike(articles.title, `%${search}%`),
-            ilike(articles.excerpt, `%${search}%`)
-          )
-        );
-      }
+      // شرط البحث يُدفع لاحقًا عبر مسار المرشحين (قبل الاستعلام الرئيسي) —
+      // دمج ILIKE مع ORDER BY يجعل المخطط يمشي فهرس الترتيب ويرشّح صفًا صفًا
+      // (قياس 2026-07-25: متوسط 25s لهذه النقطة عند البحث).
+      const adminSearchPattern = search ? `%${search}%` : null;
 
       if (status && status !== "all") {
         whereConditions.push(eq(articles.status, status));
@@ -6997,6 +6993,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
+      // مسار المرشحين للبحث: صفِّ المطابقات أولًا بلا ترتيب (Bitmap Scan على
+      // فهارس trgm) ثم رتّب الدفعة الصغيرة. العدّاد يأتي من قائمة المرشحين
+      // نفسها (بسقف 1000) بدل count(*) ثانٍ بنفس تكلفة المسح.
+      let searchCandidateTotal: number | null = null;
+      if (adminSearchPattern) {
+        const candidates = await db
+          .select({ id: articles.id })
+          .from(articles)
+          .where(and(
+            ...whereConditions.filter((c): c is SQL<unknown> => Boolean(c)),
+            or(
+              ilike(articles.title, adminSearchPattern),
+              ilike(articles.excerpt, adminSearchPattern),
+            ),
+          ))
+          .limit(1000);
+        if (candidates.length === 0) {
+          return res.json({ articles: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 });
+        }
+        whereConditions.push(inArray(articles.id, candidates.map((c) => c.id)));
+        searchCandidateTotal = candidates.length;
+      }
+
       // انحدار 2026-07-25: كان هذا ملفوفًا بـwithStatementTimeout (معاملة صريحة).
       // على نقطة Neon `-pooler` يعمل PgBouncer في وضع transaction pooling،
       // فالمعاملة تُثبّت اتصال خادم طوال مدتها بينما الاستعلام المفرد يحرره فورًا.
@@ -7042,18 +7061,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           query = query.where(and(...whereConditions));
         }
 
-        // Get total count for pagination
-        let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
-        if (whereConditions.length > 0) {
-          countQuery = countQuery.where(and(...whereConditions));
+        // Get total count for pagination — عند البحث يكفينا عدد المرشحين
+        // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح.
+        let totalCount: number;
+        if (searchCandidateTotal !== null) {
+          totalCount = searchCandidateTotal;
+        } else {
+          let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
+          if (whereConditions.length > 0) {
+            countQuery = countQuery.where(and(...whereConditions));
+          }
+          const [countResult] = await countQuery;
+          totalCount = Number(countResult?.count || 0);
         }
-        const [countResult] = await countQuery;
 
         const rows = await query.orderBy(...orderClauses)
           .limit(limitNum)
           .offset(offset);
 
-        return { results: rows, total: Number(countResult?.count || 0) };
+        return { results: rows, total: totalCount };
       })();
 
       const formattedArticles = results.map((row) => ({

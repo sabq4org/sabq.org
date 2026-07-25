@@ -58,6 +58,7 @@ async function vacuumTables(): Promise<void> {
     'short_link_clicks',
     'activity_logs',
     'behavior_logs',
+    'article_ip_views',
   ];
   const client = await pool.connect();
   try {
@@ -96,6 +97,16 @@ async function runDatabaseCleanup(): Promise<void> {
   const behaviorDeleted = await batchDelete('behavior_logs', 'created_at', '90 days');
   log.info(`${LOG_PREFIX} Old behavior logs (>90d): ${behaviorDeleted} deleted`);
 
+  // عدّادات المشاهدة لكل IP تخدم منع التلاعب قصير الأمد فقط — صف لم يُرَ منذ
+  // 90 يومًا لا قيمة له، وبدون هذا البند كان الجدول ينمو بلا حد (1.9GB في
+  // 40 يومًا وقت تدقيق 2026-07-25).
+  const ipViewsDeleted = await batchDelete('article_ip_views', 'last_seen', '90 days');
+  log.info(`${LOG_PREFIX} Old article IP views (>90d): ${ipViewsDeleted} deleted`);
+
+  // سقف زمني لإحصاءات المقالات اليومية — المستهلكون يقرؤون 30-365 يومًا فقط.
+  const dailyStatsDeleted = await batchDelete('article_daily_stats', 'date', '400 days');
+  log.info(`${LOG_PREFIX} Old article daily stats (>400d): ${dailyStatsDeleted} deleted`);
+
   await vacuumTables();
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -106,7 +117,7 @@ export function startDatabaseCleanupJob(): void {
   cron.schedule('0 3 * * *', async () => {
     await runDatabaseCleanup();
   });
-  log.info(`${LOG_PREFIX} Scheduled daily cleanup at 3:00 AM (sessions, notifications 30d, email logs 30d, clicks 180d, activity/behavior 90d)`);
+  log.info(`${LOG_PREFIX} Scheduled daily cleanup at 3:00 AM (sessions, notifications 30d, email logs 30d, clicks 180d, activity/behavior 90d, ip-views 90d, daily-stats 400d)`);
 }
 
 export { runDatabaseCleanup, cleanupExpiredSessions };
