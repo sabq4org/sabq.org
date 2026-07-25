@@ -676,7 +676,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         : user?.email}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {user?.role === "admin" ? "مدير" : user?.role === "editor" ? "محرر" : "كاتب"}
+                      {user?.role === "system_admin" || user?.role === "system.admin" || user?.role === "superadmin" || user?.role === "super_admin"
+                        ? "مسؤول النظام"
+                        : user?.role === "admin"
+                          ? "مدير"
+                          : user?.role === "editor"
+                            ? "محرر"
+                            : user?.role === "reporter"
+                              ? "مراسل"
+                              : user?.role === "opinion_author"
+                                ? "كاتب رأي"
+                                : user?.role === "angle_writer"
+                                  ? "كاتب زاوية"
+                                  : user?.role === "author"
+                                    ? "كاتب"
+                                    : "عضو"}
                     </p>
                   </div>
                 </div>
