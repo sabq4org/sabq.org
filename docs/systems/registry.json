@@ -93,6 +93,7 @@
         "server/services/editorialNotifications.ts",
         "server/services/editorAlerts.ts",
         "server/services/dashboardPulseService.ts",
+        "server/services/adminDashboardStatsService.ts",
         "server/services/coverageGapMatcher.ts",
         "server/services/aiArticleGenerator.ts",
         "server/services/smartLinks.ts",

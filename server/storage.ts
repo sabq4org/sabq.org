@@ -8259,7 +8259,8 @@ export class DatabaseStorage implements IStorage {
       [commentStats],
       [categoriesStats],
       [abTestsStats],
-      [reactionsStats],
+      [reactionsTotalStats],
+      [reactionsTodayStats],
       [engagementStats],
       [audioStats],
       [deepAnalysesStats],
@@ -8291,8 +8292,8 @@ export class DatabaseStorage implements IStorage {
         })
         .from(userEvents)
         .where(and(
-          sql`${userEvents.eventType} = 'view'`,
-          sql`${userEvents.createdAt} >= ${todayStart}`
+          eq(userEvents.eventType, "view"),
+          gte(userEvents.createdAt, todayStart),
         )),
 
       // Get user stats with active today count
@@ -8332,22 +8333,29 @@ export class DatabaseStorage implements IStorage {
         })
         .from(experiments),
 
-      // Get reactions count (total and today)
+      // Reactions total (separate from today so today can use a createdAt range scan)
       db
         .select({
           total: sql<number>`count(*)`,
-          todayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${todayStart})`,
         })
         .from(reactions),
 
-      // Get engagement stats
+      db
+        .select({
+          todayCount: sql<number>`count(*)`,
+        })
+        .from(reactions)
+        .where(gte(reactions.createdAt, todayStart)),
+
+      // Engagement: never full-scan reading_history — last 7d for avg/totalReads + readsToday
       db
         .select({
           totalReads: sql<number>`count(*)`,
           readsToday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${todayStart})`,
           avgDuration: sql<number>`coalesce(avg(${readingHistory.readDuration}), 0)`,
         })
-        .from(readingHistory),
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, weekAgo)),
 
       // Get audio newsletters stats
       db
@@ -8496,8 +8504,8 @@ export class DatabaseStorage implements IStorage {
         running: Number(abTestsStats.running),
       },
       reactions: {
-        total: Number(reactionsStats.total),
-        todayCount: Number(reactionsStats.todayCount),
+        total: Number(reactionsTotalStats.total),
+        todayCount: Number(reactionsTodayStats.todayCount),
       },
       engagement: {
         averageTimeOnSite: Math.round(Number(engagementStats.avgDuration)),

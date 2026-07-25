@@ -1457,53 +1457,12 @@ if (!(globalThis as any).__sabqServer) {
         });
 
         
-        // Warm up dashboard stats cache in background (non-blocking)
+        // Warm up dashboard stats cache in background (non-blocking) — every replica
         setImmediate(async () => {
           try {
-            const { storage } = await import("./storage");
-            const { memoryCache, CACHE_TTL } = await import("./memoryCache");
+            const { getCachedAdminDashboardStats } = await import("./services/adminDashboardStatsService");
             console.log(`[Cache Warmup] 🔄 Pre-loading dashboard stats cache...`);
-            const stats = await storage.getAdminDashboardStats();
-            const trimmedStats = {
-              ...stats,
-              recentArticles: stats.recentArticles.map((article: any) => ({
-                id: article.id,
-                title: article.title,
-                slug: article.slug,
-                englishSlug: article.englishSlug || undefined,
-                status: article.status,
-                publishedAt: article.publishedAt,
-                views: article.views,
-                author: article.author ? {
-                  firstName: article.author.firstName,
-                  lastName: article.author.lastName,
-                  email: article.author.email,
-                } : undefined,
-              })),
-              topArticles: stats.topArticles.map((article: any) => ({
-                id: article.id,
-                title: article.title,
-                slug: article.slug,
-                englishSlug: article.englishSlug || undefined,
-                status: article.status,
-                publishedAt: article.publishedAt,
-                views: article.views,
-                category: article.category ? {
-                  nameAr: article.category.nameAr,
-                } : undefined,
-              })),
-              recentComments: stats.recentComments.map((comment: any) => ({
-                id: comment.id,
-                content: comment.content ? comment.content.substring(0, 100) : '',
-                status: comment.status,
-                createdAt: comment.createdAt,
-                user: comment.user ? {
-                  firstName: comment.user.firstName,
-                  lastName: comment.user.lastName,
-                } : undefined,
-              })),
-            };
-            memoryCache.set('admin:dashboard:stats', trimmedStats, CACHE_TTL.MEDIUM);
+            await getCachedAdminDashboardStats(true);
             console.log(`[Cache Warmup] ✅ Dashboard stats cache loaded successfully`);
           } catch (error) {
             console.error("[Cache Warmup] ⚠️  Dashboard stats cache warmup failed:", error);
@@ -1835,70 +1794,30 @@ if (!(globalThis as any).__sabqServer) {
         // }, BACKGROUND_JOB_DELAY + 90000);
         console.log("[Thumbnail Job] ⏸️ Disabled for performance optimization");
         
-        // Dashboard Stats Cache Refresh - runs every 4 minutes to keep cache warm
+      } else {
+        console.log("[Server] Background maintenance + AI jobs skipped (background workers disabled or not leader)");
+      }
+
+      // Dashboard stats cache: memory is per-process, so every replica must refresh.
+      // SWR fresh window is 5m — refresh every 4m keeps the hot path off Neon.
+      if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { storage } = await import("./storage");
-            const { memoryCache, CACHE_TTL } = await import("./memoryCache");
-            
+            const { getCachedAdminDashboardStats } = await import("./services/adminDashboardStatsService");
             const refreshDashboardCache = async () => {
               try {
-                const stats = await storage.getAdminDashboardStats();
-                const trimmedStats = {
-                  ...stats,
-                  recentArticles: stats.recentArticles.map((article: any) => ({
-                    id: article.id,
-                    title: article.title,
-                    slug: article.slug,
-                    englishSlug: article.englishSlug || undefined,
-                    status: article.status,
-                    publishedAt: article.publishedAt,
-                    views: article.views,
-                    author: article.author ? {
-                      firstName: article.author.firstName,
-                      lastName: article.author.lastName,
-                      email: article.author.email,
-                    } : undefined,
-                  })),
-                  topArticles: stats.topArticles.map((article: any) => ({
-                    id: article.id,
-                    title: article.title,
-                    slug: article.slug,
-                    englishSlug: article.englishSlug || undefined,
-                    status: article.status,
-                    publishedAt: article.publishedAt,
-                    views: article.views,
-                    category: article.category ? {
-                      nameAr: article.category.nameAr,
-                    } : undefined,
-                  })),
-                  recentComments: stats.recentComments.map((comment: any) => ({
-                    id: comment.id,
-                    content: comment.content ? comment.content.substring(0, 100) : '',
-                    status: comment.status,
-                    createdAt: comment.createdAt,
-                    user: comment.user ? {
-                      firstName: comment.user.firstName,
-                      lastName: comment.user.lastName,
-                    } : undefined,
-                  })),
-                };
-                memoryCache.set('admin:dashboard:stats', trimmedStats, CACHE_TTL.MEDIUM);
+                await getCachedAdminDashboardStats(true);
                 console.log("[Dashboard Cache] ✅ Cache refreshed successfully");
               } catch (error) {
                 console.error("[Dashboard Cache] ⚠️ Refresh failed:", error);
               }
             };
-            
-            setInterval(refreshDashboardCache, 30 * 60 * 1000);
-            console.log("[Server] ✅ Dashboard Cache Refresh job started (every 30 minutes)");
+            setInterval(refreshDashboardCache, 4 * 60 * 1000);
+            console.log("[Server] ✅ Dashboard Cache Refresh job started (every 4 minutes, all replicas)");
           } catch (error) {
             console.error("[Server] ⚠️ Error starting dashboard cache refresh:", error);
           }
         }, BACKGROUND_JOB_DELAY + 100000);
-        
-      } else {
-        console.log("[Server] Background maintenance + AI jobs skipped (background workers disabled or not leader)");
       }
 
       // أخبار المونديال: التسجيل خارج بوابة isLeader() عمدًا — أثناء النشر
