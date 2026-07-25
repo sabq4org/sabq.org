@@ -216,7 +216,7 @@ export default function Profile() {
     if (routeTab && routeTab !== activeTab) {
       setActiveTabState(routeTab);
     }
-  }, [routeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routeTab, activeTab]);
 
   const setActiveTab = (tab: string) => {
     const normalized = normalizeProfileTab(tab) ?? "overview";

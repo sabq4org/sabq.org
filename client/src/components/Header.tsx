@@ -498,7 +498,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   أدواتي
                 </h3>
                 <div className="space-y-1">
-                  {getMobileToolsItems(user as any).map((item) => {
+                  {getMobileToolsItems(user).map((item) => {
                     const Icon = item.icon;
                     return (
                       <Link key={item.id} href={item.href}>

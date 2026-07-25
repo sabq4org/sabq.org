@@ -105,20 +105,16 @@ export function AccountSection() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("purpose", "profile");
-      const uploadRes = await fetch("/api/media/upload", {
+      formData.append("entityType", "profile-avatar");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
         body: formData,
-        credentials: "include",
-      });
-      if (!uploadRes.ok) throw new Error("upload failed");
-      const uploadJson = await uploadRes.json();
-      const url = uploadJson?.url || uploadJson?.data?.url;
-      if (!url) throw new Error("no url");
+        isFormData: true,
+      })) as { url: string };
+
       await apiRequest("/api/profile/image", {
         method: "PUT",
-        body: JSON.stringify({ imageUrl: url }),
-        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileImageUrl: uploaded.url }),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: "تم التحديث", description: "تم تحديث صورتك الشخصية" });
