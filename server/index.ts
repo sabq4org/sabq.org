@@ -1517,6 +1517,8 @@ if (!(globalThis as any).__sabqServer) {
       }
 
       const enableBackgroundWorkers = process.env.ENABLE_BACKGROUND_WORKERS === "true";
+      // كأس العالم انتهى: وظائفه معطّلة افتراضيًا. WORLD_CUP_LIVE_ENABLED=true لبطولة قادمة.
+      const wcLive = process.env.WORLD_CUP_LIVE_ENABLED === "true";
       // النشرة الثقيلة لها process مستقل. لا تعِد تشغيلها داخل API إلا كخيار
       // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
       const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
@@ -2048,8 +2050,12 @@ if (!(globalThis as any).__sabqServer) {
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
-            startWorldCupNewsJob();
+            if (wcLive) {
+              const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
+              startWorldCupNewsJob();
+            } else {
+              console.log("[WC] بطولة منتهية — أخبار المونديال معطّلة (WORLD_CUP_LIVE_ENABLED != true)");
+            }
           } catch (error) {
             console.error("[Server] Error starting world cup news job:", error);
           }
@@ -2113,8 +2119,12 @@ if (!(globalThis as any).__sabqServer) {
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { startWcPredictionsJob } = await import("./jobs/wcPredictionsJob");
-            startWcPredictionsJob();
+            if (wcLive) {
+              const { startWcPredictionsJob } = await import("./jobs/wcPredictionsJob");
+              startWcPredictionsJob();
+            } else {
+              console.log("[WC] بطولة منتهية — تسوية توقّعات المونديال معطّلة (WORLD_CUP_LIVE_ENABLED != true)");
+            }
           } catch (error) {
             console.error("[Server] Error starting world cup predictions job:", error);
           }
