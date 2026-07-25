@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search } from "lucide-react";
+import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -30,7 +30,7 @@ import logoImage from "@assets/sabq-logo.png";
 import kingsCupEmblem from "@assets/kings-cup-logo.png";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
-import { hasPermission } from "@/hooks/useAuth";
+import { getMobileToolsItems } from "@/nav/accountMenuItems";
 
 interface HeaderProps {
   user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
@@ -491,65 +491,38 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
               </div>
             </div>
 
-            {/* أدواتي - My Tools (Logged-in users) */}
+            {/* أدواتي - My Tools (Logged-in users) — مصدر واحد مع القائمة المنسدلة */}
             {user && (
               <div className="p-3 border-t">
                 <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                   أدواتي
                 </h3>
                 <div className="space-y-1">
-                  {hasPermission(user as any, "dashboard.view") && (
-                    <Link href="/dashboard">
-                      <span
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                        onClick={() => setMobileMenuOpen(false)}
-                        data-testid="link-mobile-dashboard"
-                      >
-                        <LayoutDashboard className="h-5 w-5 text-primary" aria-hidden="true" />
-                        لوحة التحكم
-                      </span>
-                    </Link>
-                  )}
-                  <Link href="/daily-brief">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-daily-brief"
-                    >
-                      <Newspaper className="h-5 w-5 text-primary" aria-hidden="true" />
-                      ملخصي اليومي
-                    </span>
-                  </Link>
-                  <Link href="/profile">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-profile"
-                    >
-                      <User className="h-5 w-5 text-primary" aria-hidden="true" />
-                      الملف الشخصي
-                    </span>
-                  </Link>
-                  <Link href="/profile?tab=bookmarks">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-bookmarks"
-                    >
-                      <Bookmark className="h-5 w-5 text-primary" aria-hidden="true" />
-                      المحفوظات
-                    </span>
-                  </Link>
-                  <Link href="/notification-settings">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-notification-settings"
-                    >
-                      <Bell className="h-5 w-5 text-primary" aria-hidden="true" />
-                      إعدادات الإشعارات
-                    </span>
-                  </Link>
+                  {getMobileToolsItems(user).map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Link key={item.id} href={item.href}>
+                        <span
+                          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer min-h-[44px]"
+                          onClick={() => setMobileMenuOpen(false)}
+                          data-testid={
+                            item.id === "dashboard"
+                              ? "link-mobile-dashboard"
+                              : item.id === "profile"
+                                ? "link-mobile-profile"
+                                : item.id === "bookmarks-row"
+                                  ? "link-mobile-bookmarks"
+                                  : item.id === "settings"
+                                    ? "link-mobile-settings"
+                                    : `link-mobile-${item.id}`
+                          }
+                        >
+                          <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
+                          {item.labelAr}
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             )}

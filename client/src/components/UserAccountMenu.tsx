@@ -1,30 +1,23 @@
 /**
  * محتوى قائمة حساب المستخدم في الهيدر —
- * بطاقة ولاء بارزة + روابط أقل ازدحامًا.
+ * بطاقة ولاء + شرائح سريعة + روابط بلا قوائم فرعية.
  */
 import { useQuery } from "@tanstack/react-query";
-import {
-  Bell,
-  ChevronLeft,
-  Eye,
-  LayoutDashboard,
-  LogOut,
-  MessageSquare,
-  Newspaper,
-  Settings,
-  Trophy,
-  User as UserIcon,
-} from "lucide-react";
+import { ChevronLeft, LogOut, Trophy } from "lucide-react";
 import {
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { hasPermission, type User as AuthUser } from "@/hooks/useAuth";
+import type { User as AuthUser } from "@/hooks/useAuth";
 import { tierProgress } from "@shared/loyalty";
 import { formatNumber } from "@/lib/format";
+import { getQueryFn } from "@/lib/queryClient";
+import {
+  ACCOUNT_QUICK_CHIPS,
+  getMemberMenuItems,
+  getStaffMenuItems,
+} from "@/nav/accountMenuItems";
 
 type LoyaltySummary = {
   points: {
@@ -52,11 +45,28 @@ type Props = {
   testIdSuffix?: string;
 };
 
+type NotificationsResponse = {
+  unreadCount?: number;
+};
+
 export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
   const suffix = testIdSuffix;
+  const authUser = user as AuthUser;
+
   const { data: loyalty } = useQuery<LoyaltySummary>({
     queryKey: ["/api/loyalty/summary"],
   });
+
+  const { data: bookmarksRaw } = useQuery<unknown>({
+    queryKey: ["/api/profile/bookmarks"],
+  });
+  const bookmarksCount = Array.isArray(bookmarksRaw) ? bookmarksRaw.length : 0;
+
+  const { data: notifData } = useQuery<NotificationsResponse>({
+    queryKey: ["/api/notifications", { limit: 20, read: false }],
+    queryFn: getQueryFn<NotificationsResponse>({ on401: "returnNull", silent: true }),
+  });
+  const inboxCount = notifData?.unreadCount ?? 0;
 
   const lifetime = loyalty?.points?.lifetimePoints ?? 0;
   const balance = loyalty?.points?.totalPoints ?? 0;
@@ -69,6 +79,15 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
           100,
       )
     : 100;
+
+  const memberItems = getMemberMenuItems(authUser);
+  const staffItems = getStaffMenuItems(authUser);
+
+  const chipCount = (key?: "bookmarks" | "inbox") => {
+    if (key === "bookmarks") return bookmarksCount;
+    if (key === "inbox") return inboxCount;
+    return undefined;
+  };
 
   return (
     <>
@@ -106,7 +125,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
               </div>
             </div>
             <span className="text-[11px] font-bold text-primary inline-flex items-center gap-0.5 shrink-0 mt-0.5">
-              محفظتي
+              نقاطي ومكافآتي
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           </div>
@@ -126,83 +145,71 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
         </a>
       </div>
 
+      {/* شرائح سريعة */}
+      <div className="grid grid-cols-3 gap-1 px-2 pb-2" dir="rtl">
+        {ACCOUNT_QUICK_CHIPS.map((chip) => {
+          const Icon = chip.icon;
+          const count = chipCount(chip.countKey);
+          return (
+            <a
+              key={chip.id}
+              href={chip.href}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 px-1 py-2 text-center hover:bg-muted/70 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[44px]"
+              data-testid={`${chip.testId}${suffix}`}
+            >
+              <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span className="text-[10px] font-semibold leading-tight truncate max-w-full px-0.5">
+                {chip.labelAr}
+              </span>
+              {typeof count === "number" && count > 0 && (
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {count > 99 ? "99+" : count}
+                </span>
+              )}
+            </a>
+          );
+        })}
+      </div>
+
       <DropdownMenuSeparator />
 
-      <DropdownMenuItem asChild>
-        <a
-          href="/daily-brief"
-          className="flex w-full items-center cursor-pointer"
-          data-testid={`link-daily-brief${suffix}`}
-        >
-          <Newspaper className="ml-2 h-4 w-4" aria-hidden="true" />
-          ملخصي اليومي
-        </a>
-      </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <a
-          href="/profile"
-          className="flex w-full items-center cursor-pointer"
-          data-testid={`link-profile${suffix}`}
-        >
-          <UserIcon className="ml-2 h-4 w-4" aria-hidden="true" />
-          الملف الشخصي
-        </a>
-      </DropdownMenuItem>
-
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger data-testid={`button-account-settings${suffix}`}>
-          <Settings className="ml-2 h-4 w-4" aria-hidden="true" />
-          إعدادات
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="min-w-[12rem]">
-          <DropdownMenuItem asChild>
+      {memberItems.map((item) => {
+        const Icon = item.icon;
+        return (
+          <DropdownMenuItem key={item.id} asChild>
             <a
-              href="/focus/weekly"
+              href={item.href}
               className="flex w-full items-center cursor-pointer"
-              data-testid={`link-focus-weekly${suffix}`}
+              data-testid={`${item.testId}${suffix}`}
             >
-              <Eye className="ml-2 h-4 w-4" aria-hidden="true" />
-              تقرير القراءة الأسبوعي
+              <Icon className="ml-2 h-4 w-4" aria-hidden="true" />
+              {item.labelAr}
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <a
-              href="/notification-settings"
-              className="flex w-full items-center cursor-pointer"
-              data-testid={`link-notification-settings${suffix}`}
-            >
-              <Bell className="ml-2 h-4 w-4" aria-hidden="true" />
-              إعدادات الإشعارات
-            </a>
-          </DropdownMenuItem>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
+        );
+      })}
 
-      {hasPermission(user as AuthUser, "dashboard.view") && (
+      {staffItems.length > 0 && (
         <>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <a
-              href="/dashboard"
-              className="flex w-full items-center cursor-pointer"
-              data-testid={`link-dashboard${suffix}`}
-            >
-              <LayoutDashboard className="ml-2 h-4 w-4" aria-hidden="true" />
-              لوحة التحكم
-            </a>
-          </DropdownMenuItem>
-          {hasPermission(user as AuthUser, "dashboard.view_messages") && (
-            <DropdownMenuItem asChild>
-              <a
-                href="/dashboard/communications"
-                className="flex w-full items-center cursor-pointer"
-                data-testid={`link-communications${suffix}`}
-              >
-                <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
-                قنوات الاتصال
-              </a>
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground">
+            أدوات العمل
+          </DropdownMenuLabel>
+          {staffItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <DropdownMenuItem key={item.id} asChild>
+                <a
+                  href={item.href}
+                  className="flex w-full items-center cursor-pointer"
+                  data-testid={`${item.testId}${suffix}`}
+                >
+                  <Icon className="ml-2 h-4 w-4" aria-hidden="true" />
+                  {item.labelAr}
+                </a>
+              </DropdownMenuItem>
+            );
+          })}
         </>
       )}
 

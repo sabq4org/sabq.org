@@ -74,7 +74,7 @@ export default function EditInterests() {
         title: "تم التحديث بنجاح ✅",
         description: "تم تحديث اهتماماتك بنجاح.",
       });
-      setLocation("/profile");
+      setLocation("/settings/interests");
     },
     onError: () => {
       toast({
@@ -232,7 +232,7 @@ export default function EditInterests() {
         >
           <Button
             variant="outline"
-            onClick={() => setLocation("/profile")}
+            onClick={() => setLocation("/settings/interests")}
             data-testid="button-cancel"
             className="gap-2"
           >

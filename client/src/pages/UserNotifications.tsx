@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
@@ -144,7 +144,7 @@ export default function UserNotifications() {
   const { data, isLoading, error } = useQuery<NotificationsResponse>({
     queryKey: ["/api/notifications", { limit: 100 }],
     queryFn: async () => {
-      const res = await fetch("/api/notifications?limit=100", { credentials: 'include' });
+      const res = await fetch(apiUrl("/api/notifications?limit=100"), { credentials: 'include' });
       if (!res.ok) {
         const err = new Error("Failed to fetch notifications");
         (err as any).status = res.status;
@@ -372,7 +372,7 @@ export default function UserNotifications() {
                   الإشعارات
                 </h1>
                 
-                <Link href="/recommendation-settings">
+                <Link href="/settings/notifications">
                   <Button
                     variant="ghost"
                     size="icon"
