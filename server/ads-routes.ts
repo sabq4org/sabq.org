@@ -3068,11 +3068,26 @@ router.get("/slots/active", async (_req, res) => {
         // Slot locations that actually filled at least once in the last 24h.
         // Catches slots whose placement is momentarily paused but historically
         // serves; keeps them eligible so we don't oscillate.
-        const recentlyFilled = await db
-          .selectDistinct({ location: inventorySlots.location })
-          .from(impressions)
-          .innerJoin(inventorySlots, eq(impressions.slotId, inventorySlots.id))
-          .where(gte(impressions.timestamp, lookbackStart));
+        //
+        // Soft-fail: بعد DROP يدوي خاطئ لـ impressions أُعيد الجدول بـ
+        // slot_id INTEGER بينما inventory_slots.id varchar → Postgres 42883
+        // ويفشل المسار كاملاً رغم أن eligiblePlacements كافية. لا تُسقط الكاش.
+        let recentlyFilled: Array<{ location: string | null }> = [];
+        try {
+          recentlyFilled = await db
+            .selectDistinct({ location: inventorySlots.location })
+            .from(impressions)
+            .innerJoin(
+              inventorySlots,
+              sql`${impressions.slotId}::text = ${inventorySlots.id}::text`,
+            )
+            .where(gte(impressions.timestamp, lookbackStart));
+        } catch (err: any) {
+          console.warn(
+            "[Ads API] recentlyFilled skipped (impressions schema drift?):",
+            err?.cause?.message || err?.message || err,
+          );
+        }
 
         const slotSet = new Set<string>();
         for (const row of eligiblePlacements) {
