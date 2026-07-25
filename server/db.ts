@@ -417,6 +417,22 @@ export async function executeWithStatementTimeout<T = any>(
   });
 }
 
+// الشقيق الآمن للأنواع: executeWithStatementTimeout يمرر الاستعلام إلى
+// tx.execute فيرجع صفوفًا خامًا (snake_case، وأعمدة الـjoins تتصادم) — يصلح
+// للـSQL الخام فقط. هذا الغلاف يمرر tx نفسه فتُبنى استعلامات Drizzle عليه
+// وتحتفظ بتخطيط select والأنواع كاملة. المهلة تلغي الاستعلام من جهة الخادم
+// (SET LOCAL داخل المعاملة) فيتحرر اتصال الـpool بدل أن يبقى محتجزًا.
+export async function withStatementTimeout<T>(
+  timeoutMs: number,
+  run: (tx: typeof db) => Promise<T>,
+): Promise<T> {
+  const ms = Math.max(100, Math.floor(timeoutMs));
+  return (db as any).transaction(async (tx: any) => {
+    await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${ms}`));
+    return run(tx as typeof db);
+  });
+}
+
 // Pool stats helper for debugging
 export function getPoolStats() {
   return {

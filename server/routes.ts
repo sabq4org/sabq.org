@@ -125,10 +125,11 @@ import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
+import { getOrBuildSitemapXml } from "./services/sitemapCacheService";
 import pLimit from 'p-limit';
-import { db, executeWithStatementTimeout } from "./db";
+import { db, executeWithStatementTimeout, withStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
-import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt } from "drizzle-orm";
+import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
 import path from "path";
@@ -6915,7 +6916,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const reporterAlias = aliasedTable(users, 'reporter');
 
       // Build where conditions array
-      const whereConditions = [];
+      const whereConditions: (SQL<unknown> | undefined)[] = [];
 
       if (search) {
         whereConditions.push(
@@ -6986,55 +6987,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Build query with all conditions
-      let query = db
-        .select({
-          article: articleAdminSelect,
-          category: categories,
-          author: {
-            id: users.id,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            firstNameEn: users.firstNameEn,
-            lastNameEn: users.lastNameEn,
-            email: users.email,
-            profileImageUrl: users.profileImageUrl,
-          },
-          reporter: {
-            id: reporterAlias.id,
-            firstName: reporterAlias.firstName,
-            lastName: reporterAlias.lastName,
-            firstNameEn: reporterAlias.firstNameEn,
-            lastNameEn: reporterAlias.lastNameEn,
-            email: reporterAlias.email,
-            profileImageUrl: reporterAlias.profileImageUrl,
-          },
-          publisher: {
-            id: publishers.id,
-            companyName: publishers.agencyName,
-          },
-        })
-        .from(articles)
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(users, eq(articles.authorId, users.id))
-        .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
-        .leftJoin(publishers, eq(articles.publisherId, publishers.id))
-        .$dynamic();
-
-      // Apply all conditions
-      if (whereConditions.length > 0) {
-        query = query.where(and(...whereConditions));
-      }
-
-      
-      // Get total count for pagination
-      let countQuery = db.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
-      if (whereConditions.length > 0) {
-        countQuery = countQuery.where(and(...whereConditions));
-      }
-      const [countResult] = await countQuery;
-      const total = Number(countResult?.count || 0);
-
       // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
       // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
       // reordering from the dashboard persists after refetch instead of snapping back to date order
@@ -7049,11 +7001,62 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
-      query = query.orderBy(...orderClauses)
-        .limit(limitNum)
-        .offset(offset);
+      // البحث بالعنوان/المقتطف بلغ 47 ث تحت الضغط وعدّ النتائج 24 ث
+      // (pg_stat_statements) — مهلة 15 ث تلغي الاستعلام من جهة الخادم وتحرر
+      // اتصال الـpool بدل خنق بقية الطلبات.
+      const { results, total } = await withStatementTimeout(15_000, async (tx) => {
+        let query = tx
+          .select({
+            article: articleAdminSelect,
+            category: categories,
+            author: {
+              id: users.id,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              firstNameEn: users.firstNameEn,
+              lastNameEn: users.lastNameEn,
+              email: users.email,
+              profileImageUrl: users.profileImageUrl,
+            },
+            reporter: {
+              id: reporterAlias.id,
+              firstName: reporterAlias.firstName,
+              lastName: reporterAlias.lastName,
+              firstNameEn: reporterAlias.firstNameEn,
+              lastNameEn: reporterAlias.lastNameEn,
+              email: reporterAlias.email,
+              profileImageUrl: reporterAlias.profileImageUrl,
+            },
+            publisher: {
+              id: publishers.id,
+              companyName: publishers.agencyName,
+            },
+          })
+          .from(articles)
+          .leftJoin(categories, eq(articles.categoryId, categories.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
+          .leftJoin(publishers, eq(articles.publisherId, publishers.id))
+          .$dynamic();
 
-      const results = await query;
+        // Apply all conditions
+        if (whereConditions.length > 0) {
+          query = query.where(and(...whereConditions));
+        }
+
+        // Get total count for pagination
+        let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
+        if (whereConditions.length > 0) {
+          countQuery = countQuery.where(and(...whereConditions));
+        }
+        const [countResult] = await countQuery;
+
+        const rows = await query.orderBy(...orderClauses)
+          .limit(limitNum)
+          .offset(offset);
+
+        return { results: rows, total: Number(countResult?.count || 0) };
+      });
 
       const formattedArticles = results.map((row) => ({
         ...row.article,
@@ -27050,44 +27053,40 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/sitemap.xml", async (_req, res) => {
     try {
       const baseUrl = "https://sabq.org";
-      const now = Date.now();
-      const cache = (app as any).__sitemapIndexCache;
-      if (cache && now - cache.ts < 30 * 60 * 1000) {
-        res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-        return res.send(cache.xml);
-      }
+      // ذاكرة ← Redis ← توليد (getOrBuildSitemapXml) — طبقة Redis تنجو من
+      // النشرات وتُشارك بين النسخ؛ بدونها كل إقلاع يعيد التوليد من القاعدة.
+      const indexXml = await getOrBuildSitemapXml('index', 30 * 60 * 1000, async () => {
+        // Most-recent published article → a <lastmod> hint on the
+        // frequently-changing news + article-bucket children so Google
+        // reprioritizes them on recrawl. One cheap aggregate; index is cached 30m.
+        let lastmod = '';
+        try {
+          const r = await db.execute(sql`SELECT MAX(published_at) AS m FROM articles WHERE status = 'published'`);
+          const m = (((r as any).rows || r)[0] || {}).m;
+          if (m) lastmod = `<lastmod>${new Date(m).toISOString()}</lastmod>`;
+        } catch { /* lastmod is best-effort */ }
 
-      // Most-recent published article → a <lastmod> hint on the
-      // frequently-changing news + article-bucket children so Google
-      // reprioritizes them on recrawl. One cheap aggregate; index is cached 10m.
-      let lastmod = '';
-      try {
-        const r = await db.execute(sql`SELECT MAX(published_at) AS m FROM articles WHERE status = 'published'`);
-        const m = (((r as any).rows || r)[0] || {}).m;
-        if (m) lastmod = `<lastmod>${new Date(m).toISOString()}</lastmod>`;
-      } catch { /* lastmod is best-effort */ }
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
+        for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+        }
+        for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+        }
+        for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+        }
+        xml += '</sitemapindex>';
+        return xml;
+      });
 
-      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-      xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n`;
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
-      for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
-      }
-      for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
-      }
-      for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
-      }
-      xml += '</sitemapindex>';
-
-      (app as any).__sitemapIndexCache = { xml, ts: now };
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-      res.send(xml);
+      res.send(indexXml as string);
     } catch (error) {
       console.error("Error generating sitemap index:", error);
       res.status(500).send("Error generating sitemap");
@@ -27117,32 +27116,27 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/sitemap-categories.xml", async (_req, res) => {
     try {
       const baseUrl = "https://sabq.org";
-      const now = Date.now();
-      const cache = (app as any).__sitemapCatsCache;
-      if (cache && now - cache.ts < 30 * 60 * 1000) {
-        res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-        return res.send(cache.xml);
-      }
-      const activeCats = await db.execute(sql`
-        SELECT c.slug, c.english_slug FROM categories c
-        WHERE c.status = 'visible'
-        AND EXISTS (SELECT 1 FROM articles a WHERE a.category_id = c.id AND a.status = 'published' LIMIT 1)
-        ORDER BY c.display_order
-      `);
-      const catRows: any[] = (activeCats as any).rows || activeCats;
+      const catsXml = await getOrBuildSitemapXml('categories', 30 * 60 * 1000, async () => {
+        const activeCats = await db.execute(sql`
+          SELECT c.slug, c.english_slug FROM categories c
+          WHERE c.status = 'visible'
+          AND EXISTS (SELECT 1 FROM articles a WHERE a.category_id = c.id AND a.status = 'published' LIMIT 1)
+          ORDER BY c.display_order
+        `);
+        const catRows: any[] = (activeCats as any).rows || activeCats;
 
-      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-      xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-      for (const cat of catRows) {
-        const catSlug = cat.english_slug || cat.slug;
-        xml += `  <url><loc>${baseUrl}/category/${encodeURIComponent(catSlug)}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>\n`;
-      }
-      xml += '</urlset>';
-      (app as any).__sitemapCatsCache = { xml, ts: now };
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+        for (const cat of catRows) {
+          const catSlug = cat.english_slug || cat.slug;
+          xml += `  <url><loc>${baseUrl}/category/${encodeURIComponent(catSlug)}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>\n`;
+        }
+        xml += '</urlset>';
+        return xml;
+      });
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-      res.send(xml);
+      res.send(catsXml as string);
     } catch (error) {
       console.error("Error generating categories sitemap:", error);
       res.status(500).send("Error generating sitemap");
@@ -27255,21 +27249,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           return res.status(404).send("Not found");
         }
 
-        const now = Date.now();
-        const cacheKey = `${cachePrefix}_${bucket}`;
-        const cache = (app as any)[cacheKey];
-        // كاش 6 ساعات: الـ buckets أرشيفية — اكتشاف الجديد مسؤولية
-        // sitemap-news.xml (آخر 48 ساعة، كاش 3 دقائق) لا هذه الملفات
-        if (cache && now - cache.ts < 6 * 60 * 60 * 1000) {
-          res.header('Content-Type', 'application/xml; charset=utf-8');
-          res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
-          return res.send(cache.xml);
-        }
-
-        const xml = await generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets);
+        // كاش 6 ساعات (ذاكرة ← Redis): الـ buckets أرشيفية — اكتشاف الجديد
+        // مسؤولية sitemap-news.xml (آخر 48 ساعة، كاش 3 دقائق) لا هذه الملفات
+        const xml = await getOrBuildSitemapXml(`${cachePrefix}_${bucket}`, 6 * 60 * 60 * 1000,
+          () => generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets));
         if (xml === null) return res.status(404).send("Not found");
 
-        (app as any)[cacheKey] = { xml, ts: now };
         res.header('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
         res.send(xml);

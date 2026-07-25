@@ -1,5 +1,5 @@
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
-import { db } from "./db";
+import { db, withStatementTimeout } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
 import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
@@ -3928,7 +3928,7 @@ export class DatabaseStorage implements IStorage {
       return []; // Early return: no results for unauthorized archived requests
     }
 
-    const conditions = [];
+    const conditions: (SQL<unknown> | undefined)[] = [];
 
     if (filters?.categoryId) {
       conditions.push(eq(articles.categoryId, filters.categoryId));
@@ -3980,8 +3980,10 @@ export class DatabaseStorage implements IStorage {
     }
 
     const reporterAlias = aliasedTable(users, 'reporter');
-    
-    const results = await db
+
+    // مهلة 15 ث: هذا الاستعلام بلغ 47 ث تحت الضغط (pg_stat_statements) وكل
+    // نسخة عالقة تحتجز اتصال pool؛ الإلغاء من جهة الخادم يحرره فورًا.
+    const results = await withStatementTimeout(15_000, (tx) => tx
       .select({
         article: articleListSelect,
         category: categoryBasicSelect,
@@ -4001,7 +4003,7 @@ export class DatabaseStorage implements IStorage {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       // «إنعاش»: COALESCE يقدّم الخبر المُنعش دون تغيير تاريخ نشره الظاهر
       .orderBy(desc(articles.displayOrder), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
-      .limit(filters?.limit || 500);
+      .limit(filters?.limit || 500));
 
     return results.map((r) => ({
       ...r.article,
@@ -8420,8 +8422,8 @@ export class DatabaseStorage implements IStorage {
         })
         .from(smartBlocks),
 
-      // Get recent articles (latest 5)
-      db
+      // Get recent articles (latest 5) — مهلة 15 ث (بلغ 13.6 ث تحت الضغط)
+      withStatementTimeout(15_000, (tx) => tx
         .select({
           article: articleCardSelect,
           category: categoryBasicSelect,
@@ -8431,7 +8433,7 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
         .orderBy(desc(articles.createdAt))
-        .limit(5),
+        .limit(5)),
 
       // Get recent comments (latest 5)
       db
@@ -8444,8 +8446,8 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(comments.createdAt))
         .limit(5),
 
-      // Get top articles (most viewed, top 5)
-      db
+      // Get top articles (most viewed, top 5) — مهلة 15 ث (فرز views بلا فهرس)
+      withStatementTimeout(15_000, (tx) => tx
         .select({
           article: articleCardSelect,
           category: categoryBasicSelect,
@@ -8456,7 +8458,7 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(users, eq(articles.authorId, users.id))
         .where(eq(articles.status, "published"))
         .orderBy(desc(articles.views))
-        .limit(5),
+        .limit(5)),
     ]);
 
     const recentArticles: ArticleWithDetails[] = recentArticlesData.map((r) => ({
