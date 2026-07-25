@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-24 | المالك: editorial
+> آخر مراجعة: 2026-07-25 | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -42,6 +42,7 @@
 - **مواد بوابة الناشر:** تُحسب فقط عبر `articles.publisher_id` (لا عبر `authorId` لمالك الوكالة) حتى لا يدخل أرشيف المراسل القديم في باقة الوكالة. ختم الإنشاء من المحرر يضبط `publisherId` + `isPublisherNews`. سكربت تنظيف: `scripts/unlink-publisher-except-today.ts`.
 - **سعة يوم النشر:** حد ثابت `OPINION_WRITERS_PER_DAY_CAP = 10` في `shared/opinionWriterConstants.ts`. عند الامتلاء تظهر «غير متاح للنشر» في لوحة الكتّاب ومنتقي الكاتب، ويُرفض التعيين الذاتي والإداري ليوم ممتلئ (إلا تحديث نفس اليوم). العرض: «X من 10 كتّاب» (لا `X/10` حتى لا يُقرأ كتاريخ).
 - **التزام كتّاب الرأي:** `hasUpcoming` / `pendingCount` يعتبران المقال مُرسلاً إن `reviewStatus=pending_review` أو مسودة موبايل (`source` ios-app/android-app و`reviewStatus` فارغ). إرسال `/api/v1/articles/submit` يضبط `pending_review` من البداية.
+- **مقالات تنتظر التعديل (موبايل):** `GET /api/v1/articles/my-revisions` يرشّح `review_status=needs_changes` مع `(author_id OR reporter_id)` ويرتّب بـ `reviewed_at`. يعتمد على الفهرسين الجزئيين `idx_articles_needs_changes_author_reviewed` و`idx_articles_needs_changes_reporter_reviewed`؛ لا تُزلهما أو توسّع الاستعلام بطريقة تعيده إلى مسح جدول `articles` كاملاً.
 - **بانر موعد الكاتب:** `submitDeadline = nextPublishAt − يومان`. التذكير (`reminder`/`due_soon`) فقط والمهلة ما زالت في المستقبل؛ بعد فواتها → `late` بنص «فات آخر موعد للإرسال» دون عرض تاريخ ماضٍ. لا تربط التذكير بـ«خلال يومين من النشر» لأنها تتزامن مع انتهاء المهلة فتظهر رسالة محرجة.
 - **محرّر الإدخال ≠ كاتب الرأي:** لمقالات الرأي `authorId` = الكاتب الظاهر للقارئ، و`submitterId` = من أدخل المادة في المحرر. بانر المحرر يعتمد على `enteredBy` من `submitterId` فقط (لا يخلط الكاتب بالمحرر).
 - **نقر كاتب الرأي على الويب:** إن وُجد `staff.slug` → `/reporter/:slug`. وإلا → `/author/:name` عبر `GET /api/authors/by-name` (مطابقة الاسم على `users` ثم اختيار المكرّر بآخر `author_id` نشر؛ قائمة عبر `author_id` + كاش ذاكرة ٥ دقائق). الواجهة شبكة عناوين مثل `/opinion` لا صفوف صور.
