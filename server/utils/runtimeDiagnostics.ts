@@ -66,6 +66,7 @@ export interface RuntimeSnapshot {
   sockets: number;
   handlesByType: Record<string, number>;
   pool: { total: number; idle: number; waiting: number } | null;
+  caches: { name: string; size: number; max: number; inflight?: number }[];
   loopLagMs: number;
   maxLoopLagMs: number;
 }
@@ -86,6 +87,15 @@ export function runtimeSnapshot(): RuntimeSnapshot {
     /* المسبح غير مهيّأ بعد */
   }
 
+  let caches: RuntimeSnapshot["caches"] = [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { cacheSizes } = require("../memoryCache");
+    caches = cacheSizes();
+  } catch {
+    /* الكاشات غير مهيّأة بعد */
+  }
+
   return {
     uptimeS: Math.round(process.uptime()),
     rssMb: mb(mem.rss),
@@ -97,6 +107,7 @@ export function runtimeSnapshot(): RuntimeSnapshot {
     sockets: h.sockets,
     handlesByType: h.byType,
     pool,
+    caches,
     loopLagMs: Math.round(loopLagMs),
     maxLoopLagMs: Math.round(maxLoopLagMs),
   };
@@ -123,7 +134,11 @@ export function startRuntimeDiagnostics(): void {
       `[Runtime] up=${s.uptimeS}s rss=${s.rssMb}MB heap=${s.heapUsedMb}/${s.heapTotalMb}MB ext=${s.externalMb}MB ` +
         `fd=${s.openFds ?? "?"} sockets=${s.sockets} handles=${s.handles} ` +
         `pool=${s.pool ? `${s.pool.total}/${s.pool.idle}idle/${s.pool.waiting}wait` : "?"} ` +
-        `loopLag=${s.loopLagMs}ms peak=${s.maxLoopLagMs}ms`,
+        `loopLag=${s.loopLagMs}ms peak=${s.maxLoopLagMs}ms ` +
+        `caches=[${s.caches
+          .slice(0, 4)
+          .map((c) => `${c.name}:${c.size}/${c.max}`)
+          .join(" ")}]`,
     );
     maxLoopLagMs = 0;
   }, SAMPLE_INTERVAL_MS);

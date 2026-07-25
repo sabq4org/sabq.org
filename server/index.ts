@@ -125,6 +125,55 @@ app.get("/api/diagnostics", (_req, res) => {
   }
 });
 
+// لقطة heap — الأداة الحاسمة لتسمية الكائن المتسرّب. تُنتج ملف
+// .heapsnapshot يُفتح في Chrome DevTools ← Memory. الطريقة: خذ لقطتين
+// (مبكرة ومتأخرة بعشرين دقيقة) وحمّلهما، ثم في عرض «Comparison» رتّب
+// بـ«# Delta» — المُنشئ في الأعلى هو المتسرّب.
+//
+// محمية بسرّ إلزامي (HEAP_SNAPSHOT_TOKEN): اللقطة نسخة كاملة من ذاكرة
+// العملية — فيها أسرار وtokens وPII — فلا تُكشف بلا سرّ. غيابه ⇒ 404 (لا
+// نكشف وجود النقطة أصلًا). المقارنة timing-safe.
+//
+// تحذير تشغيلي: أخذ اللقطة يُجبر GC كاملًا ويجمّد حلقة الأحداث ثوانيَ
+// (heap بحجم ~1.5GB ⇒ 2–5ث). خذها بوعي وقت تحمّل خفيف إن أمكن.
+app.get("/api/diagnostics/heap", async (req, res) => {
+  const secret = process.env.HEAP_SNAPSHOT_TOKEN;
+  if (!secret) return res.status(404).end();
+
+  const provided = String(req.query.token || "");
+  try {
+    const { timingSafeEqual } = await import("node:crypto");
+    const a = Buffer.from(provided);
+    const b = Buffer.from(secret);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+  } catch {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  try {
+    const v8 = await import("node:v8");
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="sabq-heap-${Math.round(process.uptime())}s.heapsnapshot"`,
+    );
+    console.warn("[Runtime] أخذ لقطة heap — قد تتجمّد حلقة الأحداث ثوانيَ");
+    const stream = v8.getHeapSnapshot();
+    stream.pipe(res);
+    stream.on("error", () => {
+      try {
+        res.destroy();
+      } catch {
+        /* noop */
+      }
+    });
+  } catch (err: any) {
+    if (!res.headersSent) res.status(500).json({ error: err?.message || "snapshot failed" });
+  }
+});
+
 app.get("/api/version", (_req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
   res.status(200).json({
