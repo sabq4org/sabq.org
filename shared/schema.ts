@@ -1001,6 +1001,14 @@ export const articles = pgTable("articles", {
   index("idx_articles_status_published").on(table.status, table.publishedAt.desc()),
   index("idx_articles_category_status").on(table.categoryId, table.status),
   index("idx_articles_author_status").on(table.authorId, table.status),
+  // Mobile "my revisions" filters this rare state by either owner and sorts
+  // by reviewedAt. Partial indexes avoid scanning the entire articles table.
+  index("idx_articles_needs_changes_author_reviewed")
+    .on(table.authorId, table.reviewedAt.desc())
+    .where(sql`${table.reviewStatus} = 'needs_changes'`),
+  index("idx_articles_needs_changes_reporter_reviewed")
+    .on(table.reporterId, table.reviewedAt.desc())
+    .where(sql`${table.reviewStatus} = 'needs_changes'`),
   index("idx_articles_type").on(table.articleType),
   index("idx_articles_published_at").on(table.publishedAt.desc()),
   // ترتيب الموجز بعد خاصية الإنعاش: يغطي فرز COALESCE(resurfaced_at, published_at)
