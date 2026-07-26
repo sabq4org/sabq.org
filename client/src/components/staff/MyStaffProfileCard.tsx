@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StaffProfileForm } from "@/components/staff/StaffProfileForm";
 import { useAuth } from "@/hooks/useAuth";
+import { apiUrl } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 const PROFILE_CTA =
@@ -67,7 +68,15 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
     queryKey: ["/api/staff-profiles/me"],
     enabled: Boolean(user?.id),
   });
+  const { data: lettersRaw } = useQuery({
+    queryKey: ["/api/official-letters/mine"],
+    enabled: Boolean(user?.id),
+  });
   const data = (dataRaw ?? null) as MeProfile | null;
+  const activeLetters = (
+    ((lettersRaw as { letters?: { id: string; status: string }[] } | undefined)?.letters) ?? []
+  ).filter((l) => l.status === "issued");
+  const firstIssuedId = activeLetters[0]?.id ?? null;
   const percent = data?.profile?.completionPercent ?? 0;
   const missingCount = data?.profile?.missingFields?.length
     ?? data?.missingLabels?.length
@@ -144,16 +153,35 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {reviewStatus === "approved" && (
-            <Button
-              type="button"
-              size="sm"
-              className="gap-1.5"
-              onClick={goToCertificates}
-              data-testid="button-goto-issue-certificate"
-            >
-              <Download className="h-3.5 w-3.5" />
-              إصدار وتحميل الشهادة
-            </Button>
+            firstIssuedId ? (
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                asChild
+                data-testid="button-download-certificate"
+              >
+                <a
+                  href={apiUrl(`/api/official-letters/${firstIssuedId}/file.pdf`)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  تحميل الشهادة
+                </a>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                onClick={goToCertificates}
+                data-testid="button-goto-issue-certificate"
+              >
+                <Download className="h-3.5 w-3.5" />
+                إصدار الشهادة
+              </Button>
+            )
           )}
           <Button
             type="button"

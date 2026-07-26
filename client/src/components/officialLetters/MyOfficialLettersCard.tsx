@@ -165,25 +165,12 @@ export function MyOfficialLettersCard() {
         ) : activeLetters.length > 0 ? (
           <ul className="divide-y rounded-xl border">
             {activeLetters.map((letter) => (
-              <li key={letter.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{letter.letterTypeLabelAr}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {letter.referenceCode}
-                    {letter.recipientEntity ? ` · ${letter.recipientEntity}` : ""}
-                  </p>
-                </div>
-                <Button size="sm" asChild>
-                  <a
-                    href={apiUrl(`/api/official-letters/${letter.id}/file.pdf`)}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid={`link-my-letter-${letter.id}`}
-                  >
-                    <Download className="ml-1 h-4 w-4" />
-                    تنزيل الشهادة
-                  </a>
-                </Button>
+              <li key={letter.id} className="px-3 py-2.5" data-testid={`row-my-letter-${letter.id}`}>
+                <p className="text-sm font-medium">{letter.letterTypeLabelAr}</p>
+                <p className="text-xs text-muted-foreground">
+                  {letter.referenceCode}
+                  {letter.recipientEntity ? ` · ${letter.recipientEntity}` : ""}
+                </p>
               </li>
             ))}
           </ul>
@@ -205,7 +192,7 @@ export function MyOfficialLettersCard() {
               data-testid="button-request-letter"
             >
               <Download className="ml-2 h-4 w-4" />
-              إصدار وتحميل شهادة التعريف
+              إصدار شهادة التعريف
             </Button>
           </div>
         ) : null}
@@ -225,7 +212,7 @@ export function MyOfficialLettersCard() {
 
         {!canRequestSelected && formOpen ? (
           <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            لديك شهادة سارية من هذا النوع — استخدم زر التنزيل أعلاه. لا يمكن طلب شهادة ثانية.
+            لديك شهادة سارية من هذا النوع بالفعل. استخدم زر «تحميل الشهادة» أعلى الصفحة.
           </p>
         ) : formOpen ? (
           <div className="space-y-3 rounded-xl border p-3">
@@ -365,7 +352,7 @@ export function MyOfficialLettersCard() {
                 ) : (
                   <>
                     <Send className="ml-2 h-4 w-4" />
-                    إصدار وتحميل الشهادة
+                    إصدار الشهادة
                   </>
                 )}
               </Button>
