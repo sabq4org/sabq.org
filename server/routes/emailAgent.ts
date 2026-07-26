@@ -21,6 +21,10 @@ import { invalidatePublishedContent } from "../services/contentInvalidation";
 import { detectUrls, isNewsUrl, containsOnlyUrl, extractArticleContent, getSourceAttribution } from "../services/urlContentExtractor";
 import { sendEditorPublishAlert, getPublisherName } from "../services/editorAlerts";
 import { riyadhDayRange } from "../utils/riyadhDay";
+import {
+  claimEmailDedup,
+  extractEmailAddress,
+} from "../services/emailAgentDedup";
 
 const router = Router();
 
@@ -459,8 +463,8 @@ async function extractTextFromImage(buffer: Buffer, mimeType: string): Promise<s
   }
 }
 
-// 🔒 DEDUPLICATION: In-memory cache to prevent duplicate email processing
-// SendGrid retries webhooks on slow responses, causing duplicate articles
+// 🔒 DEDUPLICATION: In-memory fallback only when DB claim fails.
+// Primary dedup is DB-backed via claimEmailDedup (Message-ID + sender/subject).
 const processedEmails = new Map<string, number>(); // messageId -> timestamp
 const DEDUP_TTL = 5 * 60 * 1000; // 5 minutes TTL for processed emails
 
@@ -629,40 +633,68 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       }
     }
     
-    // 🔒 DEDUPLICATION CHECK - Database-based for Autoscale pods
-    // Use Message-ID if available, otherwise create hash from subject + from + date
-    dedupKey = messageId || `${from}_${subject}_${new Date().toISOString().substring(0, 16)}`; // Round to minute
-    
-    // Check database for existing processed email (works across all pods)
+    // 🔒 DEDUPLICATION — Message-ID (SendGrid retries) + sender/subject window (resends)
+    // Incident 2026-07-26: same story resent 6× with new Message-IDs → 5 published copies.
+    const senderEmailEarly = extractEmailAddress(from);
     try {
-      const existingEmail = await db.execute(
-        sql`SELECT id FROM email_agent_processed WHERE id = ${dedupKey} OR message_id = ${messageId || ''} LIMIT 1`
-      );
-      
-      if (existingEmail.rows.length > 0) {
-        console.log(`[Email Agent] 🔒 DUPLICATE DETECTED (DB) - Already processed: ${dedupKey.substring(0, 80)}...`);
-        return res.status(200).json({ 
-          success: true, 
-          message: "Duplicate webhook ignored - already processed this email",
-          dedupKey: dedupKey.substring(0, 50)
+      const claim = await claimEmailDedup({
+        messageId,
+        from,
+        subject,
+      });
+      dedupKey = claim.messageKey;
+
+      if (!claim.claimed) {
+        console.log(
+          `[Email Agent] 🔒 DUPLICATE DETECTED (${claim.reason}) — ${claim.messageKey.substring(0, 80)}`,
+        );
+
+        // Content resends should appear in the inbox as rejected so editors see the block.
+        // Message-ID retries stay silent (SendGrid noise).
+        if (claim.reason === "duplicate_content") {
+          try {
+            await storage.createEmailWebhookLog({
+              fromEmail: senderEmailEarly,
+              subject: subject || "(بدون موضوع)",
+              bodyText: typeof text === "string" ? text.substring(0, 2000) : "",
+              bodyHtml: typeof html === "string" ? html.substring(0, 2000) : "",
+              status: "rejected",
+              rejectionReason: "duplicate_content",
+              senderVerified: false,
+              tokenVerified: false,
+              processingError: `حُظر كتكرار لنفس المرسل والموضوع خلال نافذة منع التكرار (${claim.contentKey})`,
+            });
+            await storage.updateEmailAgentStats(new Date(), {
+              emailsReceived: 1,
+              emailsRejected: 1,
+            });
+          } catch (logError) {
+            console.error("[Email Agent] Failed to log content-duplicate rejection:", logError);
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          message:
+            claim.reason === "duplicate_content"
+              ? "Duplicate content ignored - same sender/subject recently processed"
+              : "Duplicate webhook ignored - already processed this email",
+          reason: claim.reason,
+          dedupKey: claim.messageKey.substring(0, 50),
         });
       }
-      
-      // Insert immediately to claim this email (atomic operation)
-      await db.execute(
-        sql`INSERT INTO email_agent_processed (id, message_id, subject, sender) 
-            VALUES (${dedupKey}, ${messageId || null}, ${subject.substring(0, 500)}, ${from.substring(0, 255)})
-            ON CONFLICT (id) DO NOTHING`
+
+      console.log(
+        `[Email Agent] 🔒 Dedup claimed message=${claim.messageKey.substring(0, 60)} content=${claim.contentKey}`,
       );
-      console.log(`[Email Agent] 🔒 Dedup key registered in DB: ${dedupKey.substring(0, 80)}...`);
     } catch (dbError) {
       console.error(`[Email Agent] DB dedup check failed, using memory fallback:`, dbError);
-      // Fallback to in-memory check if DB fails
+      dedupKey = messageId || `${senderEmailEarly}_${subject}_${new Date().toISOString().substring(0, 16)}`;
       if (processedEmails.has(dedupKey)) {
-        return res.status(200).json({ 
-          success: true, 
+        return res.status(200).json({
+          success: true,
           message: "Duplicate webhook ignored - already processing",
-          dedupKey: dedupKey.substring(0, 50)
+          dedupKey: dedupKey.substring(0, 50),
         });
       }
       processedEmails.set(dedupKey, Date.now());
@@ -1033,7 +1065,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       console.log(`[Email Agent] 📸 ========== uploadPendingImages completed ==========`);
     };
 
-    const senderEmail = from.match(/<(.+)>/)?.[1] || from;
+    const senderEmail = extractEmailAddress(from);
     
     const logId = nanoid();
     webhookLog = await storage.createEmailWebhookLog({
