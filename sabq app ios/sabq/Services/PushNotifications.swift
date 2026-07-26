@@ -23,6 +23,9 @@ enum NotificationDeepLink: Hashable {
     case feedback(id: String)
     case match(id: Int)
     case asianCupMatch(id: Int)
+    case roshn
+    case roshnTeam(id: Int)
+    case roshnMatch(id: Int)
     case survey(token: String)
 }
 
@@ -132,6 +135,22 @@ final class NotificationsStore {
         // sabq://match/<id>              — match center (WC / sports alerts)
         // sabq://asian-cup/match/<id>    — Asian Cup match center
         // sabq://survey/<token>          — personal survey invitation (SurveyView)
+        // Universal Links من الويب: نفس /roshn وصفحات الأندية تفتح التجربة
+        // الأصلية بدل بدء التطبيق على الرئيسية.
+        if url.scheme == "https", ["sabq.org", "www.sabq.org"].contains(url.host ?? "") {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            if parts.first == "roshn" {
+                if parts.count >= 3, parts[1] == "match", let id = Int(parts[2]) {
+                    return .roshnMatch(id: id)
+                }
+                return .roshn
+            }
+            if parts.count >= 3, parts[0] == "sports", parts[1] == "team", let id = Int(parts[2]) {
+                return .roshnTeam(id: id)
+            }
+            return nil
+        }
+
         guard url.scheme == "sabq" else { return nil }
         let host = url.host ?? ""
         let path = url.pathComponents.filter { $0 != "/" }
@@ -151,6 +170,15 @@ final class NotificationsStore {
                 return .asianCupMatch(id: id)
             }
             return nil
+        case "roshn":
+            // sabq://roshn أو sabq://roshn/team/<id> أو /match/<id>
+            if path.count >= 2, path[0] == "team", let id = Int(path[1]) {
+                return .roshnTeam(id: id)
+            }
+            if path.count >= 2, path[0] == "match", let id = Int(path[1]) {
+                return .roshnMatch(id: id)
+            }
+            return .roshn
         default: return nil
         }
     }

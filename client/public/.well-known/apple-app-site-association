@@ -3,6 +3,23 @@
     "apps": [],
     "details": [
       {
+        "appID": "CBU7MJEC5R.com.sabq.sabqorg",
+        "components": [
+          {
+            "/": "/roshn",
+            "comment": "بوابة دوري روشن داخل تطبيق سبق"
+          },
+          {
+            "/": "/roshn/*",
+            "comment": "مركز مباراة وروابط روشن العميقة"
+          },
+          {
+            "/": "/sports/team/*",
+            "comment": "صفحات أندية دوري روشن داخل تطبيق سبق"
+          }
+        ]
+      },
+      {
         "appID": "CBU7MJEC5R.com.sabq.gulfcup",
         "components": [
           {

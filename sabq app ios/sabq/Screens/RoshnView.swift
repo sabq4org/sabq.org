@@ -20,49 +20,73 @@ final class RoshnHubStore {
     var loadingMatches = false
     var loadingStandings = false
     var loadingRaces = false
+    var matchesError: String?
+    var standingsError: String?
+    var racesError: String?
 
-    func loadMatches() async {
+    func loadMatches(force: Bool = false) async {
         if loadingMatches { return }
         loadingMatches = true
         defer { loadingMatches = false }
-        buckets = try? await APIClient.shared.fetchRoshnMatches()
+        do {
+            buckets = try await APIClient.shared.fetchRoshnMatches(ignoreCache: force)
+            matchesError = nil
+        } catch {
+            matchesError = message(for: error)
+        }
     }
 
-    func loadStandings() async {
+    func loadStandings(force: Bool = false) async {
         if loadingStandings { return }
         loadingStandings = true
         defer { loadingStandings = false }
-        standings = (try? await APIClient.shared.fetchRoshnStandings()) ?? standings
+        do {
+            standings = try await APIClient.shared.fetchRoshnStandings(ignoreCache: force)
+            standingsError = nil
+        } catch {
+            standingsError = message(for: error)
+        }
     }
 
     /// السباقات بحارس الأرشيف: الموسم الحالي أولًا، وإن كان فارغًا قبل الموسم
     /// نعرض لوحات الموسم الماضي موسومة (نفس منطق الويب حرفيًا).
-    func loadRaces(hero: RsHero?) async {
+    func loadRaces(hero: RsHero?, force: Bool = false) async {
         if loadingRaces { return }
         loadingRaces = true
         defer { loadingRaces = false }
 
-        let current = (try? await APIClient.shared.fetchRoshnScorers()) ?? []
-        if !current.isEmpty {
-            racesFromArchive = false
-            scorers = current
-            async let a = APIClient.shared.fetchRoshnAssists()
-            async let c = APIClient.shared.fetchRoshnCards()
-            assists = (try? await a) ?? []
-            cards = try? await c
-            return
-        }
-        guard let hero, !hero.inSeason,
-              let prev = hero.lastSeason?.previousSeason ?? hero.outlook.nextSeason.map({ $0 - 1 })
-        else {
-            racesFromArchive = false
-            scorers = []
-            return
-        }
-        racesFromArchive = true
-        scorers = (try? await APIClient.shared.fetchRoshnScorers(season: prev)) ?? []
-        assists = (try? await APIClient.shared.fetchRoshnAssists(season: prev)) ?? []
-        cards = try? await APIClient.shared.fetchRoshnCards(season: prev)
+        let archiveSeason: Int? = {
+            guard let hero, !hero.inSeason else { return nil }
+            return hero.lastSeason?.previousSeason ?? hero.outlook.nextSeason.map { $0 - 1 }
+        }()
+        racesFromArchive = archiveSeason != nil
+
+        // الطلبات الثلاثة مستقلة: فشل الهدافين المؤقت لا ينبغي أن يخفي
+        // الصناعة والبطاقات كما كان يحدث سابقًا.
+        async let scorersResult: [RsScorer]? = try? await APIClient.shared.fetchRoshnScorers(
+            season: archiveSeason, ignoreCache: force
+        )
+        async let assistsResult: [RsLeader]? = try? await APIClient.shared.fetchRoshnAssists(
+            season: archiveSeason, ignoreCache: force
+        )
+        async let cardsResult: RsCards? = try? await APIClient.shared.fetchRoshnCards(
+            season: archiveSeason, ignoreCache: force
+        )
+        let (newScorers, newAssists, newCards) = await (scorersResult, assistsResult, cardsResult)
+
+        if let newScorers { scorers = newScorers }
+        if let newAssists { assists = newAssists }
+        if let newCards { cards = newCards }
+
+        let failures = [newScorers == nil, newAssists == nil, newCards == nil].filter { $0 }.count
+        racesError = failures == 0 ? nil
+            : failures == 3 ? "تعذّر تحميل لوحات الموسم. أعد المحاولة بعد لحظات."
+            : "اكتملت بعض اللوحات فقط؛ سنعيد تحميل البقية عند المحاولة."
+    }
+
+    private func message(for error: Error) -> String {
+        if let api = error as? APIError, let text = api.errorDescription { return text }
+        return "تعذّر الاتصال بمصدر البيانات حاليًا"
     }
 }
 
@@ -71,12 +95,23 @@ struct RoshnView: View {
     @State private var store = RoshnHubStore()
     @State private var tab: Tab = .matches
     @State private var selectedFixture: RsFixture?
+    @State private var showMatchCenter = false
+    @State private var selectedTeam: RsTeam?
 
     enum Tab: String, CaseIterable {
         case matches = "المباريات"
         case standings = "الترتيب"
         case races = "الهدّافون"
         case teams = "الأندية"
+
+        var icon: String {
+            switch self {
+            case .matches: "calendar"
+            case .standings: "list.number"
+            case .races: "trophy.fill"
+            case .teams: "shield.fill"
+            }
+        }
     }
 
     var body: some View {
@@ -87,121 +122,169 @@ struct RoshnView: View {
                 switch tab {
                 case .matches: matchesTab
                 case .standings: standingsTab
-                case .races: RoshnRacesSection(store: store)
+                case .races:
+                    RoshnRacesSection(store: store) {
+                        Task { await store.loadRaces(hero: homeStore.hero, force: true) }
+                    }
                 case .teams: teamsTab
                 }
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 28)
         }
-        .background(Color.white)
+        .background(RoshnTheme.canvas)
         .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.locale, RsFormat.latinLocale)
         .navigationTitle("دوري روشن")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await homeStore.loadIfNeeded()
-            await store.loadMatches()
-            await store.loadStandings()
-            await store.loadRaces(hero: homeStore.hero)
+            async let matches: Void = store.loadMatches()
+            async let standings: Void = store.loadStandings()
+            async let races: Void = store.loadRaces(hero: homeStore.hero)
+            _ = await (matches, standings, races)
         }
         .refreshable {
             await homeStore.refreshLive()
-            await store.loadMatches()
-            await store.loadStandings()
-            await store.loadRaces(hero: homeStore.hero)
+            async let matches: Void = store.loadMatches(force: true)
+            async let standings: Void = store.loadStandings(force: true)
+            async let races: Void = store.loadRaces(hero: homeStore.hero, force: true)
+            _ = await (matches, standings, races)
         }
-        .sheet(item: $selectedFixture) { fixture in
-            RoshnMatchCenter(fixtureId: fixture.id)
+        .sheet(isPresented: $showMatchCenter) {
+            if let fixture = selectedFixture {
+                RoshnMatchCenter(fixtureId: fixture.id)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+        .navigationDestination(item: $selectedTeam) { team in
+            RoshnTeamView(teamId: team.id, previewName: team.name, previewLogo: team.logo)
         }
     }
 
-    // MARK: الترويسة — بطاقة فاتحة بهوية روشن
+    // MARK: الترويسة — ملعب ليلي احترافي يطابق روح /roshn
 
     private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(LinearGradient(colors: [RoshnTheme.sky, RoshnTheme.pitch],
-                                             startPoint: .topTrailing, endPoint: .bottomLeading))
-                        .frame(width: 52, height: 52)
-                    Image(systemName: "soccerball")
-                        .font(SabqFonts.app(size: 26, weight: .medium))
+        ZStack {
+            RoshnTheme.heroGradient
+
+            // خطوط ملعب خافتة تعطي هوية رياضية من دون صورة ثقيلة.
+            Circle()
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .frame(width: 190, height: 190)
+                .offset(x: 135, y: 40)
+            Rectangle()
+                .stroke(.white.opacity(0.06), lineWidth: 1)
+                .frame(width: 175, height: 88)
+                .offset(x: -145, y: 78)
+
+            VStack(spacing: 15) {
+                HStack(spacing: 13) {
+                    Image("RoshnLeagueLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .padding(7)
+                        .frame(width: 64, height: 64)
+                        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(.white))
+                        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(.white.opacity(0.55), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.22), radius: 12, y: 7)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("دوري روشن السعودي")
+                            .font(SabqFonts.app(size: 23, weight: .bold))
+                            .foregroundStyle(.white)
+                        Text(seasonSubtitle)
+                            .font(SabqFonts.app(size: 11.5))
+                            .foregroundStyle(.white.opacity(0.70))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if let h = homeStore.hero, !h.live.isEmpty {
+                        HStack(spacing: 5) {
+                            Circle().fill(.white).frame(width: 6, height: 6)
+                            Text(h.live.count == 1 ? "مباشر" : "\(RsFormat.latin(h.live.count)) مباشر")
+                                .font(SabqFonts.app(size: 10.5, weight: .semibold))
+                        }
                         .foregroundStyle(.white)
-                }
-                .shadow(color: RoshnTheme.sky.opacity(0.25), radius: 6, y: 3)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("دوري روشن السعودي")
-                        .font(SabqFonts.app(size: 20, weight: .bold))
-                        .foregroundStyle(RoshnTheme.ink)
-                    Text(seasonSubtitle)
-                        .font(SabqFonts.app(size: 11))
-                        .foregroundStyle(RoshnTheme.inkSoft)
-                }
-
-                Spacer()
-
-                if let h = homeStore.hero, !h.live.isEmpty {
-                    HStack(spacing: 5) {
-                        Circle().fill(RoshnTheme.liveRed).frame(width: 7, height: 7)
-                        Text(h.live.count == 1 ? "مباشر" : "\(h.live.count) مباشر")
-                            .font(SabqFonts.app(size: 11, weight: .semibold))
-                            .foregroundStyle(RoshnTheme.liveRed)
+                        .padding(.horizontal, 9).padding(.vertical, 6)
+                        .background(Capsule().fill(RoshnTheme.liveRed))
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(Capsule().fill(RoshnTheme.liveRed.opacity(0.10)))
+                }
+
+                HStack(spacing: 8) {
+                    heroMetric(value: RsFormat.latin(store.standings.count), label: "نادٍ", icon: "shield.fill")
+                    heroMetric(value: RsFormat.latin(store.buckets?.upcoming.count ?? 0), label: "قادمة", icon: "calendar")
+                    heroMetric(value: RsFormat.latin(store.scorers.count), label: "في السباق", icon: "figure.soccer")
+                }
+
+                if let h = homeStore.hero, h.preSeason, !h.inSeason, let ts = h.outlook.firstKickoffTs {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        HStack(spacing: 7) {
+                            Image(systemName: "timer")
+                            Text("الموسم الجديد ينطلق بعد \(WCFormat.countdown(to: ts))")
+                                .lineLimit(1).minimumScaleFactor(0.75)
+                        }
+                        .font(SabqFonts.app(size: 12.5, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.11)))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.12), lineWidth: 1))
+                    }
                 }
             }
-
-            // عدّاد الانطلاقة قبل الموسم — لمسة الترقّب الأولى في الصفحة.
-            if let h = homeStore.hero, h.preSeason, !h.inSeason, let ts = h.outlook.firstKickoffTs {
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    HStack(spacing: 6) {
-                        Image(systemName: "timer")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                        Text("الموسم الجديد ينطلق بعد \(WCFormat.countdown(to: ts))")
-                            .font(SabqFonts.app(size: 12.5, weight: .semibold))
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    .foregroundStyle(RoshnTheme.sky)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.skySoft))
-                }
-            }
+            .padding(17)
         }
-        .padding(14)
-        .background(RoshnTheme.stripGradient)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1))
+        .shadow(color: RoshnTheme.navy.opacity(0.22), radius: 18, y: 10)
+    }
+
+    private func heroMetric(value: String, label: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(SabqFonts.app(size: 11, weight: .medium))
+            Text(value).font(SabqFonts.app(size: 14, weight: .bold)).monospacedDigit()
+            Text(label).font(SabqFonts.app(size: 10.5))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.09)))
     }
 
     private var seasonSubtitle: String {
         guard let h = homeStore.hero else { return "تغطية حية بتوقيت الرياض" }
         let season = h.outlook.nextSeason ?? h.outlook.season
-        return "موسم \(RsFormat.seasonLabel(season)) · تغطية حية بتوقيت الرياض"
+        return "موسم \(RsFormat.isolatedLatin(RsFormat.seasonLabel(season))) · تغطية حية بتوقيت الرياض"
     }
 
     // MARK: شريط التبويبات
 
     private var tabBar: some View {
-        HStack(spacing: 6) {
-            ForEach(Tab.allCases, id: \.self) { item in
-                Button {
-                    tab = item
-                } label: {
-                    Text(item.rawValue)
-                        .font(SabqFonts.app(size: 13, weight: tab == item ? .semibold : .regular))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Tab.allCases, id: \.self) { item in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { tab = item }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: item.icon)
+                                .font(SabqFonts.app(size: 11, weight: .medium))
+                            Text(item.rawValue)
+                                .font(SabqFonts.app(size: 13, weight: tab == item ? .semibold : .regular))
+                        }
                         .foregroundStyle(tab == item ? .white : RoshnTheme.inkSoft)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
+                        .padding(.horizontal, 15).padding(.vertical, 10)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(tab == item ? RoshnTheme.sky : RoshnTheme.skySoft.opacity(0.6))
+                            Capsule().fill(tab == item ? RoshnTheme.navy : RoshnTheme.card)
                         )
+                        .overlay(Capsule().stroke(tab == item ? Color.clear : RoshnTheme.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -224,6 +307,12 @@ struct RoshnView: View {
 
     private var matchesTab: some View {
         VStack(spacing: 10) {
+            sectionHeading("مباريات الدوري", subtitle: "المواعيد والنتائج لحظة بلحظة", icon: "sportscourt.fill")
+
+            if let error = store.matchesError {
+                retryBanner(error) { Task { await store.loadMatches(force: true) } }
+            }
+
             HStack(spacing: 6) {
                 ForEach([MatchBucket.live, .today, .upcoming, .results], id: \.self) { bucket in
                     Button {
@@ -269,7 +358,10 @@ struct RoshnView: View {
                             .padding(.top, 4)
 
                             ForEach(items) { fixture in
-                                RoshnMatchRow(fixture: fixture) { selectedFixture = fixture }
+                                RoshnMatchRow(fixture: fixture) {
+                                    selectedFixture = fixture
+                                    showMatchCenter = true
+                                }
                             }
                         }
                     }
@@ -312,6 +404,10 @@ struct RoshnView: View {
 
     private var standingsTab: some View {
         VStack(spacing: 8) {
+            sectionHeading("جدول الترتيب", subtitle: "المراكز والنقاط وفارق الأهداف", icon: "chart.bar.fill")
+            if let error = store.standingsError {
+                retryBanner(error) { Task { await store.loadStandings(force: true) } }
+            }
             if store.loadingStandings, store.standings.isEmpty {
                 loadingRows(count: 9, height: 44)
             } else if store.standings.isEmpty {
@@ -321,7 +417,10 @@ struct RoshnView: View {
                 standingsHeader
                 LazyVStack(spacing: 4) {
                     ForEach(store.standings) { row in
-                        RoshnStandingRowView(row: row, total: store.standings.count)
+                        Button { selectedTeam = row.team } label: {
+                            RoshnStandingRowView(row: row, total: store.standings.count)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -361,26 +460,43 @@ struct RoshnView: View {
     // MARK: تبويب الأندية
 
     private var teamsTab: some View {
-        Group {
+        VStack(spacing: 12) {
+            sectionHeading("أندية دوري روشن", subtitle: "صفحات متكاملة: أرقام، مباريات، هدّافون وقائمة", icon: "shield.fill")
+            if let error = store.standingsError {
+                retryBanner(error) { Task { await store.loadStandings(force: true) } }
+            }
             if store.standings.isEmpty {
                 emptyState(icon: "shield", text: "قائمة أندية الموسم تظهر مع اعتماد الجدول")
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 10)], spacing: 10) {
                     ForEach(store.standings.sorted { $0.team.name < $1.team.name }) { row in
-                        VStack(spacing: 8) {
-                            WCRemoteImage(url: row.team.logo)
-                                .padding(6).frame(width: 56, height: 56)
-                                .background(Circle().fill(.white))
-                                .overlay(Circle().stroke(RoshnTheme.line, lineWidth: 1))
-                            Text(row.team.name)
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .foregroundStyle(RoshnTheme.ink)
-                                .lineLimit(1).minimumScaleFactor(0.7)
+                        Button { selectedTeam = row.team } label: {
+                            VStack(spacing: 8) {
+                                ZStack(alignment: .bottomTrailing) {
+                                    WCRemoteImage(url: row.team.logo)
+                                        .padding(7).frame(width: 60, height: 60)
+                                        .background(Circle().fill(.white))
+                                        .overlay(Circle().stroke(RoshnTheme.line, lineWidth: 1))
+                                    Text(RsFormat.latin(row.rank))
+                                        .font(SabqFonts.app(size: 9, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(RoshnTheme.navy))
+                                }
+                                Text(row.team.name)
+                                    .font(SabqFonts.app(size: 12.5, weight: .semibold))
+                                    .foregroundStyle(RoshnTheme.ink)
+                                    .lineLimit(1).minimumScaleFactor(0.7)
+                                Text("\(RsFormat.latin(row.points)) نقطة")
+                                    .font(SabqFonts.app(size: 9.5))
+                                    .foregroundStyle(RoshnTheme.inkSoft)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(RoshnTheme.card))
+                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.skySoft.opacity(0.5)))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -411,6 +527,38 @@ struct RoshnView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 44)
+    }
+
+    private func sectionHeading(_ title: String, subtitle: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 15, weight: .medium))
+                .foregroundStyle(RoshnTheme.sky)
+                .frame(width: 36, height: 36)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(RoshnTheme.skySoft))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(SabqFonts.app(size: 17, weight: .bold)).foregroundStyle(RoshnTheme.ink)
+                Text(subtitle).font(SabqFonts.app(size: 10.5)).foregroundStyle(RoshnTheme.inkSoft)
+            }
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    private func retryBanner(_ message: String, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: "wifi.exclamationmark")
+                .foregroundStyle(RoshnTheme.gold)
+            Text(message)
+                .font(SabqFonts.app(size: 11))
+                .foregroundStyle(RoshnTheme.inkSoft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("إعادة") { action() }
+                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(RoshnTheme.sky)
+        }
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(RoshnTheme.goldSoft.opacity(0.75)))
     }
 }
 
@@ -570,6 +718,7 @@ struct RoshnStandingRowView: View {
 
 struct RoshnRacesSection: View {
     let store: RoshnHubStore
+    let onRetry: () -> Void
     @State private var race: Race = .goals
 
     enum Race: String, CaseIterable {
@@ -580,6 +729,36 @@ struct RoshnRacesSection: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "trophy.fill")
+                    .font(SabqFonts.app(size: 15, weight: .medium))
+                    .foregroundStyle(RoshnTheme.gold)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(RoshnTheme.goldSoft))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("سباقات الموسم")
+                        .font(SabqFonts.app(size: 17, weight: .bold))
+                        .foregroundStyle(RoshnTheme.ink)
+                    Text("الهدافون وصنّاع الأهداف والبطاقات")
+                        .font(SabqFonts.app(size: 10.5))
+                        .foregroundStyle(RoshnTheme.inkSoft)
+                }
+                Spacer()
+            }
+
+            if let message = store.racesError {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise.circle")
+                    Text(message).frame(maxWidth: .infinity, alignment: .leading)
+                    Button("إعادة", action: onRetry)
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
+                }
+                .font(SabqFonts.app(size: 10.5))
+                .foregroundStyle(RoshnTheme.gold)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.goldSoft))
+            }
+
             if store.racesFromArchive {
                 Text("لوحات الموسم الماضي — تتصفّر مع أول جولة للموسم الجديد")
                     .font(SabqFonts.app(size: 11))
@@ -608,10 +787,15 @@ struct RoshnRacesSection: View {
             switch race {
             case .goals:
                 if store.scorers.isEmpty {
-                    racesEmpty("سباق هدّاف الدوري ينطلق مع أول صافرة")
+                    if store.loadingRaces {
+                        racesLoading
+                    } else {
+                        racesEmpty("سباق هدّاف الدوري ينطلق مع أول صافرة")
+                    }
                 } else {
+                    if store.scorers.count >= 3 { podium }
                     LazyVStack(spacing: 6) {
-                        ForEach(store.scorers) { s in
+                        ForEach(store.scorers.count >= 3 ? Array(store.scorers.dropFirst(3)) : store.scorers) { s in
                             leaderRow(rank: s.rank, name: s.name, photo: s.photo, team: s.team,
                                       primary: "\(s.goals)", secondary: "\(s.assists) صناعة")
                         }
@@ -655,6 +839,52 @@ struct RoshnRacesSection: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+
+    private var racesLoading: some View {
+        VStack(spacing: 8) {
+            ForEach(0..<5, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(RoshnTheme.card)
+                    .frame(height: 58)
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+            }
+        }
+    }
+
+    private var podium: some View {
+        let leaders = [store.scorers[1], store.scorers[0], store.scorers[2]]
+        return HStack(alignment: .bottom, spacing: 8) {
+            ForEach(Array(leaders.enumerated()), id: \.element.id) { index, scorer in
+                let champion = index == 1
+                VStack(spacing: 6) {
+                    ZStack(alignment: .bottomTrailing) {
+                        WCRemoteImage(url: scorer.photo)
+                            .frame(width: champion ? 72 : 58, height: champion ? 72 : 58)
+                            .background(Circle().fill(RoshnTheme.skySoft))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(champion ? RoshnTheme.gold : RoshnTheme.line, lineWidth: champion ? 3 : 2))
+                        Text(RsFormat.latin(scorer.rank))
+                            .font(SabqFonts.app(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(champion ? RoshnTheme.gold : RoshnTheme.navy))
+                    }
+                    Text(scorer.name)
+                        .font(SabqFonts.app(size: champion ? 12.5 : 11, weight: .semibold))
+                        .foregroundStyle(RoshnTheme.ink)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    Text("\(RsFormat.latin(scorer.goals)) هدف")
+                        .font(SabqFonts.app(size: champion ? 14 : 12, weight: .bold))
+                        .foregroundStyle(champion ? RoshnTheme.gold : RoshnTheme.inkSoft)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, champion ? 14 : 11)
+                .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(champion ? RoshnTheme.goldSoft : RoshnTheme.card))
+                .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(champion ? RoshnTheme.gold.opacity(0.35) : RoshnTheme.line, lineWidth: 1))
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func leaderRow(rank: Int, name: String, photo: String, team: RsTeam,

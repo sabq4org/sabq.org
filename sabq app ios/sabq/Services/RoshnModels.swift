@@ -174,7 +174,29 @@ nonisolated struct RsLeader: Decodable, Identifiable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case playerId = "id"
-        case rank, name, photo, team, goals, assists, yellow, red
+        case rank, name, photo, team, teamLogo, goals, assists, yellow, red
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        rank = try c.decode(Int.self, forKey: .rank)
+        playerId = try c.decodeIfPresent(Int.self, forKey: .playerId)
+        name = try c.decode(String.self, forKey: .name)
+        photo = try c.decodeIfPresent(String.self, forKey: .photo) ?? ""
+        goals = try c.decodeIfPresent(Int.self, forKey: .goals)
+        assists = try c.decodeIfPresent(Int.self, forKey: .assists)
+        yellow = try c.decodeIfPresent(Int.self, forKey: .yellow)
+        red = try c.decodeIfPresent(Int.self, forKey: .red)
+
+        if let object = try? c.decode(RsTeam.self, forKey: .team) {
+            team = object
+        } else {
+            // عقد البطاقات التاريخي يعيد team كنص وteamLogo منفصلًا، بينما
+            // الهدافون والصناعة يعيدانه ككائن. نطبّع الشكلين لواجهة واحدة.
+            let teamName = try c.decodeIfPresent(String.self, forKey: .team) ?? ""
+            let logo = try c.decodeIfPresent(String.self, forKey: .teamLogo) ?? ""
+            team = RsTeam(id: 0, name: teamName, logo: logo, winner: nil)
+        }
     }
 }
 
@@ -204,7 +226,11 @@ nonisolated struct RsMatchEvent: Decodable, Identifiable, Hashable {
     let label: String
 
     var id: String { "\(minute ?? 0)-\(extra ?? 0)-\(type)-\(player)" }
-    var minuteLabel: String { "\(minute ?? 0)'\(extra.map { "+\($0)" } ?? "")" }
+    var minuteLabel: String {
+        let base = RsFormat.latin(minute ?? 0)
+        let added = extra.map { "+\(RsFormat.latin($0))" } ?? ""
+        return "\(base)\(added)'"
+    }
 }
 
 /// صفّ إحصائي — home/away قد تصل نصًّا أو رقمًا أو null، فنطبّعها لنصّ عرض.
@@ -310,6 +336,127 @@ nonisolated struct RsMatchRatings: Decodable, Hashable {
     let players: [RsRatedPlayer]
 }
 
+// MARK: صفحة النادي المتكاملة (/api/sports/team/:id?with=stats)
+
+nonisolated struct RsTeamVenue: Decodable, Hashable {
+    let name: String
+    let city: String
+    let capacity: Int?
+    let image: String?
+}
+
+nonisolated struct RsTeamInfo: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+    let country: String?
+    let founded: Int?
+    let venue: RsTeamVenue?
+}
+
+nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let number: Int?
+    let position: String
+    let positionEn: String
+    let age: Int?
+    let photo: String
+}
+
+nonisolated struct RsStatTriple: Decodable, Hashable {
+    let total: Int
+    let home: Int
+    let away: Int
+}
+
+nonisolated struct RsTeamStatFixtures: Decodable, Hashable {
+    let played: RsStatTriple
+    let wins: RsStatTriple
+    let draws: RsStatTriple
+    let loses: RsStatTriple
+}
+
+nonisolated struct RsGoalSide: Decodable, Hashable {
+    let total: Int
+    let average: String?
+}
+
+nonisolated struct RsTeamStatGoals: Decodable, Hashable {
+    let `for`: RsGoalSide
+    let against: RsGoalSide
+}
+
+nonisolated struct RsTeamCards: Decodable, Hashable {
+    let yellowTotal: Int
+    let redTotal: Int
+}
+
+nonisolated struct RsTeamStatSummary: Decodable, Hashable {
+    let cleanSheets: RsStatTriple
+    let failedToScore: RsStatTriple
+    let cards: RsTeamCards
+    let mostUsedFormation: String?
+}
+
+nonisolated struct RsTeamStatBiggest: Decodable, Hashable {
+    let winsHome: String?
+    let winsAway: String?
+    let losesHome: String?
+    let losesAway: String?
+    let streakWin: Int?
+    let streakLose: Int?
+    let streakDraw: Int?
+}
+
+nonisolated struct RsTeamStats: Decodable, Hashable {
+    let leagueId: Int?
+    let season: Int?
+    let fixtures: RsTeamStatFixtures
+    let goals: RsTeamStatGoals
+    let summary: RsTeamStatSummary
+    let biggest: RsTeamStatBiggest?
+}
+
+nonisolated struct RsCoachCareer: Decodable, Hashable {
+    let team: String
+    let start: String?
+    let end: String?
+}
+
+nonisolated struct RsCoach: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let photo: String
+    let nationality: String
+    let age: Int?
+    let startDate: String?
+    let career: [RsCoachCareer]
+}
+
+nonisolated struct RsTeamScorer: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let id: Int
+    let name: String
+    let photo: String
+    let goals: Int
+    let assists: Int
+    let penalties: Int
+    let matches: Int
+}
+
+nonisolated struct RsTeamProfile: Decodable {
+    let team: RsTeamInfo
+    let standing: RsStandingRow?
+    let competitionSlug: String?
+    let competitionName: String?
+    let fixtures: [RsFixture]
+    let squad: [RsSquadPlayer]
+    let stats: RsTeamStats?
+    let coach: RsCoach?
+    let topScorers: [RsTeamScorer]
+}
+
 // MARK: أغلفة الاستجابات
 
 nonisolated struct RsStandingsResponse: Decodable { let standings: [RsStandingRow] }
@@ -328,41 +475,89 @@ extension APIClient {
     }
 
     func fetchRoshnMatches(ignoreCache: Bool = false) async throws -> RsMatchBuckets {
-        try await get(RsMatchBuckets.self, path: "/sports/pro-league/matches",
-                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        try await roshnGet(RsMatchBuckets.self, path: "/sports/pro-league/matches",
+                           ignoreCache: ignoreCache)
     }
 
     func fetchRoshnStandings(ignoreCache: Bool = false) async throws -> [RsStandingRow] {
-        try await get(RsStandingsResponse.self, path: "/sports/pro-league/standings",
-                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).standings
+        try await roshnGet(RsStandingsResponse.self, path: "/sports/pro-league/standings",
+                           ignoreCache: ignoreCache).standings
     }
 
-    func fetchRoshnScorers(season: Int? = nil) async throws -> [RsScorer] {
-        let suffix = season.map { "?season=\($0)" } ?? ""
-        return try await get(RsScorersResponse.self, path: "/sports/pro-league/scorers\(suffix)",
-                             apiRoot: URLConstants.publicAPI).scorers
+    func fetchRoshnScorers(season: Int? = nil, ignoreCache: Bool = false) async throws -> [RsScorer] {
+        let query = season.map { ["season": String($0)] } ?? [:]
+        return try await roshnGet(RsScorersResponse.self, path: "/sports/pro-league/scorers",
+                                  query: query, ignoreCache: ignoreCache).scorers
     }
 
-    func fetchRoshnAssists(season: Int? = nil) async throws -> [RsLeader] {
-        let suffix = season.map { "?season=\($0)" } ?? ""
-        return try await get(RsAssistsResponse.self, path: "/sports/pro-league/assists\(suffix)",
-                             apiRoot: URLConstants.publicAPI).assists
+    func fetchRoshnAssists(season: Int? = nil, ignoreCache: Bool = false) async throws -> [RsLeader] {
+        let query = season.map { ["season": String($0)] } ?? [:]
+        return try await roshnGet(RsAssistsResponse.self, path: "/sports/pro-league/assists",
+                                  query: query, ignoreCache: ignoreCache).assists
     }
 
-    func fetchRoshnCards(season: Int? = nil) async throws -> RsCards {
-        let suffix = season.map { "?season=\($0)" } ?? ""
-        return try await get(RsCards.self, path: "/sports/pro-league/cards\(suffix)",
-                             apiRoot: URLConstants.publicAPI)
+    func fetchRoshnCards(season: Int? = nil, ignoreCache: Bool = false) async throws -> RsCards {
+        let query = season.map { ["season": String($0)] } ?? [:]
+        return try await roshnGet(RsCards.self, path: "/sports/pro-league/cards",
+                                  query: query, ignoreCache: ignoreCache)
     }
 
     func fetchRoshnMatch(fixtureId: Int, ignoreCache: Bool = false) async throws -> RsMatchDetail {
-        try await get(RsMatchDetail.self, path: "/sports/match/\(fixtureId)",
-                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        try await roshnGet(RsMatchDetail.self, path: "/sports/match/\(fixtureId)",
+                           ignoreCache: ignoreCache)
     }
 
-    func fetchRoshnMatchRatings(fixtureId: Int) async throws -> RsMatchRatings {
-        try await get(RsMatchRatings.self, path: "/sports/match/\(fixtureId)/players",
-                      apiRoot: URLConstants.publicAPI)
+    func fetchRoshnMatchRatings(fixtureId: Int, ignoreCache: Bool = false) async throws -> RsMatchRatings {
+        try await roshnGet(RsMatchRatings.self, path: "/sports/match/\(fixtureId)/players",
+                           ignoreCache: ignoreCache)
+    }
+
+    func fetchRoshnTeamProfile(teamId: Int, ignoreCache: Bool = false) async throws -> RsTeamProfile {
+        try await roshnGet(RsTeamProfile.self, path: "/sports/team/\(teamId)",
+                           query: ["with": "stats"], ignoreCache: ignoreCache)
+    }
+
+    /// نقاط الرياضة قد تعيد 503 لثوانٍ بينما يكمل الخادم تسخين SWR في
+    /// الخلفية. الويب يعيد الطلب تلقائيًا عبر TanStack Query؛ هذا الجسر يمنح
+    /// iOS السلوك نفسه بمحاولة واحدة مؤجلة بدل تحويل الاستجابة المؤقتة إلى
+    /// قائمة فارغة دائمة.
+    private func roshnGet<T: Decodable>(
+        _ type: T.Type,
+        path: String,
+        query: [String: String] = [:],
+        ignoreCache: Bool = false
+    ) async throws -> T {
+        var lastError: Error?
+        for attempt in 0..<2 {
+            do {
+                return try await get(
+                    type,
+                    path: path,
+                    query: query,
+                    ignoreCache: ignoreCache || attempt > 0,
+                    apiRoot: URLConstants.publicAPI
+                )
+            } catch {
+                lastError = error
+                guard attempt == 0, Self.isRoshnRetryable(error) else { throw error }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if Task.isCancelled { throw CancellationError() }
+            }
+        }
+        throw lastError ?? APIError.noResponse
+    }
+
+    nonisolated private static func isRoshnRetryable(_ error: Error) -> Bool {
+        if let url = error as? URLError {
+            return [.timedOut, .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet]
+                .contains(url.code)
+        }
+        guard let api = error as? APIError else { return false }
+        switch api {
+        case .serverError(let code): return code == 502 || code == 503 || code == 504
+        case .rateLimited, .noResponse, .apiMessage: return true
+        default: return false
+        }
     }
 }
 
@@ -391,10 +586,20 @@ nonisolated enum RoshnTheme {
     static let liveRed = Color(red: 0.90, green: 0.24, blue: 0.28)
     /// هبوط (المراكز الثلاثة الأخيرة في الترتيب).
     static let danger = Color(red: 0.86, green: 0.28, blue: 0.28)
+    /// كحلي ليلي مستوحى من هيرو /roshn على الويب.
+    static let navy = Color(red: 0.035, green: 0.12, blue: 0.20)
+    static let navyDeep = Color(red: 0.018, green: 0.065, blue: 0.11)
+    static let canvas = Color(red: 0.965, green: 0.978, blue: 0.986)
+    static let card = Color.white
 
     /// تدرّج بطاقة الشريط — فاتح صباحي: سماوي ناعم → أبيض → نسمة زمردية.
     static let stripGradient = LinearGradient(
         colors: [skySoft, .white, pitchSoft],
+        startPoint: .topTrailing, endPoint: .bottomLeading
+    )
+
+    static let heroGradient = LinearGradient(
+        colors: [navyDeep, navy, Color(red: 0.015, green: 0.30, blue: 0.27)],
         startPoint: .topTrailing, endPoint: .bottomLeading
     )
 }
@@ -402,6 +607,8 @@ nonisolated enum RoshnTheme {
 // MARK: - تنسيق التوقيت (يعيد استخدام منسّقات كأس العالم — الرياض/ميلادي/لاتيني)
 
 nonisolated enum RsFormat {
+    static let latinLocale = Locale(identifier: "ar_SA-u-ca-gregory-nu-latn")
+
     static func time(_ fixture: RsFixture) -> String {
         guard let d = fixture.kickoff else { return "" }
         return WCFormat.timeRiyadh.string(from: d)
@@ -423,9 +630,33 @@ nonisolated enum RsFormat {
 
     /// «2026-27» — الدوري يُوسم بموسم مزدوج.
     static func seasonLabel(_ season: Int) -> String {
-        "\(season)-\(String(season + 1).suffix(2))"
+        "\(latin(season))-\(String(latin(season + 1)).suffix(2))"
+    }
+
+    static func latin(_ value: Int) -> String {
+        String(value)
+    }
+
+    /// يعزل رقمًا لاتينيًا داخل جملة RTL حتى لا ينقلب موسم `2026-27`
+    /// بصريًا إلى `27-2026`.
+    static func isolatedLatin(_ value: String) -> String {
+        "\u{2066}\(value)\u{2069}"
+    }
+
+    static func latinDecimal(_ value: Double, digits: Int = 1) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = digits
+        formatter.maximumFractionDigits = digits
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.*f", digits, value)
     }
 }
 
 /// مسار التنقل لمركز دوري روشن.
 nonisolated struct RoshnRoute: Hashable {}
+
+/// رابط مباشر لصفحة نادٍ من رابط الويب العام `/sports/team/:id`.
+nonisolated struct RoshnTeamRoute: Hashable {
+    let teamId: Int
+}

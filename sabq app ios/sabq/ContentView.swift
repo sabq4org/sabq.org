@@ -102,6 +102,9 @@ struct ContentView: View {
                 .navigationDestination(for: RoshnRoute.self) { _ in
                     RoshnView()
                 }
+                .navigationDestination(for: RoshnTeamRoute.self) { route in
+                    RoshnTeamView(teamId: route.teamId)
+                }
                 .navigationDestination(for: MuqtarabRoute.self) { _ in
                     MuqtarabLandingView()
                 }
@@ -220,6 +223,8 @@ struct ContentView: View {
             .sheet(item: $deepLinkMatch) { sel in
                 if sel.competition == "asian-cup" {
                     AsianCupMatchCenter(fixtureId: sel.id)
+                } else if sel.competition == "roshn" {
+                    RoshnMatchCenter(fixtureId: sel.id)
                 } else {
                     WorldCupMatchCenter(fixtureId: sel.id)
                 }
@@ -358,6 +363,12 @@ struct ContentView: View {
         case .asianCupMatch(let id):
             SabqAnalytics.notificationOpen(type: "asian-cup-match", articleId: String(id))
             deepLinkMatch = DeepLinkMatch(id: id, competition: "asian-cup")
+        case .roshn:
+            navigationPath.append(RoshnRoute())
+        case .roshnTeam(let id):
+            navigationPath.append(RoshnTeamRoute(teamId: id))
+        case .roshnMatch(let id):
+            deepLinkMatch = DeepLinkMatch(id: id, competition: "roshn")
         case .survey(let token):
             SabqAnalytics.notificationOpen(type: "survey", articleId: nil)
             navigationPath.append(SurveyDeepLinkRoute(token: token))
