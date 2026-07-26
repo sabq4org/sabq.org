@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ShieldCheck, Loader2, Key, AlertTriangle, Smartphone, MessageSquare, ChevronLeft } from "lucide-react";
+import { ShieldCheck, Loader2, Key, AlertTriangle, Smartphone, MessageSquare } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
 const verifySchema = z.object({
@@ -21,7 +20,6 @@ const verifySchema = z.object({
 type VerifyFormData = z.infer<typeof verifySchema>;
 
 export default function TwoFactorVerify() {
-  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -59,12 +57,7 @@ export default function TwoFactorVerify() {
 
     const fetchUserMethod = async () => {
       try {
-        const response = await fetch('/api/2fa/pending-method');
-        if (!response.ok) {
-          throw new Error('فشل في الحصول على طريقة التحقق');
-        }
-
-        const data = await response.json();
+        const data = await apiRequest<{ method: string }>("/api/2fa/pending-method");
         setUserMethod(data.method);
 
         if (data.method === 'sms' || data.method === 'both') {
@@ -90,7 +83,6 @@ export default function TwoFactorVerify() {
 
     fetchUserMethod();
     return () => clearTimeout(redirectTimer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const form = useForm<VerifyFormData>({
@@ -179,42 +171,41 @@ export default function TwoFactorVerify() {
   };
 
   return (
-    <AuthLayout>
-      <div className="flex flex-col flex-1">
-        <div className="w-full max-w-md pt-10 mx-auto">
-          <Link 
-            href="/login" 
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="link-back-login"
-          >
-            <ChevronLeft className="h-5 w-5 ml-1" />
-            العودة لتسجيل الدخول
-          </Link>
+    <AuthLayout
+      footer={
+        <button
+          type="button"
+          onClick={() => {
+            // Logout and return to login page
+            window.location.href = "/login";
+          }}
+          className="transition-colors hover:text-foreground"
+          data-testid="link-back-to-login"
+        >
+          العودة إلى تسجيل الدخول
+        </button>
+      }
+    >
+      <div className="mb-6 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          {useBackupCode ? (
+            <Key className="h-7 w-7" />
+          ) : (
+            <ShieldCheck className="h-7 w-7" />
+          )}
         </div>
-        
-        <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
-          <div className="mb-5 sm:mb-8 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-                {useBackupCode ? (
-                  <Key className="w-8 h-8 text-primary-foreground" />
-                ) : (
-                  <ShieldCheck className="w-8 h-8 text-primary-foreground" />
-                )}
-              </div>
-            </div>
-            <h1 className="mb-2 font-semibold text-gray-800 text-title-sm sm:text-title-md dark:text-white/90">
-              التحقق بخطوتين
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {useBackupCode 
-                ? "أدخل أحد رموزك الاحتياطية للمتابعة"
-                : "اختر طريقة التحقق المناسبة لك"
-              }
-            </p>
-          </div>
+        <h1 className="text-xl font-bold text-foreground sm:text-2xl">
+          التحقق بخطوتين
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          {useBackupCode
+            ? "أدخل أحد رموزك الاحتياطية للمتابعة"
+            : "اختر طريقة التحقق المناسبة لك"
+          }
+        </p>
+      </div>
 
-          {!useBackupCode ? (
+      {!useBackupCode ? (
             <Tabs value={verificationMethod} onValueChange={handleMethodChange} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
                 <TabsTrigger value="authenticator" data-testid="tab-authenticator">
@@ -486,24 +477,6 @@ export default function TwoFactorVerify() {
               </form>
             </Form>
           )}
-          
-          <div className="mt-5">
-            <div className="text-center text-sm text-muted-foreground">
-              <button
-                type="button"
-                onClick={() => {
-                  // Logout and return to login page
-                  window.location.href = "/login";
-                }}
-                className="text-primary hover:underline"
-                data-testid="link-back-to-login"
-              >
-                العودة إلى تسجيل الدخول
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </AuthLayout>
   );
 }
