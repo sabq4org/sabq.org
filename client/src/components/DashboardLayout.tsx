@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, BadgeCheck, BadgeAlert } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, Newspaper, BadgeCheck, BadgeAlert } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
@@ -167,9 +167,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         .slice(0, 8)
     : [];
 
-  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل
+  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل ومدير المحتوى
   const isIdentitySidebar =
-    role === "opinion_author" || role === "angle_writer" || role === "reporter";
+    role === "opinion_author" || role === "angle_writer" || role === "reporter" || role === "content_manager";
   // ختم الترخيص — كتّاب الرأي والمراسلون (مرخّص / جدّد / منتهٍ / غير مرخّص)
   const mediaLicenseEndpoint =
     role === "opinion_author"
@@ -271,10 +271,23 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const identityDisplayName =
     user.firstName && user.lastName
       ? `${user.firstName} ${user.lastName}`
-      : user.firstName || user.name || user.email || (role === "reporter" ? "مراسل" : "كاتب");
+      : user.firstName || user.name || user.email || (
+        role === "reporter"
+          ? "مراسل"
+          : role === "content_manager"
+            ? "مدير محتوى"
+            : "كاتب"
+      );
   const identityRoleLabel =
-    role === "reporter" ? "مراسل" : role === "angle_writer" ? "كاتب زاوية" : "كاتب رأي";
-  const IdentityRoleIcon = role === "reporter" ? Mic : PenLine;
+    role === "reporter"
+      ? "مراسل"
+      : role === "angle_writer"
+        ? "كاتب زاوية"
+        : role === "content_manager"
+          ? "مدير محتوى"
+          : "كاتب رأي";
+  const IdentityRoleIcon =
+    role === "reporter" ? Mic : role === "content_manager" ? Newspaper : PenLine;
 
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
@@ -681,8 +694,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             ? "مسؤول النظام"
                             : user?.role === "editor"
                               ? "محرر"
-                              : user?.role === "reporter"
-                                ? "مراسل"
+                            : user?.role === "reporter"
+                              ? "مراسل"
+                              : user?.role === "content_manager"
+                                ? "مدير محتوى"
                                 : user?.role === "opinion_author"
                                   ? "كاتب رأي"
                                   : user?.role === "angle_writer"

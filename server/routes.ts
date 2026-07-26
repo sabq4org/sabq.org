@@ -1425,11 +1425,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         || "قارئ";
 
       // Also derive permissions from role-based mapping (for permissions defined in code but not yet in DB)
-      const { getPermissionsForRoles } = await import("@shared/rbac-constants");
-      const roleBasedPermissions = getPermissionsForRoles(allRoles);
-      
-      // Merge both sources
-      const permissionsArray = [...new Set([...dbPermissions, ...roleBasedPermissions])];
+      const { resolveEffectivePermissions } = await import("@shared/rbac-constants");
+      // دمج DB ∪ خريطة الكود مع استبعاد ROLE_PERMISSION_DENY_MAP (مثل meetings.create لمدير المحتوى)
+      const permissionsArray = resolveEffectivePermissions(allRoles, dbPermissions);
 
       // الناشر الموثوق (auto_publish) يستخدم المحرر الأساسي وينشر منه —
       // نمنحه articles.publish ديناميكياً ما دامت بوابة نشره مفتوحة، حتى
