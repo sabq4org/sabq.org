@@ -119,9 +119,14 @@ export class AIGateway {
       }),
     );
 
+    const cacheReadInputTokens = outcome.result.cacheReadInputTokens ?? 0;
+    const cacheCreationInputTokens = outcome.result.cacheCreationInputTokens ?? 0;
     const usage = {
       inputTokens: outcome.result.inputTokens,
       outputTokens: outcome.result.outputTokens,
+      ...(cacheReadInputTokens > 0 || cacheCreationInputTokens > 0
+        ? { cacheReadInputTokens, cacheCreationInputTokens }
+        : {}),
     };
     const { latencyMs, estimatedCostUsd } = await this.logSuccess("complete", req, outcome, usage);
 
@@ -367,7 +372,13 @@ export class AIGateway {
     op: AIOperation,
     req: { feature: string; userId?: string },
     outcome: FailoverOutcome<unknown>,
-    usage: { inputTokens?: number; outputTokens?: number; unitCount?: number },
+    usage: {
+      inputTokens?: number;
+      outputTokens?: number;
+      unitCount?: number;
+      cacheReadInputTokens?: number;
+      cacheCreationInputTokens?: number;
+    },
   ): Promise<{ latencyMs: number; estimatedCostUsd: number }> {
     const latencyMs = outcome.attempts.find((a) => a.ok)?.latencyMs ?? 0;
     const model = await this.deps.getModel(outcome.used);
