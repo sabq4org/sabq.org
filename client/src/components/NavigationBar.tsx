@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Link } from "wouter";
-import { Trophy } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { apiUrl } from "@/lib/queryClient";
 import type { Category } from "@shared/schema";
@@ -41,17 +40,6 @@ export function NavigationBar() {
         <div className="container mx-auto px-3 sm:px-6 lg:px-8">
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex gap-4 sm:gap-6 py-2.5 sm:py-3" dir="rtl">
-              {/* رابط ثابت لمركز دوري روشن — أول الشريط بأيقونة الكأس (طلب المالك:
-                  لا مدخل دائم للبطولة كان موجودًا، وصفحة التوقعات بلا طريق عودة) */}
-              <Link href="/roshn">
-                <span
-                  className="group cursor-pointer flex items-center gap-1.5 text-sm font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500 transition-colors duration-200 whitespace-nowrap"
-                  data-testid="nav-roshn"
-                >
-                  <Trophy className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
-                  <span>روشن</span>
-                </span>
-              </Link>
               {coreCategories.map((category, index) => (
                   <Link key={category.id} href={`/category/${category.englishSlug || category.slug}`}>
                     <span

@@ -728,7 +728,9 @@ export const navConfig: NavItem[] = [
     labelAr: "المستخدمون والأدوار",
     icon: Users,
     roles: ["admin", "hr"],
-    excludeRoles: ["opinion_author", "reporter"],
+    // مدير المحتوى قد يملك users.view لاختيار المراسلين في المحرر، لكن قسم
+    // «الفريق والصلاحيات» إداري وليس ضمن نطاقه — exclude على الحاوية يخفي الشجرة كلها.
+    excludeRoles: ["opinion_author", "reporter", "content_manager"],
     children: [
       {
         id: "staff_profiles",
@@ -756,6 +758,7 @@ export const navConfig: NavItem[] = [
         icon: Shield,
         roles: ["admin"],
         permissions: ["users.view", "users.manage"],
+        excludeRoles: ["content_manager"],
       },
       {
         id: "users_mgmt",
@@ -765,6 +768,7 @@ export const navConfig: NavItem[] = [
         icon: UserCircle,
         roles: ["admin"],
         permissions: ["users.view", "users.manage"],
+        excludeRoles: ["content_manager"],
       },
       {
         id: "roles",
@@ -792,6 +796,7 @@ export const navConfig: NavItem[] = [
         icon: User,
         roles: ["admin"],
         permissions: ["users.view", "users.manage"],
+        excludeRoles: ["content_manager"],
       },
       {
         id: "opinion-authors",
@@ -801,6 +806,7 @@ export const navConfig: NavItem[] = [
         icon: BookOpen,
         roles: ["admin"],
         permissions: ["users.view", "users.manage"],
+        excludeRoles: ["content_manager"],
       },
       {
         id: "email-templates",
@@ -828,7 +834,6 @@ export const navConfig: NavItem[] = [
         icon: TrendingUp,
         roles: ["admin"],
         permissions: ["staff.view_productivity"],
-        // مدير المحتوى كان يملك staff.view_productivity تاريخياً — نخفي المدخل صراحة
         excludeRoles: ["content_manager"],
       },
     ],
