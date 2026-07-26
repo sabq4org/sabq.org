@@ -15,14 +15,22 @@ export type PredCompetitionSummary = {
 
 export type PredTeamMeta = { name?: string | null; logo?: string | null };
 
+/** خيار اختيار جاهز لمسابقات الموسم (بطل/هدّاف) — يُدمج في metadata عند الإنشاء. */
+export type PredPickOption = { id: string; name: string; logo?: string | null };
+
 export type PredContestMeta = {
   home?: PredTeamMeta | null;
   away?: PredTeamMeta | null;
   round?: string | null;
   venue?: string | null;
+  title?: string | null;
+  options?: PredPickOption[] | null;
 };
 
 export type PredScorePayload = { predHome?: number; predAway?: number };
+/** حمولة مسابقات الاختيار (بطل الموسم/الهدّاف) — مرآة longTermPickPayloadSchema. */
+export type PredPickPayload = { pickId?: string; pickName?: string };
+export type PredEntryPayload = PredScorePayload & PredPickPayload;
 
 export type PredContest = {
   id: string;
@@ -32,13 +40,8 @@ export type PredContest = {
   locksAt: string;
   settledAt?: string | null;
   metadata?: PredContestMeta | null;
-  result?: { finalHome?: number; finalAway?: number } | null;
-  myEntry?: { id: string; payload?: PredScorePayload | null } | null;
-};
-
-export type PredCompetitionDetail = {
-  competition: { id: string; slug: string; nameAr: string; seasonKey: string };
-  contests: PredContest[];
+  result?: { finalHome?: number; finalAway?: number; winningPickIds?: string[] } | null;
+  myEntry?: { id: string; payload?: PredEntryPayload | null } | null;
 };
 
 export type PredRule = {
@@ -48,7 +51,18 @@ export type PredRule = {
     basePool?: number;
     tiers?: { exact?: number; signedMargin?: number; outcome?: number };
     winCriterion?: "exact" | "outcome";
+    distribution?: "equal" | "early_weighted" | string;
+    earlyTiers?: { beforeHours?: number; weight?: number }[];
   } | null;
+};
+
+/** قاعدة على مستوى البطولة (من detail.rules) — الملف النشط لكل نوع مسابقة. */
+export type PredCompetitionRule = PredRule & { contestType: string };
+
+export type PredCompetitionDetail = {
+  competition: { id: string; slug: string; nameAr: string; seasonKey: string };
+  contests: PredContest[];
+  rules?: PredCompetitionRule[];
 };
 
 export type PredContestDetail = PredContest & { rule?: PredRule | null };
@@ -119,8 +133,27 @@ export function ruleSummaryAr(rule: PredRule | null | undefined): string {
       return "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك";
     case "fixed_points":
       return "نقاط ثابتة حسب دقة التوقّع";
+    case "long_term_pool": {
+      const early = rule.params.distribution === "early_weighted";
+      const maxWeight = Math.max(1, ...(rule.params.earlyTiers ?? []).map((t) => t.weight ?? 1));
+      return early
+        ? `بركة ${basePool} نقطة تُقسم على المصيبين — وكلما بكّرت بتوقّعك زاد وزنه (حتى ×${maxWeight})`
+        : `بركة ${basePool} نقطة تُقسم بالتساوي على المصيبين آخر الموسم`;
+    }
     default:
       return "تُحتسب النقاط بعد صافرة النهاية";
+  }
+}
+
+/** تسمية نوع المسابقة للعرض — مرآة CONTEST_TYPE_LABELS في عقود الخادم. */
+export function contestTypeLabelAr(contestType: string): string {
+  switch (contestType) {
+    case "match_score": return "توقّع المباريات";
+    case "champion": return "بطل الموسم";
+    case "top_scorer": return "هدّاف الموسم";
+    case "match_scorer": return "هدّاف المباراة";
+    case "first_scorer": return "أول هدّاف";
+    default: return "التوقّعات";
   }
 }
 

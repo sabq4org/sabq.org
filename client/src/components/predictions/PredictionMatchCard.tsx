@@ -2,7 +2,7 @@
 // وشريط قاعدة مولّد من الملف الفعّال (يُجلب عند فتح العدّاد)، وحالة واحدة
 // واضحة لكل مباراة. الأزرار للمسجّلين، وغيرهم يُدعى لتسجيل الدخول.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Lock, Minus, Plus, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -36,10 +36,20 @@ export function PredictionMatchCard({
   const [predHome, setPredHome] = useState(mine?.predHome ?? 0);
   const [predAway, setPredAway] = useState(mine?.predAway ?? 0);
 
+  // ساعة حية كل 30 ثانية: العدّاد التنازلي كان يُحسب مرة واحدة عند الرسم،
+  // فيبقى تبويب خامل يعرض «توقّع الآن» بعد انطلاق المباراة ثم يفشل الحفظ.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const lockPassed = Date.parse(contest.locksAt) <= now;
+  const isOpen = contest.status === "open" && !lockPassed;
+
   // القاعدة تُجلب عند فتح العدّاد فقط — من ملف الاحتساب الفعّال
   const { data: detailRaw } = useQuery<PredContestDetail>({
     queryKey: [`/api/predictions/contests/${contest.id}`],
-    enabled: editing && contest.status === "open",
+    enabled: editing && isOpen,
     staleTime: 5 * 60_000,
   });
 
@@ -54,17 +64,26 @@ export function PredictionMatchCard({
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
     },
-    onError: () =>
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "";
+      const locked = message.includes("PREDICTION_LOCKED") || message.includes("409");
       toast({
-        title: "تعذّر حفظ التوقّع",
-        description: "ربما أُقفلت المباراة — حدّث الصفحة",
+        title: locked ? "أُقفل التوقّع" : "تعذّر حفظ التوقّع",
+        description: locked
+          ? "انطلقت المباراة — التوقّع يُقفل عند ضربة البداية"
+          : "تحقّق من اتصالك وحاول مجددًا",
         variant: "destructive",
-      }),
+      });
+      if (locked) {
+        setEditing(false);
+        queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      }
+    },
   });
 
   const home = contest.metadata?.home;
   const away = contest.metadata?.away;
-  const countdown = contest.status === "open" ? lockCountdownAr(contest.locksAt) : null;
+  const countdown = isOpen ? lockCountdownAr(contest.locksAt, now) : null;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -92,6 +111,7 @@ export function PredictionMatchCard({
         </span>
         <StatusChip
           contest={contest}
+          lockPassed={lockPassed}
           onPredict={() => {
             if (!isAuthenticated) return onLoginNeeded();
             setEditing((value) => !value);
@@ -101,7 +121,7 @@ export function PredictionMatchCard({
       </div>
 
       {/* العدّاد + القاعدة + الحفظ */}
-      {editing && contest.status === "open" && (
+      {editing && isOpen && (
         <div className="mt-4 space-y-3 border-t border-border pt-4">
           {detailRaw?.rule && (
             <p className="rounded-xl bg-primary/10 px-3 py-2 text-[11.5px] font-semibold leading-relaxed text-primary">
@@ -145,14 +165,26 @@ function TeamSide({ name, logo, trailing }: { name?: string | null; logo?: strin
 
 function StatusChip({
   contest,
+  lockPassed,
   onPredict,
   onOpenSettlement,
 }: {
   contest: PredContest;
+  lockPassed: boolean;
   onPredict: () => void;
   onOpenSettlement: () => void;
 }) {
   const mine = contest.myEntry?.payload;
+  // انقضى موعد الإغلاق والحالة لم تنقلب بعد (عامل القفل يعمل كل دقيقة) —
+  // نعرض «مقفل» فورًا بدل زر توقّع سيفشل حتمًا.
+  if (contest.status === "open" && lockPassed) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-[11px] font-bold text-destructive">
+        <Lock className="h-3 w-3" />
+        {mine ? `توقّعك ${mine.predHome}–${mine.predAway} مقفل` : "أُقفل التوقّع"}
+      </span>
+    );
+  }
   switch (contest.status) {
     case "open":
       return mine ? (

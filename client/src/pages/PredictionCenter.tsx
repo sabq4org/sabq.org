@@ -3,7 +3,7 @@
 // 2026-07-17 — بطاقة بطولة تفصل نقاط الترتيب عن المحفظة، تبويبات
 // المباريات/سجلّي/المتصدرون، ولوحة تعلن نطاقها وما تشمله نقاطها.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, ListOrdered, LogIn, Trophy } from "lucide-react";
 import { Header } from "@/components/Header";
@@ -14,6 +14,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatNumber } from "@/lib/format";
 import { rememberPostAuthReturn } from "@/lib/postAuthRedirect";
 import { PredictionMatchCard } from "@/components/predictions/PredictionMatchCard";
+import { PredictionRulesCard } from "@/components/predictions/PredictionRulesCard";
+import { PredictionSeasonCard } from "@/components/predictions/PredictionSeasonCard";
 import { PredictionSettlementDrawer } from "@/components/predictions/PredictionSettlementDrawer";
 import {
   kickoffDayAr,
@@ -64,6 +66,13 @@ export default function PredictionCenter() {
     ? competitionsRaw.competitions
     : [];
   const selected = competitions.find((c) => c.slug === selectedSlug) ?? competitions[0] ?? null;
+  // رابط لبطولة غير متاحة (معطّلة/خاطئة): لا نتظاهر — نصحّح الرابط ونخبر الزائر
+  // بدل السقوط الصامت لأول بطولة بينما العنوان يوحي بغيرها.
+  const requestedMissing =
+    Boolean(selectedSlug) && competitions.length > 0 && !competitions.some((c) => c.slug === selectedSlug);
+  useEffect(() => {
+    if (requestedMissing && selected) syncCompetitionUrl(selected.slug);
+  }, [requestedMissing, selected]);
 
   // مسابقات البطولة المختارة
   const { data: detailRaw, isLoading: detailLoading } = useQuery<PredCompetitionDetail>({
@@ -72,6 +81,7 @@ export default function PredictionCenter() {
     staleTime: 30_000,
   });
   const contests = Array.isArray(detailRaw?.contests) ? detailRaw.contests : [];
+  const rules = Array.isArray(detailRaw?.rules) ? detailRaw.rules : [];
 
   // اللوحة (تُستخدم أيضًا لترتيبي في البطاقة)
   const { data: boardRaw } = useQuery<PredLeaderboardResponse>({
@@ -106,6 +116,11 @@ export default function PredictionCenter() {
           />
         ) : (
           <>
+            {requestedMissing && selected && (
+              <p className="mb-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+                البطولة المطلوبة غير متاحة حاليًا — عرضنا لك {selected.nameAr}.
+              </p>
+            )}
             {competitions.length > 1 && (
               <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
                 {competitions.map((comp) => (
@@ -136,6 +151,9 @@ export default function PredictionCenter() {
                 onLogin={goLogin}
               />
             )}
+
+            {/* شرح النظام — ظاهر للجميع قبل تسجيل الدخول وقبل فتح أي عدّاد */}
+            <PredictionRulesCard rules={rules} />
 
             {/* التبويبات */}
             <div className="mt-4 flex gap-2">
@@ -250,6 +268,8 @@ function HeroStat({ value, label, gold }: { value: string; label: string; gold?:
 // ---------------------------------------------------------------------------
 
 type GroupedContests = {
+  /** مسابقات الموسم الطويلة (بطل/هدّاف) — كانت تُرشَّح فتختفي كليًا من الويب. */
+  season: PredContest[];
   open: PredContest[];
   locked: PredContest[];
   finished: PredContest[];
@@ -258,13 +278,18 @@ type GroupedContests = {
 function groupContests(contests: PredContest[]): GroupedContests {
   const matchScore = contests.filter((c) => c.contestType === "match_score");
   return {
+    season: contests
+      .filter((c) => c.contestType === "champion" || c.contestType === "top_scorer")
+      .sort((a, b) => a.contestType.localeCompare(b.contestType)),
     open: matchScore
       .filter((c) => c.status === "open")
       .sort((a, b) => a.locksAt.localeCompare(b.locksAt)),
-    locked: matchScore.filter((c) => c.status === "locked" || c.status === "ready"),
+    locked: matchScore
+      .filter((c) => c.status === "locked" || c.status === "ready")
+      .sort((a, b) => a.locksAt.localeCompare(b.locksAt)),
     finished: matchScore
       .filter((c) => c.status === "settled" || c.status === "void")
-      .sort((a, b) => (b.settledAt ?? "").localeCompare(a.settledAt ?? ""))
+      .sort((a, b) => (b.settledAt ?? b.locksAt).localeCompare(a.settledAt ?? a.locksAt))
       .slice(0, 10),
   };
 }
@@ -295,7 +320,10 @@ function MatchesTab({
   }
 
   const isEmpty =
-    grouped.open.length === 0 && grouped.locked.length === 0 && grouped.finished.length === 0;
+    grouped.season.length === 0 &&
+    grouped.open.length === 0 &&
+    grouped.locked.length === 0 &&
+    grouped.finished.length === 0;
   if (isEmpty) {
     return (
       <EmptyBlock
@@ -319,6 +347,21 @@ function MatchesTab({
 
   return (
     <div className="space-y-3">
+      {grouped.season.length > 0 && (
+        <>
+          <h3 className="text-[12px] font-extrabold text-muted-foreground">توقّعات الموسم</h3>
+          {grouped.season.map((contest) => (
+            <PredictionSeasonCard
+              key={contest.id}
+              contest={contest}
+              competitionSlug={competitionSlug}
+              isAuthenticated={isAuthenticated}
+              onLoginNeeded={onLoginNeeded}
+            />
+          ))}
+          <h3 className="pt-2 text-[12px] font-extrabold text-muted-foreground">المباريات</h3>
+        </>
+      )}
       {[...grouped.open, ...grouped.locked].map(renderCard)}
       {grouped.finished.length > 0 && (
         <>

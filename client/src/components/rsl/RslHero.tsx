@@ -273,11 +273,15 @@ function PreSeasonCard({ hero, onOpenMatch }: { hero: RslHeroData; onOpenMatch: 
           </p>
         )}
 
-        <div className="flex justify-center">
-          <Button asChild className="bg-sky-300 text-sky-950 hover:bg-sky-200 font-bold rounded-full px-6">
-            <a href="/roshn/predictions?tab=tournament">توقّع بطل الموسم واربح 10,000 نقطة</a>
-          </Button>
-        </div>
+        {/* الزر رهن مفتاح التشغيل — كان يظهر دائمًا حتى مع تعطيل منصة التوقعات،
+            ويَعِد بتبويب «بطل الموسم» غير موجود. الوجهة الآن مركز التوقعات مباشرة. */}
+        {hero.predictionsEnabled && (
+          <div className="flex justify-center">
+            <Button asChild className="bg-sky-300 text-sky-950 hover:bg-sky-200 font-bold rounded-full px-6">
+              <a href="/predictions?competition=rsl-2026">توقّع وانافس على نقاط الموسم</a>
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
