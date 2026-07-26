@@ -33,7 +33,13 @@ import {
   topics,
   staff,
 } from "@shared/schema";
-import { eq, or, and, desc, ne, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
+import { eq, or, and, desc, ne, isNull, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
+import {
+  buildCloudflareUrl,
+  generateResponsiveSrcSet,
+  normalizeImageSrc,
+  HERO_SIZES_ATTR,
+} from "@shared/cdnImage";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
 import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import {
@@ -1072,7 +1078,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       // Two crawlable hubs: the section index (was MISSING — homepage exposed
       // zero /category/ links, so Googlebot had no path to the section pages
       // where Google News discovers new articles) + the latest-articles list.
-      const [rows, cats] = await Promise.all([
+      const [rows, cats, heroRows] = await Promise.all([
         db
           .select({
             slug: articles.slug,
@@ -1097,6 +1103,34 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           .where(and(eq(categories.status, "visible"), eq(categories.isIfoxCategory, false)))
           .orderBy(categories.displayOrder)
           .limit(25),
+        // Hero carousel candidates — MUST mirror /api/homepage-lite's hero
+        // query (filters + GREATEST ordering) so the preloaded image is the
+        // one HeroCarousel actually renders as LCP. A divergence means the
+        // browser preloads one image and then downloads another.
+        db
+          .select({
+            imageUrl: articles.imageUrl,
+            thumbnailUrl: articles.thumbnailUrl,
+            newsType: articles.newsType,
+          })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.status, "published"),
+              eq(articles.hideFromHomepage, false),
+              or(eq(articles.newsType, "breaking"), eq(articles.isFeatured, true)),
+              or(
+                isNull(articles.aiGenerated),
+                eq(articles.aiGenerated, false),
+                eq(articles.isFeatured, true),
+              ),
+            ),
+          )
+          .orderBy(
+            desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+            desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`),
+          )
+          .limit(5),
       ]);
       const sections = buildLinkListHtml(
         "أقسام سبق",
@@ -1113,9 +1147,33 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         })),
       );
       const semanticHtml = [sections, latest].filter(Boolean).join("") || undefined;
+      // LCP fix: describe the hero image so the Pages middleware can inject a
+      // <link rel="preload" as="image"> into the SPA shell's <head>. The SPA
+      // only discovers this image after React boots + homepage-lite returns
+      // (~1.9s resource-load delay measured on PSI). Lead selection mirrors
+      // HeroCarousel: breaking first, else the top-ordered hero row.
+      // Quality 72 is lockstep with HERO_QUALITY in HeroCarousel.tsx and
+      // useHeroPreload.ts — a different quality is a different URL and the
+      // hero downloads twice.
+      const HERO_PRELOAD_QUALITY = 72;
+      const lead = heroRows.find((r) => r.newsType === "breaking") || heroRows[0];
+      const leadImage = lead?.imageUrl || lead?.thumbnailUrl || null;
+      let heroPreload: { href: string; imagesrcset?: string; imagesizes?: string } | undefined;
+      if (leadImage && !leadImage.startsWith("data:") && !leadImage.startsWith("blob:")) {
+        const normalized = normalizeImageSrc(leadImage);
+        const href =
+          buildCloudflareUrl(normalized, { width: 960, quality: HERO_PRELOAD_QUALITY }) ||
+          normalized;
+        const imagesrcset = generateResponsiveSrcSet(normalized, HERO_PRELOAD_QUALITY);
+        heroPreload = {
+          href,
+          ...(imagesrcset ? { imagesrcset, imagesizes: HERO_SIZES_ATTR } : {}),
+        };
+      }
       return {
         ...defaultMeta("/"),
         semanticHtml,
+        heroPreload,
       };
     },
   },

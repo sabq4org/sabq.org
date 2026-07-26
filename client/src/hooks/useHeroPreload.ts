@@ -18,6 +18,13 @@ export function useHeroPreload(imageUrl: string | null | undefined): void {
     const srcset = generateResponsiveSrcSet(normalized, HERO_QUALITY);
     const fallbackHref = buildCloudflareUrl(normalized, { width: 960, quality: HERO_QUALITY }) || normalized;
 
+    // The Pages middleware may have already injected this exact preload into
+    // the served HTML (data-hero-preload-edge, built from the same shared
+    // cdnImage helpers). Only skip on an exact href match — if the hero
+    // changed after the edge cached its copy, ours is the correct one.
+    const edgeLink = document.querySelector('link[data-hero-preload-edge]');
+    if (edgeLink && edgeLink.getAttribute("href") === fallbackHref) return;
+
     const link = document.createElement("link");
     link.rel = "preload";
     link.as = "image";

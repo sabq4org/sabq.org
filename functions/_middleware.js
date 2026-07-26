@@ -415,6 +415,21 @@ function buildMetaBlock(meta) {
   const jsonLd = buildJsonLd(meta.jsonLd);
   if (jsonLd) parts.push(jsonLd);
 
+  // Homepage LCP: preload the hero-carousel lead image from the initial HTML.
+  // Without this the SPA only discovers it after React boots + homepage-lite
+  // returns (~1.9s late per PSI). The origin builds href/srcset with the exact
+  // values HeroCarousel renders (quality 72, w480/960/1600 variants), so the
+  // browser reuses this fetch instead of downloading twice. useHeroPreload.ts
+  // checks data-hero-preload-edge to skip re-adding an identical link.
+  if (meta.heroPreload && meta.heroPreload.href) {
+    const srcsetAttrs = meta.heroPreload.imagesrcset
+      ? ` imagesrcset="${escapeHtml(meta.heroPreload.imagesrcset)}" imagesizes="${escapeHtml(meta.heroPreload.imagesizes || "")}"`
+      : "";
+    parts.push(
+      `<link rel="preload" as="image" href="${escapeHtml(meta.heroPreload.href)}"${srcsetAttrs} fetchpriority="high" data-hero-preload-edge="1">`,
+    );
+  }
+
   parts.push(`<!-- sabq-edge-meta-injected -->`);
   return parts.filter(Boolean).join("\n");
 }
