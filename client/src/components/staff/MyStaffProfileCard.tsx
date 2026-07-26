@@ -1,9 +1,9 @@
 // بطاقة استكمال ملف المنسوب — للكاتب والمراسل في مساحتيهما.
-// اكتمال 100% → قيد مراجعة الإدارة → بعد الاعتماد يمكن إصدار شهادة التعريف.
+// اكتمال 100% → قيد مراجعة الإدارة → بعد الاعتماد: قفل التعديل + زر إصدار الشهادة.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { UserRoundCheck, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Download, FileText, UserRoundCheck, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StaffProfileForm } from "@/components/staff/StaffProfileForm";
@@ -33,7 +33,6 @@ function reviewBadge(status: ReviewStatus | null | undefined, complete: boolean)
     };
   }
   if (status === "pending_review" || (complete && status === "draft")) {
-    // complete+draft يُرقّى تلقائياً في الخادم؛ نعرض نفس الرسالة فوراً
     return {
       label: "البيانات تحت المراجعة",
       className: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400",
@@ -53,6 +52,12 @@ function reviewBadge(status: ReviewStatus | null | undefined, complete: boolean)
   };
 }
 
+function goToCertificates() {
+  const el = document.getElementById("my-official-letters");
+  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.dispatchEvent(new CustomEvent("sabq:open-official-letter-form"));
+}
+
 export function MyStaffProfileCard({ className }: { className?: string }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -70,6 +75,7 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
   const reviewStatus = data?.profile?.profileReviewStatus ?? "draft";
   const reviewNote = data?.profile?.profileReviewNote ?? null;
   const badge = reviewBadge(reviewStatus, complete);
+  const locked = reviewStatus === "pending_review" || reviewStatus === "approved";
 
   if (!user?.id) return null;
 
@@ -83,7 +89,7 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
       dir="rtl"
       data-testid="card-my-staff-profile"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <UserRoundCheck className="h-4 w-4" />
@@ -114,7 +120,7 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
                 ) : null}
                 {reviewStatus === "approved" && (
                   <p className="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300" data-testid="text-profile-approved">
-                    تم اعتماد ملفك — يمكنك الآن إصدار وتحميل شهادة التعريف من بطاقة الشهادات.
+                    تم اعتماد ملفك — التعديل مقفل. أصدر شهادتك من الزر أدناه أو من بطاقة الشهادات.
                   </p>
                 )}
                 {reviewStatus === "needs_correction" && (
@@ -128,26 +134,40 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
             )}
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-1.5 border-primary/30 bg-background hover:bg-primary/5"
-          onClick={() => setOpen((v) => !v)}
-          data-testid="button-toggle-staff-profile"
-        >
-          {open ? (
-            <>
-              إغلاق
-              <ChevronUp className="h-3.5 w-3.5" />
-            </>
-          ) : (
-            <>
-              {complete || reviewStatus === "approved" ? "مراجعة الملف" : "استكمال الملف"}
-              <ChevronDown className="h-3.5 w-3.5" />
-            </>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {reviewStatus === "approved" && (
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              onClick={goToCertificates}
+              data-testid="button-goto-issue-certificate"
+            >
+              <Download className="h-3.5 w-3.5" />
+              إصدار وتحميل الشهادة
+            </Button>
           )}
-        </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-primary/30 bg-background hover:bg-primary/5"
+            onClick={() => setOpen((v) => !v)}
+            data-testid="button-toggle-staff-profile"
+          >
+            {open ? (
+              <>
+                إغلاق
+                <ChevronUp className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                {locked ? "عرض الملف" : complete ? "مراجعة الملف" : "استكمال الملف"}
+                {locked ? <FileText className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {open && (

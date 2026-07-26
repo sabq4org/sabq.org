@@ -1,7 +1,7 @@
 // بطاقة «شهاداتي الرسمية» — مساحة كاتب الرأي وصفحة المراسل.
-// الإصدار مسموح فقط بعد اعتماد الإدارة لملف المنسوب. لا طلب ثانٍ لنفس النوع الساري.
+// الإصدار مسموح فقط بعد اعتماد الإدارة. لا طلب ثانٍ لنفس النوع الساري.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,12 @@ export function MyOfficialLettersCard() {
   );
   const [note, setNote] = useState("");
 
+  useEffect(() => {
+    const openForm = () => setFormOpen(true);
+    window.addEventListener("sabq:open-official-letter-form", openForm);
+    return () => window.removeEventListener("sabq:open-official-letter-form", openForm);
+  }, []);
+
   const { data: lettersRaw, isLoading: lettersLoading } = useQuery({
     queryKey: ["/api/official-letters/mine"],
   });
@@ -83,10 +89,11 @@ export function MyOfficialLettersCard() {
   const hasActiveOfType = (type: OfficialLetterType) =>
     activeLetters.some((l) => l.letterType === type);
   const canRequestSelected = !hasActiveOfType(letterType);
+  const allIssued = OFFICIAL_LETTER_TYPE_LIST.every((t) => hasActiveOfType(t.id));
 
   const { data: readinessRaw, isFetching: readinessLoading } = useQuery({
     queryKey: [`/api/official-letters/my-readiness?letterType=${letterType}`],
-    enabled: formOpen && canRequestSelected,
+    enabled: canRequestSelected,
   });
   const readiness = (readinessRaw ?? null) as Readiness | null;
   const importantGaps = readiness?.gaps.filter((g) => g.severity === "important") ?? [];
@@ -94,6 +101,7 @@ export function MyOfficialLettersCard() {
   const reviewStatus = readiness?.profileReviewStatus;
   const readyToIssue =
     Boolean(readiness?.canIssue) && (readiness?.importantMissing ?? 1) === 0;
+  const profileApproved = reviewStatus === "approved";
 
   const issueMutation = useMutation({
     mutationFn: async () =>
@@ -117,8 +125,11 @@ export function MyOfficialLettersCard() {
       setNote("");
       toast({
         title: "صدرت شهادتك",
-        description: `الرقم المرجعي ${data.letter.referenceCode} — يمكنك تنزيلها الآن`,
+        description: `الرقم المرجعي ${data.letter.referenceCode} — جارٍ فتح التنزيل`,
       });
+      if (data.letter?.id) {
+        window.open(apiUrl(`/api/official-letters/${data.letter.id}/file.pdf`), "_blank");
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -136,7 +147,7 @@ export function MyOfficialLettersCard() {
   };
 
   return (
-    <Card data-testid="card-my-official-letters">
+    <Card id="my-official-letters" data-testid="card-my-official-letters">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <FileText className="h-4 w-4 text-primary" />
@@ -162,7 +173,7 @@ export function MyOfficialLettersCard() {
                     {letter.recipientEntity ? ` · ${letter.recipientEntity}` : ""}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" asChild>
+                <Button size="sm" asChild>
                   <a
                     href={apiUrl(`/api/official-letters/${letter.id}/file.pdf`)}
                     target="_blank"
@@ -170,12 +181,33 @@ export function MyOfficialLettersCard() {
                     data-testid={`link-my-letter-${letter.id}`}
                   >
                     <Download className="ml-1 h-4 w-4" />
-                    تنزيل
+                    تنزيل الشهادة
                   </a>
                 </Button>
               </li>
             ))}
           </ul>
+        ) : profileApproved && !formOpen ? (
+          <div
+            className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4"
+            data-testid="panel-ready-to-issue-certificate"
+          >
+            <p className="flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4" />
+              ملفك معتمد — جاهز لإصدار شهادة التعريف
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              اضغط الزر لإصدار الشهادة وفتح ملف PDF للتنزيل فوراً.
+            </p>
+            <Button
+              className="mt-3"
+              onClick={() => setFormOpen(true)}
+              data-testid="button-request-letter"
+            >
+              <Download className="ml-2 h-4 w-4" />
+              إصدار وتحميل شهادة التعريف
+            </Button>
+          </div>
         ) : null}
 
         {letters.some((l) => l.status === "revoked") && (
@@ -314,7 +346,7 @@ export function MyOfficialLettersCard() {
                 data-testid="readiness-complete"
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>تم اعتماد ملفك — يمكنك إصدار الشهادة وتنزيلها الآن</span>
+                <span>تم اعتماد ملفك — اضغط لإصدار الشهادة وفتح التنزيل فوراً</span>
               </div>
             ) : null}
 
@@ -342,19 +374,18 @@ export function MyOfficialLettersCard() {
               </Button>
             </div>
           </div>
-        ) : (
+        ) : !profileApproved && !allIssued ? (
           <Button
             variant="outline"
             size="sm"
             onClick={() => setFormOpen(true)}
             data-testid="button-request-letter"
-            disabled={OFFICIAL_LETTER_TYPE_LIST.every((t) => hasActiveOfType(t.id))}
           >
-            {OFFICIAL_LETTER_TYPE_LIST.every((t) => hasActiveOfType(t.id))
-              ? "جميع الشهادات صادرة"
-              : "إصدار شهادة تعريف"}
+            إصدار شهادة تعريف
           </Button>
-        )}
+        ) : allIssued ? (
+          <p className="text-xs text-muted-foreground">جميع أنواع الشهادات صادرة — استخدم زر التنزيل أعلاه.</p>
+        ) : null}
       </CardContent>
     </Card>
   );

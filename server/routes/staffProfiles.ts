@@ -177,9 +177,12 @@ router.put(
     try {
       const userId = (req.user as { id: string }).id;
       const review = await getStaffProfileReviewStatus(userId);
-      if (review.status === "pending_review") {
+      if (review.status === "pending_review" || review.status === "approved") {
         return res.status(409).json({
-          message: "ملفك قيد مراجعة الإدارة — لا يمكن التعديل حتى تكتمل المراجعة أو يُطلب منك تصحيح",
+          message:
+            review.status === "approved"
+              ? "ملفك معتمد — لا يمكن التعديل. اطلب من الإدارة فتح تصحيح إن لزم"
+              : "ملفك قيد مراجعة الإدارة — لا يمكن التعديل حتى تكتمل المراجعة أو يُطلب منك تصحيح",
         });
       }
 
@@ -248,9 +251,12 @@ router.post(
       if (!req.file) return res.status(400).json({ message: "لم يُرفق ملف" });
       const userId = (req.user as { id: string }).id;
       const review = await getStaffProfileReviewStatus(userId);
-      if (review.status === "pending_review") {
+      if (review.status === "pending_review" || review.status === "approved") {
         return res.status(409).json({
-          message: "ملفك قيد مراجعة الإدارة — لا يمكن رفع وثائق حتى تكتمل المراجعة أو يُطلب منك تصحيح",
+          message:
+            review.status === "approved"
+              ? "ملفك معتمد — لا يمكن رفع وثائق. اطلب من الإدارة فتح تصحيح إن لزم"
+              : "ملفك قيد مراجعة الإدارة — لا يمكن رفع وثائق حتى تكتمل المراجعة أو يُطلب منك تصحيح",
         });
       }
       const uploaded = await uploadStaffDocument(userId, kind, req.file, userId);
