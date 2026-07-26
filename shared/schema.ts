@@ -14783,6 +14783,11 @@ export const staffProfiles = pgTable("staff_profiles", {
   employeeNumber: varchar("employee_number", { length: 16 }).unique(),
 
   // أ · الهوية الرسمية
+  /**
+   * الاسم الرباعي الرسمي للشهادات والخطابات فقط.
+   * لا يُزامَن إلى users.firstName/lastName ولا يظهر في المقالات.
+   */
+  officialFullNameAr: text("official_full_name_ar"),
   nationalIdEncrypted: text("national_id_encrypted"),
   nationalIdLast4: varchar("national_id_last4", { length: 4 }),
   nationality: text("nationality"),

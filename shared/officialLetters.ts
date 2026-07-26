@@ -93,24 +93,24 @@ export function isOfficialLetterType(value: unknown): value is OfficialLetterTyp
 // ────────────────────────────────────────────────────────────────────
 
 export type LetterFieldKey =
+  | "officialFullName"
   | "nationalId"
   | "department"
-  | "joinedAt"
-  | "pressId";
+  | "joinedAt";
 
 export const LETTER_FIELD_LABELS_AR: Record<LetterFieldKey, string> = {
+  officialFullName: "الاسم الرباعي (للشهادة)",
   nationalId: "رقم الهوية",
   department: "القسم",
   joinedAt: "تاريخ الالتحاق",
-  pressId: "رقم البطاقة الصحفية",
 };
 
 /** أثر غياب كل حقل — يُعرض للمنسوب للإطلاع فقط (لا يستكمل ملفه بنفسه). */
 export const LETTER_FIELD_IMPACT_AR: Record<LetterFieldKey, string> = {
+  officialFullName: "الجهات الرسمية تحتاج الاسم كاملاً كما في الهوية — وليس الاسم الثنائي للعرض",
   nationalId: "الجهات الرسمية غالباً تطلبه لمطابقة الهوية",
   department: "يوضّح الموقع داخل الصحيفة",
   joinedAt: "يثبت مدة الارتباط بالصحيفة",
-  pressId: "يدعم الصفة الصحفية أمام الجهة",
 };
 
 /** الحقول التي يُنصح بشدة بوجودها لكل نوع خطاب. */
@@ -118,9 +118,9 @@ export const LETTER_TYPE_IMPORTANT_FIELDS: Record<
   OfficialLetterType,
   LetterFieldKey[]
 > = {
-  media_license: ["nationalId"],
-  facilitate_mission: ["nationalId", "pressId"],
-  general: [],
+  media_license: ["officialFullName", "nationalId"],
+  facilitate_mission: ["officialFullName", "nationalId"],
+  general: ["officialFullName"],
 };
 
 export type LetterFieldSeverity = "important" | "optional";
@@ -140,10 +140,10 @@ export const LETTER_GAPS_STAFF_HINT_AR =
 
 /** من يستطيع استكمال الحقل — الكاتب/المراسل ذاتياً عبر /api/staff-profiles/me. */
 export const LETTER_FIELD_OWNER: Record<LetterFieldKey, "staff" | "self"> = {
+  officialFullName: "self",
   nationalId: "self",
   department: "self",
   joinedAt: "self",
-  pressId: "self",
 };
 
 /** التسمية العربية لصفة المنسوب حين لا يوجد مسمّى وظيفي مسجّل. */

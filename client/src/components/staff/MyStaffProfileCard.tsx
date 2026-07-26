@@ -21,6 +21,7 @@ type MeProfile = {
     missingFields?: string[];
     profileReviewStatus?: ReviewStatus | null;
     profileReviewNote?: string | null;
+    officialFullNameAr?: string | null;
   } | null;
   missingLabels?: string[];
 };
@@ -74,8 +75,13 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
   const complete = Boolean(data?.profile) && missingCount === 0 && percent >= 100;
   const reviewStatus = data?.profile?.profileReviewStatus ?? "draft";
   const reviewNote = data?.profile?.profileReviewNote ?? null;
+  const hasOfficialFullName = Boolean(
+    String((data?.profile as { officialFullNameAr?: string | null } | undefined)?.officialFullNameAr ?? "").trim(),
+  );
   const badge = reviewBadge(reviewStatus, complete);
-  const locked = reviewStatus === "pending_review" || reviewStatus === "approved";
+  const locked =
+    reviewStatus === "pending_review" ||
+    (reviewStatus === "approved" && hasOfficialFullName);
 
   if (!user?.id) return null;
 
@@ -120,7 +126,9 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
                 ) : null}
                 {reviewStatus === "approved" && (
                   <p className="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300" data-testid="text-profile-approved">
-                    تم اعتماد ملفك — التعديل مقفل. أصدر شهادتك من الزر أدناه أو من بطاقة الشهادات.
+                    {hasOfficialFullName
+                      ? "تم اعتماد ملفك — التعديل مقفل. أصدر شهادتك من الزر أدناه أو من بطاقة الشهادات."
+                      : "تم اعتماد ملفك — أكمل الاسم الرباعي في الملف (للشهادة فقط، لا يظهر في مقالاتك) ثم أصدر الشهادة."}
                   </p>
                 )}
                 {reviewStatus === "needs_correction" && (
