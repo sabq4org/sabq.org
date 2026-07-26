@@ -75,7 +75,7 @@ export function RslMatchCard({ fixture, onOpen }: RslMatchCardProps) {
   return (
     <Card
       onClick={() => onOpen(fixture.id)}
-      className="group cursor-pointer overflow-hidden border border-border/80 bg-card shadow-sm hover-elevate active-elevate-2 transition-all duration-300 dark:border-card-border"
+      className="group cursor-pointer overflow-hidden border-0 bg-muted/45 hover-elevate active-elevate-2 transition-all duration-300 dark:bg-card"
       data-testid={`rsl-match-card-${fixture.id}`}
     >
       <CardContent className="p-3.5 space-y-2.5">
