@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Link } from "wouter";
 import { Trophy } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { apiUrl } from "@/lib/queryClient";
 import type { Category } from "@shared/schema";
 import { filterAICategories } from "@/utils/filterAICategories";
 
@@ -24,7 +25,8 @@ export function NavigationBar() {
     queryKey: ["/api/categories/smart", "core", "active"],
     queryFn: async () => {
       const params = new URLSearchParams({ type: "core", status: "active" });
-      const res = await fetch(`/api/categories/smart?${params}`, { credentials: "include" });
+      // apiUrl بدل fetch الخام — يعمل في وضعي PROXY وDIRECT (قاعدة وقف النزيف)
+      const res = await fetch(apiUrl(`/api/categories/smart?${params}`), { credentials: "include" });
       if (!res.ok) return [];
       return await res.json();
     },
