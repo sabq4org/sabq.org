@@ -33,6 +33,7 @@ import {
   getMatchDetail,
   getMatchLite,
   getMatchPlayerRatings,
+  getMatchPlayerStatsTs,
   getMatchTeamStats,
   getMatchTvChannels,
   getPlayerForm,
@@ -799,6 +800,28 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] match team stats failed:", error);
       res.json({ available: false, rows: [] });
+    }
+  });
+
+  // تقييمات لاعبين احتياطية (TheSports) — تملأ تبويب «التقييمات» حين لا يرسل
+  // API-Football بيانات لاعبين (نفس احتياط المونديال معمّمًا). أفضل جهد.
+  app.get("/api/sports/match/:id/player-stats", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ available: false, home: null, away: null });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const stats = await getMatchPlayerStatsTs(id);
+      res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=3600");
+      res.json(stats);
+    } catch (error) {
+      console.error("[Sports] match player stats failed:", error);
+      res.json({ available: false, home: null, away: null });
     }
   });
 

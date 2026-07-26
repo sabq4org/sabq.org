@@ -35,6 +35,8 @@ import {
   getTsCompetitionId,
   getTsCompetitionMatchPairs,
   getTsCompetitionPlayerMarket,
+  getTsLineup,
+  getTsMatchPlayerStats,
   getTsMatchTeamStats,
   getTsMatchTv,
   getTsPlayerMarketHistory,
@@ -45,8 +47,10 @@ import {
   TS_I18N_TYPE,
   TS_VAR_RESULT_AR,
   type TsEvent,
+  type TsLineup,
   type TsLiveBoardItem,
   type TsLiveStats,
+  type TsPlayerMatchStat,
   type TsTeamStatSide,
 } from "./theSportsService";
 import {
@@ -1963,6 +1967,107 @@ export async function getMatchTeamStats(fixtureId: number): Promise<SplMatchTeam
       rows.push({ type: f.type ?? `ts:${f.field}`, label: f.label, home: `${h ?? 0}${suffix}`, away: `${a ?? 0}${suffix}` });
     }
     return { available: rows.length > 0, rows };
+  });
+}
+
+// ---------- تقييمات اللاعبين الاحتياطية (TheSports) — حين تغيب عن API-Football ----------
+
+export interface SplPlayerStatLine {
+  name: string;
+  rating: number | null;
+  starter: boolean;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+}
+
+export interface SplMatchPlayerStatsTs {
+  available: boolean;
+  home: { team: SplTeam; players: SplPlayerStatLine[] } | null;
+  away: { team: SplTeam; players: SplPlayerStatLine[] } | null;
+}
+
+/**
+ * تقييمات لاعبين احتياطية عبر جسر TheSports — نفس نمط المونديال
+ * (getWcMatchPlayerStats) معمّمًا لكل بطولات السجل: يملأ تبويب «التقييمات»
+ * حين لا يرسل API-Football بيانات لاعبين (شائع في الدوريات المحلية).
+ * أفضل جهد: أي تعذّر → available:false فتعرض الواجهة حالتها الفارغة.
+ */
+export async function getMatchPlayerStatsTs(fixtureId: number): Promise<SplMatchPlayerStatsTs> {
+  const empty: SplMatchPlayerStatsTs = { available: false, home: null, away: null };
+  if (!isSaudiLeagueConfigured()) return empty;
+  return withSWR(`spl:tsplayers:${fixtureId}`, TS_TEAM_STATS_TTL, TS_TEAM_STATS_TTL * 2, async () => {
+    const detail = await getMatchDetail(fixtureId).catch(() => null);
+    if (!detail?.fixture) return empty;
+    const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
+    const tsCompId = getTsCompetitionId(comp?.slug);
+    if (!comp || !tsCompId) return empty;
+    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    if (!uuid) return empty;
+
+    const [rows, lineup] = await Promise.all([
+      getTsMatchPlayerStats(uuid).catch(() => [] as TsPlayerMatchStat[]),
+      getTsLineup(uuid).catch(() => null as TsLineup | null),
+    ]);
+    // نُبقي من شارك فقط (دقائق>0 أو تقييم فعلي)
+    const played = rows.filter((r) => r.minutes > 0 || (r.rating ?? 0) > 0);
+    if (played.length === 0) return empty;
+
+    // أسماء عربية (name_aa) + احتياط اسم التشكيلة
+    const nameOf = await resolveTsNames(TS_I18N_TYPE.player, played.map((r) => r.playerId));
+    const lineupName = new Map<string, string>();
+    if (lineup) {
+      for (const p of [...lineup.home, ...lineup.away]) {
+        const nm = p.nameAr || p.name;
+        if (p.id && nm) lineupName.set(String(p.id), nm);
+      }
+    }
+
+    // إقران مضيف/ضيف عبر جسر الفِرق؛ وإلا ترتيب الظهور احتياطًا.
+    const bridge = await getSplTeamBridge(comp);
+    const homeUuid = bridge.get(detail.fixture.home.id) ?? null;
+    const awayUuid = bridge.get(detail.fixture.away.id) ?? null;
+
+    const toLine = (r: (typeof played)[number]): SplPlayerStatLine | null => {
+      const name = nameOf(r.playerId) || lineupName.get(r.playerId) || "";
+      if (!name) return null;
+      return {
+        name,
+        rating: (r.rating ?? 0) > 0 ? r.rating : null,
+        starter: r.starter,
+        minutes: r.minutes,
+        goals: r.values.goals ?? 0,
+        assists: r.values.assists ?? 0,
+        yellow: r.values.yellow_cards ?? 0,
+        red: r.values.red_cards ?? 0,
+      };
+    };
+    const sortLines = (a: SplPlayerStatLine, b: SplPlayerStatLine) =>
+      (b.rating ?? -1) - (a.rating ?? -1) || b.minutes - a.minutes;
+
+    const homePlayers: SplPlayerStatLine[] = [];
+    const awayPlayers: SplPlayerStatLine[] = [];
+    const distinctTeams = Array.from(new Set(played.map((r) => r.teamId).filter(Boolean)));
+    for (const r of played) {
+      const line = toLine(r);
+      if (!line) continue;
+      let side: "home" | "away";
+      if (homeUuid && r.teamId === homeUuid) side = "home";
+      else if (awayUuid && r.teamId === awayUuid) side = "away";
+      else side = r.teamId === distinctTeams[0] ? "home" : "away";
+      (side === "home" ? homePlayers : awayPlayers).push(line);
+    }
+    homePlayers.sort(sortLines);
+    awayPlayers.sort(sortLines);
+    if (homePlayers.length === 0 && awayPlayers.length === 0) return empty;
+
+    return {
+      available: true,
+      home: homePlayers.length ? { team: detail.fixture.home, players: homePlayers } : null,
+      away: awayPlayers.length ? { team: detail.fixture.away, players: awayPlayers } : null,
+    };
   });
 }
 

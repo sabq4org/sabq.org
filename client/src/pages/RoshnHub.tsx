@@ -134,7 +134,7 @@ export default function RoshnHub() {
         </section>
       </main>
 
-      <MatchDialog id={openMatchId} onClose={() => setOpenMatchId(null)} />
+      <MatchDialog id={openMatchId} onClose={() => setOpenMatchId(null)} theme="roshn" />
       <Footer />
     </div>
   );
