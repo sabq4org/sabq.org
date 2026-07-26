@@ -19,6 +19,8 @@
 	<!-- تعبئة رمز SMS التلقائية (domain-bound OTP عبر webcredentials) -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:sabq.org</string>
+		<string>applinks:www.sabq.org</string>
 		<string>webcredentials:sabq.org</string>
 		<string>webcredentials:www.sabq.org</string>
 	</array>

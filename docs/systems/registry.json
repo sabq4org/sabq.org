@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-25",
+  "updatedAt": "2026-07-27",
   "systems": [
     {
       "id": "account-center",
@@ -480,7 +480,13 @@
         "client/src/pages/dashboard/Wc2026NumbersReportPage.tsx",
         "client/src/components/worldcup/Wc2026NumbersReportPanel.tsx",
         "client/src/components/worldcup/WorldCupHomeSection.tsx",
-        "client/src/components/SabqPulseSection.tsx"
+        "client/src/components/SabqPulseSection.tsx",
+        "client/src/pages/RoshnHub.tsx",
+        "client/src/components/rsl/**",
+        "sabq app ios/sabq/Services/RoshnModels.swift",
+        "sabq app ios/sabq/Components/RoshnHomeStrip.swift",
+        "sabq app ios/sabq/Screens/Roshn*.swift",
+        "sabq app ios/sabqTests/RoshnModelsTests.swift"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -501,7 +507,7 @@
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
       "owners": ["sports"],
-      "lastReviewed": "2026-07-25"
+      "lastReviewed": "2026-07-27"
     },
     {
       "id": "push-notifications",

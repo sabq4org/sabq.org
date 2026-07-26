@@ -14,7 +14,11 @@ struct RoshnMatchCenter: View {
     @State private var detail: RsMatchDetail?
     @State private var ratings: RsMatchRatings?
     @State private var ratingsRequested = false
+    @State private var ratingsError: String?
     @State private var tab: Tab = .events
+    @State private var loadError: String?
+    @State private var retryToken = 0
+    @State private var selectedTeam: RsTeam?
 
     enum Tab: String, CaseIterable {
         case events = "الأحداث"
@@ -31,6 +35,8 @@ struct RoshnMatchCenter: View {
                         header(d)
                         tabBar
                         content(d)
+                    } else if let loadError {
+                        errorBlock(loadError)
                     } else {
                         loadingBlock
                     }
@@ -38,8 +44,9 @@ struct RoshnMatchCenter: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 24)
             }
-            .background(Color.white)
+            .background(RoshnTheme.canvas)
             .environment(\.layoutDirection, .rightToLeft)
+            .environment(\.locale, RsFormat.latinLocale)
             .navigationTitle("مركز المباراة")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -52,9 +59,21 @@ struct RoshnMatchCenter: View {
                     }
                 }
             }
+            .navigationDestination(item: $selectedTeam) { team in
+                RoshnTeamView(teamId: team.id, previewName: team.name, previewLogo: team.logo)
+            }
         }
-        .task {
-            detail = try? await APIClient.shared.fetchRoshnMatch(fixtureId: fixtureId)
+        .task(id: retryToken) {
+            loadError = nil
+            do {
+                detail = try await APIClient.shared.fetchRoshnMatch(
+                    fixtureId: fixtureId,
+                    ignoreCache: retryToken > 0
+                )
+            } catch {
+                loadError = (error as? APIError)?.errorDescription ?? "تعذّر الاتصال بمصدر المباراة"
+                return
+            }
             // نبض لحظي أثناء اللعب — 8 ثوانٍ (وتيرة مركز المونديال).
             while !Task.isCancelled {
                 guard let d = detail else { return }
@@ -74,20 +93,26 @@ struct RoshnMatchCenter: View {
     // MARK: الترويسة
 
     private func header(_ d: RsMatchDetail) -> some View {
-        VStack(spacing: 10) {
+        ZStack {
+            RoshnTheme.heroGradient
+            Circle()
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .frame(width: 160, height: 160)
+
+            VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
                 teamColumn(d.fixture.home)
                 VStack(spacing: 5) {
                     if d.fixture.started {
                         Text("\(d.fixture.goals.away ?? 0) - \(d.fixture.goals.home ?? 0)")
                             .font(SabqFonts.app(size: 30, weight: .bold))
-                            .foregroundStyle(RoshnTheme.ink)
+                            .foregroundStyle(.white)
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
                         Text(RsFormat.time(d.fixture))
                             .font(SabqFonts.app(size: 22, weight: .bold))
-                            .foregroundStyle(RoshnTheme.sky)
+                            .foregroundStyle(.white)
                     }
                     statusChip(d.fixture)
                 }
@@ -98,22 +123,22 @@ struct RoshnMatchCenter: View {
             VStack(spacing: 3) {
                 Text("\(RsFormat.day(d.fixture)) · \(RsFormat.time(d.fixture))")
                     .font(SabqFonts.app(size: 10.5))
-                    .foregroundStyle(RoshnTheme.inkSoft)
+                    .foregroundStyle(.white.opacity(0.72))
                 if !d.fixture.round.isEmpty || !d.fixture.venue.name.isEmpty {
                     Text([d.fixture.round, d.fixture.venue.name].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(SabqFonts.app(size: 10.5))
-                        .foregroundStyle(RoshnTheme.inkSoft)
+                        .foregroundStyle(.white.opacity(0.64))
                         .lineLimit(1).minimumScaleFactor(0.75)
                 }
             }
+            }
+            .padding(.vertical, 18).padding(.horizontal, 12)
         }
-        .padding(.vertical, 16).padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .background(RoshnTheme.stripGradient)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(RoshnTheme.line, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.1), lineWidth: 1)
         )
         .overlay(alignment: .top) {
             // خط الهوية السماوي أعلى البطاقة — لمسة روشن المميزة.
@@ -126,18 +151,19 @@ struct RoshnMatchCenter: View {
     }
 
     private func teamColumn(_ team: RsTeam) -> some View {
-        VStack(spacing: 7) {
+        Button { selectedTeam = team } label: { VStack(spacing: 7) {
             WCRemoteImage(url: team.logo)
                 .padding(5).frame(width: 58, height: 58)
                 .background(Circle().fill(.white))
-                .overlay(Circle().stroke(RoshnTheme.line, lineWidth: 1))
-                .shadow(color: RoshnTheme.ink.opacity(0.06), radius: 5, y: 2)
+                .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1))
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
             Text(team.name)
                 .font(SabqFonts.app(size: 13, weight: .semibold))
-                .foregroundStyle(RoshnTheme.ink)
+                .foregroundStyle(.white)
                 .lineLimit(2).minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
-        }
+        } }
+        .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
     }
 
@@ -155,9 +181,9 @@ struct RoshnMatchCenter: View {
             } else {
                 Text(f.status.label.isEmpty ? "قادمة" : f.status.label)
                     .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(RoshnTheme.inkSoft)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 11).padding(.vertical, 5)
-                    .background(Capsule().fill(RoshnTheme.skySoft))
+                    .background(Capsule().fill(.white.opacity(0.12)))
             }
         }
     }
@@ -177,7 +203,7 @@ struct RoshnMatchCenter: View {
                     tab = item
                     if item == .ratings, !ratingsRequested {
                         ratingsRequested = true
-                        Task { ratings = try? await APIClient.shared.fetchRoshnMatchRatings(fixtureId: fixtureId) }
+                        Task { await loadRatings() }
                     }
                 } label: {
                     Text(item.rawValue)
@@ -494,6 +520,23 @@ struct RoshnMatchCenter: View {
                     }
                 }
             }
+        } else if let ratingsError {
+            VStack(spacing: 10) {
+                Image(systemName: "star.slash")
+                    .font(SabqFonts.app(size: 25, weight: .light))
+                    .foregroundStyle(RoshnTheme.gold)
+                Text(ratingsError)
+                    .font(SabqFonts.app(size: 12))
+                    .foregroundStyle(RoshnTheme.inkSoft)
+                    .multilineTextAlignment(.center)
+                Button("إعادة المحاولة") { Task { await loadRatings(force: true) } }
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 9)
+                    .background(Capsule().fill(RoshnTheme.sky))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 30)
         } else if ratingsRequested {
             loadingBlock
         } else {
@@ -534,6 +577,46 @@ struct RoshnMatchCenter: View {
             }
         }
         .padding(.top, 8)
+    }
+
+    private func errorBlock(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(SabqFonts.app(size: 32, weight: .light))
+                .foregroundStyle(RoshnTheme.gold)
+            Text("تعذّر فتح مركز المباراة")
+                .font(SabqFonts.app(size: 17, weight: .bold))
+                .foregroundStyle(RoshnTheme.ink)
+            Text(message)
+                .font(SabqFonts.app(size: 12))
+                .foregroundStyle(RoshnTheme.inkSoft)
+                .multilineTextAlignment(.center)
+            Button {
+                retryToken += 1
+            } label: {
+                Label("إعادة المحاولة", systemImage: "arrow.clockwise")
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18).padding(.vertical, 10)
+                    .background(Capsule().fill(RoshnTheme.sky))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 54)
+    }
+
+    @MainActor
+    private func loadRatings(force: Bool = false) async {
+        ratingsError = nil
+        do {
+            ratings = try await APIClient.shared.fetchRoshnMatchRatings(
+                fixtureId: fixtureId,
+                ignoreCache: force
+            )
+        } catch {
+            ratingsError = (error as? APIError)?.errorDescription ?? "تعذّر تحميل تقييمات اللاعبين"
+        }
     }
 
     private func emptyState(icon: String, text: String) -> some View {
