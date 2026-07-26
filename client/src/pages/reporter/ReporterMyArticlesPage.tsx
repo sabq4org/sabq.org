@@ -6,9 +6,7 @@ import { ar } from "date-fns/locale";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
-import { WriterMediaLicenseCard } from "@/pages/opinion-author/WriterMediaLicenseCard";
-import { MyStaffProfileCard } from "@/components/staff/MyStaffProfileCard";
-import { MyOfficialLettersCard } from "@/components/officialLetters/MyOfficialLettersCard";
+import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -210,11 +208,7 @@ export default function ReporterMyArticlesPage() {
           }
         />
 
-        <MyStaffProfileCard />
-
-        <WriterMediaLicenseCard endpoint="/api/reporter/media-license" />
-
-        <MyOfficialLettersCard />
+        <MyServicesHomeLink />
 
         {isError ? (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">

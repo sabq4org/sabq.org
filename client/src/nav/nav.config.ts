@@ -65,6 +65,7 @@ import {
   Radar,
   HeartPulse,
   Headphones,
+  Briefcase,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -110,6 +111,14 @@ export const navConfig: NavItem[] = [
         roles: ["reporter"],
       },
       {
+        id: "reporter_my_services",
+        labelKey: "nav.my_services",
+        labelAr: "ملفي وخدماتي",
+        path: "/dashboard/my-services",
+        icon: Briefcase,
+        roles: ["reporter"],
+      },
+      {
         id: "reporter_inquiries",
         labelKey: "nav.writer_inquiries",
         labelAr: "استفساراتي",
@@ -137,6 +146,14 @@ export const navConfig: NavItem[] = [
     labelAr: "دليل الكاتب",
     path: "/dashboard/opinion-author/guide",
     icon: BookOpen,
+    roles: ["opinion_author"],
+  },
+  {
+    id: "opinion_author_my_services",
+    labelKey: "nav.my_services",
+    labelAr: "ملفي وخدماتي",
+    path: "/dashboard/my-services",
+    icon: Briefcase,
     roles: ["opinion_author"],
   },
 

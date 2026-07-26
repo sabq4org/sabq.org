@@ -209,6 +209,7 @@ const ProfileSegmentRouter = lazy(() => retryImport(() => import("@/pages/Profil
 const PreferencesCenter = lazy(() => retryImport(() => import("@/pages/PreferencesCenter")));
 const SettingsCenter = lazy(() => retryImport(() => import("@/pages/settings/SettingsCenter")));
 const OfficialLetters = lazy(() => retryImport(() => import("@/pages/dashboard/OfficialLetters")));
+const MyServicesPage = lazy(() => retryImport(() => import("@/pages/dashboard/MyServicesPage")));
 const VerifyLetter = lazy(() => retryImport(() => import("@/pages/VerifyLetter")));
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
@@ -933,6 +934,7 @@ function Router() {
         <Route path="/dashboard/staff">{() => <LazyRoute component={StaffMembers} />}</Route>
         <Route path="/dashboard/staff-profiles">{() => <LazyRoute component={StaffProfilesDirectory} />}</Route>
         <Route path="/dashboard/official-letters">{() => <LazyRoute component={OfficialLetters} />}</Route>
+        <Route path="/dashboard/my-services">{() => <LazyRoute component={MyServicesPage} />}</Route>
         <Route path="/verify/:code">{() => <LazyRoute component={VerifyLetter} />}</Route>
         <Route path="/dashboard/staff-profiles/:userId">{() => <LazyRoute component={StaffProfilePage} />}</Route>
         <Route path="/dashboard/meetings">{() => <LazyRoute component={MeetingsHub} />}</Route>

@@ -53,8 +53,10 @@
         "server/services/officialLetterPdfService.ts",
         "server/routes/officialLetters.ts",
         "client/src/pages/dashboard/OfficialLetters.tsx",
+        "client/src/pages/dashboard/MyServicesPage.tsx",
         "client/src/pages/VerifyLetter.tsx",
         "client/src/components/officialLetters/**",
+        "client/src/components/staff/MyServicesHomeLink.tsx",
         "docs/systems/official-letters/**"
       ],
       "aiFeatureKeys": [],
@@ -136,6 +138,8 @@
       ],
       "pathGlobs": [
         "client/src/components/staff/MyStaffProfileCard.tsx",
+        "client/src/components/staff/MyServicesHomeLink.tsx",
+        "client/src/pages/dashboard/MyServicesPage.tsx",
         "server/routes/staffProfiles.ts",
         "server/services/staffProfileService.ts",
         "server/routes/articleEditLocks.ts",

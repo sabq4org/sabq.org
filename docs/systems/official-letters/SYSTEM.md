@@ -25,7 +25,7 @@
 | Backend | `server/services/officialLetterService.ts`, `server/services/officialLetterPdfService.ts`, `server/routes/officialLetters.ts` |
 | Web (إدارة خطابات) | `OfficialLetters.tsx` → `/dashboard/official-letters` |
 | Web (إدارة ملف) | `StaffProfilesDirectory` → `/dashboard/staff-profiles` (يفتح طابور «قيد المراجعة» افتراضياً) + اعتماد من `StaffProfilePage` |
-| Web (منسوب) | `client/src/components/officialLetters/MyOfficialLettersCard.tsx` في مساحة الكاتب وصفحة المراسل |
+| Web (منسوب) | صفحة **ملفي وخدماتي** `/dashboard/my-services` (`MyServicesPage`) — تضم `MyOfficialLettersCard`؛ النظرة العامة تعرض رابطاً مضغوطاً فقط (`MyServicesHomeLink`) |
 | Web (تذكرة) | `client/src/components/officialLetters/IssueLetterFromTicketDialog.tsx` داخل `TicketThread` |
 | Web (عام) | `client/src/pages/VerifyLetter.tsx` → `/verify/:code` |
 
@@ -71,9 +71,10 @@
   `/dashboard/staff-profiles` (السايدبار: «مراجعة ملفات المنسوبين») — طابور
   قيد المراجعة مع أزرار **اعتماد** و**ملاحظات** مباشرة في الصف، أو فتح الملف.
   رابط سريع أيضاً من صفحة الخطابات الرسمية.
-  بعدها فقط `requestSelfLetter`.   أثناء `pending_review` و`approved` التعديل الذاتي مقفل (واجهة + API).
-  بعد الاعتماد يظهر زر «إصدار وتحميل الشهادة» في بطاقة الملف وبطاقة
-  «شهاداتي الرسمية» (`#my-official-letters`) ويفتح PDF بعد الإصدار.
+  بعدها فقط `requestSelfLetter`. أثناء `pending_review` و`approved` التعديل الذاتي مقفل (واجهة + API).
+  بعد الاعتماد: الإصدار والتحميل من بطاقة «شهاداتي الرسمية» فقط داخل
+  `/dashboard/my-services` (`#my-official-letters`) — زر «تحميل» بجانب كل شهادة
+  صادرة، وزر إصدار عند الاعتماد. لا تكرار على النظرة العامة ولا في بطاقة الملف.
   طلب تصحيح يعيد فتح الحقول. **لا شهادة ثانية** لنفس النوع الساري.
 - **الشعار:** `public/branding/sabq-logo-official.png` (من ملف هوية Illustrator
   `SABQ logo.pdf` — خلفية شفافة). الاحتياطي: `sabq-logo.png` ثم
