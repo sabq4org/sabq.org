@@ -516,6 +516,18 @@ async function serveApiLastGood(cacheKeyReq, reason) {
   try {
     const hit = await caches.default.match(apiLastGoodKey(cacheKeyReq));
     if (!hit) return null;
+    // Never replay a truncated/invalid JSON last-good (the pre-buffer bug
+    // could have stored one). Prefer a 502 over a broken homepage body.
+    const contentType = (hit.headers.get("content-type") || "").toLowerCase();
+    if (contentType.includes("application/json")) {
+      const text = await hit.clone().text();
+      try {
+        JSON.parse(text);
+      } catch (_) {
+        console.error("[pages-fn] discarding invalid last-good JSON:", reason);
+        return null;
+      }
+    }
     const headers = new Headers(hit.headers);
     headers.set("x-edge-cache", "STALE");
     headers.set("X-Sabq-Stale", "1");
@@ -726,6 +738,19 @@ export async function onRequest(context) {
       try {
         const hit = await caches.default.match(apiCacheKeyReq);
         if (hit) {
+          const contentType = (hit.headers.get("content-type") || "").toLowerCase();
+          if (contentType.includes("application/json")) {
+            const text = await hit.clone().text();
+            try {
+              JSON.parse(text);
+            } catch (_) {
+              // Discard poisoned/truncated cache entries (pre-buffer bug).
+              console.error("[pages-fn] discarding invalid cached JSON for", path);
+              context.waitUntil(caches.default.delete(apiCacheKeyReq).catch(() => {}));
+              // Fall through to origin fetch.
+              throw new Error("invalid-cached-json");
+            }
+          }
           const headers = new Headers(hit.headers);
           headers.set("x-edge-cache", "HIT");
           return new Response(hit.body, {
@@ -735,7 +760,9 @@ export async function onRequest(context) {
           });
         }
       } catch (err) {
-        console.error("[pages-fn] api cache match error:", err);
+        if (String(err?.message) !== "invalid-cached-json") {
+          console.error("[pages-fn] api cache match error:", err);
+        }
       }
     }
 
@@ -746,33 +773,86 @@ export async function onRequest(context) {
         useApiCache ? API_PROXY_TIMEOUT_MS : 0,
       );
 
+      // Cacheable anonymous GETs: buffer the FULL body before cloning/caching.
+      // Cloning a still-streaming origin body twice (fresh + last-good) while
+      // also returning it to the browser tees the stream 3 ways — under load
+      // Cloudflare truncates mid-UTF-8 (~4–5KB). Symptom for anonymous
+      // visitors: homepage "Unterminated string in JSON…"; logged-in users
+      // (connect.sid → cache bypass, single stream) were fine. Incident
+      // 2026-07-26.
       if (useApiCache && apiCacheKeyReq && res.status === 200) {
         if (!res.headers.has("set-cookie")) {
-          const cachedHeaders = new Headers(res.headers);
-          cachedHeaders.set("Cache-Control", `public, max-age=${apiCacheTtl}, s-maxage=${apiCacheTtl}`);
+          let bodyBuf;
+          try {
+            bodyBuf = await res.arrayBuffer();
+          } catch (readErr) {
+            console.error("[pages-fn] api body read error:", readErr);
+            const stale = await serveApiLastGood(apiCacheKeyReq, "body-read-failed");
+            if (stale) return stale;
+            return new Response("Bad gateway", { status: 502 });
+          }
 
-          const responseToCache = new Response(res.clone().body, {
+          const contentType = (res.headers.get("content-type") || "").toLowerCase();
+          if (contentType.includes("application/json")) {
+            try {
+              JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(bodyBuf));
+            } catch (parseErr) {
+              console.error(
+                "[pages-fn] refusing to cache truncated/invalid JSON for",
+                path,
+                parseErr,
+              );
+              const stale = await serveApiLastGood(apiCacheKeyReq, "invalid-json");
+              if (stale) return stale;
+              // Do not serve a known-broken body to the browser.
+              return new Response(
+                JSON.stringify({ message: "Upstream response incomplete" }),
+                {
+                  status: 502,
+                  headers: { "Content-Type": "application/json; charset=utf-8" },
+                },
+              );
+            }
+          }
+
+          const outHeaders = new Headers(res.headers);
+          // Body is decoded/uncompressed after arrayBuffer(); drop transport
+          // encodings so Content-Length matches what we actually send.
+          outHeaders.delete("content-encoding");
+          outHeaders.delete("content-length");
+          outHeaders.set(
+            "Cache-Control",
+            `public, max-age=${apiCacheTtl}, s-maxage=${apiCacheTtl}`,
+          );
+
+          const responseToCache = new Response(bodyBuf.slice(0), {
             status: res.status,
             statusText: res.statusText,
-            headers: cachedHeaders,
+            headers: outHeaders,
           });
 
           context.waitUntil(
             caches.default.put(apiCacheKeyReq, responseToCache).catch((err) => {
               console.error("[pages-fn] api cache put error:", err);
-            })
+            }),
           );
 
           // «آخر نسخة سليمة» — تُقدَّم فقط عند فشل الأصل (انظر serveApiLastGood).
-          const lastGoodHeaders = new Headers(res.headers);
+          const lastGoodHeaders = new Headers(outHeaders);
           lastGoodHeaders.set("Cache-Control", `public, s-maxage=${API_LAST_GOOD_TTL_S}`);
-          const lastGoodCopy = new Response(res.clone().body, {
+          const lastGoodCopy = new Response(bodyBuf.slice(0), {
             status: 200,
             headers: lastGoodHeaders,
           });
           context.waitUntil(
-            caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {})
+            caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {}),
           );
+
+          return new Response(bodyBuf, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: outHeaders,
+          });
         }
       }
 
