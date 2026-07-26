@@ -92,8 +92,9 @@ export function PredictionMatchCard({
         <TeamSide name={home?.name} logo={home?.logo} />
         <div className="min-w-[72px] text-center">
           {contest.status === "settled" && contest.result ? (
+            // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم فريقه
             <span className="text-xl font-extrabold tabular-nums text-foreground" dir="ltr">
-              {contest.result.finalHome}–{contest.result.finalAway}
+              {contest.result.finalAway}–{contest.result.finalHome}
             </span>
           ) : (
             <span className="text-sm font-bold tabular-nums text-muted-foreground">
@@ -139,7 +140,11 @@ export function PredictionMatchCard({
             disabled={submitMutation.isPending}
             className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
           >
-            {submitMutation.isPending ? "جارٍ الحفظ…" : `تأكيد التوقّع ${predHome}–${predAway}`}
+            {submitMutation.isPending ? (
+              "جارٍ الحفظ…"
+            ) : (
+              <>تأكيد التوقّع <span dir="ltr" className="tabular-nums">{predAway}–{predHome}</span></>
+            )}
           </button>
           <p className="text-center text-[10.5px] text-muted-foreground">
             يُقفل التوقّع عند ضربة البداية — ويمكنك تعديله حتى ذلك الحين
@@ -181,7 +186,11 @@ function StatusChip({
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-[11px] font-bold text-destructive">
         <Lock className="h-3 w-3" />
-        {mine ? `توقّعك ${mine.predHome}–${mine.predAway} مقفل` : "أُقفل التوقّع"}
+        {mine ? (
+          <>توقّعك <span dir="ltr" className="tabular-nums">{mine.predAway}–{mine.predHome}</span> مقفل</>
+        ) : (
+          "أُقفل التوقّع"
+        )}
       </span>
     );
   }
@@ -193,7 +202,7 @@ function StatusChip({
           onClick={onPredict}
           className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary transition hover:bg-primary/20"
         >
-          توقّعتَ {mine.predHome}–{mine.predAway} · تعديل
+          توقّعتَ <span dir="ltr" className="tabular-nums">{mine.predAway}–{mine.predHome}</span> · تعديل
         </button>
       ) : (
         <button
@@ -209,7 +218,11 @@ function StatusChip({
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-[11px] font-bold text-destructive">
           <Lock className="h-3 w-3" />
-          {mine ? `توقّعك ${mine.predHome}–${mine.predAway} مقفل` : "مقفل — بانتظار النتيجة"}
+          {mine ? (
+            <>توقّعك <span dir="ltr" className="tabular-nums">{mine.predAway}–{mine.predHome}</span> مقفل</>
+          ) : (
+            "مقفل — بانتظار النتيجة"
+          )}
         </span>
       );
     case "settled":

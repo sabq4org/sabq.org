@@ -5,7 +5,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, ListOrdered, LogIn, Trophy } from "lucide-react";
+import { Link } from "wouter";
+import { CalendarClock, ChevronLeft, ListOrdered, LogIn, Trophy } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -27,6 +28,14 @@ import {
 } from "@/components/predictions/predictionTypes";
 
 type Tab = "matches" | "ledger" | "leaders";
+
+/** طريق العودة لمركز كل بطولة — الصفحة كانت بلا أي رابط راجع (طلب المالك). */
+const HUB_LINKS: { prefix: string; href: string; label: string }[] = [
+  { prefix: "rsl", href: "/roshn", label: "مركز دوري روشن" },
+  { prefix: "gulf-cup", href: "/gulf-cup", label: "مركز خليجي 27" },
+  { prefix: "kings-cup", href: "/kings-cup", label: "مركز كأس الملك" },
+  { prefix: "asian-cup", href: "/asian-cup", label: "مركز كأس آسيا" },
+];
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "matches", label: "المباريات" },
@@ -74,6 +83,10 @@ export default function PredictionCenter() {
     if (requestedMissing && selected) syncCompetitionUrl(selected.slug);
   }, [requestedMissing, selected]);
 
+  const hubLink = selected
+    ? HUB_LINKS.find((hub) => selected.slug.startsWith(hub.prefix)) ?? null
+    : null;
+
   // مسابقات البطولة المختارة
   const { data: detailRaw, isLoading: detailLoading } = useQuery<PredCompetitionDetail>({
     queryKey: [`/api/predictions/competitions/${selected?.slug}`],
@@ -116,6 +129,15 @@ export default function PredictionCenter() {
           />
         ) : (
           <>
+            {hubLink && (
+              <Link href={hubLink.href}>
+                <span className="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-bold text-muted-foreground transition hover:text-foreground">
+                  <Trophy className="h-3.5 w-3.5 text-amber-500" />
+                  {hubLink.label}
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </span>
+              </Link>
+            )}
             {requestedMissing && selected && (
               <p className="mb-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-[12px] font-semibold text-amber-800 dark:text-amber-300">
                 البطولة المطلوبة غير متاحة حاليًا — عرضنا لك {selected.nameAr}.
