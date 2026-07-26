@@ -496,6 +496,12 @@ setInterval(cleanupProcessedEmails, 5 * 60 * 1000);
 // "always reject" once the secret is deployed everywhere.
 //
 // (Security audit C6, 2026-05-11.)
+/** Safe JSON response — no-op if we already ACKed SendGrid after dedup claim. */
+function respondWebhook(res: Response, body: Record<string, unknown>, status = 200): void {
+  if (res.headersSent) return;
+  res.status(status).json(body);
+}
+
 function verifyInboundWebhookSecret(req: Request): { ok: boolean; reason?: string } {
   const inboundSecret = process.env.SENDGRID_INBOUND_SECRET;
   if (!inboundSecret) {
@@ -687,6 +693,21 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       console.log(
         `[Email Agent] 🔒 Dedup claimed message=${claim.messageKey.substring(0, 60)} content=${claim.contentKey}`,
       );
+
+      // ACK SendGrid immediately after a successful claim — BEFORE AI / uploads.
+      // Inbound Parse retries on timeout/slow 200s. Processing often takes >30s
+      // (GPT + images), so without an early ACK the same MIME is POSTed again
+      // while the first run is still publishing. Combined with the post-token
+      // flood of previously-401'd mail, that looked like "news keeps repeating".
+      // Dedup still blocks true duplicates; this stops the retry storm at the source.
+      if (!res.headersSent) {
+        res.status(200).json({
+          success: true,
+          message: "Email accepted for processing",
+          accepted: true,
+          dedupKey: claim.messageKey.substring(0, 50),
+        });
+      }
     } catch (dbError) {
       console.error(`[Email Agent] DB dedup check failed, using memory fallback:`, dbError);
       dedupKey = messageId || `${senderEmailEarly}_${subject}_${new Date().toISOString().substring(0, 16)}`;
@@ -698,6 +719,14 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         });
       }
       processedEmails.set(dedupKey, Date.now());
+      if (!res.headersSent) {
+        res.status(200).json({
+          success: true,
+          message: "Email accepted for processing",
+          accepted: true,
+          dedupKey: dedupKey.substring(0, 50),
+        });
+      }
     }
     
     // 📎 Process attachments from SendGrid (multer files OR parsed attachments from raw MIME)
@@ -1100,10 +1129,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Sender not authorized",
       });
+      return;
     }
 
     if (trustedSender.status !== "active") {
@@ -1129,10 +1159,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Sender account is inactive",
       });
+      return;
     }
 
     const tokenInSubject = extractTokenFromText(subject);
@@ -1187,10 +1218,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Invalid token",
       });
+      return;
     }
 
     console.log("[Email Agent] Sender verified successfully");
@@ -1477,10 +1509,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "No content found in email",
       });
+      return;
     }
 
     // 🌐 USE TRUSTED SENDER LANGUAGE PREFERENCE
@@ -1557,13 +1590,14 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Content quality below threshold (Sabq standards)",
         qualityScore: editorialResult.qualityScore,
         issues: editorialResult.issues,
         suggestions: editorialResult.suggestions,
       });
+      return;
     }
 
     // 🎨 Bypass news value check for infographics (visual content is inherently valuable)
@@ -1598,11 +1632,12 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Content has no news value",
         issues: editorialResult.issues,
       });
+      return;
     }
 
     // 🛡️ SAFETY: Reject if AI returned empty content (truncated response, partial JSON, etc.)
@@ -1633,10 +1668,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "AI processing returned empty content - article not published for safety",
       });
+      return;
     }
 
     // ✅ SUCCESSFUL VALIDATION - Upload pending images to PUBLIC
@@ -2050,7 +2086,12 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       ...(trustedSender.autoPublish ? { emailsPublished: 1 } : { emailsDrafted: 1 }),
     });
 
-    return res.status(200).json({
+    // Early ACK already returned 200 after dedup claim.
+    if (res.headersSent) {
+      console.log("[Email Agent] ✅ Processing finished (already ACKed to SendGrid)");
+      return;
+    }
+    respondWebhook(res, {
       success: true,
       message: trustedSender.autoPublish 
         ? "Article published successfully (edited with Sabq style)" 
@@ -2069,6 +2110,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         suggestions: editorialResult.suggestions,
       },
     });
+    return;
 
   } catch (error: any) {
     console.error("[Email Agent] ❌ Error processing webhook:", error);
@@ -2099,7 +2141,8 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       emailsFailed: 1,
     });
 
-    return res.status(200).json({
+    // Early ACK may already have been sent after dedup claim — don't double-send.
+    respondWebhook(res, {
       success: false,
       message: "Internal processing error",
       error: error.message,
