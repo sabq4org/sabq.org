@@ -165,12 +165,30 @@ export function MyOfficialLettersCard() {
         ) : activeLetters.length > 0 ? (
           <ul className="divide-y rounded-xl border">
             {activeLetters.map((letter) => (
-              <li key={letter.id} className="px-3 py-2.5" data-testid={`row-my-letter-${letter.id}`}>
-                <p className="text-sm font-medium">{letter.letterTypeLabelAr}</p>
-                <p className="text-xs text-muted-foreground">
-                  {letter.referenceCode}
-                  {letter.recipientEntity ? ` · ${letter.recipientEntity}` : ""}
-                </p>
+              <li
+                key={letter.id}
+                className="flex items-center justify-between gap-3 px-3 py-2.5"
+                data-testid={`row-my-letter-${letter.id}`}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{letter.letterTypeLabelAr}</p>
+                  <p className="text-xs text-muted-foreground">{letter.referenceCode}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  asChild
+                  data-testid={`button-download-letter-${letter.id}`}
+                >
+                  <a
+                    href={apiUrl(`/api/official-letters/${letter.id}/file.pdf`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download className="ml-1.5 h-3.5 w-3.5" />
+                    تحميل
+                  </a>
+                </Button>
               </li>
             ))}
           </ul>
@@ -212,7 +230,7 @@ export function MyOfficialLettersCard() {
 
         {!canRequestSelected && formOpen ? (
           <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            لديك شهادة سارية من هذا النوع بالفعل. استخدم زر «تحميل الشهادة» أعلى الصفحة.
+            لديك شهادة سارية من هذا النوع بالفعل. استخدم زر «تحميل» بجانب الشهادة أعلاه.
           </p>
         ) : formOpen ? (
           <div className="space-y-3 rounded-xl border p-3">
@@ -371,7 +389,7 @@ export function MyOfficialLettersCard() {
             إصدار شهادة تعريف
           </Button>
         ) : allIssued ? (
-          <p className="text-xs text-muted-foreground">جميع أنواع الشهادات صادرة — استخدم زر التنزيل أعلاه.</p>
+          <p className="text-xs text-muted-foreground">جميع أنواع الشهادات صادرة — استخدم زر «تحميل» بجانب كل شهادة.</p>
         ) : null}
       </CardContent>
     </Card>

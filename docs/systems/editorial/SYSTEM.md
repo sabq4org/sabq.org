@@ -53,7 +53,7 @@
 - **دورة مراجعة ملف الترخيص:** عمود `media_license_review_status` = `approved` | `needs_correction` | `pending_review` (null = تراث يُعامل كـ approved إن وُجد ملف). مسار الحالات: مرخّص → طلب تصحيح (`يحتاج تصحيحاً`) → إعادة رفع (`تحت المراجعة`) → موافقة (`مرخّص`) أو رفض (يعود لـ يحتاج تصحيحاً). الرفع الأول/التجديد بلا تصحيح مفتوح يبقى `approved` مباشرة. APIs: `POST .../media-license-correction` و`.../media-license-approve` و`.../media-license-reject` (كتّاب: `OPINION_REVIEW`؛ مراسلون: system_admin). سكربت: `scripts/sql/add-media-license-correction-note-2026-07-25.sql`.
 - **بوابة الإرسال من ٣١ يوليو ٢٠٢٦ (رياض):** `isMediaLicenseEnforcementActive` — عند تفعيله يُرفض النشر/`submitForReview` ومسارات الإرسال (`/api/admin/articles`، submit-review، موبايل `/articles/submit`) إن كان صاحب الاسم بلا ترخيص ساري (`assertMediaLicenseAllowsSubmission`). حساب «صحيفة سبق» مستثنى. في منتقي المراسل/الكاتب: `licenseSelectable: false` → اسم مطفي وغير قابل للاختيار. حفظ المسودة يبقى متاحاً.
 - **صلاحية الترخيص بدون تاريخ:** `resolveMediaLicenseEnd` — تاريخ ناقص/فاسد = غير ساري (`expired` إن كان مقدَّماً، لا `مرخّص`). منتصف ليل UTC يُفسَّر كنهاية يوم الرياض. القوائم تستخدم `mediaLicenseFlags`؛ الواجهة تعرض دائماً «حتى …» أو «بلا تاريخ انتهاء».
-- **شارة الترخيص في الشريط:** غير مرخّص / منتهٍ / جدّد → تنقل إلى نموذج `WriterMediaLicenseCard` عبر `#writer-media-license` (كاتب: `/dashboard/opinion-author`، مراسل: `/dashboard/reporter/articles`) وتفتح النموذج إن لزم.
+- **شارة الترخيص في الشريط:** غير مرخّص / منتهٍ / جدّد → تنقل إلى نموذج `WriterMediaLicenseCard` عبر `#writer-media-license` داخل `/dashboard/my-services` وتفتح النموذج إن لزم.
 - **شريط تحذير الترخيص في اللوحة:** لمراسل/كاتب رأي بلا ترخيص ساري أو بترخيص منتهٍ يظهر أعلى المحتوى في `DashboardLayout` نص أحمر على خلفية حمراء خفيفة (`MEDIA_LICENSE_DASHBOARD_WARNING`) ينبّه بعدم القدرة على المشاركة بعد 31 يوليو 2026؛ الضغط يفتح نموذج الترخيص.
 - **إدارة الترخيص — كتّاب الرأي:** `/dashboard/opinion-writers` عبر `DashboardPageHeader`؛ خلية مضغوطة + فلترة (تحت المراجعة / يحتاج تصحيحاً / …) + اعتماد/رفض/طلب تصحيح؛ `GET /api/admin/opinion-writers/:id/media-license-file`.
 - **إدارة المراسلين:** `/dashboard/reporters` — **مسؤول النظام فقط** (`requireRoles` في السايدبار + `ProtectedRoute` + `requireRole` على `/api/admin/reporters*`). لا تُفتح عبر `articles.view`/`users.view`. أعمدة الصفحة: ترخيص، مدينة، آخر دخول — **بدون** منشورة/آخر خبر/مشاهدات. API: `GET /api/admin/reporters` من `users` + ملف الترخيص؛ `GET /api/admin/reporters/:id/articles` موجود ولا تستهلكه الصفحة. ترتيب: تحت المراجعة → منتهٍ → يحتاج تصحيحاً → جدّد → بدون → ساري. KPI «نشطون آخر ٧ أيام» يعتمد `lastLoginAt` فقط.
@@ -61,17 +61,17 @@
 - **سايدبار محرّر المقال:** بدون `sticky`/`max-h` على عمود الإعدادات — التمرير يتم مع صفحة الداشبورد حتى يُصل لآخر حقول SEO والكلمات المفتاحية (كان sticky يقصّ الأسفل داخل `overflow-auto` للداشبورد).
 - **قنوات الاتصال (`/dashboard/communications`):** مفردات الحالة في السجلات هي ما يكتبه الخادم فقط — البريد: `received` / `published` / `processed` (= مسودة) / `rejected` / `failed`، وواتساب: `received` / `processed` / `rejected` مع `publishStatus` للتمييز بين منشور ومسودة. لا تُضِف خيارات فلترة بأسماء غير هذه (`success` / `drafted` / `processing` كانت ترجع صفر نتائج دائماً؛ `success`→`processed` و`failed`→`rejected` مقبولان الآن كمرادفين في `/api/whatsapp/logs` للتوافق فقط). `badge-stats` للقناتين يعيد `newMessages` / `publishedToday` / `draftedToday` / `rejectedToday`، و«اليوم» يُحسب بتوقيت الرياض عبر `server/utils/riyadhDay.ts` لا بتوقيت الخادم. رمز واتساب يُولَّد على الخادم بـ `crypto` قبل `insertWhatsappTokenSchema.parse` ولا يُقبل من العميل. بوابة الصفحة صلاحيات لا أدوار نصية، والتبويب الذي لا يملكه المستخدم يعرض رسالة صريحة بدل جدول فارغ.
 - **إنعاش الخبر:** `POST /api/articles/:id/resurface` يختم `articles.resurfaced_at` فقط (لا يغيّر `publishedAt`/المشاهدات/الرابط). صدارة الواجهة تعتمد `COALESCE(resurfaced_at, published_at)` في `homepage-lite` و`/api/v1/homepage` و`home-bundle` — أي مسار موجز جديد يجب أن يستخدم نفس الترتيب وإلا لن يظهر المُنعش أولاً.
-- **استكمال ملف المنسوب (كاتب/مراسل):** بطاقة `MyStaffProfileCard` أعلى مساحة
-  كاتب الرأي (`/dashboard/opinion-author`) وصفحة المراسل (`/dashboard/reporter/articles`)
-  — قبل بطاقة الترخيص. مسار ذاتي: `GET/PUT /api/staff-profiles/me` (+ lookups
-  ووثائق وnational-id). **تبويب الاعتماد الصحفي مخفي ذاتياً** (للإدارة فقط عبر
-  `/dashboard/staff-profiles`). العقد يبقى لـ HR. الترخيص المهني يبقى عبر
-  `WriterMediaLicenseCard` وليس شرطاً لاكتمال ملف المنسوب (الشهادة تسبق الترخيص).
-  **مراجعة قبل شهادة التعريف:** اكتمال 100% يضع الملف تلقائياً في
-  `pending_review` (عند الحفظ أو قراءة الملف — بلا زر إرسال). HR يعتمد عبر
-  `POST /api/staff-profiles/:userId/approve` أو يطلب تصحيحاً
-  (`.../request-correction`). الإصدار الذاتي للشهادة يتطلب `approved` فقط
-  (تفاصيل في `official-letters/SYSTEM.md`).
+- **ملفي وخدماتي:** صفحة موحّدة `/dashboard/my-services` (`MyServicesPage`) تجمع
+  `MyStaffProfileCard` + شهادة التعريف + `WriterMediaLicenseCard`. السايدبار
+  (كاتب رأي / مراسل) والنظرة العامة تعرضان رابطاً مضغوطاً فقط
+  (`MyServicesHomeLink`) بدل تكديس البطاقات. مسار ذاتي للملف:
+  `GET/PUT /api/staff-profiles/me` (+ lookups ووثائق وnational-id).
+  **تبويب الاعتماد الصحفي مخفي ذاتياً** (للإدارة فقط عبر
+  `/dashboard/staff-profiles`). الترخيص المهني ليس شرطاً لاكتمال ملف المنسوب
+  (الشهادة تسبق الترخيص). **مراجعة قبل شهادة التعريف:** اكتمال 100% →
+  `pending_review` تلقائياً. HR يعتمد عبر `POST .../approve` أو يطلب تصحيحاً.
+  الإصدار الذاتي للشهادة يتطلب `approved` فقط (تفاصيل في
+  `official-letters/SYSTEM.md`).
 - **Visual AI (`visualAiService.analyzeImage`):** الرد ثلاثي اللغة كان يُقطع عند `maxOutputTokens: 2048` فيفشل `JSON.parse` (`Failed to parse JSON response`). السقف 4096، والتحليل عبر `parseVisualAiJson` (أسوار markdown + إصلاح JSON مقطوع)، وفشل التحليل يعيد التوليد داخل `pRetry`.
 - **عدادات إدارة المقالات:** `GET /api/admin/articles/metrics` → `getArticlesMetrics` يستعلاماً واحداً بـ `count(*) FILTER` + كاش ذاكرة `admin:articles:metrics` لمدة `CACHE_TTL.SHORT` (بدل 4 COUNT متتالية كانت ~2.5s في APM).
 - **نبض غرفة الأخبار (`GET /api/admin/dashboard/stats`):** عبر `adminDashboardStatsService.getCachedAdminDashboardStats` — SWR (طازج 5 دقائق / stale حتى 15 مع تحديث خلفي + single-flight). الـ warmup وتحديث كل 4 دقائق يعملان على **كل replica** (كاش الذاكرة per-process). `reading_history` يُجمَّع على آخر 7 أيام فقط؛ تفاعلات اليوم باستعلام منفصل بفلتر تاريخ. الموبايل `full-stats` يشارك نفس الكاش. KPI الجانبية (`deepAnalyses`, `audioNewsletters`, `publishers`, …) تُغلَّف بـ soft-fail داخل `getAdminDashboardStats` حتى لا يُسقط عمود ناقص في الإنتاج (مثل `deep_analyses.status`) المسار كاملاً.

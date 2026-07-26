@@ -202,11 +202,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const showMediaLicenseWarningBanner = showUnlicensedBadge || showExpiredBadge;
 
   const mediaLicenseFormPath =
-    role === "opinion_author"
-      ? "/dashboard/opinion-author"
-      : role === "reporter"
-        ? "/dashboard/reporter/articles"
-        : null;
+    role === "opinion_author" || role === "reporter"
+      ? "/dashboard/my-services"
+      : null;
 
   const openMediaLicenseForm = () => {
     if (!mediaLicenseFormPath) return;
