@@ -19,6 +19,7 @@ import { MatchDialog } from "@/pages/SportsHub";
 import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { RslHero } from "@/components/rsl/RslHero";
 import { RslFacts } from "@/components/rsl/RslFacts";
+import { RslVaraPromo } from "@/components/rsl/RslVaraPromo";
 import { RslMatches, type RslMatchBuckets } from "@/components/rsl/RslMatches";
 import { RslStandings } from "@/components/rsl/RslStandings";
 import { RslScorers } from "@/components/rsl/RslScorers";
@@ -105,6 +106,7 @@ export default function RoshnHub() {
           <SectionError label="حالة الموسم والمباريات الحية" onRetry={() => void refetchHero()} />
         )}
         <RslFacts hero={hero} />
+        <RslVaraPromo />
         {matchesError && !matchesData ? (
           <SectionError label="جدول المباريات" onRetry={() => void refetchMatches()} />
         ) : (
