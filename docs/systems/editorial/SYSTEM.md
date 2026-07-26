@@ -67,7 +67,8 @@
   ووثائق وnational-id). **تبويب الاعتماد الصحفي مخفي ذاتياً** (للإدارة فقط عبر
   `/dashboard/staff-profiles`). العقد يبقى لـ HR. الترخيص المهني يبقى عبر
   `WriterMediaLicenseCard` وليس شرطاً لاكتمال ملف المنسوب (الشهادة تسبق الترخيص).
-  **مراجعة قبل شهادة التعريف:** اكتمال 100% → `pending_review`؛ HR يعتمد عبر
+  **مراجعة قبل شهادة التعريف:** اكتمال 100% يضع الملف تلقائياً في
+  `pending_review` (عند الحفظ أو قراءة الملف — بلا زر إرسال). HR يعتمد عبر
   `POST /api/staff-profiles/:userId/approve` أو يطلب تصحيحاً
   (`.../request-correction`). الإصدار الذاتي للشهادة يتطلب `approved` فقط
   (تفاصيل في `official-letters/SYSTEM.md`).

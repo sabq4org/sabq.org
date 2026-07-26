@@ -60,13 +60,11 @@
   `MyStaffProfileCard`). نص الإرشاد: `LETTER_GAPS_STAFF_HINT_AR`.
   **الترخيص المهني ليس شرطاً** لاكتمال الملف ولا لإصدار شهادة التعريف (كثيرون
   يطلبون الشهادة للتقديم على الترخيص — دورة الترخيص منفصلة في `editorial`).
-- **مراجعة الإدارة قبل الإصدار:** اكتمال 100% ذاتياً → `pending_review` ورسالة
-  «البيانات تحت المراجعة». HR يراجع/يعدّل (مسمى، تاريخ التحاق، …) ثم
-  `POST /api/staff-profiles/:userId/approve` → `approved`. بعدها فقط
-  `requestSelfLetter` يصدر الشهادة ويظهر زر التنزيل. طلب تصحيح:
-  `POST .../request-correction` مع ملاحظة. أي حفظ ذاتي بعد الاعتماد يعيد الملف
-  إلى `pending_review`. **لا شهادة ثانية** من نفس النوع ما دامت سارية
-  (`status=issued`).
+- **مراجعة الإدارة قبل الإصدار:** اكتمال 100% (عند الحفظ أو عند قراءة الملف)
+  يضع الحالة تلقائياً في `pending_review` — **لا يوجد زر إرسال للمراجعة**.
+  HR يراجع/يعدّل ثم `POST .../approve` → `approved`. بعدها فقط
+  `requestSelfLetter`. طلب تصحيح: `POST .../request-correction`. أي حفظ ذاتي
+  بعد الاعتماد يعيد `pending_review`. **لا شهادة ثانية** لنفس النوع الساري.
 - **الشعار:** `public/branding/sabq-logo-official.png` (من ملف هوية Illustrator
   `SABQ logo.pdf` — خلفية شفافة). الاحتياطي: `sabq-logo.png` ثم
   `sabq-logo-report.png`. لا تستبدل `sabq-logo.png` (خلفية سوداء للوحة التحكم).

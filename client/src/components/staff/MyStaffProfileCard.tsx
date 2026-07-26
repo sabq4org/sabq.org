@@ -32,7 +32,8 @@ function reviewBadge(status: ReviewStatus | null | undefined, complete: boolean)
       className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
     };
   }
-  if (status === "pending_review") {
+  if (status === "pending_review" || (complete && status === "draft")) {
+    // complete+draft يُرقّى تلقائياً في الخادم؛ نعرض نفس الرسالة فوراً
     return {
       label: "البيانات تحت المراجعة",
       className: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400",
@@ -44,15 +45,11 @@ function reviewBadge(status: ReviewStatus | null | undefined, complete: boolean)
       className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
     };
   }
-  if (complete) {
-    return {
-      label: "الملف مكتمل — بانتظار الإرسال للمراجعة",
-      className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-    };
-  }
   return {
-    label: "مسودة",
-    className: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
+    label: complete ? "الملف مكتمل" : "مسودة",
+    className: complete
+      ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400"
+      : "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
   };
 }
 
@@ -110,11 +107,11 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
                     </span>
                   )}
                 </div>
-                {reviewStatus === "pending_review" && (
+                {reviewStatus === "pending_review" || (complete && reviewStatus === "draft") ? (
                   <p className="text-xs leading-relaxed text-sky-800 dark:text-sky-300" data-testid="text-profile-pending-review">
                     بياناتك مكتملة وهي تحت مراجعة الإدارة. بعد الاعتماد ستتمكن من إصدار شهادة التعريف وتنزيلها.
                   </p>
-                )}
+                ) : null}
                 {reviewStatus === "approved" && (
                   <p className="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300" data-testid="text-profile-approved">
                     تم اعتماد ملفك — يمكنك الآن إصدار وتحميل شهادة التعريف من بطاقة الشهادات.
