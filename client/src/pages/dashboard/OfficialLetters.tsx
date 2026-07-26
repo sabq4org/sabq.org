@@ -2,6 +2,7 @@
 // إصدار شهادة تعريف / تسهيل مهمة للمنسوبين، ومراجعة طلباتهم.
 
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
@@ -35,6 +36,7 @@ import {
 import {
   AlertTriangle,
   Check,
+  ClipboardCheck,
   Download,
   FileText,
   Loader2,
@@ -78,6 +80,7 @@ type StaffRow = {
   jobTitleName: string | null;
   departmentName: string | null;
   employmentType: string | null;
+  profileReviewStatus?: string | null;
 };
 
 type SubjectPreview = {
@@ -120,6 +123,9 @@ export default function OfficialLetters() {
 
   const { data: staffRaw } = useQuery({ queryKey: ["/api/staff-profiles"] });
   const staff = (((staffRaw as { items?: StaffRow[] } | undefined)?.items) ?? []) as StaffRow[];
+  const pendingProfileReviews = staff.filter(
+    (row) => row.profileReviewStatus === "pending_review",
+  ).length;
 
   const { data: previewRaw, isFetching: previewLoading } = useQuery({
     queryKey: [`/api/official-letters/subjects/${subjectUserId}`],
@@ -227,6 +233,20 @@ export default function OfficialLetters() {
             </Button>
           }
         />
+
+        <Link
+          href="/dashboard/staff-profiles?review=pending_review"
+          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-sky-300/70 bg-sky-50/80 px-4 py-3 text-start transition hover:bg-sky-50 dark:border-sky-900/50 dark:bg-sky-950/30"
+          data-testid="link-staff-profile-review-queue"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-sky-900 dark:text-sky-100">
+            <ClipboardCheck className="h-4 w-4 shrink-0" />
+            {pendingProfileReviews > 0
+              ? `${pendingProfileReviews} ملف منسوب بانتظار المراجعة والاعتماد قبل الشهادة`
+              : "مراجعة ملفات المنسوبين واعتمادها قبل إصدار الشهادات"}
+          </span>
+          <span className="shrink-0 text-xs text-sky-700 dark:text-sky-300">افتح الطابور ←</span>
+        </Link>
 
         {requests.length > 0 && (
           <section className="rounded-2xl border border-amber-200/70 bg-amber-50/60 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">

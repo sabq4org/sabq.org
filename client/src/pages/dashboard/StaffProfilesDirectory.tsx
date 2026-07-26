@@ -2,7 +2,7 @@
 // بهوية لوحة التحكم (DashboardPageShell / Header / شريط إحصاء / فلاتر بطاقات).
 
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
@@ -21,6 +21,7 @@ import {
 import {
   AlertTriangle,
   Briefcase,
+  ClipboardCheck,
   ExternalLink,
   IdCard,
   Loader2,
@@ -151,10 +152,21 @@ function displayName(row: StaffRow): string {
 }
 
 export default function StaffProfilesDirectory() {
+  const [location] = useLocation();
+  const initialReview = (() => {
+    const q = new URLSearchParams(location.split("?")[1] || "");
+    const review = q.get("review");
+    if (review === "pending_review" || review === "approved" || review === "needs_correction" || review === "draft") {
+      return review;
+    }
+    // افتراضياً: افتح طابور المراجعة — هذا الغرض الأساسي للإدارة هنا
+    return "pending_review";
+  })();
+
   const [q, setQ] = useState("");
   const [departmentId, setDepartmentId] = useState(ALL);
   const [employmentType, setEmploymentType] = useState(ALL);
-  const [reviewFilter, setReviewFilter] = useState<string>(ALL);
+  const [reviewFilter, setReviewFilter] = useState<string>(initialReview);
   const [quickEditUserId, setQuickEditUserId] = useState<string | null>(null);
 
   // النوع يُفلتر محلياً حتى تبقى أعداد بطاقات الأنواع صحيحة مع البحث/الإدارة.
@@ -197,10 +209,41 @@ export default function StaffProfilesDirectory() {
       <DashboardPageShell maxWidthClassName="max-w-[1400px]" contentClassName="px-4 pb-16 sm:px-6">
         <DashboardPageHeader
           icon={IdCard}
-          title="ملفات المنسوبين"
-          description="الملف الموحد للمنسوب — المرجع للبطاقة الصحفية وكل أسطح سبق"
+          title="مراجعة ملفات المنسوبين"
+          description="طابور اعتماد بيانات الكتّاب والمراسلين قبل إصدار شهادة التعريف — افتح الملف، صحّح إن لزم، ثم اعتمد"
           titleTestId="text-staff-profiles-title"
         />
+
+        {stats.pendingReview > 0 && reviewFilter !== "pending_review" && (
+          <button
+            type="button"
+            onClick={() => setReviewFilter("pending_review")}
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-sky-300/70 bg-sky-50/80 px-4 py-3 text-start transition hover:bg-sky-50 dark:border-sky-900/50 dark:bg-sky-950/30"
+            data-testid="banner-pending-review-queue"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-sky-900 dark:text-sky-100">
+              <ClipboardCheck className="h-4 w-4" />
+              {stats.pendingReview} ملف بانتظار مراجعتك واعتمادك
+            </span>
+            <span className="text-xs text-sky-700 dark:text-sky-300">عرض الطابور ←</span>
+          </button>
+        )}
+
+        {reviewFilter === "pending_review" && (
+          <div
+            className="rounded-2xl border border-sky-200/80 bg-sky-50/50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100"
+            data-testid="panel-review-queue-help"
+          >
+            <p className="font-semibold">كيف تعتمد الملف؟</p>
+            <p className="mt-1 text-xs leading-relaxed text-sky-900/80 dark:text-sky-200/90">
+              اضغط فتح الملف → راجع المسمى الوظيفي وتاريخ الالتحاق والبيانات → عدّل إن لزم → زر «اعتماد الملف».
+              بعدها يستطيع المنسوب إصدار شهادة التعريف وتنزيلها.
+            </p>
+            {stats.pendingReview === 0 && !isLoading && (
+              <p className="mt-2 text-xs text-muted-foreground">لا ملفات قيد المراجعة حالياً.</p>
+            )}
+          </div>
+        )}
 
         {/* شريط الحالة */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
