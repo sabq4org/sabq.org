@@ -101,7 +101,7 @@ export default function RoshnHub() {
         <SportsNewsBlock query="دوري روشن" title="أخبار دوري روشن" />
       </main>
 
-      <MatchDialog id={openMatchId} onClose={() => setOpenMatchId(null)} />
+      <MatchDialog id={openMatchId} onClose={() => setOpenMatchId(null)} theme="roshn" />
       <Footer />
     </div>
   );

@@ -57,7 +57,7 @@ import {
   ArrowLeftRight,
   MonitorPlay,
 } from "lucide-react";
-import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
@@ -1986,8 +1986,36 @@ function AbsenteesCard({ absentees, homeName, awayName, homeLogo, awayLogo }: {
   );
 }
 
-function SpPressureView({ data, homeName, awayName, live }: { data?: SpPressure; homeName: string; awayName: string; live: boolean }) {
+/** تلميح شريط الضغط — الطرف المسيطر بالدقيقة وقيمته (نمط تلميح المونديال). */
+function SpPressureTooltip({ active, payload, homeName, awayName }: {
+  active?: boolean;
+  payload?: { payload: SpPressurePoint }[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  const homeSide = p.net >= 0;
+  return (
+    <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-md" dir="rtl">
+      <p className="font-bold mb-0.5 tabular-nums" dir="ltr">{p.minute}'</p>
+      <p className={homeSide ? "text-emerald-600" : "text-amber-600"}>
+        {homeSide ? homeName : awayName}: <span className="font-bold tabular-nums">{Math.round(Math.abs(p.net))}</span>
+      </p>
+    </div>
+  );
+}
+
+function SpPressureView({ data, homeName, awayName, live, loading }: { data?: SpPressure; homeName: string; awayName: string; live: boolean; loading?: boolean }) {
   const points = Array.isArray(data?.points) ? data!.points : [];
+  if (loading && points.length === 0) {
+    return (
+      <div className="space-y-3 py-3">
+        <Skeleton className="h-5 w-40 mx-auto" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    );
+  }
   if (points.length === 0) {
     return <div className="py-8 text-center text-muted-foreground text-sm">مؤشّر الضغط يظهر هنا أثناء المباراة</div>;
   }
@@ -2008,6 +2036,7 @@ function SpPressureView({ data, homeName, awayName, live }: { data?: SpPressure;
             <XAxis dataKey="minute" tick={{ fontSize: 10 }} tickFormatter={(m) => `${m}'`} interval="preserveStartEnd" minTickGap={24} />
             <YAxis hide />
             <ReferenceLine y={0} stroke="hsl(var(--border))" />
+            <Tooltip content={<SpPressureTooltip homeName={homeName} awayName={awayName} />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
             <Bar dataKey="net" radius={[1, 1, 0, 0]}>
               {points.map((p) => (<Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#f59e0b"} />))}
             </Bar>
@@ -2018,10 +2047,40 @@ function SpPressureView({ data, homeName, awayName, live }: { data?: SpPressure;
   );
 }
 
+/** تلميح رسم الزخم — هجمات الفريقين بالدقيقة (نمط تلميح المونديال). */
+function SpMomentumTooltip({ active, payload, homeName, awayName }: {
+  active?: boolean;
+  payload?: { payload: SpMomentumPoint }[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-md" dir="rtl">
+      <p className="font-bold mb-0.5 tabular-nums" dir="ltr">~{p.minute}'</p>
+      <p className="text-emerald-600">
+        {homeName}: <span className="font-bold tabular-nums">{Math.abs(p.home)}</span>
+      </p>
+      <p className="text-rose-600">
+        {awayName}: <span className="font-bold tabular-nums">{Math.abs(p.away)}</span>
+      </p>
+    </div>
+  );
+}
+
 // رسم الزخم الهجومي (الهجمات الخطيرة عبر الزمن) + شريط استحواذ — إثراء SportMonks.
-function SpMomentumView({ data, homeName, awayName }: { data?: SpMomentum; homeName: string; awayName: string }) {
+function SpMomentumView({ data, homeName, awayName, loading }: { data?: SpMomentum; homeName: string; awayName: string; loading?: boolean }) {
   const points = Array.isArray(data?.points) ? data!.points : [];
   const possession = data?.possession ?? null;
+  if (loading && points.length === 0 && !possession) {
+    return (
+      <div className="space-y-3 py-3">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    );
+  }
   if (points.length === 0 && !possession) {
     return <div className="py-8 text-center text-muted-foreground text-sm">رسم الزخم يظهر هنا أثناء المباراة</div>;
   }
@@ -2050,6 +2109,7 @@ function SpMomentumView({ data, homeName, awayName }: { data?: SpMomentum; homeN
                 <XAxis dataKey="minute" tick={{ fontSize: 10 }} tickFormatter={(m) => `${m}'`} interval="preserveStartEnd" minTickGap={24} />
                 <YAxis hide />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                <Tooltip content={<SpMomentumTooltip homeName={homeName} awayName={awayName} />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
                 <Bar dataKey="net" radius={[2, 2, 0, 0]}>
                   {points.map((p) => (<Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#e11d48"} />))}
                 </Bar>
@@ -2093,17 +2153,25 @@ function SpCommentaryView({ data, live }: { data?: SpCommentary; live: boolean }
   );
 }
 
-export function MatchCenter({ id, scrollable = false }: { id: number | null; scrollable?: boolean }) {
+/** سِمة مركز المباراة — "roshn" تلبس رأس النافذة أرضية الملعب الليلي بهوية الدوري. */
+export type MatchCenterTheme = "default" | "roshn";
+
+export function MatchCenter({ id, scrollable = false, theme = "default" }: {
+  id: number | null;
+  scrollable?: boolean;
+  theme?: MatchCenterTheme;
+}) {
+  const roshn = theme === "roshn";
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
     // الفتح يجلب دائمًا (staleTime العام 5 دقائق كان يعيد لقطة «قادمة» قديمة).
     refetchOnMount: "always",
-    // حية → 15ث. حول الانطلاق (≤30د قبله وحتى ساعتين بعده إن ظلّت «لم تبدأ») →
-    // 25ث لالتقاط قادمة→مباشر — الصيغة القديمة كانت قفل جمود قبل الصافرة.
+    // حية → 8ث (وتيرة المونديال). حول الانطلاق (≤30د قبله وحتى ساعتين بعده إن
+    // ظلّت «لم تبدأ») → 25ث لالتقاط قادمة→مباشر.
     refetchInterval: (q) => {
       const f = q.state.data?.fixture;
       if (!f) return false;
-      if (f.status?.live) return 15_000;
+      if (f.status?.live) return 8_000;
       if (f.status?.finished) return false;
       const msToKickoff = (f.timestamp ?? 0) * 1000 - Date.now();
       return msToKickoff <= 30 * 60_000 && msToKickoff > -2 * 3_600_000 ? 25_000 : false;
@@ -2144,17 +2212,18 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     refetchInterval: live ? 20_000 : false,
     staleTime: 30_000,
   });
-  const { data: pressure } = useQuery<SpPressure>({
+  // الضغط والزخم بوتيرة المونديال (12ث) — كانا 20/30ث فيتأخر النبض المرئي.
+  const { data: pressure, isLoading: pressureLoading } = useQuery<SpPressure>({
     queryKey: [`/api/sports/match/${id}/pressure`],
     enabled: id != null && matchStarted && tab === "pressure",
-    refetchInterval: live ? 20_000 : false,
-    staleTime: 20_000,
+    refetchInterval: live ? 12_000 : false,
+    staleTime: 10_000,
   });
-  const { data: momentum } = useQuery<SpMomentum>({
+  const { data: momentum, isLoading: momentumLoading } = useQuery<SpMomentum>({
     queryKey: [`/api/sports/match/${id}/momentum`],
     enabled: id != null && matchStarted && tab === "momentum",
-    refetchInterval: live ? 30_000 : false,
-    staleTime: 25_000,
+    refetchInterval: live ? 12_000 : false,
+    staleTime: 10_000,
   });
   const { data: commentary } = useQuery<SpCommentary>({
     queryKey: [`/api/sports/match/${id}/commentary`],
@@ -2228,42 +2297,55 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
   const tsStatRows: SpStatRow[] = tsStats?.available && Array.isArray(tsStats.rows) ? tsStats.rows : [];
   const hasApiStats = !!stats && stats.rows.length > 0;
   const hasStatsTab = hasApiStats || factStatRows.length > 0 || tsStatRows.length > 0;
+  // التبويبات الجوهرية (الأحداث/الإحصائيات/التشكيلات) ثابتة بعد انطلاق المباراة
+  // بحالات فارغة — نمط المونديال. إخفاؤها عند تأخّر البيانات كان يوحي أن المركز
+  // «أفقر» من مركز المونديال بينما الفجوة مجرد بوابات عرض.
   const tabs = [
     isUpcoming ? { key: "absences", label: "الغيابات" } : null,
     forecast?.available ? { key: "forecast", label: "توقّعات" } : null,
-    events.length > 0 ? { key: "events", label: "الأحداث" } : null,
+    started || events.length > 0 ? { key: "events", label: "الأحداث" } : null,
     started ? { key: "commentary", label: "التعليق" } : null,
-    hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
+    started || hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
-    lineups.length > 0 || expectedLineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
+    started || lineups.length > 0 || expectedLineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
     <div className={`flex flex-col ${scrollable ? "h-full overflow-hidden" : ""}`} dir="rtl">
-        <div className="shrink-0 relative bg-accent-blue/20 border-b border-border p-4 pt-5">
-          {isLoading || !fx ? <Skeleton className="h-16 rounded-lg" /> : (
+        {/* رأس النافذة — بسِمة روشن: أرضية الملعب الليلي (نفس هيرو /roshn) بخط سماوي مميز */}
+        <div className={`shrink-0 relative p-4 pt-5 border-b ${
+          roshn
+            ? "bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828] border-white/10"
+            : "bg-accent-blue/20 border-border"
+        }`}>
+          {roshn && <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-l from-sky-400 via-sky-300 to-emerald-400" />}
+          {isLoading || !fx ? <Skeleton className={`h-16 rounded-lg ${roshn ? "bg-white/10" : ""}`} /> : (
             <>
               <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
                 <div className="flex flex-col items-center gap-1.5">
-                  <div className="h-12 w-12 rounded-full bg-white ring-1 ring-border p-1">
+                  <div className={`h-12 w-12 rounded-full bg-white p-1 ${roshn ? "ring-2 ring-white/20 shadow-lg" : "ring-1 ring-border"}`}>
                     {fx.home.logo && <img src={fx.home.logo} alt="" className="h-full w-full object-contain" />}
                   </div>
-                  <span className="text-sm font-extrabold text-center text-foreground">{fx.home.name}</span>
+                  <span className={`text-sm font-extrabold text-center ${roshn ? "text-white" : "text-foreground"}`}>{fx.home.name}</span>
                 </div>
                 <div className="flex flex-col items-center gap-1 pt-1">
                   {fx.status.finished || fx.status.live ? (
-                    <span className="text-3xl font-black tabular-nums text-foreground" dir="ltr">
+                    <span className={`text-3xl font-black tabular-nums ${roshn ? "text-white" : "text-foreground"}`} dir="ltr">
                       {fx.goals.away ?? 0} - {fx.goals.home ?? 0}
                     </span>
                   ) : (
-                    <span className="text-xl font-black text-foreground">{fmtTime(fx.timestamp)}</span>
+                    <span className={`text-xl font-black ${roshn ? "text-sky-200" : "text-foreground"}`}>{fmtTime(fx.timestamp)}</span>
                   )}
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border-0 px-2.5 py-0.5 text-xs font-semibold ${
-                      fx.status.live ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
+                      fx.status.live
+                        ? "bg-red-500 text-white"
+                        : roshn
+                          ? "bg-white/10 text-emerald-100"
+                          : "bg-muted text-muted-foreground"
                     }`}
                   >
                     {fx.status.live && <Radio className="h-3 w-3 animate-pulse" />}
@@ -2273,19 +2355,19 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1.5">
-                  <div className="h-12 w-12 rounded-full bg-white ring-1 ring-border p-1">
+                  <div className={`h-12 w-12 rounded-full bg-white p-1 ${roshn ? "ring-2 ring-white/20 shadow-lg" : "ring-1 ring-border"}`}>
                     {fx.away.logo && <img src={fx.away.logo} alt="" className="h-full w-full object-contain" />}
                   </div>
-                  <span className="text-sm font-extrabold text-center text-foreground">{fx.away.name}</span>
+                  <span className={`text-sm font-extrabold text-center ${roshn ? "text-white" : "text-foreground"}`}>{fx.away.name}</span>
                 </div>
               </div>
               {/* تاريخ ووقت المباراة — يظهران دائمًا (قادمة/جارية/منتهية) */}
-              <p className="mt-2 flex items-center justify-center gap-1 text-[11px] font-bold text-muted-foreground">
+              <p className={`mt-2 flex items-center justify-center gap-1 text-[11px] font-bold ${roshn ? "text-emerald-100/70" : "text-muted-foreground"}`}>
                 <CalendarDays className="h-3 w-3" />
                 {fmtFullDay(fx.timestamp)} · {fmtTime(fx.timestamp)}
               </p>
               {(fx.round || fx.venue.name) && (
-                <p className="mt-1 flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
+                <p className={`mt-1 flex items-center justify-center gap-1 text-[11px] ${roshn ? "text-emerald-100/60" : "text-muted-foreground"}`}>
                   <MapPin className="h-3 w-3" />
                   {[fx.round, fx.venue.name].filter(Boolean).join(" · ")}
                 </p>
@@ -2369,6 +2451,13 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
         <div className={`${scrollable ? "flex-1 min-h-0 overflow-y-auto overscroll-contain " : ""}p-4 lg:p-6`}>
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (() => {
+            if (events.length === 0) {
+              return (
+                <div className="py-8 text-center text-muted-foreground text-sm">
+                  {live ? "أحداث المباراة تتوالى هنا لحظة بلحظة" : "لا أحداث مسجّلة لهذه المباراة بعد"}
+                </div>
+              );
+            }
             // ترتيب تنازلي (الأحدث أعلى)، ومطابقة تفصيل SportMonks (طريقة الهدف/سبب البطاقة/VAR).
             const sorted = [...events].sort(
               (a, b) => (b.minute ?? 0) - (a.minute ?? 0) || (b.extra ?? 0) - (a.extra ?? 0),
@@ -2459,6 +2548,11 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
           {!isLoading && activeKey === "forecast" && forecast?.available && (
             <ForecastView data={forecast} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} />
           )}
+          {!isLoading && activeKey === "stats" && !hasStatsTab && (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              {live ? "أرقام المباراة تتجمّع الآن — تظهر تباعًا خلال الشوط الأول" : "لا تتوفّر إحصاءات لهذه المباراة بعد"}
+            </div>
+          )}
           {!isLoading && activeKey === "stats" && hasStatsTab && (() => {
             // مصدر الأرقام: API-Football إن توفّر، ثم SportMonks، ثم TheSports المفصّل (يملأ الفجوة).
             const statRows = hasApiStats ? stats!.rows : factStatRows.length > 0 ? factStatRows : tsStatRows;
@@ -2492,10 +2586,10 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
             );
           })()}
           {!isLoading && activeKey === "pressure" && (
-            <SpPressureView data={pressure} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} live={live} />
+            <SpPressureView data={pressure} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} live={live} loading={pressureLoading} />
           )}
           {!isLoading && activeKey === "momentum" && (
-            <SpMomentumView data={momentum} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} />
+            <SpMomentumView data={momentum} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} loading={momentumLoading} />
           )}
           {!isLoading && activeKey === "commentary" && (
             <SpCommentaryView data={commentary} live={live} />
@@ -2508,6 +2602,11 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                   <p className="text-[11px] text-muted-foreground">ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر</p>
                 </div>
               )}
+              {expectedLineups.length === 0 && lineups.length === 0 && (
+                <div className="py-8 text-center text-muted-foreground text-sm">
+                  التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة عادةً
+                </div>
+              )}
               <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
                 {(expectedLineups.length > 0 ? expectedLineups : lineups).map((l) => (
                   <LineupTeam key={l.team.id} lineup={l} />
@@ -2515,7 +2614,7 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
               </div>
             </div>
           )}
-          {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
+          {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} live={live} />}
           {!isLoading && activeKey === "h2h" && fx && h2hData && (
             <H2HView h2h={h2hData} homeId={fx.home.id} homeName={fx.home.name} awayName={fx.away.name} />
           )}
@@ -2527,7 +2626,11 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
 
 // نافذة المباراة (modal) — غلاف رفيع حول MatchCenter: تعتيم + قفل تمرير الخلفية +
 // زر إغلاق. نفس المحتوى الغني يُعاد استخدامه في صفحة /sports/match/:id المستقلّة.
-export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+export function MatchDialog({ id, onClose, theme = "default" }: {
+  id: number | null;
+  onClose: () => void;
+  theme?: MatchCenterTheme;
+}) {
   // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
   // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
   useEffect(() => {
@@ -2558,7 +2661,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
       >
         <button onClick={onClose} aria-label="إغلاق" className="absolute left-2 top-2 z-20 inline-flex items-center justify-center w-9 h-9 rounded-full bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
         <Link href={`/sports/match/${id}`} onClick={onClose} aria-label="فتح صفحة المباراة" className="absolute right-2 top-2 z-20 inline-flex h-9 items-center gap-1 rounded-full bg-card/80 px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"><Maximize2 className="w-4 h-4" /> صفحة المباراة</Link>
-        <MatchCenter id={id} scrollable />
+        <MatchCenter id={id} scrollable theme={theme} />
       </motion.div>
     </div>
   );
@@ -2572,8 +2675,80 @@ function ratingTone(r: number): string {
   return "bg-red-500/90 text-white";
 }
 
+// احتياط تقييمات TheSports (أسماء بلا صور/معرّفات) — نفس احتياط المونديال معمّمًا.
+interface SpTsPlayerLine {
+  name: string; rating: number | null; starter: boolean;
+  minutes: number; goals: number; assists: number; yellow: number; red: number;
+}
+interface SpTsPlayerStats {
+  available: boolean;
+  home: { team: { id: number; name: string; logo: string }; players: SpTsPlayerLine[] } | null;
+  away: { team: { id: number; name: string; logo: string }; players: SpTsPlayerLine[] } | null;
+}
+
+function SpTsRatingRow({ player, teamLogo }: { player: SpTsPlayerLine; teamLogo: string }) {
+  const meta = [
+    player.minutes ? `${player.minutes} د` : null,
+    player.goals ? `${player.goals} ⚽` : null,
+    player.assists ? `${player.assists} صناعة` : null,
+    player.yellow ? `${player.yellow} 🟨` : null,
+    player.red ? `${player.red} 🟥` : null,
+    player.starter ? null : "بديل",
+  ].filter(Boolean);
+  return (
+    <div className="w-full flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2 text-right">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold truncate">{player.name}</p>
+        {meta.length > 0 && <p className="text-[10px] text-muted-foreground">{meta.join(" · ")}</p>}
+      </div>
+      <img src={teamLogo} alt="" className="h-4 w-4 object-contain shrink-0" loading="lazy" />
+      {player.rating != null ? (
+        <span className={`rounded-md px-1.5 py-0.5 text-xs font-black tabular-nums shrink-0 ${ratingTone(player.rating)}`} dir="ltr">
+          {player.rating.toFixed(1)}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground shrink-0">—</span>
+      )}
+    </div>
+  );
+}
+
+function SpTsRatingsFallback({ id, live }: { id: number; live: boolean }) {
+  const { data, isLoading } = useQuery<SpTsPlayerStats>({
+    queryKey: [`/api/sports/match/${id}/player-stats`],
+    refetchInterval: live ? 60_000 : false,
+    staleTime: 60_000,
+  });
+  if (isLoading) {
+    return <Skeleton className="h-[360px] rounded-xl" />;
+  }
+  if (!data?.available || (!data.home && !data.away)) {
+    return <div className="py-8 text-center text-muted-foreground text-sm">لا تتوفّر تقييمات لهذه المباراة</div>;
+  }
+  const sides = [data.home, data.away].filter(
+    (s): s is NonNullable<SpTsPlayerStats["home"]> => !!s && s.players.length > 0,
+  );
+  return (
+    <div className="space-y-4 py-1">
+      {sides.map((side) => (
+        <div key={side.team.id}>
+          <div className="flex items-center gap-2 mb-2">
+            <img src={side.team.logo} alt={side.team.name} className="h-5 w-5 object-contain" loading="lazy" />
+            <h4 className="text-sm font-bold">{side.team.name}</h4>
+          </div>
+          <div className="space-y-1.5">
+            {side.players.map((p, i) => (
+              <SpTsRatingRow key={`${side.team.id}-${p.name}-${i}`} player={p} teamLogo={side.team.logo} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // تبويب «التقييمات» — يُحمّل بكسل (lazy) عند فتحه فقط (المكوّن لا يُركّب إلا حينها).
-function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
+function RatingsList({ id, homeId, live }: { id: number; homeId: number | null; live: boolean }) {
   const { data, isLoading, isError } = useQuery<SpMatchRatings>({
     queryKey: [`/api/sports/match/${id}/players`],
     staleTime: 60_000,
@@ -2587,7 +2762,8 @@ function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
     );
   }
   if (isError || !data || data.players.length === 0) {
-    return <div className="py-8 text-center text-muted-foreground text-sm">لا تتوفّر تقييمات لهذه المباراة</div>;
+    // تقييمات API-Football غائبة (شائع بالدوريات المحلية) → احتياط TheSports.
+    return <SpTsRatingsFallback id={id} live={live} />;
   }
 
   const { motm, players } = data;
