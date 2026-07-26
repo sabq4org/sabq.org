@@ -99,6 +99,9 @@ struct ContentView: View {
                 .navigationDestination(for: KingsCupRoute.self) { _ in
                     KingsCupView()
                 }
+                .navigationDestination(for: RoshnRoute.self) { _ in
+                    RoshnView()
+                }
                 .navigationDestination(for: MuqtarabRoute.self) { _ in
                     MuqtarabLandingView()
                 }
