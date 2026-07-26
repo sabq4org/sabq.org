@@ -1185,7 +1185,8 @@ export function TitleRace({ rows }: { rows: SpStandingRow[] }) {
             <span className="w-5 text-center font-black tabular-nums text-muted-foreground">{r.rank}</span>
             {r.team.logo && <img src={r.team.logo} alt="" className="w-7 h-7 object-contain shrink-0" />}
             <span className="w-24 sm:w-32 truncate font-bold text-sm shrink-0 text-foreground">{r.team.name}</span>
-            <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden" dir="ltr">
+            {/* بلا dir="ltr": في RTL يمتد الشريط من اليمين (بجوار اسم الفريق) لا من اليسار */}
+            <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
               <motion.div
                 initial={{ width: 0 }} whileInView={{ width: `${(r.points / maxPts) * 100}%` }}
                 viewport={{ once: true }} transition={{ duration: 0.7, delay: i * 0.1 }}
@@ -1465,7 +1466,9 @@ function StatBar({ row }: { row: SpStatRow }) {
         <span className="text-muted-foreground font-medium">{row.label}</span>
         <span className="font-bold text-foreground tabular-nums">{row.away ?? "—"}</span>
       </div>
-      <div className="relative h-2 rounded-full bg-muted overflow-hidden" dir="ltr">
+      {/* بلا dir="ltr": صفّ القيم أعلاه RTL (المضيف يمينًا) — فرضُ LTR كان يعكس
+          جهتي الشريط فيظهر عمود المضيف تحت رقم الضيف والعكس */}
+      <div className="relative h-2 rounded-full bg-muted overflow-hidden">
         <div className="absolute end-1/2 h-full rounded-s-full bg-primary transition-all duration-500" style={{ width: `${hPct}%` }} />
         <div className="absolute start-1/2 h-full rounded-e-full bg-amber-400 transition-all duration-500" style={{ width: `${aPct}%` }} />
       </div>
@@ -1491,7 +1494,9 @@ function PossessionBar({ row }: { row: SpStatRow }) {
           <div className="text-[10px] text-muted-foreground font-medium">الضيف</div>
         </div>
       </div>
-      <div className="flex h-2.5 rounded-full overflow-hidden bg-muted" dir="ltr">
+      {/* بلا dir="ltr": المضيف معنون يمينًا أعلاه — فرضُ LTR كان يضع شريطه يسارًا
+          عكس تسميته (نفس تعليق PossessionBar في مركز المونديال) */}
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-muted">
         <div className="bg-primary transition-all duration-700" style={{ width: `${h}%` }} />
         <div className="bg-amber-400 transition-all duration-700" style={{ width: `${a}%` }} />
       </div>
@@ -1649,7 +1654,8 @@ function PredictionBar({ prediction, homeName, awayName }: { prediction: SpPredi
         <span className="text-muted-foreground">تعادل {drawPct}%</span>
         <span className="text-amber-600 dark:text-amber-400 truncate max-w-[35%]">{awayPct}% {awayName}</span>
       </div>
-      <div className="flex h-2.5 rounded-full overflow-hidden bg-muted" dir="ltr">
+      {/* بلا dir="ltr": نسبة المضيف معنونة يمينًا أعلاه — فرضُ LTR كان يعكس أعمدة الشريط */}
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-muted">
         <div className="bg-primary" style={{ width: `${homePct}%` }} />
         <div className="bg-muted-foreground/40" style={{ width: `${drawPct}%` }} />
         <div className="bg-amber-400" style={{ width: `${awayPct}%` }} />
@@ -2094,7 +2100,8 @@ function SpMomentumView({ data, homeName, awayName, loading }: { data?: SpMoment
             <span className="text-muted-foreground font-medium">الاستحواذ</span>
             <span className="font-bold text-amber-500 tabular-nums">{100 - hPoss}%</span>
           </div>
-          <div className="flex h-2 rounded-full overflow-hidden bg-muted" dir="ltr">
+          {/* بلا dir="ltr": نسبة المضيف معنونة يمينًا أعلاه — فرضُ LTR كان يعكس جهتي الشريط */}
+          <div className="flex h-2 rounded-full overflow-hidden bg-muted">
             <div className="bg-primary transition-all duration-700" style={{ width: `${hPoss}%` }} />
             <div className="bg-amber-400 transition-all duration-700" style={{ width: `${100 - hPoss}%` }} />
           </div>
@@ -2451,13 +2458,6 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
         <div className={`${scrollable ? "flex-1 min-h-0 overflow-y-auto overscroll-contain " : ""}p-4 lg:p-6`}>
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (() => {
-            if (events.length === 0) {
-              return (
-                <div className="py-8 text-center text-muted-foreground text-sm">
-                  {live ? "أحداث المباراة تتوالى هنا لحظة بلحظة" : "لا أحداث مسجّلة لهذه المباراة بعد"}
-                </div>
-              );
-            }
             // ترتيب تنازلي (الأحدث أعلى)، ومطابقة تفصيل SportMonks (طريقة الهدف/سبب البطاقة/VAR).
             const sorted = [...events].sort(
               (a, b) => (b.minute ?? 0) - (a.minute ?? 0) || (b.extra ?? 0) - (a.extra ?? 0),
