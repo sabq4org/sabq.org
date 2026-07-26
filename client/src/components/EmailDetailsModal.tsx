@@ -329,9 +329,10 @@ export function EmailDetailsModal({
                       {log.rejectionReason === "sender_not_trusted" && "المرسل غير مسجل في قائمة المرسلين الموثوقين"}
                       {log.rejectionReason === "sender_inactive" && "حساب المرسل معطّل أو غير نشط"}
                       {log.rejectionReason === "invalid_token" && "رمز التوثيق (Token) غير صحيح أو مفقود"}
+                      {log.rejectionReason === "duplicate_content" && "تكرار: نفس المرسل والموضوع عولجا مؤخراً — مُنع النشر التلقائي"}
                       {log.rejectionReason === "quality_too_low" && `جودة المحتوى (${log.aiAnalysis?.contentQuality || 0}/100) أقل من الحد الأدنى المطلوب - لا يتوافق مع معايير صبق الصحفية`}
                       {log.rejectionReason === "no_news_value" && "المحتوى ليس له قيمة إخبارية كافية"}
-                      {!["sender_not_trusted", "sender_inactive", "invalid_token", "quality_too_low", "no_news_value"].includes(log.rejectionReason) && log.rejectionReason}
+                      {!["sender_not_trusted", "sender_inactive", "invalid_token", "duplicate_content", "quality_too_low", "no_news_value"].includes(log.rejectionReason) && log.rejectionReason}
                     </p>
                   </div>
                 </div>
