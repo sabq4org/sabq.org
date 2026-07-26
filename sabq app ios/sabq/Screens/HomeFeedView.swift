@@ -174,6 +174,9 @@ struct HomeFeedView: View {
                     KingsCupHomeStrip()
                         .animatedAppear(index: 3)
 
+                    RoshnHomeStrip()
+                        .animatedAppear(index: 3)
+
                     // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {
                         personalJourneyBlock
