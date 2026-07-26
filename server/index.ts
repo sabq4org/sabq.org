@@ -1378,6 +1378,10 @@ if (!(globalThis as any).__sabqServer) {
             urlPath === '/service-worker.js' ||
             urlPath === '/sw.js' ||
             /^\/sitemap[\w-]*\.xml$/i.test(urlPath) ||
+            // أرشيف CMS القديم (قبل سبق الحالي): material-file / media-cache لم يُرحَّل.
+            // 404 صحيح؛ التحذير يملأ لوق Railway فقط من مقالات قديمة بروابط ميتة.
+            urlPath.startsWith('/uploads/material-file/') ||
+            urlPath.startsWith('/uploads/media-cache/') ||
             // ماسحات تبحث عن أسرار/إعدادات مسربة — 404 صحيح والضوضاء فقط تملأ اللوق.
             /(?:^|\/)(?:secrets?|credentials?|service[-_]?account(?:[-_]?key)?|firebase(?:[-_](?:admin(?:sdk)?|credentials|config))?|gcp(?:[-_](?:credentials|key))?|google[-_]?credentials|aws-exports|amplifyconfiguration|auth|config|env|settings|key|sa|appsettings(?:\.[A-Za-z]+)?|local\.settings|openapi|swagger)\.(?:json|js)$/i.test(urlPath) ||
             /(?:^|\/)\.(?:vscode|docker|env|claude|cursor|mcp|config|openclaw|continue|hermes|git)\//i.test(urlPath) ||
