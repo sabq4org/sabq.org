@@ -44,6 +44,7 @@ type ProfileResponse = {
     nationalIdLast4?: string | null;
     hasNationalId?: boolean;
     officialPhotoUrl?: string | null;
+    profileReviewStatus?: "draft" | "pending_review" | "approved" | "needs_correction" | null;
   }) | null;
   requiredFields: { key: string; labelAr: string }[];
   missingLabels?: string[];
@@ -244,6 +245,10 @@ export function StaffProfileForm({
   if (isLoading || !data) {
     return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
+
+  const reviewStatus = data.profile?.profileReviewStatus ?? "draft";
+  /** أثناء قيد المراجعة: المنسوب يشاهد فقط — لا تعديل حتى اعتماد أو طلب تصحيح */
+  const selfLocked = isSelf && reviewStatus === "pending_review";
 
   const missingLabels = (data.profile?.missingFields ?? [])
     .map((k) => requiredLabelByKey.get(k) ?? k);
@@ -495,15 +500,32 @@ export function StaffProfileForm({
 
   return (
     <div dir="rtl" className="flex flex-col gap-3">
+      {selfLocked && (
+        <p
+          className="rounded-xl border border-sky-300/70 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100"
+          data-testid="text-profile-locked-pending"
+        >
+          ملفك قيد مراجعة الإدارة — التعديل مقفل حالياً. إن طُلب منك تصحيح ستُفتح الحقول مجدداً.
+        </p>
+      )}
       <div className={mode === "dialog" ? "flex gap-3 items-start" : "flex flex-col gap-3"}>
         {tabs}
-        {panels}
+        <div
+          className={selfLocked ? "pointer-events-none select-none opacity-70" : undefined}
+          aria-disabled={selfLocked || undefined}
+        >
+          {panels}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
         {!data.profile ? (
           <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-600">
             الملف لم يُنشأ بعد — الحفظ الأول ينشئه برقم وظيفي
+          </Badge>
+        ) : selfLocked ? (
+          <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-600">
+            قيد المراجعة — التعديل مقفل
           </Badge>
         ) : missingLabels.length > 0 ? (
           <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600">
@@ -512,9 +534,11 @@ export function StaffProfileForm({
         ) : (
           <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600">✓ الملف مكتمل</Badge>
         )}
-        <Button className="mr-auto" disabled={save.isPending} onClick={() => save.mutate()}>
-          {save.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />} حفظ الملف
-        </Button>
+        {!selfLocked && (
+          <Button className="mr-auto" disabled={save.isPending} onClick={() => save.mutate()} data-testid="button-save-staff-profile">
+            {save.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />} حفظ الملف
+          </Button>
+        )}
       </div>
     </div>
   );

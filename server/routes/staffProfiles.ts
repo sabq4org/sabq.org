@@ -29,6 +29,7 @@ import {
   upsertStaffProfile,
   approveStaffProfile,
   requestStaffProfileCorrection,
+  getStaffProfileReviewStatus,
   SELF_STAFF_PROFILE_ROLES,
   STAFF_DOC_KINDS,
   type StaffDocKind,
@@ -174,11 +175,18 @@ router.put(
   requireSelfStaffAccess,
   async (req: Request, res: Response) => {
     try {
+      const userId = (req.user as { id: string }).id;
+      const review = await getStaffProfileReviewStatus(userId);
+      if (review.status === "pending_review") {
+        return res.status(409).json({
+          message: "ملفك قيد مراجعة الإدارة — لا يمكن التعديل حتى تكتمل المراجعة أو يُطلب منك تصحيح",
+        });
+      }
+
       const parsed = patchSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" });
       }
-      const userId = (req.user as { id: string }).id;
       const patch = { ...parsed.data } as StaffProfilePatch;
       for (const key of SELF_FORBIDDEN_KEYS) {
         delete (patch as Record<string, unknown>)[key];
@@ -239,6 +247,12 @@ router.post(
       }
       if (!req.file) return res.status(400).json({ message: "لم يُرفق ملف" });
       const userId = (req.user as { id: string }).id;
+      const review = await getStaffProfileReviewStatus(userId);
+      if (review.status === "pending_review") {
+        return res.status(409).json({
+          message: "ملفك قيد مراجعة الإدارة — لا يمكن رفع وثائق حتى تكتمل المراجعة أو يُطلب منك تصحيح",
+        });
+      }
       const uploaded = await uploadStaffDocument(userId, kind, req.file, userId);
       if (!uploaded.ok) return res.status(uploaded.status).json({ message: uploaded.message });
       res.json({ success: true, kind });
