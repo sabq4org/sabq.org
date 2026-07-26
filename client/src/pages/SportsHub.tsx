@@ -2322,8 +2322,12 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
     <div className={`flex flex-col ${scrollable ? "h-full overflow-hidden" : ""}`} dir="rtl">
-        {/* رأس النافذة — بسِمة روشن: أرضية الملعب الليلي (نفس هيرو /roshn) بخط سماوي مميز */}
-        <div className={`shrink-0 relative p-4 pt-5 border-b ${
+        {/* رأس النافذة — بسِمة روشن: أرضية الملعب الليلي (نفس هيرو /roshn) بخط سماوي مميز.
+            في وضع النافذة (scrollable) نوسّع الحشوة العلوية حتى لا تتداخل أزرار
+            «صفحة المباراة / إغلاق» مع شعارات الأندية على الجوال. */}
+        <div className={`shrink-0 relative border-b p-4 ${
+          scrollable ? "pt-14" : "pt-5"
+        } ${
           roshn
             ? "bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828] border-white/10"
             : "bg-accent-blue/20 border-border"
@@ -2653,11 +2657,14 @@ export function MatchDialog({ id, onClose, theme = "default" }: {
 
   if (id == null) return null;
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
         dir="rtl" onClick={(e) => e.stopPropagation()}
-        className="relative bg-card w-full sm:max-w-lg lg:max-w-3xl sm:rounded-2xl rounded-t-2xl max-h-[90dvh] sm:max-h-[88vh] lg:max-h-[85vh] flex flex-col overflow-hidden border border-border"
+        className="relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-card sm:max-h-[88vh] sm:max-w-lg sm:rounded-2xl lg:max-h-[85vh] lg:max-w-3xl"
       >
         <button onClick={onClose} aria-label="إغلاق" className="absolute left-2 top-2 z-20 inline-flex items-center justify-center w-9 h-9 rounded-full bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
         <Link href={`/sports/match/${id}`} onClick={onClose} aria-label="فتح صفحة المباراة" className="absolute right-2 top-2 z-20 inline-flex h-9 items-center gap-1 rounded-full bg-card/80 px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"><Maximize2 className="w-4 h-4" /> صفحة المباراة</Link>
