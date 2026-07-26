@@ -144,9 +144,13 @@ struct RoshnHomeStrip: View {
             VStack(spacing: 3) {
                 HStack(spacing: 7) {
                     logo(opener.home.logo)
+                    // fixedSize يمنع انعصار النص حرفًا-حرفًا عموديًا بين الشعارين
+                    // (كان يتمدد لـ15 سطرًا فيضخّم ارتفاع البطاقة كلها).
                     Text("مباراة الافتتاح")
                         .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(RoshnTheme.inkSoft)
+                        .lineLimit(1)
+                        .fixedSize()
                     logo(opener.away.logo)
                 }
                 if let ts = h.outlook.firstKickoffTs ?? (opener.timestamp > 0 ? opener.timestamp : nil) {
