@@ -716,7 +716,7 @@ export const navConfig: NavItem[] = [
       {
         id: "staff_profiles",
         labelKey: "nav.staff_profiles",
-        labelAr: "ملفات المنسوبين",
+        labelAr: "مراجعة ملفات المنسوبين",
         path: "/dashboard/staff-profiles",
         icon: IdCard,
         roles: ["admin", "hr"],

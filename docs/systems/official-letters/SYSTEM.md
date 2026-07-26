@@ -23,7 +23,8 @@
 | Shared | `shared/officialLetters.ts` (الأنواع والقوالب والصياغة) |
 | Schema | `official_letters`, `official_letter_requests` في `shared/schema.ts` |
 | Backend | `server/services/officialLetterService.ts`, `server/services/officialLetterPdfService.ts`, `server/routes/officialLetters.ts` |
-| Web (إدارة) | `client/src/pages/dashboard/OfficialLetters.tsx` → `/dashboard/official-letters` |
+| Web (إدارة خطابات) | `OfficialLetters.tsx` → `/dashboard/official-letters` |
+| Web (إدارة ملف) | `StaffProfilesDirectory` → `/dashboard/staff-profiles` (يفتح طابور «قيد المراجعة» افتراضياً) + اعتماد من `StaffProfilePage` |
 | Web (منسوب) | `client/src/components/officialLetters/MyOfficialLettersCard.tsx` في مساحة الكاتب وصفحة المراسل |
 | Web (تذكرة) | `client/src/components/officialLetters/IssueLetterFromTicketDialog.tsx` داخل `TicketThread` |
 | Web (عام) | `client/src/pages/VerifyLetter.tsx` → `/verify/:code` |
@@ -60,11 +61,14 @@
   `MyStaffProfileCard`). نص الإرشاد: `LETTER_GAPS_STAFF_HINT_AR`.
   **الترخيص المهني ليس شرطاً** لاكتمال الملف ولا لإصدار شهادة التعريف (كثيرون
   يطلبون الشهادة للتقديم على الترخيص — دورة الترخيص منفصلة في `editorial`).
-- **مراجعة الإدارة قبل الإصدار:** اكتمال 100% (عند الحفظ أو عند قراءة الملف)
-  يضع الحالة تلقائياً في `pending_review` — **لا يوجد زر إرسال للمراجعة**.
-  HR يراجع/يعدّل ثم `POST .../approve` → `approved`. بعدها فقط
-  `requestSelfLetter`. طلب تصحيح: `POST .../request-correction`. أي حفظ ذاتي
-  بعد الاعتماد يعيد `pending_review`. **لا شهادة ثانية** لنفس النوع الساري.
+- **مراجعة الإدارة قبل الإصدار:** اكتمال 100% (عند الحفظ أو عند قراءة الملف
+  أو عند فتح دليل الإدارة) يضع الحالة تلقائياً في `pending_review` — **لا يوجد
+  زر إرسال**. مكان المراجعة للإدارة:
+  `/dashboard/staff-profiles` (السايدبار: «مراجعة ملفات المنسوبين» تحت
+  المستخدمون والأدوار) — يفتح طابور قيد المراجعة افتراضياً؛ افتح الملف ثم
+  «اعتماد الملف» أو «طلب تصحيح». رابط سريع أيضاً من صفحة الخطابات الرسمية.
+  بعدها فقط `requestSelfLetter`. أي حفظ ذاتي بعد الاعتماد يعيد `pending_review`.
+  **لا شهادة ثانية** لنفس النوع الساري.
 - **الشعار:** `public/branding/sabq-logo-official.png` (من ملف هوية Illustrator
   `SABQ logo.pdf` — خلفية شفافة). الاحتياطي: `sabq-logo.png` ثم
   `sabq-logo-report.png`. لا تستبدل `sabq-logo.png` (خلفية سوداء للوحة التحكم).

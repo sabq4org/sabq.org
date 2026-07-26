@@ -231,6 +231,8 @@ export async function listStaff(params: {
   employmentType?: string;
 } = {}) {
   await ensureLookupsSeeded();
+  // قبل العرض: أي ملف مكتمل عالق على draft يدخل طابور المراجعة
+  await syncCompleteProfilesIntoReviewQueue();
 
   // منسوب = له ملف، أو دوره القديم/RBAC ضمن أدوار المنسوبين
   const rbacStaffUserIds = db
@@ -285,10 +287,69 @@ export async function listStaff(params: {
     .leftJoin(staffDepartments, eq(staffDepartments.id, staffProfiles.departmentId))
     .leftJoin(staffJobTitles, eq(staffJobTitles.id, staffProfiles.jobTitleId))
     .where(and(...conditions))
-    .orderBy(desc(sql`${staffProfiles.id} IS NOT NULL`), asc(users.firstName))
+    .orderBy(
+      // طابور المراجعة أولاً ثم الباقي
+      sql`CASE WHEN ${staffProfiles.profileReviewStatus} = 'pending_review' THEN 0
+               WHEN ${staffProfiles.profileReviewStatus} = 'needs_correction' THEN 1
+               ELSE 2 END`,
+      desc(sql`${staffProfiles.id} IS NOT NULL`),
+      asc(users.firstName),
+    )
     .limit(500);
 
   return rows;
+}
+
+/**
+ * يرقّي الملفات المكتملة العالقة على draft إلى pending_review
+ * حتى تظهر فوراً في طابور الإدارة دون انتظار فتح الكاتب لصفحته.
+ */
+export async function syncCompleteProfilesIntoReviewQueue(): Promise<number> {
+  const drafts = await db
+    .select({
+      userId: staffProfiles.userId,
+      profile: staffProfiles,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      phoneNumber: users.phoneNumber,
+      profileImageUrl: users.profileImageUrl,
+      mediaLicenseNumber: users.mediaLicenseNumber,
+      mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
+    })
+    .from(staffProfiles)
+    .innerJoin(users, eq(users.id, staffProfiles.userId))
+    .where(
+      or(
+        eq(staffProfiles.profileReviewStatus, "draft"),
+        sql`${staffProfiles.profileReviewStatus} IS NULL`,
+      )!,
+    )
+    .limit(400);
+
+  let promoted = 0;
+  for (const row of drafts) {
+    const live = computeCompletion(row.profile, {
+      firstName: row.firstName,
+      lastName: row.lastName,
+      phoneNumber: row.phoneNumber,
+      profileImageUrl: row.profileImageUrl,
+      mediaLicenseNumber: row.mediaLicenseNumber,
+      mediaLicenseExpiresAt: row.mediaLicenseExpiresAt,
+    });
+    if (live.percent < 100 || live.missing.length > 0) continue;
+    await db
+      .update(staffProfiles)
+      .set({
+        profileReviewStatus: "pending_review",
+        profileReviewNote: null,
+        completionPercent: live.percent,
+        missingFields: [],
+        updatedAt: new Date(),
+      })
+      .where(eq(staffProfiles.userId, row.userId));
+    promoted += 1;
+  }
+  return promoted;
 }
 
 // ────────────────────────────────────────────────────────────────────
