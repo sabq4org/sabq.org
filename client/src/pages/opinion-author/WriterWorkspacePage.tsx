@@ -25,7 +25,8 @@ import {
   type ScheduleBannerData,
 } from "./WriterPriorityRail";
 import { WriterMediaLicenseCard } from "./WriterMediaLicenseCard";
-import { EditorialReferenceCard } from "@/components/EditorialReferenceCard";
+import { MyStaffProfileCard } from "@/components/staff/MyStaffProfileCard";
+import { MyOfficialLettersCard } from "@/components/officialLetters/MyOfficialLettersCard";
 import {
   ContributorStatsRow,
   PerformanceChart,
@@ -401,8 +402,8 @@ export default function WriterWorkspacePage() {
     <DashboardLayout>
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
-          {/* فوق بطاقة الترخيص حتى لا يُدفع خارج الشاشة تحت النموذج الطويل */}
-          <EditorialReferenceCard />
+          {/* استكمال الملف قبل الترخيص والشهادة */}
+          <MyStaffProfileCard />
           {railMode ? (
             <WriterPriorityRail
               notifications={unreadNotifications}
@@ -414,6 +415,7 @@ export default function WriterWorkspacePage() {
             <WriterScheduleBanner />
           )}
           <WriterMediaLicenseCard />
+          <MyOfficialLettersCard />
           {railMode ? (
             <section className="rounded-xl border border-border bg-card p-3" dir="rtl">
               <div className="flex items-center justify-between gap-2">

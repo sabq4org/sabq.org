@@ -14842,6 +14842,79 @@ export type StaffDepartment = typeof staffDepartments.$inferSelect;
 export type StaffJobTitle = typeof staffJobTitles.$inferSelect;
 
 // ============================================================================
+// الخطابات الرسمية — خطاب تعريف / تسهيل مهمة صادر من صحيفة سبق
+// الملف المُولَّد يُخزَّن في التخزين الخاص (نفس نمط ملفات الترخيص) ليبقى
+// الخطاب ثابتاً بعد الإصدار مهما تغيّرت بيانات المنسوب لاحقاً.
+// ============================================================================
+
+export const officialLetters = pgTable("official_letters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // SBQ-2026-0147 — يظهر على الخطاب وفي صفحة التحقق العامة
+  referenceCode: varchar("reference_code", { length: 32 }).notNull().unique(),
+  letterType: varchar("letter_type", { length: 32 }).notNull(),
+  subjectUserId: varchar("subject_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // الجهة الموجّه إليها الخطاب — فارغة تعني «لمن يهمه الأمر»
+  recipientEntity: text("recipient_entity"),
+  // سطر غرض إضافي يكتبه المُصدِر (اختياري)
+  purposeNote: text("purpose_note"),
+  // لقطة الحقول المطبوعة وقت الإصدار — بلا رقم هوية (يبقى داخل ملف PDF فقط)
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>(),
+  // مفتاح ملف PDF في التخزين الخاص
+  fileKey: text("file_key"),
+  status: varchar("status", { length: 16 }).default("issued").notNull(),
+  source: varchar("source", { length: 16 }).default("admin").notNull(),
+  ticketId: varchar("ticket_id").references(() => opinionTickets.id, {
+    onDelete: "set null",
+  }),
+  issuedByUserId: varchar("issued_by_user_id").references(() => users.id),
+  issuedAt: timestamp("issued_at").defaultNow().notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedByUserId: varchar("revoked_by_user_id").references(() => users.id),
+  revokeReason: text("revoke_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("official_letters_subject_idx").on(table.subjectUserId),
+  index("official_letters_issued_at_idx").on(table.issuedAt),
+  index("official_letters_status_idx").on(table.status),
+]);
+
+/** طلب خطاب من المنسوب نفسه — تعتمده الإدارة فيتحوّل إلى خطاب صادر. */
+export const officialLetterRequests = pgTable("official_letter_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requesterUserId: varchar("requester_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  letterType: varchar("letter_type", { length: 32 }).notNull(),
+  recipientEntity: text("recipient_entity"),
+  note: text("note"),
+  status: varchar("status", { length: 16 }).default("pending").notNull(),
+  reviewedByUserId: varchar("reviewed_by_user_id").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: text("review_note"),
+  letterId: varchar("letter_id").references(() => officialLetters.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("official_letter_requests_requester_idx").on(table.requesterUserId),
+  index("official_letter_requests_status_idx").on(table.status),
+]);
+
+export const officialLettersRelations = relations(officialLetters, ({ one }) => ({
+  subject: one(users, {
+    fields: [officialLetters.subjectUserId],
+    references: [users.id],
+  }),
+}));
+
+export type OfficialLetterRow = typeof officialLetters.$inferSelect;
+export type OfficialLetterRequestRow = typeof officialLetterRequests.$inferSelect;
+
+// ============================================================================
 // اجتماعات سبق — اجتماعات صوتية مع مشاركة شاشة داخل لوحة التحكم
 // الوسائط عبر LiveKit؛ هذه الجداول تحكم الوصول والحضور وسجل التدقيق فقط
 // ============================================================================

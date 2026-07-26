@@ -90,15 +90,12 @@ const REQUIRED_BASE: FieldRule[] = [
 ];
 
 const REQUIRED_BY_TYPE: Record<string, FieldRule[]> = {
+  // الترخيص المهني ليس شرطاً لاكتمال الملف ولا لشهادة التعريف —
+  // كثيرون يطلبون الشهادة أصلاً للتقديم على الترخيص (بطاقة WriterMediaLicenseCard منفصلة).
   field_reporter: [
     { key: "workRegion", labelAr: "المنطقة / مقر العمل" },
-    { key: "mediaLicenseNumber", labelAr: "رقم الترخيص المهني" },
-    { key: "mediaLicenseExpiresAt", labelAr: "انتهاء الترخيص المهني" },
   ],
-  opinion_writer: [
-    { key: "mediaLicenseNumber", labelAr: "رقم الترخيص المهني" },
-    { key: "mediaLicenseExpiresAt", labelAr: "انتهاء الترخيص المهني" },
-  ],
+  opinion_writer: [],
   employee: [],
   collaborator: [],
 };
@@ -109,7 +106,14 @@ export function requiredFieldsFor(employmentType: string | null | undefined): Fi
 
 function computeCompletion(
   profile: Partial<StaffProfile>,
-  user: { firstName: string | null; lastName: string | null; phoneNumber: string | null; profileImageUrl?: string | null },
+  user: {
+    firstName: string | null;
+    lastName: string | null;
+    phoneNumber: string | null;
+    profileImageUrl?: string | null;
+    mediaLicenseNumber?: string | null;
+    mediaLicenseExpiresAt?: Date | string | null;
+  },
 ): { percent: number; missing: FieldRule[] } {
   const rules = requiredFieldsFor(profile.employmentType);
   const has = (key: string): boolean => {
@@ -120,6 +124,11 @@ function computeCompletion(
       case "nationalId": return Boolean(profile.nationalIdEncrypted);
       // صورة الحساب تُحتسب إن لم تُرفع صورة رسمية مستقلة
       case "officialPhotoUrl": return Boolean(profile.officialPhotoUrl || user.profileImageUrl);
+      // الترخيص المهني قد يكون على users (بطاقة الكاتب/المراسل) لا staff_profiles فقط
+      case "mediaLicenseNumber":
+        return Boolean(profile.mediaLicenseNumber?.trim() || user.mediaLicenseNumber?.trim());
+      case "mediaLicenseExpiresAt":
+        return Boolean(profile.mediaLicenseExpiresAt || user.mediaLicenseExpiresAt);
       default: {
         const value = (profile as Record<string, unknown>)[key];
         return value !== null && value !== undefined && String(value).trim() !== "";
@@ -407,9 +416,33 @@ export type StaffProfilePatch = Partial<{
   yearsOfExperience: number;
   previousEmployers: string;
   notes: string;
+  /** يُزامَن إلى جدول users — مطلوب لاكتمال الملف. */
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
 }>;
 
 const DATE_KEYS = new Set(["officialBirthDate", "joinedAt", "pressCardValidUntil", "mediaLicenseExpiresAt"]);
+const USER_PATCH_KEYS = new Set(["firstName", "lastName", "phoneNumber"]);
+
+/** أدوار يحق لها استكمال ملفها ذاتياً (كاتب رأي / مراسل). */
+export const SELF_STAFF_PROFILE_ROLES = ["opinion_author", "reporter"] as const;
+
+export type SelfStaffEmploymentHint = "opinion_writer" | "field_reporter";
+
+export function employmentTypeForSelfRole(roleNames: string[]): SelfStaffEmploymentHint | null {
+  if (roleNames.includes("opinion_author")) return "opinion_writer";
+  if (roleNames.includes("reporter")) return "field_reporter";
+  return null;
+}
+
+/** أنواع وثائق يرفعها المنسوب بنفسه — العقد يبقى للموارد البشرية. */
+export const SELF_STAFF_DOC_KINDS = ["cv", "nationalId", "license"] as const;
+export type SelfStaffDocKind = (typeof SELF_STAFF_DOC_KINDS)[number];
+
+export function isSelfStaffDocKind(kind: string): kind is SelfStaffDocKind {
+  return (SELF_STAFF_DOC_KINDS as readonly string[]).includes(kind);
+}
 
 export async function upsertStaffProfile(userId: string, patch: StaffProfilePatch, actorId: string) {
   return await db.transaction(async (tx) => {
@@ -419,8 +452,14 @@ export async function upsertStaffProfile(userId: string, patch: StaffProfilePatc
     const [existing] = await tx.select().from(staffProfiles).where(eq(staffProfiles.userId, userId)).limit(1);
 
     const values: Record<string, unknown> = { updatedBy: actorId, updatedAt: new Date() };
+    const userUpdate: Record<string, unknown> = {};
+
     for (const [key, raw] of Object.entries(patch)) {
       if (raw === undefined) continue;
+      if (USER_PATCH_KEYS.has(key)) {
+        userUpdate[key] = raw === "" ? null : String(raw).trim();
+        continue;
+      }
       if (key === "nationalId") {
         const plain = String(raw).trim();
         if (plain) {
@@ -454,16 +493,8 @@ export async function upsertStaffProfile(userId: string, patch: StaffProfilePatc
       profile = created;
     }
 
-    // نسبة الاكتمال والنواقص
-    const { percent, missing } = computeCompletion(profile, user);
-    const [finalProfile] = await tx
-      .update(staffProfiles)
-      .set({ completionPercent: percent, missingFields: missing.map((m) => m.key) })
-      .where(eq(staffProfiles.userId, userId))
-      .returning();
-
     // جسر التوافق: بطاقة Wallet الصحفية تقرأ من users حتى اكتمال الهجرة
-    const legacySync: Record<string, unknown> = {};
+    const legacySync: Record<string, unknown> = { ...userUpdate };
     if (patch.pressIdNumber !== undefined) {
       legacySync.pressIdNumber = patch.pressIdNumber || null;
       legacySync.hasPressCard = Boolean(patch.pressIdNumber);
@@ -486,6 +517,14 @@ export async function upsertStaffProfile(userId: string, patch: StaffProfilePatc
     if (Object.keys(legacySync).length > 0) {
       await tx.update(users).set(legacySync).where(eq(users.id, userId));
     }
+
+    const [freshUser] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    const { percent, missing } = computeCompletion(profile, freshUser ?? user);
+    const [finalProfile] = await tx
+      .update(staffProfiles)
+      .set({ completionPercent: percent, missingFields: missing.map((m) => m.key) })
+      .where(eq(staffProfiles.userId, userId))
+      .returning();
 
     return {
       success: true as const,

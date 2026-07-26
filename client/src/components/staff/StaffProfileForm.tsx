@@ -43,9 +43,11 @@ type ProfileResponse = {
     missingFields?: string[];
     nationalIdLast4?: string | null;
     hasNationalId?: boolean;
+    officialPhotoUrl?: string | null;
   }) | null;
   requiredFields: { key: string; labelAr: string }[];
   missingLabels?: string[];
+  suggestedEmploymentType?: "opinion_writer" | "field_reporter" | null;
 };
 
 const SECTIONS = [
@@ -58,7 +60,7 @@ const SECTIONS = [
 ] as const;
 
 const SECTION_FIELDS: Record<string, string[]> = {
-  identity: ["nationalId", "nationality", "officialBirthDate", "officialPhotoUrl"],
+  identity: ["firstName", "lastName", "phoneNumber", "nationalId", "nationality", "officialBirthDate", "officialPhotoUrl"],
   job: ["jobTitleId", "departmentId", "employmentType", "joinedAt", "workRegion"],
   press: ["pressIdNumber", "pressCardValidUntil", "mediaLicenseNumber", "mediaLicenseExpiresAt"],
   contact: ["officialPhone", "officialEmail", "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "bloodType"],
@@ -66,12 +68,14 @@ const SECTION_FIELDS: Record<string, string[]> = {
   docs: [],
 };
 
-const DOC_KINDS = [
+const DOC_KINDS_ADMIN = [
   { kind: "cv", labelAr: "السيرة الذاتية", keyField: "cvFileKey", icon: "📄" },
   { kind: "nationalId", labelAr: "صورة الهوية", keyField: "nationalIdFileKey", icon: "🪪" },
   { kind: "license", labelAr: "الترخيص المهني", keyField: "mediaLicenseFileKey", icon: "📜" },
   { kind: "contract", labelAr: "العقد", keyField: "contractFileKey", icon: "📑" },
 ] as const;
+
+const DOC_KINDS_SELF = DOC_KINDS_ADMIN.filter((d) => d.kind !== "contract");
 
 const dateInput = (value: unknown): string =>
   typeof value === "string" && value ? value.slice(0, 10) : "";
@@ -79,23 +83,39 @@ const dateInput = (value: unknown): string =>
 export function StaffProfileForm({
   userId,
   mode,
+  access = "admin",
   onSaved,
 }: {
   userId: string;
   mode: "page" | "dialog";
+  /** admin = HR · self = الكاتب/المراسل يستكمل ملفه عبر /me */
+  access?: "admin" | "self";
   onSaved?: () => void;
 }) {
   const { toast } = useToast();
+  const isSelf = access === "self";
+  const apiBase = isSelf ? "/api/staff-profiles/me" : `/api/staff-profiles/${userId}`;
+  const lookupsKey = isSelf ? "/api/staff-profiles/me/lookups" : "/api/staff-profiles/lookups";
+  const docKinds = isSelf ? DOC_KINDS_SELF : DOC_KINDS_ADMIN;
+  // الاعتماد الصحفي للإدارة فقط — الكاتب/المراسل يستخدمان بطاقة الترخيص المنفصلة
+  const visibleSections = isSelf
+    ? SECTIONS.filter((s) => s.id !== "press")
+    : SECTIONS;
+
   const [activeSection, setActiveSection] = useState<string>("identity");
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [nationalIdInput, setNationalIdInput] = useState("");
   const [revealedId, setRevealedId] = useState<string | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
-  const { data: dataRaw, isLoading } = useQuery({ queryKey: [`/api/staff-profiles/${userId}`] });
-  const { data: lookupsRaw } = useQuery({ queryKey: ["/api/staff-profiles/lookups"] });
+  const { data: dataRaw, isLoading } = useQuery({ queryKey: [apiBase] });
+  const { data: lookupsRaw } = useQuery({ queryKey: [lookupsKey] });
   const data = (dataRaw ?? null) as ProfileResponse | null;
   const lookups = (lookupsRaw ?? null) as Lookups | null;
+
+  useEffect(() => {
+    if (isSelf && activeSection === "press") setActiveSection("identity");
+  }, [isSelf, activeSection]);
 
   useEffect(() => {
     if (!data) return;
@@ -108,6 +128,13 @@ export function StaffProfileForm({
     // سحب الصورة الرسمية تلقائياً من صورة الحساب إن لم تُرفع صورة مستقلة
     if (!base.officialPhotoUrl && data.user.profileImageUrl) {
       base.officialPhotoUrl = data.user.profileImageUrl;
+    }
+    // الاسم والجوال من users — ملزمان للاكتمال
+    base.firstName = data.user.firstName ?? "";
+    base.lastName = data.user.lastName ?? "";
+    base.phoneNumber = data.user.phoneNumber ?? "";
+    if (!base.employmentType && data.suggestedEmploymentType) {
+      base.employmentType = data.suggestedEmploymentType;
     }
     setForm(base);
   }, [data]);
@@ -131,7 +158,10 @@ export function StaffProfileForm({
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, unknown> = {};
-      const editable = Object.values(SECTION_FIELDS).flat();
+      const sectionsToSave = isSelf
+        ? Object.entries(SECTION_FIELDS).filter(([id]) => id !== "press")
+        : Object.entries(SECTION_FIELDS);
+      const editable = sectionsToSave.flatMap(([, keys]) => keys);
       for (const key of editable) {
         if (key === "nationalId") continue;
         if (form[key] !== undefined) {
@@ -141,7 +171,7 @@ export function StaffProfileForm({
         }
       }
       if (nationalIdInput.trim()) payload.nationalId = nationalIdInput.trim();
-      return apiRequest(`/api/staff-profiles/${userId}`, {
+      return apiRequest(apiBase, {
         method: "PUT",
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
@@ -149,8 +179,9 @@ export function StaffProfileForm({
     },
     onSuccess: (result: { completionPercent: number; missingFields: { labelAr: string }[] }) => {
       setNationalIdInput("");
-      queryClient.invalidateQueries({ queryKey: [`/api/staff-profiles/${userId}`] });
+      queryClient.invalidateQueries({ queryKey: [apiBase] });
       queryClient.invalidateQueries({ queryKey: ["/api/staff-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/official-letters/my-readiness"] });
       const remaining = result.missingFields?.length ?? 0;
       toast({
         title: `حُفظ الملف — الاكتمال ${result.completionPercent}%`,
@@ -164,10 +195,14 @@ export function StaffProfileForm({
 
   const reveal = async () => {
     try {
-      const res = await apiRequest(`/api/staff-profiles/${userId}/national-id`, { method: "GET" });
+      const res = await apiRequest(`${apiBase}/national-id`, { method: "GET" });
       setRevealedId(res.nationalId);
     } catch (err: unknown) {
-      toast({ title: "غير مصرح", description: err instanceof Error ? err.message : "صلاحية الوثائق مطلوبة", variant: "destructive" });
+      toast({
+        title: "تعذر الكشف",
+        description: err instanceof Error ? err.message : "غير مصرح",
+        variant: "destructive",
+      });
     }
   };
 
@@ -176,8 +211,8 @@ export function StaffProfileForm({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      await apiRequest(`/api/staff-profiles/${userId}/documents/${kind}`, { method: "POST", body: fd, isFormData: true });
-      queryClient.invalidateQueries({ queryKey: [`/api/staff-profiles/${userId}`] });
+      await apiRequest(`${apiBase}/documents/${kind}`, { method: "POST", body: fd, isFormData: true });
+      queryClient.invalidateQueries({ queryKey: [apiBase] });
       toast({ title: "رُفعت الوثيقة بنجاح" });
     } catch (err: unknown) {
       toast({ title: "تعذر رفع الوثيقة", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
@@ -194,7 +229,7 @@ export function StaffProfileForm({
       body: JSON.stringify({ nameAr: nameAr.trim() }),
       headers: { "Content-Type": "application/json" },
     });
-    queryClient.invalidateQueries({ queryKey: ["/api/staff-profiles/lookups"] });
+    queryClient.invalidateQueries({ queryKey: [lookupsKey] });
   };
 
   if (isLoading || !data) {
@@ -221,6 +256,14 @@ export function StaffProfileForm({
 
   const missingClass = (key: string) => (missingKeys.has(key) ? "border-red-400" : "");
 
+  const employmentOptions = (lookups?.employmentTypes ?? []).filter((t) => {
+    if (!isSelf) return true;
+    const suggested = data.suggestedEmploymentType;
+    if (suggested === "opinion_writer") return t.value === "opinion_writer" || t.value === "collaborator";
+    if (suggested === "field_reporter") return t.value === "field_reporter" || t.value === "collaborator";
+    return true;
+  });
+
   const tabs = (
     <nav
       className={
@@ -229,7 +272,7 @@ export function StaffProfileForm({
           : "flex flex-col gap-1 rounded-xl border bg-card p-1.5 min-w-[190px]"
       }
     >
-      {SECTIONS.map((s) => {
+      {visibleSections.map((s) => {
         const missing = sectionMissingCount(s.id);
         const active = activeSection === s.id;
         return (
@@ -258,6 +301,15 @@ export function StaffProfileForm({
     <div className="flex-1 rounded-xl border bg-card p-5">
       {activeSection === "identity" && (
         <div className="grid gap-4 sm:grid-cols-2">
+          {field("firstName", "الاسم الأول",
+            <Input className={missingClass("firstName")} value={String(form.firstName ?? "")} onChange={(e) => set("firstName", e.target.value)} />,
+            { required: true })}
+          {field("lastName", "اسم العائلة",
+            <Input className={missingClass("lastName")} value={String(form.lastName ?? "")} onChange={(e) => set("lastName", e.target.value)} />,
+            { required: true })}
+          {field("phoneNumber", "رقم الجوال",
+            <Input dir="ltr" className={missingClass("phoneNumber")} value={String(form.phoneNumber ?? "")} onChange={(e) => set("phoneNumber", e.target.value)} />,
+            { required: true })}
           {field("nationalId", "الهوية الوطنية / الإقامة",
             <div className="flex gap-2">
               <Input
@@ -271,7 +323,12 @@ export function StaffProfileForm({
                 <Button type="button" variant="outline" size="sm" onClick={reveal}><Eye className="h-4 w-4" /></Button>
               )}
             </div>,
-            { required: true, hint: "مشفّرة — الكشف لصلاحية الموارد البشرية ويُسجَّل" })}
+            {
+              required: true,
+              hint: isSelf
+                ? "مشفّرة — يمكنك رؤيتها وتعديلها في ملفك فقط"
+                : "مشفّرة — الكشف لصلاحية الموارد البشرية ويُسجَّل",
+            })}
           {field("nationality", "الجنسية",
             <Input value={String(form.nationality ?? "")} onChange={(e) => set("nationality", e.target.value)} />)}
           {field("officialBirthDate", "تاريخ الميلاد الرسمي",
@@ -290,7 +347,9 @@ export function StaffProfileForm({
                 <SelectTrigger className={`flex-1 ${missingClass("jobTitleId")}`}><SelectValue placeholder="— اختر —" /></SelectTrigger>
                 <SelectContent>{(lookups?.jobTitles ?? []).map((t) => <SelectItem key={t.id} value={t.id}>{t.nameAr}</SelectItem>)}</SelectContent>
               </Select>
-              <Button type="button" variant="outline" size="icon" onClick={() => addLookup("job-titles")}><Plus className="h-4 w-4" /></Button>
+              {!isSelf && (
+                <Button type="button" variant="outline" size="icon" onClick={() => addLookup("job-titles")}><Plus className="h-4 w-4" /></Button>
+              )}
             </div>, { required: true })}
           {field("departmentId", "الإدارة",
             <div className="flex gap-2">
@@ -298,12 +357,14 @@ export function StaffProfileForm({
                 <SelectTrigger className={`flex-1 ${missingClass("departmentId")}`}><SelectValue placeholder="— اختر —" /></SelectTrigger>
                 <SelectContent>{(lookups?.departments ?? []).map((d) => <SelectItem key={d.id} value={d.id}>{d.nameAr}</SelectItem>)}</SelectContent>
               </Select>
-              <Button type="button" variant="outline" size="icon" onClick={() => addLookup("departments")}><Plus className="h-4 w-4" /></Button>
+              {!isSelf && (
+                <Button type="button" variant="outline" size="icon" onClick={() => addLookup("departments")}><Plus className="h-4 w-4" /></Button>
+              )}
             </div>, { required: true })}
           {field("employmentType", "نوع العلاقة",
             <Select value={(form.employmentType as string) ?? ""} onValueChange={(v) => set("employmentType", v)}>
               <SelectTrigger className={missingClass("employmentType")}><SelectValue placeholder="— اختر —" /></SelectTrigger>
-              <SelectContent>{(lookups?.employmentTypes ?? []).map((t) => <SelectItem key={t.value} value={t.value}>{t.labelAr}</SelectItem>)}</SelectContent>
+              <SelectContent>{employmentOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.labelAr}</SelectItem>)}</SelectContent>
             </Select>, { required: true })}
           {field("joinedAt", "تاريخ الالتحاق",
             <DateField value={dateInput(form.joinedAt)} onChange={(v) => set("joinedAt", v)} fromYear={2005} toYear={new Date().getFullYear()} className={missingClass("joinedAt")} />,
@@ -314,7 +375,7 @@ export function StaffProfileForm({
         </div>
       )}
 
-      {activeSection === "press" && (
+      {activeSection === "press" && !isSelf && (
         <div className="grid gap-4 sm:grid-cols-2">
           <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
             هذه الحقول تغذي بطاقة Apple Wallet الصحفية مباشرة، وتُزامَن تلقائياً مع النظام القديم.
@@ -325,9 +386,10 @@ export function StaffProfileForm({
             <DateField value={dateInput(form.pressCardValidUntil)} onChange={(v) => set("pressCardValidUntil", v)} fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 6} />)}
           {field("mediaLicenseNumber", "رقم الترخيص المهني",
             <Input className={missingClass("mediaLicenseNumber")} value={String(form.mediaLicenseNumber ?? "")} onChange={(e) => set("mediaLicenseNumber", e.target.value)} />,
-            { hint: "ملزم للمراسل الميداني وكاتب الرأي" })}
+            { hint: "اختياري هنا — يُدار عبر بطاقة الترخيص المهنية بعد الحصول عليه" })}
           {field("mediaLicenseExpiresAt", "انتهاء الترخيص",
-            <DateField value={dateInput(form.mediaLicenseExpiresAt)} onChange={(v) => set("mediaLicenseExpiresAt", v)} fromYear={new Date().getFullYear() - 1} toYear={new Date().getFullYear() + 6} className={missingClass("mediaLicenseExpiresAt")} />)}
+            <DateField value={dateInput(form.mediaLicenseExpiresAt)} onChange={(v) => set("mediaLicenseExpiresAt", v)} fromYear={new Date().getFullYear() - 1} toYear={new Date().getFullYear() + 6} className={missingClass("mediaLicenseExpiresAt")} />,
+            { hint: "اختياري — ليس شرطاً لشهادة التعريف" })}
         </div>
       )}
 
@@ -377,9 +439,11 @@ export function StaffProfileForm({
       {activeSection === "docs" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
-            تخزين خاص — الاطلاع لصلاحية الموارد البشرية فقط، والتنزيل برابط موقّت.
+            {isSelf
+              ? "تخزين خاص — يمكنك رفع السيرة وصورة الهوية والترخيص. العقد يبقى لدى الموارد البشرية."
+              : "تخزين خاص — الاطلاع لصلاحية الموارد البشرية فقط، والتنزيل برابط موقّت."}
           </p>
-          {DOC_KINDS.map((doc) => {
+          {docKinds.map((doc) => {
             const filled = Boolean(form[doc.keyField]);
             return (
               <div key={doc.kind} className={`rounded-xl border-2 p-4 text-center ${filled ? "border-emerald-500/40" : "border-dashed"}`}>
@@ -403,7 +467,7 @@ export function StaffProfileForm({
                   </label>
                   {filled && (
                     <a
-                      href={apiUrl(`/api/staff-profiles/${userId}/documents/${doc.kind}`)}
+                      href={apiUrl(`${apiBase}/documents/${doc.kind}`)}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold text-muted-foreground"

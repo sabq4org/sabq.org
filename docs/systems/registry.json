@@ -36,6 +36,33 @@
       "lastReviewed": "2026-07-25"
     },
     {
+      "id": "official-letters",
+      "nameAr": "الخطابات الرسمية",
+      "nameEn": "Official Letters",
+      "status": "active",
+      "category": "infra",
+      "summary": "إصدار خطابات تعريف وتسهيل مهمة للمنسوبين بصيغة PDF عربية مرقّمة ومختومة مع صفحة تحقق عامة.",
+      "docPath": "docs/systems/official-letters/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/editorial/SYSTEM.md",
+        ".cursor/rules/pr-client-report-design.mdc"
+      ],
+      "pathGlobs": [
+        "shared/officialLetters.ts",
+        "server/services/officialLetterService.ts",
+        "server/services/officialLetterPdfService.ts",
+        "server/routes/officialLetters.ts",
+        "client/src/pages/dashboard/OfficialLetters.tsx",
+        "client/src/pages/VerifyLetter.tsx",
+        "client/src/components/officialLetters/**",
+        "docs/systems/official-letters/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/official-letters",
+      "owners": ["platform"],
+      "lastReviewed": "2026-07-26"
+    },
+    {
       "id": "loyalty",
       "nameAr": "نظام الولاء",
       "nameEn": "Loyalty",
@@ -108,6 +135,9 @@
         "docs/ai-prompts-article-editor.md"
       ],
       "pathGlobs": [
+        "client/src/components/staff/MyStaffProfileCard.tsx",
+        "server/routes/staffProfiles.ts",
+        "server/services/staffProfileService.ts",
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
@@ -222,7 +252,7 @@
       ],
       "dashboardPath": "/dashboard",
       "owners": ["editorial"],
-      "lastReviewed": "2026-07-25"
+      "lastReviewed": "2026-07-26"
     },
     {
       "id": "ifox",

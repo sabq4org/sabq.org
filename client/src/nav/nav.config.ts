@@ -723,6 +723,15 @@ export const navConfig: NavItem[] = [
         permissions: ["staff_profiles.view"],
       },
       {
+        id: "official_letters",
+        labelKey: "nav.official_letters",
+        labelAr: "الخطابات الرسمية",
+        path: "/dashboard/official-letters",
+        icon: FileText,
+        roles: ["admin", "hr"],
+        permissions: ["staff_profiles.view"],
+      },
+      {
         id: "staff",
         labelKey: "nav.staff",
         labelAr: "منسوبي سبق",

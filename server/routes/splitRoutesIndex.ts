@@ -81,6 +81,7 @@ import correspondentApplicationsRouter from "./correspondentApplications";
 import publisherPortalRouter from "./publisherPortal";
 import smartBlocksRouter from "./smartBlocks";
 import wcNumbersReportRouter from "./wcNumbersReport";
+import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
 
 /**
@@ -174,4 +175,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(smartBlocksRouter);
   app.use(wcNumbersReportRouter);
   app.use(accountSecurityRouter);
+  app.use(officialLettersRouter);
 }

@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-25 | المالك: editorial
+> آخر مراجعة: 2026-07-26 | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -61,7 +61,12 @@
 - **سايدبار محرّر المقال:** بدون `sticky`/`max-h` على عمود الإعدادات — التمرير يتم مع صفحة الداشبورد حتى يُصل لآخر حقول SEO والكلمات المفتاحية (كان sticky يقصّ الأسفل داخل `overflow-auto` للداشبورد).
 - **قنوات الاتصال (`/dashboard/communications`):** مفردات الحالة في السجلات هي ما يكتبه الخادم فقط — البريد: `received` / `published` / `processed` (= مسودة) / `rejected` / `failed`، وواتساب: `received` / `processed` / `rejected` مع `publishStatus` للتمييز بين منشور ومسودة. لا تُضِف خيارات فلترة بأسماء غير هذه (`success` / `drafted` / `processing` كانت ترجع صفر نتائج دائماً؛ `success`→`processed` و`failed`→`rejected` مقبولان الآن كمرادفين في `/api/whatsapp/logs` للتوافق فقط). `badge-stats` للقناتين يعيد `newMessages` / `publishedToday` / `draftedToday` / `rejectedToday`، و«اليوم» يُحسب بتوقيت الرياض عبر `server/utils/riyadhDay.ts` لا بتوقيت الخادم. رمز واتساب يُولَّد على الخادم بـ `crypto` قبل `insertWhatsappTokenSchema.parse` ولا يُقبل من العميل. بوابة الصفحة صلاحيات لا أدوار نصية، والتبويب الذي لا يملكه المستخدم يعرض رسالة صريحة بدل جدول فارغ.
 - **إنعاش الخبر:** `POST /api/articles/:id/resurface` يختم `articles.resurfaced_at` فقط (لا يغيّر `publishedAt`/المشاهدات/الرابط). صدارة الواجهة تعتمد `COALESCE(resurfaced_at, published_at)` في `homepage-lite` و`/api/v1/homepage` و`home-bundle` — أي مسار موجز جديد يجب أن يستخدم نفس الترتيب وإلا لن يظهر المُنعش أولاً.
-- **مراجع تحريرية ثابتة (PDF):** بطاقة `EditorialReferenceCard` أعلى مساحة كاتب الرأي (`/dashboard/opinion-author`) وصفحة المراسل (`/dashboard/reporter/articles`) — قبل بطاقة الترخيص حتى تبقى ظاهرة تحت شريط التحذير الأحمر ولا تُدفَع أسفل النموذج الطويل. الملف من `client/public/editorial-refs/` (حالياً: نظام التعليم العام). ليست مكتبة CMS — لإضافة مرجع جديد انسخ PDF هناك وحدّث المكوّن أو مرّر `href`/`message`.
+- **استكمال ملف المنسوب (كاتب/مراسل):** بطاقة `MyStaffProfileCard` أعلى مساحة
+  كاتب الرأي (`/dashboard/opinion-author`) وصفحة المراسل (`/dashboard/reporter/articles`)
+  — قبل بطاقة الترخيص. مسار ذاتي: `GET/PUT /api/staff-profiles/me` (+ lookups
+  ووثائق وnational-id). **تبويب الاعتماد الصحفي مخفي ذاتياً** (للإدارة فقط عبر
+  `/dashboard/staff-profiles`). العقد يبقى لـ HR. الترخيص المهني يبقى عبر
+  `WriterMediaLicenseCard` وليس شرطاً لاكتمال ملف المنسوب (الشهادة تسبق الترخيص).
 - **Visual AI (`visualAiService.analyzeImage`):** الرد ثلاثي اللغة كان يُقطع عند `maxOutputTokens: 2048` فيفشل `JSON.parse` (`Failed to parse JSON response`). السقف 4096، والتحليل عبر `parseVisualAiJson` (أسوار markdown + إصلاح JSON مقطوع)، وفشل التحليل يعيد التوليد داخل `pRetry`.
 - **عدادات إدارة المقالات:** `GET /api/admin/articles/metrics` → `getArticlesMetrics` يستعلاماً واحداً بـ `count(*) FILTER` + كاش ذاكرة `admin:articles:metrics` لمدة `CACHE_TTL.SHORT` (بدل 4 COUNT متتالية كانت ~2.5s في APM).
 - **نبض غرفة الأخبار (`GET /api/admin/dashboard/stats`):** عبر `adminDashboardStatsService.getCachedAdminDashboardStats` — SWR (طازج 5 دقائق / stale حتى 15 مع تحديث خلفي + single-flight). الـ warmup وتحديث كل 4 دقائق يعملان على **كل replica** (كاش الذاكرة per-process). `reading_history` يُجمَّع على آخر 7 أيام فقط؛ تفاعلات اليوم باستعلام منفصل بفلتر تاريخ. الموبايل `full-stats` يشارك نفس الكاش. KPI الجانبية (`deepAnalyses`, `audioNewsletters`, `publishers`, …) تُغلَّف بـ soft-fail داخل `getAdminDashboardStats` حتى لا يُسقط عمود ناقص في الإنتاج (مثل `deep_analyses.status`) المسار كاملاً.

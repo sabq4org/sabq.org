@@ -29,6 +29,9 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/onboarding',
   '/payment',
   '/settings',
+  // صفحة التحقق من الخطابات الرسمية: عامة الوصول (يفتحها موظف الجهة من QR)
+  // لكنها تعرض اسم منسوب وصفته — لا تُفهرس ولا تُخزَّن على الحافة.
+  '/verify',
   '/en/dashboard',
   '/en/settings',
   '/ur/dashboard',
