@@ -4,9 +4,8 @@
  * أُعيد بناؤه كليًّا بنظام تصميم المونديال (نفس نهج /world-cup و/kings-cup):
  * هيرو الملعب الليلي بحالات الموسم الأربع (ما قبل الموسم بعدّاد الانطلاق /
  * عطلة بين الموسمين / يوم جولة / مباراة الليلة)، شريط إرث الموسم الماضي،
- * المباريات بتبويبات، بانر التوقّعات (محرّك المونديال)، جدول الترتيب الملوّن،
- * سباقات الموسم، الأندية، وأخبار الدوري — البيانات من /api/rsl/hero
- * و/api/sports/pro-league/* القائمة.
+ * المباريات بتبويبات، جدول الترتيب الملوّن، سباقات الموسم، الأندية، وأخبار
+ * الدوري — البيانات من /api/rsl/hero و/api/sports/pro-league/* القائمة.
  */
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -39,7 +38,12 @@ export default function RoshnHub() {
   }, []);
   useCanonical("https://sabq.org/roshn");
 
-  const { data: hero, isLoading: heroLoading } = useQuery<RslHeroData>({
+  const {
+    data: hero,
+    isLoading: heroLoading,
+    isError: heroError,
+    refetch: refetchHero,
+  } = useQuery<RslHeroData>({
     queryKey: ["/api/rsl/hero"],
     // مباراة حية → 15ث؛ غير ذلك → دقيقة (ما قبل الموسم بيانات شبه ثابتة)
     refetchInterval: (query) =>
@@ -48,16 +52,24 @@ export default function RoshnHub() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: matchesData, isLoading: matchesLoading } = useQuery<
-    { configured: boolean } & RslMatchBuckets
-  >({
+  const {
+    data: matchesData,
+    isLoading: matchesLoading,
+    isError: matchesError,
+    refetch: refetchMatches,
+  } = useQuery<{ configured: boolean } & RslMatchBuckets>({
     queryKey: [`/api/sports/${RSL_SLUG}/matches`],
     refetchInterval: (query) =>
       (query.state.data?.live ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
     refetchIntervalInBackground: false,
   });
 
-  const { data: standingsData, isLoading: standingsLoading } = useQuery<{ standings: RslStandingRow[] }>({
+  const {
+    data: standingsData,
+    isLoading: standingsLoading,
+    isError: standingsError,
+    refetch: refetchStandings,
+  } = useQuery<{ standings: RslStandingRow[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/standings`],
     refetchInterval: (query) =>
       (query.state.data?.standings ?? []).some((r) => r.live) ? 15_000 : 5 * 60_000,
@@ -83,26 +95,71 @@ export default function RoshnHub() {
       <NavigationBar />
 
       <main className="flex-1">
-        <RslHero hero={hero} isLoading={heroLoading} onOpenMatch={setOpenMatchId} />
-        <RslFacts hero={hero} />
-        <RslMatches buckets={buckets} isLoading={matchesLoading} onOpenMatch={setOpenMatchId} />
-        <RslStandings
-          standings={standings}
-          isLoading={standingsLoading}
-          inSeason={inSeason}
-          previousSeason={previousSeason}
+        <RslHero
+          hero={hero}
+          isLoading={heroLoading}
+          onOpenMatch={setOpenMatchId}
+          teamsCount={standings.length || undefined}
         />
+        {heroError && !hero && (
+          <SectionError label="حالة الموسم والمباريات الحية" onRetry={() => void refetchHero()} />
+        )}
+        <RslFacts hero={hero} />
+        {matchesError && !matchesData ? (
+          <SectionError label="جدول المباريات" onRetry={() => void refetchMatches()} />
+        ) : (
+          <RslMatches buckets={buckets} isLoading={matchesLoading} onOpenMatch={setOpenMatchId} />
+        )}
+        {standingsError && !standingsData ? (
+          <SectionError label="جدول الترتيب" onRetry={() => void refetchStandings()} />
+        ) : (
+          <RslStandings
+            standings={standings}
+            isLoading={standingsLoading}
+            inSeason={inSeason}
+            previousSeason={previousSeason}
+          />
+        )}
         <RslScorers inSeason={inSeason} previousSeason={previousSeason} />
         <TeamOfTheWeekSection
           endpoint="/api/sports/pro-league/totw"
           subtitle="الأعلى تقييمًا في آخر جولة من دوري روشن"
         />
         <RslTeams standings={standings} isLoading={standingsLoading} />
-        <SportsNewsBlock query="دوري روشن" title="أخبار دوري روشن" />
+        {/* كتلة الأخبار داخل حاوية القسم — كانت تمتد للحواف بلا هوامش كبقية الأقسام */}
+        <section dir="rtl" className="py-10">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <SportsNewsBlock query="دوري روشن" title="أخبار دوري روشن" />
+          </div>
+        </section>
       </main>
 
       <MatchDialog id={openMatchId} onClose={() => setOpenMatchId(null)} />
       <Footer />
     </div>
+  );
+}
+
+/**
+ * حالة فشل قسم — الأقسام كانت تعيد null عند فشل الجلب فيرى الزائر صفحة
+ * شبه فارغة بلا تفسير أثناء عطل مزوّد. رسالة صريحة + زر إعادة محاولة.
+ */
+function SectionError({ label, onRetry }: { label: string; onRetry: () => void }) {
+  return (
+    <section dir="rtl" className="py-8">
+      <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-10 text-center">
+          <p className="text-sm font-bold text-foreground">تعذّر تحميل {label} حاليًا</p>
+          <p className="text-xs text-muted-foreground">قد يكون خللًا مؤقتًا لدى مزوّد البيانات</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-full bg-primary px-5 py-1.5 text-xs font-bold text-primary-foreground transition hover:opacity-90"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -29,6 +29,8 @@ interface RslHeroProps {
   hero: RslHeroData | undefined;
   isLoading: boolean;
   onOpenMatch: (fixtureId: number) => void;
+  /** عدد أندية الموسم (من الترتيب) — يشتقّ سطر الحقائق بدل أرقام مكتوبة تتقادم. */
+  teamsCount?: number;
 }
 
 function TeamSide({
@@ -307,7 +309,12 @@ function OffSeasonCard({ hero }: { hero: RslHeroData }) {
   );
 }
 
-export function RslHero({ hero, isLoading, onOpenMatch }: RslHeroProps) {
+export function RslHero({ hero, isLoading, onOpenMatch, teamsCount }: RslHeroProps) {
+  // سطر الحقائق من عدد الأندية الفعلي (دوري كامل ذهابًا وإيابًا)؛ 18 احتياط
+  // ريثما يصل الترتيب — فلا تتقادم الأرقام إن تغيّر نظام البطولة.
+  const clubs = teamsCount && teamsCount > 1 ? teamsCount : 18;
+  const rounds = (clubs - 1) * 2;
+  const totalMatches = clubs * (clubs - 1);
   const outlook = hero?.outlook;
   const live = Array.isArray(hero?.live) ? hero.live : [];
   const liveCount = live.length;
@@ -370,7 +377,7 @@ export function RslHero({ hero, isLoading, onOpenMatch }: RslHeroProps) {
             دوري <span className="text-sky-300">روشن</span> السعودي
           </h1>
           <p className="text-sm sm:text-base text-emerald-100/70 max-w-xl">
-            18 ناديًا · 34 جولة · 306 مباريات — أقوى دوريات المنطقة بتغطية حية لحظة بلحظة بتوقيت الرياض
+            {clubs} ناديًا · {rounds} جولة · {totalMatches} مباريات — أقوى دوريات المنطقة بتغطية حية لحظة بلحظة بتوقيت الرياض
           </p>
         </motion.div>
 
