@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
@@ -12,19 +12,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   AlertTriangle,
   Briefcase,
+  CheckCircle2,
   ClipboardCheck,
   ExternalLink,
   IdCard,
   Loader2,
+  MessageSquareWarning,
   Mic2,
   Pencil,
   PenLine,
@@ -168,12 +174,67 @@ export default function StaffProfilesDirectory() {
   const [employmentType, setEmploymentType] = useState(ALL);
   const [reviewFilter, setReviewFilter] = useState<string>(initialReview);
   const [quickEditUserId, setQuickEditUserId] = useState<string | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<{ userId: string; name: string } | null>(null);
+  const [correctionNote, setCorrectionNote] = useState("");
+  const { toast } = useToast();
 
   // النوع يُفلتر محلياً حتى تبقى أعداد بطاقات الأنواع صحيحة مع البحث/الإدارة.
   const params = new URLSearchParams();
   if (q.trim()) params.set("q", q.trim());
   if (departmentId !== ALL) params.set("departmentId", departmentId);
   const listKey = `/api/staff-profiles${params.toString() ? `?${params}` : ""}`;
+
+  const invalidateStaffLists = () => {
+    queryClient.invalidateQueries({
+      predicate: (query) =>
+        typeof query.queryKey[0] === "string" &&
+        String(query.queryKey[0]).startsWith("/api/staff-profiles"),
+    });
+  };
+
+  const approveMutation = useMutation({
+    mutationFn: async (userId: string) =>
+      apiRequest(`/api/staff-profiles/${userId}/approve`, { method: "POST" }),
+    onSuccess: () => {
+      invalidateStaffLists();
+      toast({
+        title: "تم اعتماد الملف",
+        description: "يمكن للمنسوب الآن إصدار شهادة التعريف وتنزيلها",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "تعذر الاعتماد",
+        description: error.message || "افتح الملف وصحّح النواقص أولاً",
+      });
+    },
+  });
+
+  const correctionMutation = useMutation({
+    mutationFn: async ({ userId, note }: { userId: string; note: string }) =>
+      apiRequest(`/api/staff-profiles/${userId}/request-correction`, {
+        method: "POST",
+        body: JSON.stringify({ note }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: () => {
+      invalidateStaffLists();
+      setCorrectionTarget(null);
+      setCorrectionNote("");
+      toast({
+        title: "أُرسلت الملاحظات للمنسوب",
+        description: "سيظهر له طلب التصحيح ويمكنه تعديل الملف",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "تعذر إرسال الملاحظات",
+        description: error.message || "أدخل ملاحظة واضحة",
+      });
+    },
+  });
 
   const { data: listRaw, isLoading } = useQuery({ queryKey: [listKey] });
   const { data: lookupsRaw } = useQuery({ queryKey: ["/api/staff-profiles/lookups"] });
@@ -234,10 +295,9 @@ export default function StaffProfilesDirectory() {
             className="rounded-2xl border border-sky-200/80 bg-sky-50/50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100"
             data-testid="panel-review-queue-help"
           >
-            <p className="font-semibold">كيف تعتمد الملف؟</p>
+            <p className="font-semibold">كيف تعتمد الملف من هنا؟</p>
             <p className="mt-1 text-xs leading-relaxed text-sky-900/80 dark:text-sky-200/90">
-              اضغط فتح الملف → راجع المسمى الوظيفي وتاريخ الالتحاق والبيانات → عدّل إن لزم → زر «اعتماد الملف».
-              بعدها يستطيع المنسوب إصدار شهادة التعريف وتنزيلها.
+              لكل صف قيد المراجعة: زر «اعتماد» أو «ملاحظات» (طلب تصحيح). «عرض الملف» للتدقيق أو التعديل قبل الاعتماد.
             </p>
             {stats.pendingReview === 0 && !isLoading && (
               <p className="mt-2 text-xs text-muted-foreground">لا ملفات قيد المراجعة حالياً.</p>
@@ -405,10 +465,15 @@ export default function StaffProfilesDirectory() {
                 const meta = row.employmentType ? EMPLOYMENT_META[row.employmentType] : null;
                 const TypeIcon = meta?.icon ?? UserRound;
                 const percent = row.completionPercent ?? 0;
+                const reviewStatus = (row.profileReviewStatus ?? "draft") as ReviewStatus;
+                const pending = reviewStatus === "pending_review";
+                const name = displayName(row);
                 const alerts = [
                   expiryBadge("البطاقة", row.pressCardValidUntil),
                   expiryBadge("الترخيص", row.mediaLicenseExpiresAt),
                 ].filter(Boolean);
+                const approvingThis =
+                  approveMutation.isPending && approveMutation.variables === row.userId;
 
                 return (
                   <li
@@ -424,11 +489,11 @@ export default function StaffProfilesDirectory() {
                         />
                       ) : (
                         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                          {displayName(row).slice(0, 1)}
+                          {name.slice(0, 1)}
                         </div>
                       )}
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-bold">{displayName(row)}</div>
+                        <div className="truncate text-sm font-bold">{name}</div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                           <span className="truncate" dir="ltr">{row.email}</span>
                           {row.employeeNumber && (
@@ -447,15 +512,11 @@ export default function StaffProfilesDirectory() {
                           ) : (
                             <span className="text-[10px] text-muted-foreground">بلا نوع</span>
                           )}
-                          {row.hasProfile && (() => {
-                            const status = (row.profileReviewStatus ?? "draft") as ReviewStatus;
-                            const badge = REVIEW_BADGE[status];
-                            return (
-                              <Badge variant="outline" className={cn("text-[10px]", badge.className)}>
-                                {badge.label}
-                              </Badge>
-                            );
-                          })()}
+                          {row.hasProfile && (
+                            <Badge variant="outline" className={cn("text-[10px]", REVIEW_BADGE[reviewStatus].className)}>
+                              {REVIEW_BADGE[reviewStatus].label}
+                            </Badge>
+                          )}
                           {(row.jobTitleName || row.departmentName) && (
                             <span className="truncate text-[11px] text-muted-foreground">
                               {[row.jobTitleName, row.departmentName].filter(Boolean).join(" · ")}
@@ -492,26 +553,58 @@ export default function StaffProfilesDirectory() {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {pending && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="h-8 gap-1"
+                              disabled={approvingThis}
+                              onClick={() => approveMutation.mutate(row.userId)}
+                              data-testid={`button-approve-row-${row.userId}`}
+                            >
+                              {approvingThis ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              )}
+                              اعتماد
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 gap-1"
+                              onClick={() => {
+                                setCorrectionNote("");
+                                setCorrectionTarget({ userId: row.userId, name });
+                              }}
+                              data-testid={`button-notes-row-${row.userId}`}
+                            >
+                              <MessageSquareWarning className="h-3.5 w-3.5" />
+                              ملاحظات
+                            </Button>
+                          </>
+                        )}
                         <Button
-                          size="icon"
+                          size="sm"
                           variant="ghost"
-                          className="h-9 w-9 text-muted-foreground"
+                          className="h-8 gap-1 text-muted-foreground"
                           onClick={() => setQuickEditUserId(row.userId)}
                           title="تعديل سريع"
                           data-testid={`staff-quick-edit-${row.userId}`}
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3.5 w-3.5" />
+                          تعديل
                         </Button>
                         <Link href={`/dashboard/staff-profiles/${row.userId}`}>
                           <Button
-                            size="icon"
+                            size="sm"
                             variant="ghost"
-                            className="h-9 w-9 text-muted-foreground"
-                            title="فتح الملف"
+                            className="h-8 gap-1 text-muted-foreground"
                             data-testid={`staff-open-${row.userId}`}
                           >
-                            <ExternalLink className="h-4 w-4" />
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            عرض الملف
                           </Button>
                         </Link>
                       </div>
@@ -531,6 +624,66 @@ export default function StaffProfilesDirectory() {
             {quickEditUserId && (
               <StaffProfileForm userId={quickEditUserId} mode="dialog" onSaved={() => setQuickEditUserId(null)} />
             )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={correctionTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCorrectionTarget(null);
+              setCorrectionNote("");
+            }
+          }}
+        >
+          <DialogContent className="max-w-md" dir="rtl">
+            <DialogHeader>
+              <DialogTitle>ملاحظات / طلب تصحيح</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              للمنسوب: <span className="font-semibold text-foreground">{correctionTarget?.name}</span>
+              — سيظهر له النص ويمكنه تعديل ملفه ثم يعود للمراجعة.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="dir-correction-note">الملاحظة (مطلوبة)</Label>
+              <Textarea
+                id="dir-correction-note"
+                rows={4}
+                value={correctionNote}
+                onChange={(e) => setCorrectionNote(e.target.value)}
+                placeholder="مثال: صحّح المسمى الوظيفي أو تاريخ الالتحاق…"
+                data-testid="input-directory-correction-note"
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:justify-start">
+              <Button
+                disabled={!correctionNote.trim() || correctionMutation.isPending || !correctionTarget}
+                onClick={() => {
+                  if (!correctionTarget) return;
+                  correctionMutation.mutate({
+                    userId: correctionTarget.userId,
+                    note: correctionNote.trim(),
+                  });
+                }}
+                data-testid="button-submit-directory-correction"
+              >
+                {correctionMutation.isPending ? (
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquareWarning className="ml-2 h-4 w-4" />
+                )}
+                إرسال الملاحظات
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setCorrectionTarget(null);
+                  setCorrectionNote("");
+                }}
+              >
+                إلغاء
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </DashboardPageShell>
