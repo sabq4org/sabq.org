@@ -92,7 +92,7 @@ import {
   setFollowNotify,
 } from "../services/sportsFollowsService";
 import { getSportsSummary } from "../services/sportsSummaryService";
-import { requireAuth } from "../rbac";
+import { requireAnyPermission, requireAuth } from "../rbac";
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -1663,9 +1663,10 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
-  // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية). lazy — تُستدعى
-  // عند فتح تبويب «الملخّص الذكي». التوليد خلف كاش SWR فلا يتكرّر لكل زائر.
-  app.get("/api/sports/match/:id/story", async (req, res) => {
+  // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية).
+  // مقصورة على أهل التحرير (لوحة التحكم) — كانت مفتوحة للعموم بلا مصادقة ولا حدّ،
+  // وكل معرّف مباراة جديد يشغّل توليد LLM + استدعاءات API-Football مدفوعة.
+  app.get("/api/sports/match/:id/story", requireAnyPermission("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "غير متاح" });
       return;
@@ -1681,8 +1682,8 @@ export function registerSportsRoutes(app: Express) {
         res.status(404).json({ message: "لا يتوفّر ملخّص لهذه المباراة" });
         return;
       }
-      const ttl = story.live ? "max-age=30, s-maxage=60" : "max-age=600, s-maxage=3600";
-      res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
+      // استجابة خلف مصادقة — private حتى لا تعلَق نسخة على حافة CDN.
+      res.set("Cache-Control", "private, max-age=60");
       res.json(story);
     } catch (error) {
       console.error("[Sports] match story failed:", error);
@@ -1691,7 +1692,8 @@ export function registerSportsRoutes(app: Express) {
   });
 
   // المرحلة 2 (ذكاء): معاينة ما قبل المباراة (للمباريات غير المبدوءة فقط).
-  app.get("/api/sports/match/:id/preview", async (req, res) => {
+  // مقصورة على أهل التحرير كما «السرد» أعلاه — لا توليد AI مفتوحًا للعموم.
+  app.get("/api/sports/match/:id/preview", requireAnyPermission("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "غير متاح" });
       return;
@@ -1707,7 +1709,8 @@ export function registerSportsRoutes(app: Express) {
         res.status(404).json({ message: "لا تتوفّر معاينة لهذه المباراة" });
         return;
       }
-      res.set("Cache-Control", "public, max-age=600, s-maxage=1800, stale-while-revalidate=1800");
+      // استجابة خلف مصادقة — private حتى لا تعلَق نسخة على حافة CDN.
+      res.set("Cache-Control", "private, max-age=300");
       res.json(preview);
     } catch (error) {
       console.error("[Sports] match preview failed:", error);
