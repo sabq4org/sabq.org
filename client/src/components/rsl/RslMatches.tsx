@@ -3,7 +3,7 @@
  * (مباشر/اليوم/القادمة/النتائج) من دلاء /api/sports/pro-league/matches الجاهزة،
  * وتجميع بالأيام مع شبكة بطاقات متحرّكة الظهور.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarRange, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +90,15 @@ export function RslMatches({ buckets, isLoading, onOpenMatch }: RslMatchesProps)
   const { live, today, upcoming, results } = buckets;
   const defaultTab = live.length > 0 ? "live" : today.length > 0 ? "today" : "upcoming";
   const [tab, setTab] = useState<string | null>(null);
+
+  // انطلاق مباراة أثناء تصفّح الزائر: نعيد الاختيار للوضع التلقائي فيقفز
+  // التبويب إلى «مباشر» — الشارة الحمراء وحدها لا تكفي لصفحة وعدها
+  // «تغطية لحظة بلحظة»، واختيار المستخدم كان يعلق على تبويبه القديم.
+  const prevLiveCount = useRef(live.length);
+  useEffect(() => {
+    if (prevLiveCount.current === 0 && live.length > 0) setTab(null);
+    prevLiveCount.current = live.length;
+  }, [live.length]);
 
   return (
     <section dir="rtl" className="py-10" id="matches">

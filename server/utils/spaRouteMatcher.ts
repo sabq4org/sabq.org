@@ -47,6 +47,8 @@ export const VALID_PREFIXES = new Set([
   'sport', 'economy',
   // Onboarding & AI entry points
   'onboarding', 'select-interests', 'gulf-live', 'ai',
+  // Sports tournament hubs & predictions center
+  'roshn', 'rsl', 'predictions',
 ]);
 
 // Short URL pattern (7-char alphanumeric nanoid for social sharing)

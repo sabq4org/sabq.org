@@ -2336,6 +2336,101 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       };
     },
   },
+  // Roshn Saudi League — hub landing (/roshn)
+  // الصورة العامة الرياضية مؤقتًا — استبدلها بـ roshn-og-image.png فور توفرها.
+  {
+    pattern: /^\/roshn\/?$/,
+    handle: async () => {
+      const description =
+        "دوري روشن السعودي — تغطية حية لحظة بلحظة: جدول المباريات بتوقيت الرياض، ترتيب الدوري، الهدّافون وصنّاع الأهداف، مركز مباراة تفصيلي، وأخبار الأندية على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/sports-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>دوري روشن السعودي — تغطية حية من سبق</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "دوري روشن السعودي — مباريات وترتيب وهدّافون | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/roshn`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "دوري روشن السعودي — تغطية حية",
+              description,
+              url: `${SITE_URL}/roshn`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "SportsOrganization",
+              name: "دوري روشن السعودي",
+              alternateName: "Roshn Saudi League",
+              sport: "Football",
+              url: `${SITE_URL}/roshn`,
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "دوري روشن السعودي",
+                  item: `${SITE_URL}/roshn`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // مركز التوقعات الموحّد (/predictions) — سطح زائر منذ توحيد المنصة المركزية.
+  {
+    pattern: /^\/predictions\/?$/,
+    handle: async () => {
+      const description =
+        "مركز توقعات سبق — توقّع نتائج مباريات دوري روشن وبطولات الخليج، نافس على نقاط البِرك المتراكمة، وتابع ترتيبك بين المتصدرين.";
+      const image = `${SITE_URL}/branding/sports-og-image.png`;
+      return {
+        title: "مركز التوقعات — توقّع ونافس على النقاط | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/predictions`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          name: "مركز توقعات سبق",
+          description,
+          url: `${SITE_URL}/predictions`,
+          inLanguage: "ar",
+        },
+      };
+    },
+  },
 ];
 
 /**
