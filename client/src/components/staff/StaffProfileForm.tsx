@@ -247,8 +247,14 @@ export function StaffProfileForm({
   }
 
   const reviewStatus = data.profile?.profileReviewStatus ?? "draft";
-  /** أثناء قيد المراجعة: المنسوب يشاهد فقط — لا تعديل حتى اعتماد أو طلب تصحيح */
-  const selfLocked = isSelf && reviewStatus === "pending_review";
+  /** بعد الإرسال للمراجعة أو الاعتماد: المنسوب يشاهد فقط حتى يُطلب تصحيح */
+  const selfLocked =
+    isSelf && (reviewStatus === "pending_review" || reviewStatus === "approved");
+
+  const lockMessage =
+    reviewStatus === "approved"
+      ? "ملفك معتمد من الإدارة — التعديل مقفل. لإصدار الشهادة استخدم بطاقة «شهاداتي الرسمية» بالأسفل. إن احتجت تعديلاً فاطلب من الإدارة فتح التصحيح."
+      : "ملفك قيد مراجعة الإدارة — التعديل مقفل حالياً. إن طُلب منك تصحيح ستُفتح الحقول مجدداً";
 
   const missingLabels = (data.profile?.missingFields ?? [])
     .map((k) => requiredLabelByKey.get(k) ?? k);
@@ -505,7 +511,7 @@ export function StaffProfileForm({
           className="rounded-xl border border-sky-300/70 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100"
           data-testid="text-profile-locked-pending"
         >
-          ملفك قيد مراجعة الإدارة — التعديل مقفل حالياً. إن طُلب منك تصحيح ستُفتح الحقول مجدداً.
+          {lockMessage}
         </p>
       )}
       <div className={mode === "dialog" ? "flex gap-3 items-start" : "flex flex-col gap-3"}>
@@ -525,7 +531,7 @@ export function StaffProfileForm({
           </Badge>
         ) : selfLocked ? (
           <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-600">
-            قيد المراجعة — التعديل مقفل
+            {reviewStatus === "approved" ? "معتمد — التعديل مقفل" : "قيد المراجعة — التعديل مقفل"}
           </Badge>
         ) : missingLabels.length > 0 ? (
           <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600">
