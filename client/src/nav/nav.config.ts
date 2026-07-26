@@ -828,6 +828,8 @@ export const navConfig: NavItem[] = [
         icon: TrendingUp,
         roles: ["admin"],
         permissions: ["staff.view_productivity"],
+        // مدير المحتوى كان يملك staff.view_productivity تاريخياً — نخفي المدخل صراحة
+        excludeRoles: ["content_manager"],
       },
     ],
   },
@@ -878,6 +880,8 @@ export const navConfig: NavItem[] = [
         icon: FileCheck,
         roles: ["admin"],
         permissions: ["publishers.view", "articles.review"],
+        // مراجعة مقالات الناشرين ليست ضمن نطاق مدير المحتوى
+        excludeRoles: ["content_manager"],
       },
       {
         id: "publishers_analytics",

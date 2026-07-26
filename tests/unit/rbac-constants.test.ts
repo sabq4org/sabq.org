@@ -5,6 +5,8 @@ import {
   ROLE_PERMISSIONS_MAP,
   PERMISSION_CODES,
   getPermissionsForRoles,
+  resolveEffectivePermissions,
+  denyPermissionsForRoles,
   canAssignRole,
 } from "@shared/rbac-constants";
 
@@ -36,6 +38,30 @@ describe("getPermissionsForRoles — wildcard contract", () => {
   it("returns [] for unknown roles and for an empty list", () => {
     expect(getPermissionsForRoles(["no_such_role"])).toEqual([]);
     expect(getPermissionsForRoles([])).toEqual([]);
+  });
+});
+
+describe("content_manager — meetings.create and staff productivity revoked", () => {
+  it("ROLE_PERMISSIONS_MAP no longer grants meetings.create or staff.view_productivity", () => {
+    const perms = ROLE_PERMISSIONS_MAP[ROLE_NAMES.CONTENT_MANAGER] || [];
+    expect(perms).toContain("meetings.view");
+    expect(perms).not.toContain("meetings.create");
+    expect(perms).not.toContain(PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY);
+  });
+
+  it("resolveEffectivePermissions strips stale DB grants for content_manager", () => {
+    const effective = resolveEffectivePermissions(
+      [ROLE_NAMES.CONTENT_MANAGER],
+      ["meetings.create", PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY, "articles.view"],
+    );
+    expect(effective).not.toContain("meetings.create");
+    expect(effective).not.toContain(PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY);
+    expect(effective).toContain("articles.view");
+    expect(effective).toContain("meetings.view");
+  });
+
+  it("denyPermissionsForRoles leaves wildcard untouched", () => {
+    expect(denyPermissionsForRoles([ROLE_NAMES.CONTENT_MANAGER], ["*"])).toEqual(["*"]);
   });
 });
 

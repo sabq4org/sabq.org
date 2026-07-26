@@ -1302,18 +1302,6 @@ export default function NewsroomPulseDashboard() {
           <OperationsCards />
         </section>}
 
-        {isContentManager && (
-          <Card className="border-border/70 shadow-none">
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-bold">إنتاجية فريق المحتوى</h2>
-                <p className="mt-1 text-sm text-muted-foreground">متابعة إنتاج المواد وأداء الفريق وفق الصلاحية الممنوحة لك.</p>
-              </div>
-              <Button asChild variant="outline"><Link href="/dashboard/productivity">فتح لوحة الإنتاجية</Link></Button>
-            </CardContent>
-          </Card>
-        )}
-
         <details className="group rounded-2xl border bg-card">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5">
             <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted"><Gauge className="h-5 w-5" /></span><div><h2 className="font-bold">{isContentManager ? "إجماليات المحتوى" : "صحة المنصة والإجماليات"}</h2><p className="mt-1 text-xs text-muted-foreground">{isContentManager ? "بيانات تشغيلية خاصة بإدارة المحتوى" : "بيانات إدارية لا تحتاج متابعة يومية"}</p></div></div>

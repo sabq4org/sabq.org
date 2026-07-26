@@ -272,6 +272,8 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     "meetings.create",
   ],
 
+  // مدير المحتوى: بلا إنشاء اجتماعات وبلا إنتاجية الموظفين (قرار المنتج 2026-07-26).
+  // أي ربط قديم في DB يُستبعد عبر ROLE_PERMISSION_DENY_MAP أدناه.
   [ROLE_NAMES.CONTENT_MANAGER]: [
     PERMISSION_CODES.ARTICLES_VIEW,
     PERMISSION_CODES.ARTICLES_CREATE,
@@ -296,10 +298,8 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.CATEGORIES_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW,
-    PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
     "meetings.view",
-    "meetings.create",
   ],
 
   [ROLE_NAMES.REPORTER]: [
@@ -536,6 +536,45 @@ export function getPermissionsForRoles(roleNames: string[]): string[] {
   }
 
   return Array.from(allPermissions);
+}
+
+/**
+ * صلاحيات تُستبعد صراحة لدور معيّن حتى لو بقيت مربوطة في `role_permissions`
+ * (الدمج DB ∪ ROLE_PERMISSIONS_MAP كان يُبقي منحًا قديمة).
+ */
+export const ROLE_PERMISSION_DENY_MAP: Record<string, readonly string[]> = {
+  [ROLE_NAMES.CONTENT_MANAGER]: [
+    "meetings.create",
+    PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
+  ],
+};
+
+/** يستبعد صلاحيات ROLE_PERMISSION_DENY_MAP من قائمة فعّالة حسب أدوار المستخدم. */
+export function denyPermissionsForRoles(
+  roleNames: string[],
+  permissions: string[],
+): string[] {
+  if (permissions.includes("*")) return permissions;
+
+  const denied = new Set<string>();
+  for (const roleName of roleNames) {
+    for (const code of ROLE_PERMISSION_DENY_MAP[roleName] || []) {
+      denied.add(code);
+    }
+  }
+  if (denied.size === 0) return permissions;
+  return permissions.filter((code) => !denied.has(code));
+}
+
+/** دمج صلاحيات DB مع خريطة الكود ثم تطبيق الاستبعادات الصريحة للدور. */
+export function resolveEffectivePermissions(
+  roleNames: string[],
+  dbPermissions: string[] = [],
+): string[] {
+  const codePerms = getPermissionsForRoles(roleNames);
+  if (codePerms.includes("*")) return ["*"];
+  const merged = [...new Set([...dbPermissions, ...codePerms])];
+  return denyPermissionsForRoles(roleNames, merged);
 }
 
 // Roles that grant full superuser via getUserPermissions' name check — assigning
