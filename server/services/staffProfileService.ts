@@ -272,6 +272,7 @@ export async function listStaff(params: {
       employeeNumber: staffProfiles.employeeNumber,
       employmentType: staffProfiles.employmentType,
       completionPercent: staffProfiles.completionPercent,
+      profileReviewStatus: staffProfiles.profileReviewStatus,
       officialPhotoUrl: staffProfiles.officialPhotoUrl,
       departmentName: staffDepartments.nameAr,
       jobTitleName: staffJobTitles.nameAr,
@@ -444,7 +445,31 @@ export function isSelfStaffDocKind(kind: string): kind is SelfStaffDocKind {
   return (SELF_STAFF_DOC_KINDS as readonly string[]).includes(kind);
 }
 
-export async function upsertStaffProfile(userId: string, patch: StaffProfilePatch, actorId: string) {
+export const STAFF_PROFILE_REVIEW_STATUSES = [
+  "draft",
+  "pending_review",
+  "approved",
+  "needs_correction",
+] as const;
+export type StaffProfileReviewStatus = (typeof STAFF_PROFILE_REVIEW_STATUSES)[number];
+
+export function isStaffProfileReviewStatus(v: unknown): v is StaffProfileReviewStatus {
+  return typeof v === "string" && (STAFF_PROFILE_REVIEW_STATUSES as readonly string[]).includes(v);
+}
+
+export const STAFF_PROFILE_REVIEW_LABELS_AR: Record<StaffProfileReviewStatus, string> = {
+  draft: "مسودة",
+  pending_review: "قيد مراجعة الإدارة",
+  approved: "معتمد",
+  needs_correction: "يحتاج تصحيحاً",
+};
+
+export async function upsertStaffProfile(
+  userId: string,
+  patch: StaffProfilePatch,
+  actorId: string,
+  opts: { actorIsSelf?: boolean } = {},
+) {
   return await db.transaction(async (tx) => {
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return { success: false as const, message: "المستخدم غير موجود" };
@@ -488,7 +513,7 @@ export async function upsertStaffProfile(userId: string, patch: StaffProfilePatc
       const employeeNumber = await generateEmployeeNumber(tx as unknown as typeof db);
       const [created] = await tx
         .insert(staffProfiles)
-        .values({ userId, employeeNumber, ...values })
+        .values({ userId, employeeNumber, profileReviewStatus: "draft", ...values })
         .returning();
       profile = created;
     }
@@ -520,17 +545,125 @@ export async function upsertStaffProfile(userId: string, patch: StaffProfilePatc
 
     const [freshUser] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
     const { percent, missing } = computeCompletion(profile, freshUser ?? user);
+
+    // المنسوب: اكتمال 100% → قيد المراجعة؛ ناقص → مسودة (أو يبقى needs_correction إن لم يكتمل بعد طلب تصحيح)
+    const reviewPatch: Record<string, unknown> = {
+      completionPercent: percent,
+      missingFields: missing.map((m) => m.key),
+    };
+    if (opts.actorIsSelf) {
+      if (percent >= 100 && missing.length === 0) {
+        reviewPatch.profileReviewStatus = "pending_review";
+        reviewPatch.profileReviewNote = null;
+      } else if (profile.profileReviewStatus !== "needs_correction") {
+        reviewPatch.profileReviewStatus = "draft";
+      }
+    }
+
     const [finalProfile] = await tx
       .update(staffProfiles)
-      .set({ completionPercent: percent, missingFields: missing.map((m) => m.key) })
+      .set(reviewPatch)
       .where(eq(staffProfiles.userId, userId))
       .returning();
 
     return {
       success: true as const,
-      profile: { ...finalProfile, nationalIdEncrypted: undefined, hasNationalId: Boolean(finalProfile.nationalIdEncrypted) },
+      profile: {
+        ...finalProfile,
+        nationalIdEncrypted: undefined,
+        hasNationalId: Boolean(finalProfile.nationalIdEncrypted),
+      },
       completionPercent: percent,
       missingFields: missing,
+      profileReviewStatus: finalProfile.profileReviewStatus,
     };
   });
+}
+
+export async function approveStaffProfile(userId: string, actorId: string) {
+  const [existing] = await db
+    .select({ id: staffProfiles.id, completionPercent: staffProfiles.completionPercent })
+    .from(staffProfiles)
+    .where(eq(staffProfiles.userId, userId))
+    .limit(1);
+  if (!existing) throw new Error("لا يوجد ملف منسوب لهذا المستخدم");
+
+  // أعد حساب الاكتمال حياً
+  const full = await getStaffProfile(userId);
+  if (!full?.profile || (full.profile.completionPercent as number) < 100) {
+    throw new Error("لا يمكن الاعتماد — الملف غير مكتمل. صحّح النواقص أولاً");
+  }
+
+  const [updated] = await db
+    .update(staffProfiles)
+    .set({
+      profileReviewStatus: "approved",
+      profileReviewNote: null,
+      profileReviewedAt: new Date(),
+      profileReviewedBy: actorId,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    })
+    .where(eq(staffProfiles.userId, userId))
+    .returning({
+      userId: staffProfiles.userId,
+      profileReviewStatus: staffProfiles.profileReviewStatus,
+    });
+  return updated;
+}
+
+export async function requestStaffProfileCorrection(
+  userId: string,
+  actorId: string,
+  note: string,
+) {
+  const trimmed = note.trim();
+  if (!trimmed) throw new Error("ملاحظة التصحيح مطلوبة");
+  const [existing] = await db
+    .select({ id: staffProfiles.id })
+    .from(staffProfiles)
+    .where(eq(staffProfiles.userId, userId))
+    .limit(1);
+  if (!existing) throw new Error("لا يوجد ملف منسوب لهذا المستخدم");
+
+  const [updated] = await db
+    .update(staffProfiles)
+    .set({
+      profileReviewStatus: "needs_correction",
+      profileReviewNote: trimmed,
+      profileReviewedAt: new Date(),
+      profileReviewedBy: actorId,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    })
+    .where(eq(staffProfiles.userId, userId))
+    .returning({
+      userId: staffProfiles.userId,
+      profileReviewStatus: staffProfiles.profileReviewStatus,
+      profileReviewNote: staffProfiles.profileReviewNote,
+    });
+  return updated;
+}
+
+export async function getStaffProfileReviewStatus(
+  userId: string,
+): Promise<{
+  status: StaffProfileReviewStatus;
+  note: string | null;
+  allowsCertificateIssue: boolean;
+}> {
+  const [row] = await db
+    .select({
+      status: staffProfiles.profileReviewStatus,
+      note: staffProfiles.profileReviewNote,
+    })
+    .from(staffProfiles)
+    .where(eq(staffProfiles.userId, userId))
+    .limit(1);
+  const status = isStaffProfileReviewStatus(row?.status) ? row.status : "draft";
+  return {
+    status,
+    note: row?.note ?? null,
+    allowsCertificateIssue: status === "approved",
+  };
 }

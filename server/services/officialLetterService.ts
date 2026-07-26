@@ -34,7 +34,7 @@ import {
   type OfficialLetterSource,
   type OfficialLetterType,
 } from "@shared/officialLetters";
-import { decryptNationalId } from "./staffProfileService";
+import { decryptNationalId, getStaffProfileReviewStatus } from "./staffProfileService";
 import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 
 // ────────────────────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ export type LetterReadinessGap = {
 };
 
 export type LetterReadiness = {
-  /** هل تكفي البيانات لإصدار خطاب أصلاً (الاسم العربي موجود). */
+  /** هل تكفي البيانات لإصدار خطاب أصلاً (الاسم العربي موجود + اعتماد الإدارة). */
   canIssue: boolean;
   blockingReasonAr: string | null;
   fullNameAr: string | null;
@@ -175,12 +175,16 @@ export type LetterReadiness = {
   gaps: LetterReadinessGap[];
   /** عدد الحقول المهمة الناقصة لهذا النوع تحديداً. */
   importantMissing: number;
+  /** حالة مراجعة ملف المنسوب لدى الإدارة. */
+  profileReviewStatus: "draft" | "pending_review" | "approved" | "needs_correction";
+  profileReviewNote: string | null;
 };
 
 export async function getLetterReadiness(
   userId: string,
   letterType: OfficialLetterType,
 ): Promise<LetterReadiness> {
+  const review = await getStaffProfileReviewStatus(userId);
   const resolved = await resolveLetterSubject(userId, { includeNationalId: false });
 
   if (!resolved) {
@@ -192,6 +196,8 @@ export async function getLetterReadiness(
       roleTitleAr: null,
       gaps: [],
       importantMissing: 0,
+      profileReviewStatus: review.status,
+      profileReviewNote: review.note,
     };
   }
 
@@ -202,16 +208,37 @@ export async function getLetterReadiness(
     severity: fieldSeverityFor(gap.key, letterType),
   }));
 
-  // المهم أولاً حتى يقرأه المنسوب قبل الاختياري
   gaps.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "important" ? -1 : 1));
 
+  const importantMissing = gaps.filter((g) => g.severity === "important").length;
+
+  let canIssue = true;
+  let blockingReasonAr: string | null = null;
+
+  if (!review.allowsCertificateIssue) {
+    canIssue = false;
+    if (review.status === "pending_review") {
+      blockingReasonAr =
+        "بياناتك مكتملة وهي قيد مراجعة الإدارة. بعد الاعتماد ستتمكن من إصدار شهادة التعريف وتنزيلها.";
+    } else if (review.status === "needs_correction") {
+      blockingReasonAr = review.note
+        ? `مطلوب تصحيح بياناتك قبل الإصدار: ${review.note}`
+        : "مطلوب تصحيح بياناتك من الإدارة قبل إصدار الشهادة.";
+    } else {
+      blockingReasonAr =
+        "أكمل ملفك الشخصي وانتظر اعتماد الإدارة قبل إصدار شهادة التعريف.";
+    }
+  }
+
   return {
-    canIssue: true,
-    blockingReasonAr: null,
+    canIssue,
+    blockingReasonAr,
     fullNameAr: resolved.subject.fullNameAr,
     roleTitleAr: resolved.subject.roleTitleAr,
     gaps,
-    importantMissing: gaps.filter((g) => g.severity === "important").length,
+    importantMissing,
+    profileReviewStatus: review.status,
+    profileReviewNote: review.note,
   };
 }
 
@@ -491,8 +518,8 @@ export async function findActiveLetter(
 }
 
 /**
- * طلب ذاتي من المنسوب: عند اكتمال البيانات يُصدر الخطاب فوراً (بلا انتظار HR).
- * يمنع إصدار شهادة ثانية من نفس النوع ما دامت سارية.
+ * طلب ذاتي من المنسوب: يُصدر الخطاب فوراً فقط إذا كان ملف المنسوب معتمداً
+ * من الإدارة والبيانات المهمة مكتملة. يمنع شهادة ثانية من نفس النوع الساري.
  */
 export async function requestSelfLetter(input: {
   requesterUserId: string;

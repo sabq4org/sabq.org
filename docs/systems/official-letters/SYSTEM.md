@@ -12,10 +12,10 @@
 
 ## الحدود
 - **داخل النطاق:** قوالب الخطابات، توليد PDF، الترقيم المرجعي، سجل الإصدار،
-  طلبات المنسوبين، صفحة التحقق العامة.
+  طلبات المنسوبين، صفحة التحقق العامة، وبوابة الإصدار بعد **اعتماد ملف المنسوب**.
 - **خارج النطاق:** دورة مراجعة الترخيص المهني (`editorial`)، تذاكر الاستفسارات
-  (تُستهلك كنقطة دخول فقط). ملف المنسوب يُستكمل ذاتياً عبر `/api/staff-profiles/me`
-  ويُدار أيضاً من HR.
+  (تُستهلك كنقطة دخول فقط). استكمال/اعتماد ملف المنسوب يُدار عبر `staff-profiles`
+  (ذاتي + HR) — انظر `editorial/SYSTEM.md`.
 
 ## نقاط الدخول
 | الطبقة | المسار |
@@ -37,8 +37,8 @@
 | `POST /api/official-letters` | `staff_profiles.manage` |
 | `GET /api/official-letters/:id/file.pdf` | `staff_profiles.view` أو صاحب الخطاب |
 | `POST /api/official-letters/:id/revoke` | `staff_profiles.manage` |
-| `GET/POST /api/official-letters/requests*` | جلسة: الطلب الذاتي **يُصدر فوراً** عند اكتمال البيانات · `staff_profiles.manage` لمسار الاعتماد الإداري القديم إن وُجد |
-| `GET /api/official-letters/my-readiness?letterType=` | جلسة — فحص ذاتي لنواقص بيانات الطالب |
+| `GET/POST /api/official-letters/requests*` | جلسة: الإصدار الذاتي يتطلب `profileReviewStatus=approved` + اكتمال الحقول المهمة · `staff_profiles.manage` لمسار الإدارة |
+| `GET /api/official-letters/my-readiness?letterType=` | جلسة — نواقص البيانات + حالة مراجعة الملف |
 
 ## عقود مهمة / Gotchas
 - **PDF عبر Puppeteer + HTML RTL فقط.** لا تستخدم pdfmake/pdfkit للنص العربي —
@@ -60,9 +60,13 @@
   `MyStaffProfileCard`). نص الإرشاد: `LETTER_GAPS_STAFF_HINT_AR`.
   **الترخيص المهني ليس شرطاً** لاكتمال الملف ولا لإصدار شهادة التعريف (كثيرون
   يطلبون الشهادة للتقديم على الترخيص — دورة الترخيص منفصلة في `editorial`).
-- **الإصدار الذاتي:** عند اكتمال الحقول المهمة يُصدر `POST /requests` الشهادة
-  فوراً (`requestSelfLetter`) ويظهر زر التنزيل. **لا شهادة ثانية** من نفس
-  النوع ما دامت سارية (`status=issued`).
+- **مراجعة الإدارة قبل الإصدار:** اكتمال 100% ذاتياً → `pending_review` ورسالة
+  «البيانات تحت المراجعة». HR يراجع/يعدّل (مسمى، تاريخ التحاق، …) ثم
+  `POST /api/staff-profiles/:userId/approve` → `approved`. بعدها فقط
+  `requestSelfLetter` يصدر الشهادة ويظهر زر التنزيل. طلب تصحيح:
+  `POST .../request-correction` مع ملاحظة. أي حفظ ذاتي بعد الاعتماد يعيد الملف
+  إلى `pending_review`. **لا شهادة ثانية** من نفس النوع ما دامت سارية
+  (`status=issued`).
 - **الشعار:** `public/branding/sabq-logo-official.png` (من ملف هوية Illustrator
   `SABQ logo.pdf` — خلفية شفافة). الاحتياطي: `sabq-logo.png` ثم
   `sabq-logo-report.png`. لا تستبدل `sabq-logo.png` (خلفية سوداء للوحة التحكم).
@@ -75,6 +79,8 @@
 - الخطوط: `server/fonts/IBMPlexSansArabic-*.ttf` مضمّنة base64 في HTML.
 - التخزين الخاص: R2/S3 عبر `ObjectStorageService.uploadPrivateDocument`.
 - لا استهلاك AI.
+- أعمدة المراجعة على `staff_profiles`: انظر
+  `scripts/sql/add-staff-profile-review-2026-07-26.sql`.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
@@ -82,3 +88,4 @@
 - [ ] حافظت على قاعدة حذف الحقول الناقصة
 - [ ] لم أضف رقم الهوية إلى `snapshot` أو استجابات الواجهة
 - [ ] أي مسار عام جديد مضاف إلى `noindexPaths.ts`
+- [ ] حافظت على بوابة `profileReviewStatus=approved` قبل الإصدار الذاتي

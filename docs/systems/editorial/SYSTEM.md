@@ -67,6 +67,10 @@
   ووثائق وnational-id). **تبويب الاعتماد الصحفي مخفي ذاتياً** (للإدارة فقط عبر
   `/dashboard/staff-profiles`). العقد يبقى لـ HR. الترخيص المهني يبقى عبر
   `WriterMediaLicenseCard` وليس شرطاً لاكتمال ملف المنسوب (الشهادة تسبق الترخيص).
+  **مراجعة قبل شهادة التعريف:** اكتمال 100% → `pending_review`؛ HR يعتمد عبر
+  `POST /api/staff-profiles/:userId/approve` أو يطلب تصحيحاً
+  (`.../request-correction`). الإصدار الذاتي للشهادة يتطلب `approved` فقط
+  (تفاصيل في `official-letters/SYSTEM.md`).
 - **Visual AI (`visualAiService.analyzeImage`):** الرد ثلاثي اللغة كان يُقطع عند `maxOutputTokens: 2048` فيفشل `JSON.parse` (`Failed to parse JSON response`). السقف 4096، والتحليل عبر `parseVisualAiJson` (أسوار markdown + إصلاح JSON مقطوع)، وفشل التحليل يعيد التوليد داخل `pRetry`.
 - **عدادات إدارة المقالات:** `GET /api/admin/articles/metrics` → `getArticlesMetrics` يستعلاماً واحداً بـ `count(*) FILTER` + كاش ذاكرة `admin:articles:metrics` لمدة `CACHE_TTL.SHORT` (بدل 4 COUNT متتالية كانت ~2.5s في APM).
 - **نبض غرفة الأخبار (`GET /api/admin/dashboard/stats`):** عبر `adminDashboardStatsService.getCachedAdminDashboardStats` — SWR (طازج 5 دقائق / stale حتى 15 مع تحديث خلفي + single-flight). الـ warmup وتحديث كل 4 دقائق يعملان على **كل replica** (كاش الذاكرة per-process). `reading_history` يُجمَّع على آخر 7 أيام فقط؛ تفاعلات اليوم باستعلام منفصل بفلتر تاريخ. الموبايل `full-stats` يشارك نفس الكاش. KPI الجانبية (`deepAnalyses`, `audioNewsletters`, `publishers`, …) تُغلَّف بـ soft-fail داخل `getAdminDashboardStats` حتى لا يُسقط عمود ناقص في الإنتاج (مثل `deep_analyses.status`) المسار كاملاً.

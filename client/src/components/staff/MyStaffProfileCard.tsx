@@ -1,5 +1,5 @@
 // بطاقة استكمال ملف المنسوب — للكاتب والمراسل في مساحتيهما.
-// تستبدل مرجع التعليم العام بنداء واضح يؤهّل لشهادة التعريف والخدمات.
+// اكتمال 100% → قيد مراجعة الإدارة → بعد الاعتماد يمكن إصدار شهادة التعريف.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -13,10 +13,48 @@ import { cn } from "@/lib/utils";
 const PROFILE_CTA =
   "استكمال ملفك الشخصي يؤهلك لاستخدام إصدار شهادة التعريف والخدمات القادمة.";
 
+type ReviewStatus = "draft" | "pending_review" | "approved" | "needs_correction";
+
 type MeProfile = {
-  profile: { completionPercent?: number; missingFields?: string[] } | null;
+  profile: {
+    completionPercent?: number;
+    missingFields?: string[];
+    profileReviewStatus?: ReviewStatus | null;
+    profileReviewNote?: string | null;
+  } | null;
   missingLabels?: string[];
 };
+
+function reviewBadge(status: ReviewStatus | null | undefined, complete: boolean) {
+  if (status === "approved") {
+    return {
+      label: "معتمد من الإدارة ✓",
+      className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    };
+  }
+  if (status === "pending_review") {
+    return {
+      label: "البيانات تحت المراجعة",
+      className: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400",
+    };
+  }
+  if (status === "needs_correction") {
+    return {
+      label: "يحتاج تصحيحاً",
+      className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    };
+  }
+  if (complete) {
+    return {
+      label: "الملف مكتمل — بانتظار الإرسال للمراجعة",
+      className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    };
+  }
+  return {
+    label: "مسودة",
+    className: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
+  };
+}
 
 export function MyStaffProfileCard({ className }: { className?: string }) {
   const { user } = useAuth();
@@ -32,6 +70,9 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
     ?? data?.missingLabels?.length
     ?? 0;
   const complete = Boolean(data?.profile) && missingCount === 0 && percent >= 100;
+  const reviewStatus = data?.profile?.profileReviewStatus ?? "draft";
+  const reviewNote = data?.profile?.profileReviewNote ?? null;
+  const badge = reviewBadge(reviewStatus, complete);
 
   if (!user?.id) return null;
 
@@ -57,21 +98,34 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
                 <Loader2 className="h-3 w-3 animate-spin" /> جارٍ فحص اكتمال ملفك…
               </p>
             ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={
-                    complete
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                      : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  }
-                >
-                  {complete ? "الملف مكتمل ✓" : `الاكتمال ${percent}%`}
-                </Badge>
-                {!complete && missingCount > 0 && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {missingCount} حقول ملزمة ناقصة
-                  </span>
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={badge.className}>
+                    {badge.label}
+                  </Badge>
+                  {!complete && (
+                    <span className="text-[11px] text-muted-foreground">
+                      الاكتمال {percent}%
+                      {missingCount > 0 ? ` · ${missingCount} حقول ملزمة ناقصة` : ""}
+                    </span>
+                  )}
+                </div>
+                {reviewStatus === "pending_review" && (
+                  <p className="text-xs leading-relaxed text-sky-800 dark:text-sky-300" data-testid="text-profile-pending-review">
+                    بياناتك مكتملة وهي تحت مراجعة الإدارة. بعد الاعتماد ستتمكن من إصدار شهادة التعريف وتنزيلها.
+                  </p>
+                )}
+                {reviewStatus === "approved" && (
+                  <p className="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300" data-testid="text-profile-approved">
+                    تم اعتماد ملفك — يمكنك الآن إصدار وتحميل شهادة التعريف من بطاقة الشهادات.
+                  </p>
+                )}
+                {reviewStatus === "needs_correction" && (
+                  <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300" data-testid="text-profile-needs-correction">
+                    {reviewNote
+                      ? `مطلوب تصحيح: ${reviewNote}`
+                      : "طلبت الإدارة تصحيحاً على بياناتك — عدّل الملف ثم احفظه ليُعاد للمراجعة."}
+                  </p>
                 )}
               </div>
             )}
@@ -92,7 +146,7 @@ export function MyStaffProfileCard({ className }: { className?: string }) {
             </>
           ) : (
             <>
-              {complete ? "مراجعة الملف" : "استكمال الملف"}
+              {complete || reviewStatus === "approved" ? "مراجعة الملف" : "استكمال الملف"}
               <ChevronDown className="h-3.5 w-3.5" />
             </>
           )}
