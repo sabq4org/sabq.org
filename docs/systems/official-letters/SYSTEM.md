@@ -85,6 +85,11 @@
 - لا استهلاك AI.
 - أعمدة المراجعة على `staff_profiles`: انظر
   `scripts/sql/add-staff-profile-review-2026-07-26.sql`.
+- جداول الخطابات: `scripts/sql/add-official-letters-2026-07-26.sql`
+  (إن وُجد `official_letters` فقط: نفّذ
+  `add-official-letter-requests-only-2026-07-26.sql`).
+  فشل إدراج سجل التدقيق في `official_letter_requests` **لا يُلغي** الشهادة
+  الصادرة — يُسجَّل تحذير في اللوج.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
