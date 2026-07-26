@@ -21,6 +21,8 @@ export const VALID_PREFIXES = new Set([
   'forgot-password', 'reset-password', 'set-password', '2fa-verify',
   // User settings & account center
   'settings', 'preferences', 'loyalty',
+  // التحقق العام من الخطابات الرسمية
+  'verify',
   'notification-settings', 'recommendation-settings', 'bookmarks',
   'reading-history', 'my-follows', 'my-keywords', 'my-votes',
   // Static pages

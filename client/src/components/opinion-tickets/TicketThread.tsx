@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { CornerDownRight, Loader2, MessageSquare, Send, Shield, User as UserIcon, X } from "lucide-react";
+import { CornerDownRight, FileText, Loader2, MessageSquare, Send, Shield, User as UserIcon, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { PolishReplyButton } from "@/components/ai/PolishReplyButton";
+import { IssueLetterFromTicketDialog } from "@/components/officialLetters/IssueLetterFromTicketDialog";
 import type { OpinionTicketStatus } from "./statusMeta";
 import { STATUS_META, STATUS_OPTIONS } from "./statusMeta";
 import { authorKindMeta, type TicketAuthorKind } from "./authorKindMeta";
@@ -63,6 +64,7 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<ThreadMessage | null>(null);
+  const [letterDialogOpen, setLetterDialogOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useQuery<ThreadResponse>({
     queryKey: [`/api/opinion-tickets/${ticketId}`],
@@ -199,6 +201,18 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
               >
                 {statusMeta.label}
               </Badge>
+              {viewerRole === "admin" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5"
+                  onClick={() => setLetterDialogOpen(true)}
+                  data-testid="button-issue-letter-from-ticket"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  إصدار شهادة تعريف
+                </Button>
+              )}
               {viewerRole === "admin" && (
                 <Select
                   value={ticket.status}
@@ -396,6 +410,17 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {viewerRole === "admin" && data?.ticket && (
+        <IssueLetterFromTicketDialog
+          open={letterDialogOpen}
+          onOpenChange={setLetterDialogOpen}
+          ticketId={ticketId}
+          subjectUserId={data.ticket.writerId}
+          subjectName={data.ticket.writerName || data.ticket.writerEmail || "المنسوب"}
+          onIssued={setDraft}
+        />
       )}
     </div>
   );

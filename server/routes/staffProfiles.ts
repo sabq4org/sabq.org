@@ -3,26 +3,31 @@
 //
 // البوابة: صلاحيات staff_profiles.view / staff_profiles.manage /
 // staff_documents.view — يملكها admin (superuser shortcut في
-// getUserPermissions) ودور «الموارد البشرية» المستحدث. لا استيراد db
-// هنا (ADR-001) — كل البيانات عبر staffProfileService.
+// getUserPermissions) ودور «الموارد البشرية» المستحدث.
+//
+// مسار ذاتي للكاتب/المراسل: /api/staff-profiles/me* — جلسة + دور
+// opinion_author أو reporter. لا استيراد db هنا (ADR-001).
 // ----------------------------------------------------------------------------
 
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../auth";
-import { getUserPermissions } from "../rbac";
+import { getUserPermissions, getUserRoleNames, userHasAnyRole } from "../rbac";
 import { upload } from "../utils/uploadMiddleware";
 import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 import {
   addDepartment,
   addJobTitle,
+  employmentTypeForSelfRole,
   getLookups,
   getStaffDocumentKey,
   getStaffProfile,
+  isSelfStaffDocKind,
   listStaff,
   revealNationalId,
   setStaffDocumentKey,
   upsertStaffProfile,
+  SELF_STAFF_PROFILE_ROLES,
   STAFF_DOC_KINDS,
   type StaffDocKind,
   type StaffProfilePatch,
@@ -40,7 +45,230 @@ function requirePermission(code: string) {
   };
 }
 
+async function requireSelfStaffAccess(req: Request, res: Response, next: () => void) {
+  const user = req.user as { id: string } | undefined;
+  if (!user) return res.status(401).json({ message: "غير مصرح" });
+  const ok = await userHasAnyRole(user.id, [...SELF_STAFF_PROFILE_ROLES]);
+  if (!ok) {
+    return res.status(403).json({ message: "استكمال الملف متاح لكتّاب الرأي والمراسلين فقط" });
+  }
+  return next();
+}
+
 router.use("/api/staff-profiles", isAuthenticated);
+
+// nullish (نص | null | غير موجود): الملفات المرحّلة تحمل حقولاً null
+// والفورم يعيدها كما هي — رفض null كان يفشل الحفظ بـ
+// «Expected string, received null». null = تفريغ الحقل في الخدمة.
+const nStr = (max: number) => z.string().max(max).nullish();
+
+const patchSchema = z.object({
+  nationalId: z.string().trim().regex(/^\d{10}$/, "الهوية 10 أرقام").optional().or(z.literal("")),
+  nationality: nStr(60),
+  officialBirthDate: nStr(30),
+  officialPhotoUrl: nStr(600),
+  jobTitleId: nStr(60),
+  departmentId: nStr(60),
+  employmentType: z.enum(["employee", "collaborator", "field_reporter", "opinion_writer"]).nullish(),
+  joinedAt: nStr(30),
+  managerUserId: nStr(60),
+  workRegion: nStr(120),
+  pressIdNumber: nStr(40),
+  pressCardValidUntil: nStr(30),
+  mediaLicenseNumber: nStr(60),
+  mediaLicenseExpiresAt: nStr(30),
+  officialPhone: nStr(30),
+  officialEmail: nStr(160),
+  emergencyContactName: nStr(120),
+  emergencyContactRelation: nStr(60),
+  emergencyContactPhone: nStr(30),
+  bloodType: nStr(3),
+  bioAr: nStr(2000),
+  bioEn: nStr(2000),
+  specializations: z.array(z.string().max(80)).max(20).nullish(),
+  socialX: nStr(200),
+  socialLinkedin: nStr(200),
+  personalWebsite: nStr(300),
+  yearsOfExperience: z.number().int().min(0).max(60).nullish(),
+  previousEmployers: nStr(1000),
+  notes: nStr(2000),
+  firstName: nStr(80),
+  lastName: nStr(80),
+  phoneNumber: nStr(30),
+});
+
+/** حقول يمنع المنسوب من تعديلها ذاتياً (حوكمة HR / اعتماد صحفي). */
+const SELF_FORBIDDEN_KEYS = [
+  "notes",
+  "managerUserId",
+  "pressIdNumber",
+  "pressCardValidUntil",
+  "mediaLicenseNumber",
+  "mediaLicenseExpiresAt",
+] as const;
+
+async function uploadStaffDocument(
+  userId: string,
+  kind: StaffDocKind,
+  file: Express.Multer.File,
+  actorId: string,
+) {
+  if (!isPrivateObjectStorageConfigured()) {
+    return { ok: false as const, status: 503, message: "التخزين الخاص غير مهيأ" };
+  }
+  const rawExt = (file.originalname.split(".").pop() || "").toLowerCase();
+  const ALLOWED_DOC_EXT = new Set(["pdf", "jpg", "jpeg", "png", "webp"]);
+  if (!ALLOWED_DOC_EXT.has(rawExt)) {
+    return {
+      ok: false as const,
+      status: 400,
+      message: "امتداد الملف غير مسموح. المسموح: PDF, JPG, PNG, WEBP",
+    };
+  }
+  const key = `staff-docs/${userId}-${kind}-${Date.now()}.${rawExt}`;
+  const stored = await new ObjectStorageService().uploadFile(key, file.buffer, file.mimetype, "private");
+  await setStaffDocumentKey(userId, kind, stored.path, actorId);
+  return { ok: true as const };
+}
+
+// ── مسار ذاتي للكاتب/المراسل (قبل :userId حتى لا يُلتقط «me») ──
+
+router.get(
+  "/api/staff-profiles/me/lookups",
+  requireSelfStaffAccess,
+  async (_req: Request, res: Response) => {
+    try {
+      res.json(await getLookups());
+    } catch (error) {
+      console.error("[StaffProfiles] self lookups error:", error);
+      res.status(500).json({ message: "تعذر جلب القوائم" });
+    }
+  },
+);
+
+router.get(
+  "/api/staff-profiles/me",
+  requireSelfStaffAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as { id: string }).id;
+      const data = await getStaffProfile(userId);
+      if (!data) return res.status(404).json({ message: "المستخدم غير موجود" });
+      const roles = await getUserRoleNames(userId);
+      res.json({
+        ...data,
+        selfService: true,
+        suggestedEmploymentType: employmentTypeForSelfRole(roles),
+      });
+    } catch (error) {
+      console.error("[StaffProfiles] self get error:", error);
+      res.status(500).json({ message: "تعذر جلب ملفك" });
+    }
+  },
+);
+
+router.put(
+  "/api/staff-profiles/me",
+  requireSelfStaffAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = patchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" });
+      }
+      const userId = (req.user as { id: string }).id;
+      const patch = { ...parsed.data } as StaffProfilePatch;
+      for (const key of SELF_FORBIDDEN_KEYS) {
+        delete (patch as Record<string, unknown>)[key];
+      }
+
+      // ثبّت نوع العلاقة حسب الدور إن لم يُرسل أو كان غير متوافق
+      const roles = await getUserRoleNames(userId);
+      const suggested = employmentTypeForSelfRole(roles);
+      if (suggested) {
+        const allowed =
+          suggested === "opinion_writer"
+            ? ["opinion_writer", "collaborator"]
+            : ["field_reporter", "collaborator"];
+        if (!patch.employmentType || !allowed.includes(patch.employmentType)) {
+          patch.employmentType = suggested;
+        }
+      }
+
+      const result = await upsertStaffProfile(userId, patch, userId);
+      if (!result.success) return res.status(404).json({ message: result.message });
+      res.json(result);
+    } catch (error: unknown) {
+      console.error("[StaffProfiles] self upsert error:", error);
+      const message = error instanceof Error ? error.message : "تعذر حفظ الملف";
+      res.status(500).json({ message });
+    }
+  },
+);
+
+router.get(
+  "/api/staff-profiles/me/national-id",
+  requireSelfStaffAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as { id: string }).id;
+      const value = await revealNationalId(userId, userId);
+      if (!value) return res.status(404).json({ message: "لا توجد هوية محفوظة" });
+      res.set("Cache-Control", "private, no-store");
+      res.json({ nationalId: value });
+    } catch (error) {
+      console.error("[StaffProfiles] self reveal error:", error);
+      res.status(500).json({ message: "تعذر كشف الهوية" });
+    }
+  },
+);
+
+router.post(
+  "/api/staff-profiles/me/documents/:kind",
+  requireSelfStaffAccess,
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      const kind = req.params.kind;
+      if (!isSelfStaffDocKind(kind)) {
+        return res.status(400).json({
+          message: "يمكنك رفع السيرة أو صورة الهوية أو الترخيص فقط — العقد للموارد البشرية",
+        });
+      }
+      if (!req.file) return res.status(400).json({ message: "لم يُرفق ملف" });
+      const userId = (req.user as { id: string }).id;
+      const uploaded = await uploadStaffDocument(userId, kind, req.file, userId);
+      if (!uploaded.ok) return res.status(uploaded.status).json({ message: uploaded.message });
+      res.json({ success: true, kind });
+    } catch (error) {
+      console.error("[StaffProfiles] self document upload error:", error);
+      res.status(500).json({ message: "تعذر رفع الوثيقة" });
+    }
+  },
+);
+
+router.get(
+  "/api/staff-profiles/me/documents/:kind",
+  requireSelfStaffAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const kind = req.params.kind;
+      if (!isSelfStaffDocKind(kind)) {
+        return res.status(400).json({ message: "نوع الوثيقة غير متاح لك" });
+      }
+      const userId = (req.user as { id: string }).id;
+      const key = await getStaffDocumentKey(userId, kind);
+      if (!key) return res.status(404).json({ message: "لا توجد وثيقة" });
+      const url = await new ObjectStorageService().getPrivateFileDownloadURL(key, 300);
+      res.redirect(url);
+    } catch (error) {
+      console.error("[StaffProfiles] self document download error:", error);
+      res.status(500).json({ message: "تعذر جلب الوثيقة" });
+    }
+  },
+);
+
+// ── مسارات الإدارة (HR / admin) ──
 
 router.get(
   "/api/staff-profiles/lookups",
@@ -88,43 +316,6 @@ router.get(
   },
 );
 
-// nullish (نص | null | غير موجود): الملفات المرحّلة تحمل حقولاً null
-// والفورم يعيدها كما هي — رفض null كان يفشل الحفظ بـ
-// «Expected string, received null». null = تفريغ الحقل في الخدمة.
-const nStr = (max: number) => z.string().max(max).nullish();
-
-const patchSchema = z.object({
-  nationalId: z.string().trim().regex(/^\d{10}$/, "الهوية 10 أرقام").optional().or(z.literal("")),
-  nationality: nStr(60),
-  officialBirthDate: nStr(30),
-  officialPhotoUrl: nStr(600),
-  jobTitleId: nStr(60),
-  departmentId: nStr(60),
-  employmentType: z.enum(["employee", "collaborator", "field_reporter", "opinion_writer"]).nullish(),
-  joinedAt: nStr(30),
-  managerUserId: nStr(60),
-  workRegion: nStr(120),
-  pressIdNumber: nStr(40),
-  pressCardValidUntil: nStr(30),
-  mediaLicenseNumber: nStr(60),
-  mediaLicenseExpiresAt: nStr(30),
-  officialPhone: nStr(30),
-  officialEmail: nStr(160),
-  emergencyContactName: nStr(120),
-  emergencyContactRelation: nStr(60),
-  emergencyContactPhone: nStr(30),
-  bloodType: nStr(3),
-  bioAr: nStr(2000),
-  bioEn: nStr(2000),
-  specializations: z.array(z.string().max(80)).max(20).nullish(),
-  socialX: nStr(200),
-  socialLinkedin: nStr(200),
-  personalWebsite: nStr(300),
-  yearsOfExperience: z.number().int().min(0).max(60).nullish(),
-  previousEmployers: nStr(1000),
-  notes: nStr(2000),
-});
-
 router.put(
   "/api/staff-profiles/:userId",
   requirePermission("staff_profiles.manage"),
@@ -165,8 +356,6 @@ router.get(
   },
 );
 
-// ── وثائق المنسوب: رفع للتخزين الخاص + تنزيل برابط موقّع قصير العمر ──
-
 router.post(
   "/api/staff-profiles/:userId/documents/:kind",
   requirePermission("staff_profiles.manage"),
@@ -178,21 +367,13 @@ router.post(
         return res.status(400).json({ message: "نوع الوثيقة غير صحيح" });
       }
       if (!req.file) return res.status(400).json({ message: "لم يُرفق ملف" });
-      if (!isPrivateObjectStorageConfigured()) {
-        return res.status(503).json({ message: "التخزين الخاص غير مهيأ" });
-      }
-      // Constrain the stored extension to a known-safe allowlist rather than
-      // trusting originalname (audit #6, CWE-434) — blocks .html/.svg/.js even
-      // though these docs live in private storage behind short-lived signed URLs.
-      const rawExt = (req.file.originalname.split(".").pop() || "").toLowerCase();
-      const ALLOWED_DOC_EXT = new Set(["pdf", "jpg", "jpeg", "png", "webp"]);
-      if (!ALLOWED_DOC_EXT.has(rawExt)) {
-        return res.status(400).json({ message: "امتداد الملف غير مسموح. المسموح: PDF, JPG, PNG, WEBP" });
-      }
-      const ext = rawExt;
-      const key = `staff-docs/${req.params.userId}-${kind}-${Date.now()}.${ext}`;
-      const stored = await new ObjectStorageService().uploadFile(key, req.file.buffer, req.file.mimetype, "private");
-      await setStaffDocumentKey(req.params.userId, kind, stored.path, (req.user as { id: string }).id);
+      const uploaded = await uploadStaffDocument(
+        req.params.userId,
+        kind,
+        req.file,
+        (req.user as { id: string }).id,
+      );
+      if (!uploaded.ok) return res.status(uploaded.status).json({ message: uploaded.message });
       res.json({ success: true, kind });
     } catch (error) {
       console.error("[StaffProfiles] document upload error:", error);
