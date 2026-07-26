@@ -106,7 +106,29 @@ export async function getCompetitionBySlug(slug: string, userId?: string) {
   }
 
   const contests = await listContests({ competitionId: competition.id, userId });
-  return { competition, contests };
+
+  // ملفات الاحتساب النشطة لكل نوع (أعلى نسخة) — لبطاقة «كيف تُحتسب النقاط»
+  // على مستوى البطولة. كانت القاعدة تُعرض لكل مسابقة على حدة وبعد فتح العدّاد
+  // فقط، فلا يرى الزائر غير المسجّل أي شرح للنظام.
+  const profiles = await db
+    .select({
+      contestType: predictionScoringProfiles.contestType,
+      strategyKey: predictionScoringProfiles.strategyKey,
+      version: predictionScoringProfiles.version,
+      params: predictionScoringProfiles.params,
+    })
+    .from(predictionScoringProfiles)
+    .where(and(
+      eq(predictionScoringProfiles.competitionId, competition.id),
+      eq(predictionScoringProfiles.status, "active"),
+    ))
+    .orderBy(desc(predictionScoringProfiles.version));
+  const rules: typeof profiles = [];
+  for (const profile of profiles) {
+    if (!rules.some((r) => r.contestType === profile.contestType)) rules.push(profile);
+  }
+
+  return { competition, contests, rules };
 }
 
 export async function listContests(filters: {
@@ -130,15 +152,36 @@ export async function listContests(filters: {
 
   const conditions: SQL[] = [sql`${predictionContests.status} <> 'draft'`];
   if (competitionId) conditions.push(eq(predictionContests.competitionId, competitionId));
-  if (filters.status) conditions.push(eq(predictionContests.status, filters.status));
   if (filters.contestType) conditions.push(eq(predictionContests.contestType, filters.contestType));
 
-  const contests = await db
-    .select()
-    .from(predictionContests)
-    .where(and(...conditions))
-    .orderBy(asc(predictionContests.locksAt))
-    .limit(Math.min(filters.limit ?? 100, 200));
+  let contests: PredictionContest[];
+  if (filters.status) {
+    conditions.push(eq(predictionContests.status, filters.status));
+    contests = await db
+      .select()
+      .from(predictionContests)
+      .where(and(...conditions))
+      .orderBy(asc(predictionContests.locksAt))
+      .limit(Math.min(filters.limit ?? 100, 200));
+  } else {
+    // بلا مرشّح حالة: سقف واحد مرتب بموعد الإغلاق كان يُسقط المباريات الجديدة
+    // بعد تراكم 100 مسوّاة (روشن ~306 مباراة بالموسم فتختفي المفتوحة كليًا).
+    // النشطة محدودة طبيعيًا بأفق إنشاء المسابقات (14 يومًا)، والمنتهية تُقتطع
+    // لأحدثها — فلا يضيع توقّع مفتوح مهما تقدّم الموسم.
+    const active = await db
+      .select()
+      .from(predictionContests)
+      .where(and(...conditions, inArray(predictionContests.status, ["open", "locked", "ready"])))
+      .orderBy(asc(predictionContests.locksAt))
+      .limit(200);
+    const recent = await db
+      .select()
+      .from(predictionContests)
+      .where(and(...conditions, inArray(predictionContests.status, ["settled", "void"])))
+      .orderBy(desc(predictionContests.locksAt))
+      .limit(Math.min(filters.limit ?? 20, 50));
+    contests = [...active, ...recent];
+  }
 
   const entriesByContest = new Map<string, PredictionEntry>();
   if (filters.userId && contests.length > 0) {
