@@ -560,17 +560,25 @@ export async function requestSelfLetter(input: {
     issuedByUserId: input.requesterUserId,
   });
 
-  // سجل طلب معتمد فوراً للتدقيق (بلا طابور مراجعة)
-  await db.insert(officialLetterRequests).values({
-    requesterUserId: input.requesterUserId,
-    letterType: input.letterType,
-    recipientEntity: input.recipientEntity?.trim() || null,
-    note: input.note?.trim() || null,
-    status: "approved",
-    reviewedByUserId: input.requesterUserId,
-    reviewedAt: new Date(),
-    letterId: letter.id,
-  });
+  // سجل طلب معتمد فوراً للتدقيق — لا يُفشل الإصدار إن تعذّر (جدول ناقص/عطل لحظي)
+  try {
+    await db.insert(officialLetterRequests).values({
+      requesterUserId: input.requesterUserId,
+      letterType: input.letterType,
+      recipientEntity: input.recipientEntity?.trim() || null,
+      note: input.note?.trim() || null,
+      status: "approved",
+      reviewedByUserId: input.requesterUserId,
+      reviewedAt: new Date(),
+      letterId: letter.id,
+    });
+  } catch (auditErr) {
+    console.error(
+      "[officialLetters] audit request insert failed after issue (letter still valid):",
+      letter.id,
+      auditErr,
+    );
+  }
 
   return { letter, alreadyHad: false };
 }
