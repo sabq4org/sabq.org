@@ -378,7 +378,7 @@ export function RslHero({ hero, isLoading, onOpenMatch, teamsCount }: RslHeroPro
             )}
           </div>
           <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-            دوري <span className="text-sky-300">روشن</span> السعودي
+            دوري <span className="text-sky-300">روشن</span>
           </h1>
           <p className="text-sm sm:text-base text-emerald-100/70 max-w-xl">
             {clubs} ناديًا · {rounds} جولة · {totalMatches} مباريات — أقوى دوريات المنطقة بتغطية حية لحظة بلحظة بتوقيت الرياض
