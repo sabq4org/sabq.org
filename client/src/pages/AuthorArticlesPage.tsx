@@ -4,18 +4,32 @@
  */
 import { useEffect } from "react";
 import { Link, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { NavigationBar } from "@/components/NavigationBar";
 import { Footer } from "@/components/Footer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
-import { Eye, PenLine } from "lucide-react";
+import { Eye, Loader2, PenLine } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+
+const PAGE_SIZE = 18;
+
+type AuthorArticle = {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  slug: string;
+  englishSlug: string | null;
+  articleType: string | null;
+  publishedAt: string | null;
+  views: number;
+};
 
 type AuthorPage = {
   author: {
@@ -29,30 +43,28 @@ type AuthorPage = {
     articleCount: number;
     totalViews: number;
   };
-  recentArticles: Array<{
-    id: string;
-    title: string;
-    excerpt: string | null;
-    slug: string;
-    englishSlug: string | null;
-    articleType: string | null;
-    publishedAt: string | null;
-    views: number;
-  }>;
+  recentArticles: AuthorArticle[];
+  pagination?: {
+    page: number;
+    limit: number;
+    hasMore: boolean;
+  };
 };
 
-function articleHref(a: AuthorPage["recentArticles"][number]): string {
+function articleHref(a: AuthorArticle): string {
   const slug = a.englishSlug || a.slug;
   return a.articleType === "opinion" ? `/opinion/${slug}` : `/article/${slug}`;
 }
 
 function initialsOf(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2) || "س";
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .map((p) => p[0])
+      .join("")
+      .slice(0, 2) || "س"
+  );
 }
 
 export default function AuthorArticlesPage() {
@@ -61,11 +73,21 @@ export default function AuthorArticlesPage() {
   const name = rawName.trim().replace(/\s+/g, " ");
   const { user } = useAuth();
 
-  const { data, isLoading, error } = useQuery<AuthorPage>({
-    queryKey: ["/api/authors/by-name", name],
-    queryFn: async () => {
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["/api/authors/by-name", name, PAGE_SIZE],
+    queryFn: async ({ pageParam }): Promise<AuthorPage> => {
+      const page = typeof pageParam === "number" ? pageParam : 1;
       const res = await fetch(
-        apiUrl(`/api/authors/by-name?name=${encodeURIComponent(name)}&limit=12`),
+        apiUrl(
+          `/api/authors/by-name?name=${encodeURIComponent(name)}&limit=${PAGE_SIZE}&page=${page}`,
+        ),
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -74,21 +96,37 @@ export default function AuthorArticlesPage() {
       }
       return res.json();
     },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination?.hasMore) {
+        return (lastPage.pagination.page || 1) + 1;
+      }
+      const loaded = lastPage.recentArticles?.length ?? 0;
+      const total = lastPage.stats?.articleCount ?? 0;
+      // توافق مع ردود قديمة بلا pagination
+      if (!lastPage.pagination && loaded >= PAGE_SIZE && loaded < total) {
+        return 2;
+      }
+      return undefined;
+    },
     enabled: name.length >= 2,
     staleTime: 5 * 60 * 1000,
   });
 
+  const firstPage = data?.pages?.[0];
+  const articles = (data?.pages ?? []).flatMap((p) =>
+    Array.isArray(p.recentArticles) ? p.recentArticles : [],
+  );
+
   useEffect(() => {
-    document.title = data?.author.name
-      ? `${data.author.name} — كاتب في سبق`
+    document.title = firstPage?.author.name
+      ? `${firstPage.author.name} — كاتب في سبق`
       : name
         ? `${name} — كاتب في سبق`
         : "كاتب — سبق";
-  }, [data?.author.name, name]);
+  }, [firstPage?.author.name, name]);
 
   useCanonical(name ? `https://sabq.org/author/${encodeURIComponent(name)}` : null);
-
-  const articles = Array.isArray(data?.recentArticles) ? data.recentArticles : [];
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -111,7 +149,7 @@ export default function AuthorArticlesPage() {
               ))}
             </div>
           </div>
-        ) : error || !data ? (
+        ) : error || !firstPage ? (
           <div className="container max-w-xl mx-auto px-4 py-20 text-center space-y-3">
             <h1 className="text-2xl font-bold">الكاتب غير موجود</h1>
             <p className="text-muted-foreground text-sm">
@@ -127,15 +165,15 @@ export default function AuthorArticlesPage() {
               <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-5 sm:gap-7">
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 border border-border">
-                    {data.author.avatarUrl ? (
+                    {firstPage.author.avatarUrl ? (
                       <AvatarImage
-                        src={data.author.avatarUrl}
-                        alt={data.author.name}
+                        src={firstPage.author.avatarUrl}
+                        alt={firstPage.author.name}
                         className="object-cover"
                       />
                     ) : null}
                     <AvatarFallback className="bg-background text-foreground text-xl font-bold">
-                      {initialsOf(data.author.name)}
+                      {initialsOf(firstPage.author.name)}
                     </AvatarFallback>
                   </Avatar>
 
@@ -144,21 +182,21 @@ export default function AuthorArticlesPage() {
                       className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight"
                       data-testid="text-author-page-name"
                     >
-                      {data.author.name}
+                      {firstPage.author.name}
                     </h1>
                     <p className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="inline-flex items-center gap-1.5">
                         <PenLine className="h-3.5 w-3.5" />
-                        {data.author.role || "كاتب في سبق"}
+                        {firstPage.author.role || "كاتب في سبق"}
                       </span>
                       <span className="text-border">·</span>
                       <span className="tabular-nums">
-                        {data.stats.articleCount.toLocaleString("en-US")} مقال
+                        {firstPage.stats.articleCount.toLocaleString("en-US")} مقال
                       </span>
                     </p>
-                    {data.author.bio ? (
+                    {firstPage.author.bio ? (
                       <p className="text-sm sm:text-base text-muted-foreground leading-7 max-w-2xl pt-1">
-                        {data.author.bio}
+                        {firstPage.author.bio}
                       </p>
                     ) : null}
                   </div>
@@ -174,46 +212,72 @@ export default function AuthorArticlesPage() {
                   لا مقالات منشورة بعد
                 </p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {articles.map((article) => (
-                    <Link key={article.id} href={articleHref(article)}>
-                      <Card
-                        className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-hidden flex flex-col"
-                        data-testid={`card-author-article-${article.id}`}
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {articles.map((article) => (
+                      <Link key={article.id} href={articleHref(article)}>
+                        <Card
+                          className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-hidden flex flex-col"
+                          data-testid={`card-author-article-${article.id}`}
+                        >
+                          <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
+                            <h3 className="font-bold text-xl line-clamp-3 text-foreground leading-snug">
+                              {article.title}
+                            </h3>
+
+                            {article.publishedAt ? (
+                              <p className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(article.publishedAt), {
+                                  addSuffix: true,
+                                  locale: ar,
+                                })}
+                              </p>
+                            ) : null}
+
+                            {article.excerpt ? (
+                              <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
+                                {article.excerpt}
+                              </p>
+                            ) : (
+                              <div className="flex-1" />
+                            )}
+
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-border">
+                              <Eye className="h-3 w-3" />
+                              <span className="tabular-nums">
+                                {(article.views || 0).toLocaleString("en-US")}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
+                  </div>
+
+                  {hasNextPage ? (
+                    <div className="flex justify-center pt-10">
+                      <Button
+                        variant="outline"
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage}
+                        data-testid="button-author-load-more"
                       >
-                        <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
-                          <h3 className="font-bold text-xl line-clamp-3 text-foreground leading-snug">
-                            {article.title}
-                          </h3>
-
-                          {article.publishedAt ? (
-                            <p className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(article.publishedAt), {
-                                addSuffix: true,
-                                locale: ar,
-                              })}
-                            </p>
-                          ) : null}
-
-                          {article.excerpt ? (
-                            <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
-                              {article.excerpt}
-                            </p>
-                          ) : (
-                            <div className="flex-1" />
-                          )}
-
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-border">
-                            <Eye className="h-3 w-3" />
-                            <span className="tabular-nums">
-                              {(article.views || 0).toLocaleString("en-US")}
-                            </span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
+                        {isFetchingNextPage ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin ms-2" />
+                            جاري التحميل…
+                          </>
+                        ) : (
+                          `عرض المزيد (${articles.length} من ${firstPage.stats.articleCount.toLocaleString("en-US")})`
+                        )}
+                      </Button>
+                    </div>
+                  ) : articles.length > 0 ? (
+                    <p className="text-center text-xs text-muted-foreground pt-8">
+                      عرض {articles.length.toLocaleString("en-US")} مقال
+                    </p>
+                  ) : null}
+                </>
               )}
             </section>
           </>

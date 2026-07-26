@@ -4,11 +4,13 @@
  *
  * الأداء: بدون JOIN ثقيل على كل المقالات عند مطابقة الاسم؛
  * قائمة المقالات عبر author_id (فهرس)؛ كاش ذاكرة ٥ دقائق.
+ *
+ * ترحيل 2026-03 أنتج صفوفاً مكررة (نفس العنوان + published_at، slug مختلف).
+ * العدّ والقائمة يستبعدان المكررات عبر DISTINCT ON مع الإبقاء على أعلى مشاهدات.
  */
-import { and, desc, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { memoryCache } from "../memoryCache";
-import { articles, categories } from "@shared/schema";
 
 export type AuthorPageArticle = {
   id: string;
@@ -47,6 +49,11 @@ export type AuthorPageResult = {
     count: number;
   }>;
   recentArticles: AuthorPageArticle[];
+  pagination: {
+    page: number;
+    limit: number;
+    hasMore: boolean;
+  };
 };
 
 type UserRow = {
@@ -60,6 +67,20 @@ type UserRow = {
   created_at: Date | string | null;
 };
 
+type ArticleListRow = {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  slug: string;
+  english_slug: string | null;
+  article_type: string | null;
+  image_url: string | null;
+  published_at: Date | string | null;
+  views: number | null;
+  category_id: string | null;
+  category_name_ar: string | null;
+};
+
 function normalizeAuthorName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
 }
@@ -69,6 +90,12 @@ function rowsOf(result: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(withRows?.rows)) return withRows.rows;
   if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
   return [];
+}
+
+function toIsoOrNull(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
 }
 
 async function resolveAuthorByName(name: string): Promise<UserRow | null> {
@@ -106,6 +133,83 @@ async function resolveAuthorByName(name: string): Promise<UserRow | null> {
   return candidates[0];
 }
 
+/**
+ * مقالات الكاتب مع استبعاد صفوف الترحيل المكررة
+ * (نفس العنوان + نفس published_at → نبقي الأعلى مشاهدة ثم الأقدم إنشاءً).
+ */
+async function loadAuthorArticles(params: {
+  authorColumn: "author_id" | "reporter_id";
+  authorId: string;
+  limit: number;
+  offset: number;
+}): Promise<{
+  articleCount: number;
+  totalViews: number;
+  earliest: Date | string | null;
+  list: ArticleListRow[];
+}> {
+  const idCol =
+    params.authorColumn === "author_id"
+      ? sql`a.author_id`
+      : sql`a.reporter_id`;
+
+  const [statsRow, listRaw] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        COUNT(*)::int AS article_count,
+        COALESCE(SUM(views), 0)::bigint AS total_views,
+        MIN(published_at) AS earliest_publish
+      FROM (
+        SELECT DISTINCT ON (a.title, a.published_at)
+          a.views,
+          a.published_at
+        FROM articles a
+        WHERE a.status = 'published'
+          AND ${idCol} = ${params.authorId}
+        ORDER BY a.title, a.published_at,
+                 COALESCE(a.views, 0) DESC,
+                 a.created_at ASC NULLS LAST
+      ) uniq
+    `),
+
+    db.execute(sql`
+      SELECT *
+      FROM (
+        SELECT DISTINCT ON (a.title, a.published_at)
+          a.id,
+          a.title,
+          a.excerpt,
+          a.slug,
+          a.english_slug,
+          a.article_type,
+          a.image_url,
+          a.published_at,
+          a.views,
+          a.category_id,
+          c.name_ar AS category_name_ar
+        FROM articles a
+        LEFT JOIN categories c ON a.category_id = c.id
+        WHERE a.status = 'published'
+          AND ${idCol} = ${params.authorId}
+        ORDER BY a.title, a.published_at,
+                 COALESCE(a.views, 0) DESC,
+                 a.created_at ASC NULLS LAST
+      ) uniq
+      ORDER BY published_at DESC NULLS LAST
+      LIMIT ${params.limit}
+      OFFSET ${params.offset}
+    `),
+  ]);
+
+  const stats = rowsOf(statsRow)[0] ?? {};
+  return {
+    articleCount: Number(stats.article_count) || 0,
+    totalViews: Number(stats.total_views) || 0,
+    earliest: (stats.earliest_publish as Date | string | null) ?? null,
+    list: rowsOf(listRaw) as unknown as ArticleListRow[],
+  };
+}
+
 export async function getAuthorPageByName(
   rawName: string,
   opts: { page?: number; limit?: number } = {},
@@ -117,7 +221,7 @@ export async function getAuthorPageByName(
   const limit = Math.min(24, Math.max(1, opts.limit ?? 12));
   const offset = (page - 1) * limit;
 
-  const cacheKey = `author:web:${name.toLowerCase()}:p${page}:l${limit}`;
+  const cacheKey = `author:web:v2:${name.toLowerCase()}:p${page}:l${limit}`;
   const cached = memoryCache.get<AuthorPageResult>(cacheKey);
   if (cached) return cached;
 
@@ -126,94 +230,36 @@ export async function getAuthorPageByName(
 
   const authorId = String(author.id);
 
-  // قائمة + عدّ عبر author_id فقط (كتّاب الرأي ومسار الويب الأساسي)
-  const [statsRow, recent] = await Promise.all([
-    db.execute(sql`
-      SELECT
-        COUNT(*)::int AS article_count,
-        COALESCE(SUM(a.views), 0)::bigint AS total_views,
-        MIN(a.published_at) AS earliest_publish
-      FROM articles a
-      WHERE a.status = 'published'
-        AND a.author_id = ${authorId}
-    `),
-
-    db
-      .select({
-        id: articles.id,
-        title: articles.title,
-        excerpt: articles.excerpt,
-        slug: articles.slug,
-        englishSlug: articles.englishSlug,
-        articleType: articles.articleType,
-        imageUrl: articles.imageUrl,
-        publishedAt: articles.publishedAt,
-        views: articles.views,
-        categoryId: articles.categoryId,
-        categoryNameAr: categories.nameAr,
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(and(eq(articles.status, "published"), eq(articles.authorId, authorId)))
-      .orderBy(desc(articles.publishedAt))
-      .limit(limit)
-      .offset(offset),
-  ]);
-
-  const stats = rowsOf(statsRow)[0] ?? {};
+  let loaded = await loadAuthorArticles({
+    authorColumn: "author_id",
+    authorId,
+    limit,
+    offset,
+  });
 
   // إن لم تُعثر مقالات على author_id (حساب قديم عبر reporter_id) — مسار احتياطي ضيّق
-  let list = recent;
-  let articleCount = Number(stats.article_count) || 0;
-  let totalViews = Number(stats.total_views) || 0;
-  let earliest = stats.earliest_publish as Date | string | null;
-
-  if (list.length === 0 && articleCount === 0) {
-    const [fallbackStats, fallbackList] = await Promise.all([
-      db.execute(sql`
-        SELECT
-          COUNT(*)::int AS article_count,
-          COALESCE(SUM(a.views), 0)::bigint AS total_views,
-          MIN(a.published_at) AS earliest_publish
-        FROM articles a
-        WHERE a.status = 'published'
-          AND a.reporter_id = ${authorId}
-      `),
-      db
-        .select({
-          id: articles.id,
-          title: articles.title,
-          excerpt: articles.excerpt,
-          slug: articles.slug,
-          englishSlug: articles.englishSlug,
-          articleType: articles.articleType,
-          imageUrl: articles.imageUrl,
-          publishedAt: articles.publishedAt,
-          views: articles.views,
-          categoryId: articles.categoryId,
-          categoryNameAr: categories.nameAr,
-        })
-        .from(articles)
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .where(and(eq(articles.status, "published"), eq(articles.reporterId, authorId)))
-        .orderBy(desc(articles.publishedAt))
-        .limit(limit)
-        .offset(offset),
-    ]);
-    const fs = rowsOf(fallbackStats)[0] ?? {};
-    list = fallbackList;
-    articleCount = Number(fs.article_count) || 0;
-    totalViews = Number(fs.total_views) || 0;
-    earliest = fs.earliest_publish as Date | string | null;
+  if (loaded.list.length === 0 && loaded.articleCount === 0) {
+    loaded = await loadAuthorArticles({
+      authorColumn: "reporter_id",
+      authorId,
+      limit,
+      offset,
+    });
   }
 
   // تصنيفات من الصفحة الحالية فقط — بلا GROUP BY على كل الأرشيف
   const catCounts = new Map<string, { id: string; nameAr: string; count: number }>();
-  for (const r of list) {
-    if (!r.categoryId || !r.categoryNameAr) continue;
-    const prev = catCounts.get(r.categoryId);
+  for (const r of loaded.list) {
+    if (!r.category_id || !r.category_name_ar) continue;
+    const prev = catCounts.get(r.category_id);
     if (prev) prev.count += 1;
-    else catCounts.set(r.categoryId, { id: r.categoryId, nameAr: r.categoryNameAr, count: 1 });
+    else {
+      catCounts.set(r.category_id, {
+        id: r.category_id,
+        nameAr: r.category_name_ar,
+        count: 1,
+      });
+    }
   }
   const topCategories = Array.from(catCounts.values())
     .sort((a, b) => b.count - a.count)
@@ -241,32 +287,36 @@ export async function getAuthorPageByName(
       bio: author.bio || null,
       jobTitle: author.job_title || null,
       department: author.department || null,
-      joinedAt:
-        joined instanceof Date ? joined.toISOString() : joined ? String(joined) : null,
+      joinedAt: toIsoOrNull(joined),
     },
     stats: {
-      articleCount,
-      totalViews,
-      earliestPublish:
-        earliest instanceof Date
-          ? earliest.toISOString()
-          : earliest
-            ? String(earliest)
-            : null,
+      articleCount: loaded.articleCount,
+      totalViews: loaded.totalViews,
+      earliestPublish: toIsoOrNull(loaded.earliest),
     },
     topCategories,
-    recentArticles: list.map((r) => ({
-      id: r.id,
+    recentArticles: loaded.list.map((r) => ({
+      id: String(r.id),
       title: r.title,
       excerpt: r.excerpt,
       slug: r.slug,
-      englishSlug: r.englishSlug,
-      articleType: r.articleType,
-      imageUrl: r.imageUrl,
-      publishedAt: r.publishedAt,
-      views: r.views ?? 0,
-      categoryNameAr: r.categoryNameAr ?? null,
+      englishSlug: r.english_slug,
+      articleType: r.article_type,
+      imageUrl: r.image_url,
+      publishedAt:
+        r.published_at instanceof Date
+          ? r.published_at
+          : r.published_at
+            ? new Date(String(r.published_at))
+            : null,
+      views: Number(r.views) || 0,
+      categoryNameAr: r.category_name_ar ?? null,
     })),
+    pagination: {
+      page,
+      limit,
+      hasMore: offset + loaded.list.length < loaded.articleCount,
+    },
   };
 
   memoryCache.set(cacheKey, result, 5 * 60 * 1000);
