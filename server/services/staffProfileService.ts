@@ -78,8 +78,9 @@ export const EMPLOYMENT_TYPES = [
 type FieldRule = { key: string; labelAr: string };
 
 const REQUIRED_BASE: FieldRule[] = [
-  { key: "firstName", labelAr: "الاسم الأول" },
-  { key: "lastName", labelAr: "اسم العائلة" },
+  { key: "officialFullNameAr", labelAr: "الاسم الرباعي (للشهادات)" },
+  { key: "firstName", labelAr: "اسم العرض — الأول" },
+  { key: "lastName", labelAr: "اسم العرض — العائلة" },
   { key: "phoneNumber", labelAr: "رقم الجوال" },
   { key: "nationalId", labelAr: "الهوية الوطنية / الإقامة" },
   { key: "officialPhotoUrl", labelAr: "الصورة الرسمية" },
@@ -118,6 +119,8 @@ function computeCompletion(
   const rules = requiredFieldsFor(profile.employmentType);
   const has = (key: string): boolean => {
     switch (key) {
+      case "officialFullNameAr":
+        return Boolean(profile.officialFullNameAr?.trim());
       case "firstName": return Boolean(user.firstName?.trim());
       case "lastName": return Boolean(user.lastName?.trim());
       case "phoneNumber": return Boolean(user.phoneNumber?.trim() || profile.officialPhone?.trim());
@@ -630,16 +633,27 @@ export async function upsertStaffProfile(
     const [freshUser] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
     const { percent, missing } = computeCompletion(profile, freshUser ?? user);
 
-    // المنسوب: اكتمال 100% → قيد المراجعة؛ ناقص → مسودة (أو يبقى needs_correction إن لم يكتمل بعد طلب تصحيح)
+    // المنسوب: اكتمال 100% → قيد المراجعة؛ معتمد يبقى معتمداً إلا إن غيّر الاسم الرباعي
     const reviewPatch: Record<string, unknown> = {
       completionPercent: percent,
       missingFields: missing.map((m) => m.key),
     };
     if (opts.actorIsSelf) {
+      const prevStatus = existing?.profileReviewStatus ?? profile.profileReviewStatus ?? "draft";
       if (percent >= 100 && missing.length === 0) {
-        reviewPatch.profileReviewStatus = "pending_review";
-        reviewPatch.profileReviewNote = null;
-      } else if (profile.profileReviewStatus !== "needs_correction") {
+        if (prevStatus === "approved") {
+          const prevName = (existing?.officialFullNameAr || "").trim();
+          const nextName = String(profile.officialFullNameAr || "").trim();
+          if (prevName && nextName && prevName !== nextName) {
+            reviewPatch.profileReviewStatus = "pending_review";
+            reviewPatch.profileReviewNote = null;
+          }
+          // تعبئة الاسم الرباعي لأول مرة بعد الاعتماد: يبقى معتمداً
+        } else {
+          reviewPatch.profileReviewStatus = "pending_review";
+          reviewPatch.profileReviewNote = null;
+        }
+      } else if (prevStatus !== "needs_correction" && prevStatus !== "approved") {
         reviewPatch.profileReviewStatus = "draft";
       }
     }

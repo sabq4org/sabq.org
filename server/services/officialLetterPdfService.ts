@@ -159,26 +159,13 @@ function buildDetailRows(subject: LetterSubject): DetailRow[] {
   ];
 
   // الحقول الاختيارية: يُحذف السطر كاملاً إن لم تتوفر قيمته
+  // لا تُطبع البطاقة الصحفية ولا الترخيص الإعلامي على شهادة التعريف (قرار المالك).
   if (subject.nationalId) rows.push({ label: "رقم الهوية", value: subject.nationalId });
   rows.push({ label: "الصفة", value: subject.roleTitleAr });
   if (subject.departmentAr) rows.push({ label: "القسم", value: subject.departmentAr });
 
   const joined = formatShortDate(subject.joinedAt);
   if (joined) rows.push({ label: "تاريخ الالتحاق", value: joined });
-
-  if (subject.pressIdNumber) {
-    const validUntil = formatShortDate(subject.pressCardValidUntil);
-    rows.push({
-      label: "البطاقة الصحفية",
-      value: validUntil
-        ? `${subject.pressIdNumber} — سارية حتى ${validUntil}`
-        : subject.pressIdNumber,
-    });
-  }
-
-  if (subject.mediaLicenseNumber) {
-    rows.push({ label: "الترخيص الإعلامي", value: subject.mediaLicenseNumber });
-  }
 
   return rows;
 }

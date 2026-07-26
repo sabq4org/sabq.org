@@ -95,6 +95,7 @@ const patchSchema = z.object({
   yearsOfExperience: z.number().int().min(0).max(60).nullish(),
   previousEmployers: nStr(1000),
   notes: nStr(2000),
+  officialFullNameAr: nStr(200),
   firstName: nStr(80),
   lastName: nStr(80),
   phoneNumber: nStr(30),
@@ -177,13 +178,22 @@ router.put(
     try {
       const userId = (req.user as { id: string }).id;
       const review = await getStaffProfileReviewStatus(userId);
-      if (review.status === "pending_review" || review.status === "approved") {
+      if (review.status === "pending_review") {
         return res.status(409).json({
-          message:
-            review.status === "approved"
-              ? "ملفك معتمد — لا يمكن التعديل. اطلب من الإدارة فتح تصحيح إن لزم"
-              : "ملفك قيد مراجعة الإدارة — لا يمكن التعديل حتى تكتمل المراجعة أو يُطلب منك تصحيح",
+          message: "ملفك قيد مراجعة الإدارة — لا يمكن التعديل حتى تكتمل المراجعة أو يُطلب منك تصحيح",
         });
+      }
+      // معتمد: يُسمح بالتعديل فقط لتعبئة الاسم الرباعي إن كان فارغاً (لا يمس اسم المقالات)
+      if (review.status === "approved") {
+        const me = await getStaffProfile(userId);
+        const hasOfficial = Boolean(
+          (me?.profile as { officialFullNameAr?: string | null } | null)?.officialFullNameAr?.trim(),
+        );
+        if (hasOfficial) {
+          return res.status(409).json({
+            message: "ملفك معتمد — لا يمكن التعديل. اطلب من الإدارة فتح تصحيح إن لزم",
+          });
+        }
       }
 
       const parsed = patchSchema.safeParse(req.body);
@@ -251,13 +261,21 @@ router.post(
       if (!req.file) return res.status(400).json({ message: "لم يُرفق ملف" });
       const userId = (req.user as { id: string }).id;
       const review = await getStaffProfileReviewStatus(userId);
-      if (review.status === "pending_review" || review.status === "approved") {
+      if (review.status === "pending_review") {
         return res.status(409).json({
-          message:
-            review.status === "approved"
-              ? "ملفك معتمد — لا يمكن رفع وثائق. اطلب من الإدارة فتح تصحيح إن لزم"
-              : "ملفك قيد مراجعة الإدارة — لا يمكن رفع وثائق حتى تكتمل المراجعة أو يُطلب منك تصحيح",
+          message: "ملفك قيد مراجعة الإدارة — لا يمكن رفع وثائق حتى تكتمل المراجعة أو يُطلب منك تصحيح",
         });
+      }
+      if (review.status === "approved") {
+        const me = await getStaffProfile(userId);
+        const hasOfficial = Boolean(
+          (me?.profile as { officialFullNameAr?: string | null } | null)?.officialFullNameAr?.trim(),
+        );
+        if (hasOfficial) {
+          return res.status(409).json({
+            message: "ملفك معتمد — لا يمكن رفع وثائق. اطلب من الإدارة فتح تصحيح إن لزم",
+          });
+        }
       }
       const uploaded = await uploadStaffDocument(userId, kind, req.file, userId);
       if (!uploaded.ok) return res.status(uploaded.status).json({ message: uploaded.message });

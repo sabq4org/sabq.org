@@ -45,6 +45,7 @@ type ProfileResponse = {
     hasNationalId?: boolean;
     officialPhotoUrl?: string | null;
     profileReviewStatus?: "draft" | "pending_review" | "approved" | "needs_correction" | null;
+    officialFullNameAr?: string | null;
   }) | null;
   requiredFields: { key: string; labelAr: string }[];
   missingLabels?: string[];
@@ -61,7 +62,7 @@ const SECTIONS = [
 ] as const;
 
 const SECTION_FIELDS: Record<string, string[]> = {
-  identity: ["firstName", "lastName", "phoneNumber", "nationalId", "nationality", "officialBirthDate", "officialPhotoUrl"],
+  identity: ["officialFullNameAr", "firstName", "lastName", "phoneNumber", "nationalId", "nationality", "officialBirthDate", "officialPhotoUrl"],
   job: ["jobTitleId", "departmentId", "employmentType", "joinedAt", "workRegion"],
   press: ["pressIdNumber", "pressCardValidUntil", "mediaLicenseNumber", "mediaLicenseExpiresAt"],
   contact: ["officialPhone", "officialEmail", "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone", "bloodType"],
@@ -247,9 +248,12 @@ export function StaffProfileForm({
   }
 
   const reviewStatus = data.profile?.profileReviewStatus ?? "draft";
-  /** بعد الإرسال للمراجعة أو الاعتماد: المنسوب يشاهد فقط حتى يُطلب تصحيح */
+  const hasOfficialFullName = Boolean(String(data.profile?.officialFullNameAr ?? "").trim());
+  /** قيد المراجعة مقفل؛ المعتمد مقفل إلا لتعبئة الاسم الرباعي لأول مرة */
   const selfLocked =
-    isSelf && (reviewStatus === "pending_review" || reviewStatus === "approved");
+    isSelf &&
+    (reviewStatus === "pending_review" ||
+      (reviewStatus === "approved" && hasOfficialFullName));
 
   const lockMessage =
     reviewStatus === "approved"
@@ -321,12 +325,25 @@ export function StaffProfileForm({
     <div className="flex-1 rounded-xl border bg-card p-5">
       {activeSection === "identity" && (
         <div className="grid gap-4 sm:grid-cols-2">
-          {field("firstName", "الاسم الأول",
+          {field("officialFullNameAr", "الاسم الرباعي (للشهادات الرسمية)",
+            <Input
+              className={missingClass("officialFullNameAr")}
+              value={String(form.officialFullNameAr ?? "")}
+              onChange={(e) => set("officialFullNameAr", e.target.value)}
+              placeholder="مثال: علي محمد أحمد الحازمي"
+              data-testid="input-official-full-name"
+            />,
+            {
+              required: true,
+              wide: true,
+              hint: "يُطبع على شهادة التعريف فقط كما في الهوية — لا يظهر في المقالات ولا في اسم العرض بالموقع",
+            })}
+          {field("firstName", "اسم العرض — الاسم الأول",
             <Input className={missingClass("firstName")} value={String(form.firstName ?? "")} onChange={(e) => set("firstName", e.target.value)} />,
-            { required: true })}
-          {field("lastName", "اسم العائلة",
+            { required: true, hint: "يظهر في المقالات والملف العام فقط" })}
+          {field("lastName", "اسم العرض — اسم العائلة",
             <Input className={missingClass("lastName")} value={String(form.lastName ?? "")} onChange={(e) => set("lastName", e.target.value)} />,
-            { required: true })}
+            { required: true, hint: "يظهر في المقالات والملف العام فقط" })}
           {field("phoneNumber", "رقم الجوال",
             <Input dir="ltr" className={missingClass("phoneNumber")} value={String(form.phoneNumber ?? "")} onChange={(e) => set("phoneNumber", e.target.value)} />,
             { required: true })}
@@ -512,6 +529,14 @@ export function StaffProfileForm({
           data-testid="text-profile-locked-pending"
         >
           {lockMessage}
+        </p>
+      )}
+      {isSelf && reviewStatus === "approved" && !hasOfficialFullName && !selfLocked && (
+        <p
+          className="rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+          data-testid="text-fill-official-full-name"
+        >
+          أكمل <b>الاسم الرباعي</b> كما في الهوية لإصدار شهادة التعريف. هذا الاسم للشهادة فقط ولن يظهر في مقالاتك.
         </p>
       )}
       <div className={mode === "dialog" ? "flex gap-3 items-start" : "flex flex-col gap-3"}>

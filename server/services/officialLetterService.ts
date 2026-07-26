@@ -112,7 +112,10 @@ export async function resolveLetterSubject(
   if (!row?.user) return null;
 
   const { user, profile } = row;
-  const fullNameAr = joinName(user.firstName, user.lastName);
+  // الاسم على الشهادة: الرباعي الرسمي فقط — لا يُستخدم اسم العرض (المقالات)
+  const officialFullName = profile?.officialFullNameAr?.trim() || "";
+  const displayNameAr = joinName(user.firstName, user.lastName);
+  const fullNameAr = officialFullName || displayNameAr;
   if (!fullNameAr) return null;
 
   const roleTitleAr =
@@ -142,10 +145,10 @@ export async function resolveLetterSubject(
   };
 
   const missing: LetterFieldKey[] = [];
+  if (!officialFullName) missing.push("officialFullName");
   if (!profile?.nationalIdEncrypted) missing.push("nationalId");
   if (!subject.departmentAr) missing.push("department");
   if (!subject.joinedAt) missing.push("joinedAt");
-  if (!subject.pressIdNumber) missing.push("pressId");
 
   const gaps: LetterSubjectGaps = missing.map((key) => ({
     key,
