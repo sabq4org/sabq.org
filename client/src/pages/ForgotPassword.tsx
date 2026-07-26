@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ChevronLeft } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import AuthLayout from "@/components/AuthLayout";
 
@@ -60,30 +59,27 @@ export default function ForgotPassword() {
   };
 
   return (
-    <AuthLayout>
-      <div className="flex flex-col flex-1">
-        <div className="w-full max-w-md pt-10 mx-auto">
-          <Link 
-            to="/login" 
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="link-back-to-login"
-          >
-            <ChevronLeft className="h-5 w-5 ml-1" />
-            العودة لتسجيل الدخول
-          </Link>
-        </div>
-        
-        <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
-          <div className="mb-5 sm:mb-8">
-            <h1 className="mb-2 font-semibold text-gray-800 text-title-sm sm:text-title-md dark:text-white/90 text-right">
-              نسيت كلمة المرور؟
-            </h1>
-            <p className="text-sm text-muted-foreground text-right">
-              أدخل عنوان بريدك الإلكتروني المرتبط بحسابك، وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.
-            </p>
-          </div>
-          
-          <Form {...form}>
+    <AuthLayout
+      footer={
+        <Link
+          to="/login"
+          className="transition-colors hover:text-foreground"
+          data-testid="link-back-to-login"
+        >
+          العودة لتسجيل الدخول
+        </Link>
+      }
+    >
+      <div className="mb-6 text-center">
+        <h1 className="text-xl font-bold text-foreground sm:text-2xl">
+          نسيت كلمة المرور؟
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          أدخل بريدك الإلكتروني المرتبط بحسابك وسنرسل لك رابط إعادة التعيين.
+        </p>
+      </div>
+
+      <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
                 control={form.control}
@@ -120,22 +116,20 @@ export default function ForgotPassword() {
             </form>
           </Form>
 
-          {resetLink && (
-            <Alert className="mt-4">
-              <AlertDescription className="space-y-2">
-                <p className="font-semibold">رابط إعادة التعيين (للتطوير فقط):</p>
-                <a 
-                  href={resetLink} 
-                  className="text-primary hover:underline break-all text-sm"
-                  data-testid="link-reset-dev"
-                >
-                  {resetLink}
-                </a>
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-      </div>
+      {resetLink && (
+        <Alert className="mt-4">
+          <AlertDescription className="space-y-2">
+            <p className="font-semibold">رابط إعادة التعيين (للتطوير فقط):</p>
+            <a
+              href={resetLink}
+              className="text-primary hover:underline break-all text-sm"
+              data-testid="link-reset-dev"
+            >
+              {resetLink}
+            </a>
+          </AlertDescription>
+        </Alert>
+      )}
     </AuthLayout>
   );
 }
