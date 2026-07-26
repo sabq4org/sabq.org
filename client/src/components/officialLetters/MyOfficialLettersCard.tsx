@@ -1,5 +1,5 @@
 // بطاقة «شهاداتي الرسمية» — مساحة كاتب الرأي وصفحة المراسل.
-// عند اكتمال البيانات: إصدار فوري + زر تنزيل. لا طلب ثانٍ لنفس النوع الساري.
+// الإصدار مسموح فقط بعد اعتماد الإدارة لملف المنسوب. لا طلب ثانٍ لنفس النوع الساري.
 
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -27,6 +27,7 @@ import {
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   Download,
   FileText,
   Info,
@@ -52,6 +53,8 @@ type ReadinessGap = {
   severity: "important" | "optional";
 };
 
+type ProfileReviewStatus = "draft" | "pending_review" | "approved" | "needs_correction";
+
 type Readiness = {
   canIssue: boolean;
   blockingReasonAr: string | null;
@@ -59,6 +62,8 @@ type Readiness = {
   roleTitleAr: string | null;
   gaps: ReadinessGap[];
   importantMissing: number;
+  profileReviewStatus?: ProfileReviewStatus;
+  profileReviewNote?: string | null;
 };
 
 export function MyOfficialLettersCard() {
@@ -86,6 +91,7 @@ export function MyOfficialLettersCard() {
   const readiness = (readinessRaw ?? null) as Readiness | null;
   const importantGaps = readiness?.gaps.filter((g) => g.severity === "important") ?? [];
   const optionalGaps = readiness?.gaps.filter((g) => g.severity === "optional") ?? [];
+  const reviewStatus = readiness?.profileReviewStatus;
   const readyToIssue =
     Boolean(readiness?.canIssue) && (readiness?.importantMissing ?? 1) === 0;
 
@@ -137,7 +143,7 @@ export function MyOfficialLettersCard() {
           شهاداتي الرسمية
         </CardTitle>
         <CardDescription>
-          عند اكتمال ملفك تصدر شهادة التعريف فوراً ويظهر زر التنزيل — شهادة واحدة سارية لكل نوع
+          بعد اعتماد الإدارة لملفك يمكنك إصدار شهادة التعريف وتنزيلها — شهادة واحدة سارية لكل نوع
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -235,6 +241,29 @@ export function MyOfficialLettersCard() {
 
             {readinessLoading ? (
               <p className="text-xs text-muted-foreground">جارٍ فحص بياناتك…</p>
+            ) : readiness && reviewStatus === "pending_review" ? (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-sky-300/70 bg-sky-50/80 p-3 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-200"
+                data-testid="readiness-pending-review"
+              >
+                <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  {readiness.blockingReasonAr ||
+                    "بياناتك مكتملة وهي قيد مراجعة الإدارة. بعد الاعتماد ستتمكن من إصدار الشهادة وتنزيلها."}
+                </p>
+              </div>
+            ) : readiness && reviewStatus === "needs_correction" ? (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50/70 p-3 text-sm dark:border-amber-900/40 dark:bg-amber-950/20"
+                data-testid="readiness-needs-correction"
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p>
+                  {readiness.blockingReasonAr ||
+                    readiness.profileReviewNote ||
+                    "مطلوب تصحيح بياناتك من الإدارة قبل إصدار الشهادة."}
+                </p>
+              </div>
             ) : readiness && !readiness.canIssue ? (
               <div
                 className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
@@ -285,7 +314,7 @@ export function MyOfficialLettersCard() {
                 data-testid="readiness-complete"
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>بياناتك مكتملة — اضغط للإصدار والتنزيل فوراً</span>
+                <span>تم اعتماد ملفك — يمكنك إصدار الشهادة وتنزيلها الآن</span>
               </div>
             ) : null}
 
@@ -304,7 +333,7 @@ export function MyOfficialLettersCard() {
                 ) : (
                   <>
                     <Send className="ml-2 h-4 w-4" />
-                    إصدار الشهادة
+                    إصدار وتحميل الشهادة
                   </>
                 )}
               </Button>

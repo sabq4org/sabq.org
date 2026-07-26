@@ -27,6 +27,8 @@ import {
   revealNationalId,
   setStaffDocumentKey,
   upsertStaffProfile,
+  approveStaffProfile,
+  requestStaffProfileCorrection,
   SELF_STAFF_PROFILE_ROLES,
   STAFF_DOC_KINDS,
   type StaffDocKind,
@@ -195,7 +197,7 @@ router.put(
         }
       }
 
-      const result = await upsertStaffProfile(userId, patch, userId);
+      const result = await upsertStaffProfile(userId, patch, userId, { actorIsSelf: true });
       if (!result.success) return res.status(404).json({ message: result.message });
       res.json(result);
     } catch (error: unknown) {
@@ -336,6 +338,48 @@ router.put(
       console.error("[StaffProfiles] upsert error:", error);
       const message = error instanceof Error ? error.message : "تعذر حفظ الملف";
       res.status(500).json({ message });
+    }
+  },
+);
+
+/** اعتماد ملف المنسوب — يفتح له إصدار شهادة التعريف. */
+router.post(
+  "/api/staff-profiles/:userId/approve",
+  requirePermission("staff_profiles.manage"),
+  async (req: Request, res: Response) => {
+    try {
+      const updated = await approveStaffProfile(
+        req.params.userId,
+        (req.user as { id: string }).id,
+      );
+      res.json({ ok: true, ...updated });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "تعذر الاعتماد";
+      const code = /غير مكتمل|لا يوجد/.test(message) ? 400 : 500;
+      if (code === 500) console.error("[StaffProfiles] approve error:", error);
+      res.status(code).json({ message });
+    }
+  },
+);
+
+/** طلب تصحيح من المنسوب قبل الاعتماد. */
+router.post(
+  "/api/staff-profiles/:userId/request-correction",
+  requirePermission("staff_profiles.manage"),
+  async (req: Request, res: Response) => {
+    try {
+      const note = String(req.body?.note ?? "");
+      const updated = await requestStaffProfileCorrection(
+        req.params.userId,
+        (req.user as { id: string }).id,
+        note,
+      );
+      res.json({ ok: true, ...updated });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "تعذر طلب التصحيح";
+      const code = /مطلوبة|لا يوجد/.test(message) ? 400 : 500;
+      if (code === 500) console.error("[StaffProfiles] request-correction error:", error);
+      res.status(code).json({ message });
     }
   },
 );

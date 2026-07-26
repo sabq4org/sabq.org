@@ -34,6 +34,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
+type ReviewStatus = "draft" | "pending_review" | "approved" | "needs_correction";
+
 type StaffRow = {
   userId: string;
   firstName: string | null;
@@ -44,11 +46,28 @@ type StaffRow = {
   employeeNumber: string | null;
   employmentType: string | null;
   completionPercent: number | null;
+  profileReviewStatus: ReviewStatus | null;
   departmentName: string | null;
   jobTitleName: string | null;
   hasProfile: boolean;
   pressCardValidUntil: string | null;
   mediaLicenseExpiresAt: string | null;
+};
+
+const REVIEW_BADGE: Record<ReviewStatus, { label: string; className: string }> = {
+  draft: { label: "مسودة", className: "border-muted-foreground/30 text-muted-foreground" },
+  pending_review: {
+    label: "قيد المراجعة",
+    className: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  approved: {
+    label: "معتمد",
+    className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  needs_correction: {
+    label: "يحتاج تصحيحاً",
+    className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
 };
 
 const ALL = "__all__";
@@ -135,6 +154,7 @@ export default function StaffProfilesDirectory() {
   const [q, setQ] = useState("");
   const [departmentId, setDepartmentId] = useState(ALL);
   const [employmentType, setEmploymentType] = useState(ALL);
+  const [reviewFilter, setReviewFilter] = useState<string>(ALL);
   const [quickEditUserId, setQuickEditUserId] = useState<string | null>(null);
 
   // النوع يُفلتر محلياً حتى تبقى أعداد بطاقات الأنواع صحيحة مع البحث/الإدارة.
@@ -148,10 +168,14 @@ export default function StaffProfilesDirectory() {
   const allItems = ((listRaw as { items?: StaffRow[] } | undefined)?.items ?? []) as StaffRow[];
   const lookups = (lookupsRaw ?? null) as { departments: { id: string; nameAr: string }[] } | null;
 
-  const items = useMemo(
-    () => (employmentType === ALL ? allItems : allItems.filter((r) => r.employmentType === employmentType)),
-    [allItems, employmentType],
-  );
+  const items = useMemo(() => {
+    let rows = allItems;
+    if (employmentType !== ALL) rows = rows.filter((r) => r.employmentType === employmentType);
+    if (reviewFilter !== ALL) {
+      rows = rows.filter((r) => (r.profileReviewStatus ?? "draft") === reviewFilter);
+    }
+    return rows;
+  }, [allItems, employmentType, reviewFilter]);
 
   const stats = useMemo(() => {
     const byType = Object.fromEntries(
@@ -161,6 +185,7 @@ export default function StaffProfilesDirectory() {
       total: items.length,
       withProfile: items.filter((r) => r.hasProfile).length,
       complete: items.filter((r) => (r.completionPercent ?? 0) >= 80).length,
+      pendingReview: allItems.filter((r) => r.profileReviewStatus === "pending_review").length,
       alerts: items.filter(hasExpiringAlert).length,
       byType,
       pool: allItems.length,
@@ -178,16 +203,36 @@ export default function StaffProfilesDirectory() {
         />
 
         {/* شريط الحالة */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {[
             { label: "الإجمالي", value: stats.total, tone: "text-foreground", icon: Users },
             { label: "لديهم ملف", value: stats.withProfile, tone: "text-sky-700 dark:text-sky-300", icon: UserRound },
             { label: "مكتمل ≥ 80٪", value: stats.complete, tone: "text-emerald-700 dark:text-emerald-300", icon: IdCard },
+            {
+              label: "قيد المراجعة",
+              value: stats.pendingReview,
+              tone: "text-sky-700 dark:text-sky-300",
+              icon: Search,
+              onClick: () => setReviewFilter(reviewFilter === "pending_review" ? ALL : "pending_review"),
+            },
             { label: "تنبيهات قريبة", value: stats.alerts, tone: "text-amber-700 dark:text-amber-300", icon: AlertTriangle },
           ].map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.label} className="rounded-xl border bg-card px-3 py-2.5">
+              <button
+                key={item.label}
+                type="button"
+                onClick={"onClick" in item ? item.onClick : undefined}
+                className={cn(
+                  "rounded-xl border bg-card px-3 py-2.5 text-start",
+                  "onClick" in item && item.onClick && "hover:bg-muted/40",
+                  "onClick" in item &&
+                    reviewFilter === "pending_review" &&
+                    item.label === "قيد المراجعة" &&
+                    "ring-2 ring-primary/40",
+                )}
+                data-testid={item.label === "قيد المراجعة" ? "stat-pending-review" : undefined}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] text-muted-foreground">{item.label}</p>
                   <Icon className="h-3.5 w-3.5 text-muted-foreground/70" aria-hidden />
@@ -195,7 +240,7 @@ export default function StaffProfilesDirectory() {
                 <p className={cn("mt-0.5 text-xl font-bold tabular-nums tracking-tight", item.tone)}>
                   {isLoading ? "—" : item.value}
                 </p>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -259,7 +304,19 @@ export default function StaffProfilesDirectory() {
                 ))}
               </SelectContent>
             </Select>
-            {(q || departmentId !== ALL || employmentType !== ALL) && (
+            <Select value={reviewFilter} onValueChange={setReviewFilter}>
+              <SelectTrigger className="h-10 w-44" data-testid="select-review-filter">
+                <SelectValue placeholder="حالة المراجعة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>كل حالات المراجعة</SelectItem>
+                <SelectItem value="pending_review">قيد المراجعة</SelectItem>
+                <SelectItem value="approved">معتمد</SelectItem>
+                <SelectItem value="needs_correction">يحتاج تصحيحاً</SelectItem>
+                <SelectItem value="draft">مسودة</SelectItem>
+              </SelectContent>
+            </Select>
+            {(q || departmentId !== ALL || employmentType !== ALL || reviewFilter !== ALL) && (
               <Button
                 type="button"
                 variant="ghost"
@@ -269,6 +326,7 @@ export default function StaffProfilesDirectory() {
                   setQ("");
                   setDepartmentId(ALL);
                   setEmploymentType(ALL);
+                  setReviewFilter(ALL);
                 }}
               >
                 مسح الفلاتر
@@ -346,6 +404,15 @@ export default function StaffProfilesDirectory() {
                           ) : (
                             <span className="text-[10px] text-muted-foreground">بلا نوع</span>
                           )}
+                          {row.hasProfile && (() => {
+                            const status = (row.profileReviewStatus ?? "draft") as ReviewStatus;
+                            const badge = REVIEW_BADGE[status];
+                            return (
+                              <Badge variant="outline" className={cn("text-[10px]", badge.className)}>
+                                {badge.label}
+                              </Badge>
+                            );
+                          })()}
                           {(row.jobTitleName || row.departmentName) && (
                             <span className="truncate text-[11px] text-muted-foreground">
                               {[row.jobTitleName, row.departmentName].filter(Boolean).join(" · ")}

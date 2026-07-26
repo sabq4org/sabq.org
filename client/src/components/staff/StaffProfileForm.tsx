@@ -177,15 +177,24 @@ export function StaffProfileForm({
         headers: { "Content-Type": "application/json" },
       });
     },
-    onSuccess: (result: { completionPercent: number; missingFields: { labelAr: string }[] }) => {
+    onSuccess: (result: {
+      completionPercent: number;
+      missingFields: { labelAr: string }[];
+      profileReviewStatus?: string;
+    }) => {
       setNationalIdInput("");
       queryClient.invalidateQueries({ queryKey: [apiBase] });
       queryClient.invalidateQueries({ queryKey: ["/api/staff-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/official-letters/my-readiness"] });
       const remaining = result.missingFields?.length ?? 0;
+      const pending = isSelf && result.profileReviewStatus === "pending_review";
       toast({
         title: `حُفظ الملف — الاكتمال ${result.completionPercent}%`,
-        description: remaining ? `النواقص المتبقية: ${result.missingFields.map((m) => m.labelAr).join("، ")}` : "الملف مكتمل ✓",
+        description: remaining
+          ? `النواقص المتبقية: ${result.missingFields.map((m) => m.labelAr).join("، ")}`
+          : pending
+            ? "بياناتك مكتملة وهي تحت مراجعة الإدارة"
+            : "الملف مكتمل ✓",
       });
       onSaved?.();
     },

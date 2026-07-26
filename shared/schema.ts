@@ -14829,12 +14829,21 @@ export const staffProfiles = pgTable("staff_profiles", {
   completionPercent: integer("completion_percent").default(0).notNull(),
   missingFields: jsonb("missing_fields").$type<string[]>(),
   notes: text("notes"),
+  /**
+   * مراجعة الإدارة لبيانات المنسوب الذاتية قبل إصدار شهادة التعريف.
+   * draft | pending_review | approved | needs_correction
+   */
+  profileReviewStatus: varchar("profile_review_status", { length: 32 }).default("draft"),
+  profileReviewNote: text("profile_review_note"),
+  profileReviewedAt: timestamp("profile_reviewed_at"),
+  profileReviewedBy: varchar("profile_reviewed_by").references(() => users.id),
   updatedBy: varchar("updated_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("staff_profiles_department_idx").on(table.departmentId),
   index("staff_profiles_employment_type_idx").on(table.employmentType),
+  index("staff_profiles_review_status_idx").on(table.profileReviewStatus),
 ]);
 
 export type StaffProfile = typeof staffProfiles.$inferSelect;
