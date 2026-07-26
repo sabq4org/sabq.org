@@ -40,7 +40,6 @@ import {
   Crown,
   Hand,
   Square,
-  Sparkles,
   Star,
   Bell,
   BellOff,
@@ -133,8 +132,6 @@ interface SpMatchRatings {
   motm: { id: number; name: string; team: string; rating: number } | null;
   players: SpMatchRatingPlayer[];
 }
-interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
-interface SpMatchPreview { text: string; generatedAt: number; }
 // إثراءات SportMonks (سعودي/آسيا) — /api/sports/match/:id/{xg,pressure,facts}
 interface SpOverUnderLine { line: number; over: number; under: number; }
 interface SpCorrectScore { score: string; prob: number; }
@@ -749,11 +746,6 @@ export function FollowControls({ kind = "team", refId, refName, refLogo, size = 
       )}
     </div>
   );
-}
-
-// اسم متوافق مع الاستخدام القديم داخل MatchDialog.
-function TeamFollowControls(props: { refId: string | number; refName: string; refLogo?: string | null }) {
-  return <FollowControls kind="team" {...props} />;
 }
 
 // صفّ نتائج مدمج لمباراة اليوم (بنفس نمط بطاقة النتائج المدمجة) — للجوال.
@@ -1892,34 +1884,6 @@ function SpTimelineChip({ ev, extra, side }: { ev: SpMatchEvent; extra: string |
   );
 }
 
-// عرض النص المولّد بالذكاء الاصطناعي (السرد/المعاينة) مع شارة ووسم إخلاء مسؤولية.
-function AiNarrative({ loading, text, kind, live }: {
-  loading: boolean; text?: string; kind: "story" | "preview"; live?: boolean;
-}) {
-  const noun = kind === "story" ? "الملخّص" : "المعاينة";
-  if (loading) {
-    return (
-      <div className="py-10 flex flex-col items-center gap-2 text-muted-foreground text-sm">
-        <Sparkles className="w-5 h-5 animate-pulse text-primary" />
-        جارٍ توليد {noun} بالذكاء الاصطناعي…
-      </div>
-    );
-  }
-  if (!text) {
-    return <div className="py-8 text-center text-muted-foreground text-sm">تعذّر توليد {noun} حاليًا.</div>;
-  }
-  return (
-    <div>
-      <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">
-        <Sparkles className="w-3.5 h-3.5" />
-        {kind === "story" ? (live ? "سرد لحظي بالذكاء الاصطناعي" : "ملخّص بالذكاء الاصطناعي") : "معاينة بالذكاء الاصطناعي"}
-      </div>
-      <p className="text-sm leading-7 text-foreground whitespace-pre-line">{text}</p>
-      <p className="mt-3 text-[10px] text-muted-foreground">وُلِّد آليًا اعتمادًا على بيانات المباراة — قد يحتاج لمراجعة.</p>
-    </div>
-  );
-}
-
 // ---------- إثراءات SportMonks في نافذة المباراة (xG/طقس/ضغط) ----------
 
 function SpXgCard({ xg, homeLogo, awayLogo }: { xg: SpXg; homeLogo?: string; awayLogo?: string }) {
@@ -2146,10 +2110,7 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     },
   });
   const [tab, setTab] = useState("events");
-  // المعاينة/الملخّص بالذكاء الاصطناعي عند الطلب فقط (لا تتولّد تلقائيًا عند الفتح).
-  const [previewRequested, setPreviewRequested] = useState(false);
-  const [storyRequested, setStoryRequested] = useState(false);
-  useEffect(() => { setPreviewRequested(false); setStoryRequested(false); setTab("events"); }, [id]);
+  useEffect(() => { setTab("events"); }, [id]);
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
@@ -2157,22 +2118,6 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     queryKey: [`/api/sports/match/${id}/prediction`],
     enabled: id != null && isUpcoming,
     staleTime: 5 * 60_000,
-  });
-  // المرحلة 2 (ذكاء): المعاينة والسرد يُولّدان عند طلب المستخدم فقط (تبويبهما +
-  // ضغط زر التوليد) — لتفادي توليد آلي مكلف عند كل فتح للمباراة.
-  const { data: preview, isLoading: previewLoading } = useQuery<SpMatchPreview>({
-    queryKey: [`/api/sports/match/${id}/preview`],
-    enabled: id != null && isUpcoming && tab === "preview" && previewRequested,
-    staleTime: 30 * 60_000,
-  });
-  // الملخّص الذكي: للمباريات الجارية/المنتهية، عند الطلب. سرد لحظي وقت المباراة.
-  const storyLive = !!fixtureStatus?.live;
-  const storyStarted = !!fixtureStatus && (fixtureStatus.finished || fixtureStatus.live);
-  const { data: story, isLoading: storyLoading } = useQuery<SpMatchStory>({
-    queryKey: [`/api/sports/match/${id}/story`],
-    enabled: id != null && storyStarted && tab === "story" && storyRequested,
-    staleTime: storyLive ? 60_000 : 30 * 60_000,
-    refetchInterval: storyLive && tab === "story" && storyRequested ? 90_000 : false,
   });
   const homeId = data?.fixture?.home?.id;
   const awayId = data?.fixture?.away?.id;
@@ -2188,8 +2133,8 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
   const matchStarted = !!data?.fixture && (data.fixture.status.finished || live);
   const { data: facts } = useQuery<SpFacts>({
     queryKey: [`/api/sports/match/${id}/facts`],
-    // للمباريات الجارية/المنتهية: أحداث/إحصاءات. وللقادمة: المغيبون في تبويب «معاينة».
-    enabled: id != null && ((matchStarted && (tab === "events" || tab === "stats")) || (isUpcoming && tab === "preview")),
+    // للمباريات الجارية/المنتهية: أحداث/إحصاءات. وللقادمة: المغيبون في تبويب «الغيابات».
+    enabled: id != null && ((matchStarted && (tab === "events" || tab === "stats")) || (isUpcoming && tab === "absences")),
     refetchInterval: live ? 12_000 : false,
     staleTime: 20_000,
   });
@@ -2284,11 +2229,10 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
   const hasApiStats = !!stats && stats.rows.length > 0;
   const hasStatsTab = hasApiStats || factStatRows.length > 0 || tsStatRows.length > 0;
   const tabs = [
-    isUpcoming ? { key: "preview", label: "المعاينة" } : null,
+    isUpcoming ? { key: "absences", label: "الغيابات" } : null,
     forecast?.available ? { key: "forecast", label: "توقّعات" } : null,
     events.length > 0 ? { key: "events", label: "الأحداث" } : null,
     started ? { key: "commentary", label: "التعليق" } : null,
-    started ? { key: "story", label: "ملخّص ذكي" } : null,
     hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
@@ -2308,7 +2252,6 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                     {fx.home.logo && <img src={fx.home.logo} alt="" className="h-full w-full object-contain" />}
                   </div>
                   <span className="text-sm font-extrabold text-center text-foreground">{fx.home.name}</span>
-                  <TeamFollowControls refId={fx.home.id} refName={fx.home.name} refLogo={fx.home.logo} />
                 </div>
                 <div className="flex flex-col items-center gap-1 pt-1">
                   {fx.status.finished || fx.status.live ? (
@@ -2334,7 +2277,6 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                     {fx.away.logo && <img src={fx.away.logo} alt="" className="h-full w-full object-contain" />}
                   </div>
                   <span className="text-sm font-extrabold text-center text-foreground">{fx.away.name}</span>
-                  <TeamFollowControls refId={fx.away.id} refName={fx.away.name} refLogo={fx.away.logo} />
                 </div>
               </div>
               {/* تاريخ ووقت المباراة — يظهران دائمًا (قادمة/جارية/منتهية) */}
@@ -2499,9 +2441,9 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
               </div>
             );
           })()}
-          {!isLoading && activeKey === "preview" && (
+          {!isLoading && activeKey === "absences" && (
             <div className="space-y-4">
-              {facts?.absentees && facts.absentees.length > 0 && (
+              {facts?.absentees && facts.absentees.length > 0 ? (
                 <AbsenteesCard
                   absentees={facts.absentees}
                   homeName={fx?.home.name ?? ""}
@@ -2509,41 +2451,13 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                   homeLogo={fx?.home.logo}
                   awayLogo={fx?.away.logo}
                 />
-              )}
-              {previewRequested ? (
-                <AiNarrative loading={previewLoading} text={preview?.text} kind="preview" />
               ) : (
-                <div className="py-8 text-center">
-                  <Sparkles className={`w-8 h-8 mx-auto mb-3 ${ACCENT}`} />
-                  <p className="text-sm text-muted-foreground mb-4">معاينة ذكية تحلّل الفريقين وتوقّع مجريات المباراة قبل انطلاقها.</p>
-                  <button type="button" onClick={() => setPreviewRequested(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
-                    <Sparkles className="w-4 h-4" /> ولّد المعاينة بالذكاء الاصطناعي
-                  </button>
-                </div>
+                <div className="py-8 text-center text-muted-foreground text-sm">لا غيابات معلنة للفريقين حتى الآن.</div>
               )}
             </div>
           )}
           {!isLoading && activeKey === "forecast" && forecast?.available && (
             <ForecastView data={forecast} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} />
-          )}
-          {!isLoading && activeKey === "story" && (
-            storyRequested ? (
-              <AiNarrative loading={storyLoading} text={story?.text} kind="story" live={story?.live ?? storyLive} />
-            ) : (
-              <div className="py-8 text-center">
-                <Sparkles className={`w-8 h-8 mx-auto mb-3 ${ACCENT}`} />
-                <p className="text-sm text-muted-foreground mb-4">
-                  {storyLive
-                    ? "سرد لحظي يلخّص أبرز ما يجري في المباراة حتى الآن."
-                    : "ملخّص ذكي يحكي قصّة المباراة وأبرز محطّاتها."}
-                </p>
-                <button type="button" onClick={() => setStoryRequested(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
-                  <Sparkles className="w-4 h-4" /> {storyLive ? "ولّد السرد اللحظي" : "ولّد الملخّص الذكي"}
-                </button>
-              </div>
-            )
           )}
           {!isLoading && activeKey === "stats" && hasStatsTab && (() => {
             // مصدر الأرقام: API-Football إن توفّر، ثم SportMonks، ثم TheSports المفصّل (يملأ الفجوة).
