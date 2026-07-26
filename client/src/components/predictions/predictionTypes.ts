@@ -123,12 +123,12 @@ export function ruleSummaryAr(rule: PredRule | null | undefined): string {
       const exact = Math.round((tiers?.exact ?? 0) * 100);
       const margin = Math.round((tiers?.signedMargin ?? 0) * 100);
       const outcome = Math.round((tiers?.outcome ?? 0) * 100);
-      return `بركة المباراة ${basePool} نقطة: ${exact}٪ للنتيجة الدقيقة، ${margin}٪ للفارق الصحيح، ${outcome}٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية`;
+      return `جائزة المباراة ${basePool} نقطة: ${exact}٪ للنتيجة الدقيقة، ${margin}٪ للفارق الصحيح، ${outcome}٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية`;
     }
     case "shared_pool":
       return winCriterion === "exact"
-        ? `بركة ${basePool} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة`
-        : `بركة ${basePool} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة`;
+        ? `جائزة ${basePool} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة`
+        : `جائزة ${basePool} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة`;
     case "skill_weighted":
       return "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك";
     case "fixed_points":
@@ -137,8 +137,8 @@ export function ruleSummaryAr(rule: PredRule | null | undefined): string {
       const early = rule.params.distribution === "early_weighted";
       const maxWeight = Math.max(1, ...(rule.params.earlyTiers ?? []).map((t) => t.weight ?? 1));
       return early
-        ? `بركة ${basePool} نقطة تُقسم على المصيبين — وكلما بكّرت بتوقّعك زاد وزنه (حتى ×${maxWeight})`
-        : `بركة ${basePool} نقطة تُقسم بالتساوي على المصيبين آخر الموسم`;
+        ? `جائزة ${basePool} نقطة تُقسم على المصيبين — وكلما بكّرت بتوقّعك زاد وزنه (حتى ×${maxWeight})`
+        : `جائزة ${basePool} نقطة تُقسم بالتساوي على المصيبين آخر الموسم`;
     }
     default:
       return "تُحتسب النقاط بعد صافرة النهاية";
@@ -155,6 +155,17 @@ export function contestTypeLabelAr(contestType: string): string {
     case "first_scorer": return "أول هدّاف";
     default: return "التوقّعات";
   }
+}
+
+/**
+ * قاعدة العرض الموحّدة للنتائج في RTL: الرقم الملاصق لليمين للمضيف دائمًا.
+ * الخادم يخزّن النصوص «مضيف-ضيف» (breakdown)، فنقلبها للعرض داخل span
+ * dir="ltr" حتى لا تتلاعب خوارزمية bidi بالترتيب.
+ */
+export function scoreRtlAr(score: string | null | undefined): string | null {
+  if (!score) return null;
+  const m = /^(\d+)\s*[-–]\s*(\d+)$/.exec(score.trim());
+  return m ? `${m[2]}–${m[1]}` : score;
 }
 
 /** «يُقفل بعد ٢س ١٤د» — عدّ تنازلي حتى الإغلاق. */

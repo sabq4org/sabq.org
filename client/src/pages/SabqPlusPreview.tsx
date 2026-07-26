@@ -112,7 +112,7 @@ const EARN_WAYS: { icon: LucideIcon; label: string; value: string; tint: string 
   { icon: Sparkles, label: "قراءة عميقة", value: "+3", tint: "#7B6CE0" },
   { icon: MessageCircle, label: "تعليق", value: "+1", tint: "#17A26B" },
   { icon: CalendarDays, label: "دخول يومي", value: "+5 × السلسلة", tint: "#E8A317" },
-  { icon: Trophy, label: "فوز توقّع رياضي", value: "حسب البركة", tint: "#C24A4A" },
+  { icon: Trophy, label: "فوز توقّع رياضي", value: "حسب الجائزة", tint: "#C24A4A" },
 ];
 
 type PlusSummary = {
