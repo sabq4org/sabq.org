@@ -305,12 +305,35 @@ export async function getStaffProfile(userId: string) {
   if (!row) return null;
 
   const user = row.users;
-  const profile = row.staff_profiles;
-  const { nationalIdEncrypted: _omit, ...safeProfile } = profile ?? ({} as StaffProfile);
+  let profile = row.staff_profiles;
 
   // الاكتمال يُحسب حياً عند القراءة — الملفات المرحّلة عبر SQL تحمل
   // completion_percent=0 وmissing_fields=NULL فكانت تظهر «مكتملة» زوراً.
   const live = computeCompletion(profile ?? {}, user);
+
+  // لا زر «إرسال للمراجعة»: اكتمال 100% = قيد المراجعة تلقائياً
+  // (يغطي الملفات المكتملة قبل ميزة المراجعة أو حفظاً لم يحدّث الحالة).
+  if (
+    profile &&
+    live.percent >= 100 &&
+    live.missing.length === 0 &&
+    (!profile.profileReviewStatus || profile.profileReviewStatus === "draft")
+  ) {
+    const [promoted] = await db
+      .update(staffProfiles)
+      .set({
+        profileReviewStatus: "pending_review",
+        profileReviewNote: null,
+        completionPercent: live.percent,
+        missingFields: [],
+        updatedAt: new Date(),
+      })
+      .where(eq(staffProfiles.userId, userId))
+      .returning();
+    if (promoted) profile = promoted;
+  }
+
+  const { nationalIdEncrypted: _omit, ...safeProfile } = profile ?? ({} as StaffProfile);
 
   return {
     user: {
@@ -652,18 +675,13 @@ export async function getStaffProfileReviewStatus(
   note: string | null;
   allowsCertificateIssue: boolean;
 }> {
-  const [row] = await db
-    .select({
-      status: staffProfiles.profileReviewStatus,
-      note: staffProfiles.profileReviewNote,
-    })
-    .from(staffProfiles)
-    .where(eq(staffProfiles.userId, userId))
-    .limit(1);
-  const status = isStaffProfileReviewStatus(row?.status) ? row.status : "draft";
+  // يضمن ترقية draft→pending_review عند الاكتمال (نفس منطق getStaffProfile)
+  const full = await getStaffProfile(userId);
+  const raw = full?.profile?.profileReviewStatus;
+  const status = isStaffProfileReviewStatus(raw) ? raw : "draft";
   return {
     status,
-    note: row?.note ?? null,
+    note: (full?.profile?.profileReviewNote as string | null | undefined) ?? null,
     allowsCertificateIssue: status === "approved",
   };
 }
