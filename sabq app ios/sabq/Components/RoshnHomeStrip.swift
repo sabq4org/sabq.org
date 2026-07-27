@@ -171,7 +171,7 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: RoshnTheme.sky))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
     }
 
     // MARK: بطاقة المباراة القادمة/الحية
@@ -197,7 +197,7 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: f.status.live ? RoshnTheme.liveRed : RoshnTheme.pitch))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
     }
 
     // MARK: بطاقة يوم الجولة (عدّاد مشترك)
@@ -239,7 +239,7 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: RoshnTheme.pitch))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
     }
 
     // MARK: بطاقة البطل (عطلة ما بين الموسمين)
@@ -256,7 +256,7 @@ struct RoshnHomeStrip: View {
                     WCRemoteImage(url: c.logo)
                         .padding(4).frame(width: 40, height: 40)
                         .background(Circle().fill(.white))
-                        .overlay(Circle().stroke(RoshnTheme.gold.opacity(0.8), lineWidth: 1.5))
+                        .overlay(Circle().stroke(RoshnTheme.gold, lineWidth: 1.5))
                     Image(systemName: "trophy.fill")
                         .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(RoshnTheme.gold)
@@ -280,24 +280,23 @@ struct RoshnHomeStrip: View {
         .padding(.horizontal, 16).padding(.vertical, 13)
         .background(lightCard(glow: RoshnTheme.gold))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.gold.opacity(0.35), lineWidth: 1))
-        .shadow(color: RoshnTheme.gold.opacity(0.10), radius: 10, x: 0, y: 4)
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
     }
 
     // MARK: عناصر مشتركة
 
     private func identity(subtitle: String, subtitleColor: Color = RoshnTheme.inkSoft) -> some View {
         HStack(spacing: 10) {
-            // شارة الدوري: كرة على تدرّج هادئ — بلا نيون أخضر/سماوي.
+            // شارة الدوري: سماوي مسطّح موحّد — لون الهوية الأساسي بلا تدرّج ولا توهّج.
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(RoshnTheme.badgeGradient)
+                    .fill(RoshnTheme.sky)
                     .frame(width: 38, height: 38)
                 Image(systemName: "soccerball")
                     .font(SabqFonts.app(size: 18, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.95))
+                    .foregroundStyle(.white)
             }
-            .shadow(color: RoshnTheme.sky.opacity(0.14), radius: 4, y: 2)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
@@ -311,15 +310,10 @@ struct RoshnHomeStrip: View {
         }
     }
 
-    /// أرضية فاتحة بتوهّج لوني خافت في الزاوية — بديل التدرّج الداكن.
-    private func lightCard(glow: Color) -> some View {
-        RoshnTheme.stripGradient.overlay(alignment: .topLeading) {
-            Circle()
-                .fill(glow.opacity(0.07))
-                .frame(width: 150, height: 150)
-                .blur(radius: 50)
-                .offset(x: -30, y: -50)
-        }
+    /// أرضية بيضاء مسطّحة — بلا تدرّج ولا توهّج (قرار المالك: ألوان مسطّحة فقط،
+    /// والتمييز بالحدود الرمادية الواضحة والظل الخفيف الموحّد).
+    private func lightCard(glow _: Color) -> some View {
+        RoshnTheme.card
     }
 
     private var chevron: some View {
@@ -371,7 +365,7 @@ struct RoshnHomeStrip: View {
         return HStack(spacing: 5) {
             Text(period).lineLimit(1).minimumScaleFactor(0.72)
             if let minute {
-                Circle().fill(.white.opacity(0.85)).frame(width: 3.5, height: 3.5)
+                Circle().fill(.white).frame(width: 3.5, height: 3.5)
                 Text(minute).monospacedDigit().environment(\.layoutDirection, .leftToRight)
             }
         }

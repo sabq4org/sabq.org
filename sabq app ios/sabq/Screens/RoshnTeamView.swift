@@ -71,9 +71,9 @@ struct RoshnTeamView: View {
 
     private var hero: some View {
         ZStack {
-            RoshnTheme.heroGradient
+            RoshnTheme.card
             Circle()
-                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
+                .stroke(RoshnTheme.skySoft, lineWidth: 1.5)
                 .frame(width: 170, height: 170)
                 .offset(x: -135, y: 45)
 
@@ -104,7 +104,7 @@ struct RoshnTeamView: View {
                             .font(SabqFonts.app(size: 12.5, weight: .semibold))
                             .foregroundStyle(RoshnTheme.sky)
                             .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Capsule().fill(.white.opacity(0.75)))
+                            .background(Capsule().fill(RoshnTheme.skySoft))
                             .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
                     }
                 }
@@ -225,7 +225,7 @@ struct RoshnTeamView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.skySoft.opacity(0.55)))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.skySoft))
                 }
             }
         }
@@ -388,7 +388,7 @@ struct RoshnTeamView: View {
     private var tileBackground: some View {
         RoundedRectangle(cornerRadius: 13, style: .continuous)
             .fill(RoshnTheme.canvas)
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(RoshnTheme.line.opacity(0.8), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
     }
 
     private var loadingState: some View {

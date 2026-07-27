@@ -95,7 +95,6 @@ struct RoshnView: View {
     @State private var store = RoshnHubStore()
     @State private var tab: Tab = .matches
     @State private var selectedFixture: RsFixture?
-    @State private var showMatchCenter = false
     @State private var selectedTeam: RsTeam?
 
     enum Tab: String, CaseIterable {
@@ -151,12 +150,12 @@ struct RoshnView: View {
             async let races: Void = store.loadRaces(hero: homeStore.hero, force: true)
             _ = await (matches, standings, races)
         }
-        .sheet(isPresented: $showMatchCenter) {
-            if let fixture = selectedFixture {
-                RoshnMatchCenter(fixtureId: fixture.id)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
+        // sheet(item:) لا sheet(isPresented:) — النمط القديم كان يقيّم المحتوى
+        // قبل وصول selectedFixture في أول ضغطة فتُفتح ورقة بيضاء فارغة.
+        .sheet(item: $selectedFixture) { fixture in
+            RoshnMatchCenter(fixtureId: fixture.id)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .navigationDestination(item: $selectedTeam) { team in
             RoshnTeamView(teamId: team.id, previewName: team.name, previewLogo: team.logo)
@@ -167,15 +166,15 @@ struct RoshnView: View {
 
     private var header: some View {
         ZStack {
-            RoshnTheme.heroGradient
+            RoshnTheme.card
 
             // خطوط ملعب خافتة على الخلفية الفاتحة.
             Circle()
-                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
+                .stroke(RoshnTheme.skySoft, lineWidth: 1.5)
                 .frame(width: 190, height: 190)
                 .offset(x: 135, y: 40)
             Rectangle()
-                .stroke(RoshnTheme.pitch.opacity(0.10), lineWidth: 1)
+                .stroke(RoshnTheme.pitchSoft, lineWidth: 1.5)
                 .frame(width: 175, height: 88)
                 .offset(x: -145, y: 78)
 
@@ -188,7 +187,7 @@ struct RoshnView: View {
                         .frame(width: 64, height: 64)
                         .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(.white))
                         .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
-                        .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 10, y: 5)
+                        .shadow(color: RoshnTheme.cardShadow, radius: 6, y: 3)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("دوري روشن السعودي")
@@ -231,8 +230,7 @@ struct RoshnView: View {
                         .foregroundStyle(RoshnTheme.sky)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.72)))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.skySoft))
                     }
                 }
             }
@@ -240,7 +238,7 @@ struct RoshnView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.10), radius: 16, y: 8)
+        .shadow(color: RoshnTheme.cardShadow, radius: 10, y: 4)
     }
 
     private func heroMetric(value: String, label: String, icon: String) -> some View {
@@ -252,8 +250,8 @@ struct RoshnView: View {
         .foregroundStyle(RoshnTheme.heroOn)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.70)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.heroStroke.opacity(0.7), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.skySoft))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
     }
 
     private var seasonSubtitle: String {
@@ -361,7 +359,6 @@ struct RoshnView: View {
                             ForEach(items) { fixture in
                                 RoshnMatchRow(fixture: fixture) {
                                     selectedFixture = fixture
-                                    showMatchCenter = true
                                 }
                             }
                         }
@@ -510,7 +507,7 @@ struct RoshnView: View {
         VStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(RoshnTheme.skySoft.opacity(0.5))
+                    .fill(RoshnTheme.skySoft)
                     .frame(height: height)
             }
         }
@@ -559,7 +556,7 @@ struct RoshnView: View {
                 .foregroundStyle(RoshnTheme.sky)
         }
         .padding(11)
-        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(RoshnTheme.goldSoft.opacity(0.75)))
+        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(RoshnTheme.goldSoft))
     }
 }
 
@@ -580,7 +577,7 @@ struct RoshnMatchRow: View {
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(fixture.status.live ? RoshnTheme.liveRed.opacity(0.45) : RoshnTheme.line, lineWidth: 1)
+                    .stroke(fixture.status.live ? RoshnTheme.liveRed : RoshnTheme.line, lineWidth: 1)
             )
             .shadow(color: RoshnTheme.ink.opacity(0.04), radius: 6, y: 3)
         }
@@ -664,11 +661,19 @@ struct RoshnStandingRowView: View {
         return nil
     }
 
+    /// أرضيته المسطّحة الناعمة — بديل الشفافية (قرار المالك: ألوان مسطّحة فقط).
+    private var zoneSoft: Color {
+        if row.rank == 1 { return RoshnTheme.goldSoft }
+        if row.rank <= 3 { return RoshnTheme.skySoft }
+        if row.rank > total - 3 { return RoshnTheme.dangerSoft }
+        return RoshnTheme.skySoft
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(zoneColor?.opacity(0.14) ?? RoshnTheme.skySoft.opacity(0.6))
+                    .fill(zoneSoft)
                 Text("\(row.rank)")
                     .font(SabqFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(zoneColor ?? RoshnTheme.inkSoft)
@@ -710,7 +715,7 @@ struct RoshnStandingRowView: View {
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(row.live == true ? RoshnTheme.liveRed.opacity(0.35) : RoshnTheme.line, lineWidth: 1)
+                .stroke(row.live == true ? RoshnTheme.liveRed : RoshnTheme.line, lineWidth: 1)
         )
     }
 }
@@ -882,7 +887,7 @@ struct RoshnRacesSection: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, champion ? 14 : 11)
                 .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(champion ? RoshnTheme.goldSoft : RoshnTheme.card))
-                .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(champion ? RoshnTheme.gold.opacity(0.35) : RoshnTheme.line, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(champion ? RoshnTheme.gold : RoshnTheme.line, lineWidth: 1))
             }
         }
         .padding(.vertical, 4)
@@ -892,7 +897,7 @@ struct RoshnRacesSection: View {
                            primary: String, secondary: String) -> some View {
         HStack(spacing: 10) {
             ZStack {
-                Circle().fill(rank <= 3 ? RoshnTheme.goldSoft : RoshnTheme.skySoft.opacity(0.6))
+                Circle().fill(rank <= 3 ? RoshnTheme.goldSoft : RoshnTheme.skySoft)
                 Text("\(rank)")
                     .font(SabqFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(rank <= 3 ? RoshnTheme.gold : RoshnTheme.inkSoft)

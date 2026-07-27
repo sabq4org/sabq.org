@@ -94,9 +94,9 @@ struct RoshnMatchCenter: View {
 
     private func header(_ d: RsMatchDetail) -> some View {
         ZStack {
-            RoshnTheme.heroGradient
+            RoshnTheme.card
             Circle()
-                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
+                .stroke(RoshnTheme.skySoft, lineWidth: 1.5)
                 .frame(width: 160, height: 160)
 
             VStack(spacing: 12) {
@@ -135,19 +135,19 @@ struct RoshnMatchCenter: View {
             .padding(.vertical, 18).padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity)
+        // خط الهوية السماوي أعلى البطاقة — ممتد بعرضها كاملًا (طلب المالك)،
+        // قبل clipShape كي تُشذّب أطرافه مع الزوايا الدائرية.
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(RoshnTheme.sky)
+                .frame(height: 3)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(RoshnTheme.heroStroke, lineWidth: 1)
         )
-        .overlay(alignment: .top) {
-            // خط الهوية السماوي أعلى البطاقة — لمسة روشن المميزة.
-            RoundedRectangle(cornerRadius: 2)
-                .fill(RoshnTheme.badgeGradient)
-                .frame(height: 3)
-                .padding(.horizontal, 40)
-        }
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 12, y: 6)
+        .shadow(color: RoshnTheme.cardShadow, radius: 8, y: 4)
     }
 
     private func teamColumn(_ team: RsTeam) -> some View {
@@ -183,7 +183,7 @@ struct RoshnMatchCenter: View {
                     .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(RoshnTheme.sky)
                     .padding(.horizontal, 11).padding(.vertical, 5)
-                    .background(Capsule().fill(.white.opacity(0.75)))
+                    .background(Capsule().fill(RoshnTheme.skySoft))
                     .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
             }
         }
@@ -214,7 +214,7 @@ struct RoshnMatchCenter: View {
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(tab == item ? RoshnTheme.sky : RoshnTheme.skySoft.opacity(0.6))
+                                .fill(tab == item ? RoshnTheme.sky : RoshnTheme.skySoft)
                         )
                 }
                 .buttonStyle(.plain)
@@ -302,7 +302,7 @@ struct RoshnMatchCenter: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(isGoal ? RoshnTheme.pitch.opacity(0.3) : RoshnTheme.line, lineWidth: 1)
+                .stroke(isGoal ? RoshnTheme.pitch : RoshnTheme.line, lineWidth: 1)
         )
     }
 
@@ -368,7 +368,7 @@ struct RoshnMatchCenter: View {
                 HStack(spacing: 2) {
                     RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.sky)
                         .frame(width: max(geo.size.width * h / total - 1, 2))
-                    RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.gold.opacity(0.75))
+                    RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.gold)
                 }
             }
             .frame(height: 5)
@@ -573,7 +573,7 @@ struct RoshnMatchCenter: View {
         VStack(spacing: 10) {
             ForEach(0..<4, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(RoshnTheme.skySoft.opacity(0.5))
+                    .fill(RoshnTheme.skySoft)
                     .frame(height: 72)
             }
         }

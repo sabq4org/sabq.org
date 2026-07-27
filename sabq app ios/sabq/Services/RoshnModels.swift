@@ -563,69 +563,46 @@ extension APIClient {
 
 // MARK: - هوية روشن البصرية — لوحة فاتحة منسّقة
 //
-// قرار المالك: تصميم فاتح غير داكن بألوان منسّقة. الهوية البصرية (2026-07-27):
-// «صباح الملعب» — سماوي هادئ + زمرد مُطفأ + ذهب شامبانيا على أرضيات ضبابية،
-// بلا هيرو ليلي قاتم يُرهق العين عند الانتقال من البنر إلى المركز.
+// قرار المالك (2026-07-27، النسخة الثالثة): تصميم مسطّح تمامًا — ممنوع أي
+// تدرّج لوني، لا ألوان غامقة ثقيلة، ولا بهتان: ألوان نقية بتشبّع متوسط،
+// خلفية محايدة فاتحة، بطاقات بيضاء بحدود رمادية واضحة وظلال خفيفة، ولون
+// أساسي واحد (سماوي هادئ) للأزرار والتبويبات النشطة والأيقونات، مع نصوص
+// أساسية داكنة وثانوية رمادية متوسطة لرفع التباين.
 
 nonisolated enum RoshnTheme {
-    /// السماوي الأساسي — هوية روشن (أزرار/روابط/إبراز) بتشبّع أخف.
-    static let sky = Color(red: 0.14, green: 0.48, blue: 0.70)
-    /// أرضية سماوية ناعمة (خلفيات بطاقات/شارات).
-    static let skySoft = Color(red: 0.91, green: 0.96, blue: 0.99)
-    /// زمردي الملعب — ثانوي مُطفأ (فوز/مؤشرات إيجابية).
-    static let pitch = Color(red: 0.18, green: 0.52, blue: 0.42)
-    static let pitchSoft = Color(red: 0.93, green: 0.97, blue: 0.95)
-    /// ذهبي التتويج — شامبانيا دافئ بدل البرتقالي الحاد.
-    static let gold = Color(red: 0.78, green: 0.58, blue: 0.22)
-    static let goldSoft = Color(red: 0.99, green: 0.96, blue: 0.90)
-    /// حبر كحلي للنصوص الأساسية، ورمادي مائل للزرقة للثانوية.
-    static let ink = Color(red: 0.14, green: 0.20, blue: 0.28)
-    static let inkSoft = Color(red: 0.45, green: 0.52, blue: 0.58)
-    /// حدود وفواصل هادئة.
-    static let line = Color(red: 0.90, green: 0.93, blue: 0.95)
-    static let liveRed = Color(red: 0.86, green: 0.32, blue: 0.34)
+    /// السماوي الأساسي الموحّد — الأزرار والتبويبات النشطة والأيقونات والروابط.
+    static let sky = Color(red: 0.00, green: 0.55, blue: 0.80)
+    /// أرضيته الناعمة المسطّحة (شارات/خلفيات نشطة خفيفة) — بلا شفافية.
+    static let skySoft = Color(red: 0.88, green: 0.95, blue: 0.99)
+    /// زمردي الملعب — دور ثانوي (فوز/مؤشرات إيجابية) بتشبّع متوسط حيوي.
+    static let pitch = Color(red: 0.07, green: 0.58, blue: 0.40)
+    static let pitchSoft = Color(red: 0.89, green: 0.96, blue: 0.92)
+    /// ذهبي التتويج — الهدّافون واللقب والمراكز الأولى.
+    static let gold = Color(red: 0.85, green: 0.56, blue: 0.10)
+    static let goldSoft = Color(red: 0.99, green: 0.95, blue: 0.86)
+    /// نص أساسي داكن واضح، وثانوي رمادي متوسط — تباين مرفوع بقرار المالك.
+    static let ink = Color(red: 0.10, green: 0.14, blue: 0.20)
+    static let inkSoft = Color(red: 0.40, green: 0.46, blue: 0.53)
+    /// حدود رمادية واضحة حول البطاقات (أوضح من نسخة «صباح الملعب» الباهتة).
+    static let line = Color(red: 0.84, green: 0.87, blue: 0.90)
+    static let liveRed = Color(red: 0.89, green: 0.26, blue: 0.30)
+    static let liveSoft = Color(red: 0.99, green: 0.92, blue: 0.92)
     /// هبوط (المراكز الثلاثة الأخيرة في الترتيب).
-    static let danger = Color(red: 0.82, green: 0.34, blue: 0.34)
-    /// كحلي للإبراز الداكن الخفيف (شارات/أفاتار) — ليس خلفية هيرو.
+    static let danger = Color(red: 0.84, green: 0.30, blue: 0.30)
+    static let dangerSoft = Color(red: 0.99, green: 0.92, blue: 0.92)
+    /// كحلي للإبراز الخفيف (شارات/أفاتار) — ليس خلفية أسطح.
     static let navy = Color(red: 0.16, green: 0.28, blue: 0.38)
     static let navyDeep = Color(red: 0.10, green: 0.20, blue: 0.28)
-    static let canvas = Color(red: 0.97, green: 0.98, blue: 0.99)
+    /// خلفية الشاشات: محايدة فاتحة تُبرز البطاقات البيضاء فوقها.
+    static let canvas = Color(red: 0.95, green: 0.96, blue: 0.98)
     static let card = Color.white
+    /// ظل البطاقات الموحّد — خفيف (البديل الوحيد المسموح عن التوهّج).
+    static let cardShadow = Color.black.opacity(0.06)
 
-    /// نص على الهيرو الفاتح — بديل الأبيض فوق الخلفية الليلية القديمة.
+    /// نص فوق ترويسات البطاقات البيضاء.
     static let heroOn = ink
     static let heroOnSoft = inkSoft
-    /// حدّ ناعم حول بطاقات الهيرو.
-    static let heroStroke = Color(red: 0.82, green: 0.88, blue: 0.92)
-
-    /// تدرّج بطاقة الشريط — ضباب صباحي: سماوي باهت → أبيض → نسمة زمردية.
-    static let stripGradient = LinearGradient(
-        colors: [
-            Color(red: 0.93, green: 0.97, blue: 0.99),
-            .white,
-            Color(red: 0.94, green: 0.97, blue: 0.95),
-        ],
-        startPoint: .topTrailing, endPoint: .bottomLeading
-    )
-
-    /// هيرو المركز/النادي/المباراة — ضباب سماوي-زمردي فاتح مريح للعين.
-    static let heroGradient = LinearGradient(
-        colors: [
-            Color(red: 0.88, green: 0.94, blue: 0.98),
-            Color(red: 0.94, green: 0.97, blue: 0.96),
-            Color(red: 0.90, green: 0.95, blue: 0.93),
-        ],
-        startPoint: .topTrailing, endPoint: .bottomLeading
-    )
-
-    /// شارة الهوية على البنر — تدرّج هادئ بلا تشبّع نيون.
-    static let badgeGradient = LinearGradient(
-        colors: [
-            Color(red: 0.22, green: 0.52, blue: 0.68),
-            Color(red: 0.20, green: 0.50, blue: 0.48),
-        ],
-        startPoint: .topTrailing, endPoint: .bottomLeading
-    )
+    static let heroStroke = line
 }
 
 // MARK: - تنسيق التوقيت (يعيد استخدام منسّقات كأس العالم — الرياض/ميلادي/لاتيني)
