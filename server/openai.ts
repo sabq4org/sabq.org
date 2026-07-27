@@ -9,7 +9,11 @@ import {
 } from "./ai/sabqEditorialPrompt";
 
 // the newest OpenAI model is "gpt-5.1" - unified model for all completions
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// حدود صريحة بدل افتراضات SDK (مهلة 10 دقائق × 2 retries داخليين): أقصى
+// إخراج في هذا الملف 4096 توكن فـ120ث سقف سخي، وretry داخلي واحد يكفي —
+// المسارات التفاعلية فوقها طبقة withRetry أصلًا، والتراكب كان يضاعف أسوأ
+// حالة إلى دقائق (تشخيص edit-and-generate 2026-07-27).
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 120_000, maxRetries: 1 });
 
 // ============================================
 // Rate Limit & Transient Error Retry Helper

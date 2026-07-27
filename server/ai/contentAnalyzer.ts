@@ -11,7 +11,9 @@ import {
   SABQ_FALLBACK_EDITOR_MODEL,
 } from "./sabqEditorialPrompt";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// حدود صريحة بدل افتراضات SDK (10 دقائق × 2 retries) — انظر نظيرتها في
+// server/openai.ts. fallback التحرير هنا 8000 توكن فالمهلة أسخى قليلًا.
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 150_000, maxRetries: 1 });
 
 // محرر الأسلوب الأساسي (Claude) — يُنشأ عند أول استخدام، والفشل يسقط تلقائياً إلى OpenAI
 let anthropicClient: Anthropic | null = null;
@@ -24,6 +26,12 @@ function getAnthropicClient(): Anthropic {
     anthropicClient = new Anthropic({
       apiKey,
       baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+      // مهلة صريحة بدل افتراضي SDK (10 دقائق × 2 retries): إعادة كتابة مقال
+      // ضخم بـ8000 توكن قد تبلغ ~دقيقتين شرعًا، فالسقف 150ث يحمي من التعليق
+      // دون قطع التوليد المشروع. retry داخلي واحد — الفشل يسقط أصلًا إلى
+      // GPT-5.1 ثم إلى withRetry المسار (تشخيص edit-and-generate 2026-07-27).
+      timeout: 150_000,
+      maxRetries: 1,
     });
   }
   return anthropicClient;

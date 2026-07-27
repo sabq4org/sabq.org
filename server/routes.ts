@@ -11346,8 +11346,23 @@ Respond in valid JSON format only:
       const cached = memoryCache.get(cacheKey);
       if (cached) return res.json(cached);
 
+      // إسقاط content وبقية الأعمدة الثقيلة: المعالج يستهلك عشرة حقول فقط،
+      // وسحب كل الأعمدة كان يجرّ أرشيف المراسل بنصوصه كاملة في كل استدعاء
+      // بارد — يحتجز وصلة المسبح لثوانٍ وفشل فعليًا في الإنتاج
+      // (DrizzleQueryError، سجل 2026-07-27).
       const myArticles = await db
-        .select()
+        .select({
+          id: articles.id,
+          title: articles.title,
+          status: articles.status,
+          reviewStatus: articles.reviewStatus,
+          reviewNotes: articles.reviewNotes,
+          reviewedAt: articles.reviewedAt,
+          views: articles.views,
+          publishedAt: articles.publishedAt,
+          createdAt: articles.createdAt,
+          updatedAt: articles.updatedAt,
+        })
         .from(articles)
         .where(
           or(
@@ -14408,18 +14423,23 @@ Respond in valid JSON format only:
       // The newsletter subtitle is optional: its failure must not fail the request,
       // so it resolves to empty values instead of rejecting the Promise.all.
       console.log("[Edit+Generate API] Running smart content + Sabq edit + newsletter in parallel...");
+      // إسناد الزمن لكل فرع: تشخيص 36071ms (2026-07-27) توقف عند «أبطأ الفروع
+      // الثلاثة» لغياب هذا القياس. يطبع مدة كل فرع عند اكتماله (نجاحًا أو فشلًا).
+      const branchStart = Date.now();
+      const timed = <T>(label: string, p: Promise<T>): Promise<T> =>
+        p.finally(() => console.log(`[Edit+Generate API] ${label} finished in ${Date.now() - branchStart}ms`));
       const [generatedContent, editResult, newsletterResult] = await Promise.all([
-        withRetry(
+        timed("SmartContent", withRetry(
           () => generateSmartContent(content, language as "ar" | "en"),
           3,
           "SmartContent"
-        ),
-        withRetry(
+        )),
+        timed("EditContent", withRetry(
           () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
           3,
           "EditContent"
-        ),
-        withRetry(
+        )),
+        timed("Newsletter", withRetry(
           () => generateNewsletterSubtitle({
             title: content.substring(0, 200),
             content: content,
@@ -14430,7 +14450,7 @@ Respond in valid JSON format only:
         ).catch((err): { subtitle: string | undefined; excerpt: string | undefined } => {
           console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
           return { subtitle: undefined, excerpt: undefined };
-        }),
+        })),
       ]);
 
       console.log("[Edit+Generate API] ✅ All operations completed");
