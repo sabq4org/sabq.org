@@ -40,6 +40,41 @@ type StoreCallback = (err?: any, session?: session.SessionData | null) => void;
 type SimpleCallback = (err?: any) => void;
 
 /**
+ * ترويسة تقول للواجهة: «هذا 401 ليس انتهاء جلسة، بل تعذّرت قراءتها الآن».
+ *
+ * بدونها يبدو الردّان متطابقين تمامًا عند العميل، فيعرض «انتهت صلاحية
+ * جلستك» ويحوّل المحرّر إلى صفحة الدخول أثناء عطل عابر في Redis — وقد يفقد
+ * مسودّة غير محفوظة. مع الترويسة يعيد العميل المحاولة بصمت.
+ *
+ * ملاحظة CORS: يجب إدراجها في `exposedHeaders` وإلا لم يستطع المتصفح
+ * قراءتها من أصل مختلف (تطبيقا كاباسيتور يخاطبان api.sabq.org مباشرة).
+ */
+export const SESSION_DEGRADED_HEADER = "X-Session-Degraded";
+
+/**
+ * استخراج معرّف الجلسة من كوكي `connect.sid` الموقّع (`s:<sid>.<توقيع>`).
+ *
+ * لماذا لا نقرأ `req.sessionID` بعد الوسيط؟ لأن express-session حين تعود
+ * القراءة فارغة يولّد **معرّفًا جديدًا** فورًا، فلا يعود ما بيدنا هو المعرّف
+ * الذي فشلت قراءته. التوقيع لا يُتحقَّق منه هنا — هذا شأن express-session،
+ * وأسوأ ما يحدث عند عدم التطابق ألا تُرسَل الترويسة.
+ */
+export function sessionIdFromCookieHeader(cookieHeader: unknown): string | null {
+  if (typeof cookieHeader !== "string") return null;
+  const match = /(?:^|;\s*)connect\.sid=([^;]+)/.exec(cookieHeader);
+  if (!match) return null;
+  let raw: string;
+  try {
+    raw = decodeURIComponent(match[1]);
+  } catch {
+    raw = match[1];
+  }
+  const withoutPrefix = raw.startsWith("s:") ? raw.slice(2) : raw;
+  const sid = withoutPrefix.split(".")[0];
+  return sid.length > 0 ? sid : null;
+}
+
+/**
  * أخطاء «بنية تحتية» في مخزن الجلسات الاحتياطي: نفاد وصلات المسبح، انقطاع
  * الاتصال، تجاوز مهلة الاستعلام. تميّزها عن خطأ بيانات حقيقي مهم — الأول
  * عابر ويجوز التدهور معه إلى «بلا جلسة»، والثاني خلل يجب أن يظهر.
@@ -93,6 +128,8 @@ export class SessionFailoverStore extends session.Store {
   private loggedFailover = false;
   private recentFailures: number[] = [];
   private loggedDegradedRead = 0;
+  /** معرّفات جلسات تعذّرت قراءتها للتوّ — تُستهلَك مرّة واحدة في نفس الطلب. */
+  private degradedSids = new Map<string, number>();
 
   constructor(
     private readonly primary: session.Store,
@@ -101,8 +138,33 @@ export class SessionFailoverStore extends session.Store {
     /** عدد إخفاقات Redis داخل failureWindowMs قبل التحويل الكامل. */
     private readonly failureThreshold = 3,
     private readonly failureWindowMs = 10_000,
+    /** عمر علامة «تعذّرت القراءة» — يكفي لعبور نفس الطلب فقط. */
+    private readonly degradedMarkerTtlMs = 15_000,
   ) {
     super();
+  }
+
+  /**
+   * هل تعذّرت قراءة هذه الجلسة للتوّ؟ تُستهلَك العلامة عند أول سؤال حتى لا
+   * تُوسَم بها طلبات لاحقة نجحت قراءتها.
+   */
+  consumeDegradedRead(sid: string | null | undefined): boolean {
+    if (!sid) return false;
+    const at = this.degradedSids.get(sid);
+    if (at === undefined) return false;
+    this.degradedSids.delete(sid);
+    return Date.now() - at <= this.degradedMarkerTtlMs;
+  }
+
+  private markDegradedRead(sid: string): void {
+    const now = Date.now();
+    // تشذيب كسول: العطل قد يمسّ آلاف الجلسات، ولا يجوز أن تنمو الخريطة بلا حد
+    if (this.degradedSids.size > 5_000) {
+      for (const [key, at] of this.degradedSids) {
+        if (now - at > this.degradedMarkerTtlMs) this.degradedSids.delete(key);
+      }
+    }
+    this.degradedSids.set(sid, now);
   }
 
   private useFallbackOnly(): boolean {
@@ -139,9 +201,14 @@ export class SessionFailoverStore extends session.Store {
    * حالة يعرف العميل التعامل معها.
    *
    * مقصور على أخطاء البنية التحتية: خطأ بيانات حقيقي من PG يظل يُرمى.
+   *
+   * ولئلا يُفهم التدهور خطأً على أنه «انتهت جلستك»، تُسجَّل الجلسة هنا
+   * ليضع الوسيط ترويسة SESSION_DEGRADED_HEADER على الرد؛ فيعيد العميل
+   * المحاولة بدل طرد المستخدم إلى صفحة الدخول.
    */
-  private degradeRead(err: unknown, callback: StoreCallback): boolean {
+  private degradeRead(sid: string, err: unknown, callback: StoreCallback): boolean {
     if (!isInfrastructureStoreError(err)) return false;
+    this.markDegradedRead(sid);
     const now = Date.now();
     if (now - this.loggedDegradedRead > 10_000) {
       this.loggedDegradedRead = now;
@@ -163,7 +230,7 @@ export class SessionFailoverStore extends session.Store {
 
   get(sid: string, callback: StoreCallback): void {
     const fromFallback: StoreCallback = (err, sess) => {
-      if (err && this.degradeRead(err, callback)) return;
+      if (err && this.degradeRead(sid, err, callback)) return;
       callback(err, sess);
     };
     if (this.useFallbackOnly()) {

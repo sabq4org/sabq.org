@@ -353,6 +353,11 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token', 'x-agent-secret'],
+  // بلا exposedHeaders لا يستطيع المتصفح قراءة ترويسة من أصل مختلف — وتطبيقا
+  // كاباسيتور يخاطبان api.sabq.org مباشرة. X-Session-Degraded تميّز «تعذّرت
+  // قراءة جلستك الآن» عن «انتهت جلستك»، فبدونها يُطرد المستخدم إلى صفحة
+  // الدخول عند عطل عابر في Redis.
+  exposedHeaders: ['X-Session-Degraded'],
 }));
 
 // Security headers with Helmet.js - 'unsafe-inline' and 'unsafe-eval' needed for Swagger UI
