@@ -40,6 +40,7 @@ import {
   Download,
   FileText,
   Loader2,
+  RefreshCw,
   Search,
   ShieldCheck,
   X,
@@ -211,6 +212,38 @@ export default function OfficialLetters() {
     },
   });
 
+  // إعادة توليد ملفات الشهادات السارية بعد تحديث قالب التصميم — نفس الرقم
+  // المرجعي ورابط التحقق؛ المنسوب يعيد التحميل فقط.
+  const regenerateMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("/api/official-letters/regenerate-pdfs", { method: "POST" }),
+    onSuccess: (data: any) => {
+      const skipped = (data?.skipped ?? []) as { referenceCode: string; reason: string }[];
+      toast({
+        title: "اكتمل تحديث الملفات",
+        description:
+          `أعيد توليد ${data?.regenerated?.length ?? 0} من ${data?.total ?? 0} شهادة` +
+          (skipped.length
+            ? ` — تخطّي: ${skipped.map((s) => s.referenceCode).join("، ")}`
+            : ""),
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "تعذر تحديث الملفات",
+        description: error.message || "حاول مرة أخرى",
+      });
+    },
+  });
+
+  const onRegenerate = () => {
+    const ok = window.confirm(
+      "سيُعاد توليد ملفات PDF لكل الشهادات السارية بالتصميم الحالي، بنفس الأرقام المرجعية وروابط التحقق. المتابعة؟",
+    );
+    if (ok) regenerateMutation.mutate();
+  };
+
   const onTypeChange = (value: string) => {
     const next = value as OfficialLetterType;
     setLetterType(next);
@@ -228,9 +261,29 @@ export default function OfficialLetters() {
           description="إصدار خطابات التعريف وتسهيل المهمة للمنسوبين — مرقّمة وقابلة للتحقق"
           titleTestId="text-official-letters-title"
           actions={
-            <Button onClick={() => setIssueOpen(true)} data-testid="button-new-letter">
-              خطاب جديد
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={onRegenerate}
+                disabled={regenerateMutation.isPending}
+                data-testid="button-regenerate-letters"
+              >
+                {regenerateMutation.isPending ? (
+                  <>
+                    <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+                    جارٍ التحديث…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="ml-1 h-4 w-4" />
+                    تحديث ملفات PDF
+                  </>
+                )}
+              </Button>
+              <Button onClick={() => setIssueOpen(true)} data-testid="button-new-letter">
+                خطاب جديد
+              </Button>
+            </div>
           }
         />
 
