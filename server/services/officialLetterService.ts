@@ -391,6 +391,90 @@ export async function getLetterPdf(
   return { referenceCode: letter.referenceCode, buffer };
 }
 
+export type RegenerateLettersResult = {
+  total: number;
+  regenerated: string[];
+  skipped: { referenceCode: string; reason: string }[];
+};
+
+/**
+ * يعيد بناء ملفات PDF للشهادات السارية بعد تحديث قالب التصميم، ويستبدل
+ * الملف المخزّن على نفس المفتاح — الرقم المرجعي وتاريخ الإصدار ورابط
+ * التحقق لا يتغيرون، والمنسوب يعيد التحميل فقط.
+ *
+ * استثناء إداري مقصود من مبدأ «الوثيقة الثابتة» (قرار المالك 2026-07-27):
+ * البيانات تُقرأ من ملف المنسوب الحالي — نفس ما يفعله مسار التنزيل
+ * الاحتياطي عند غياب التخزين — لأن رقم الهوية لا يُحفظ في اللقطة.
+ */
+export async function regenerateLetterPdfs(): Promise<RegenerateLettersResult> {
+  if (!isPrivateObjectStorageConfigured()) {
+    throw new Error(
+      "التخزين الخاص غير مهيأ — في بيئة التطوير تُولَّد الملفات عند التنزيل تلقائياً",
+    );
+  }
+
+  const letters = await db
+    .select()
+    .from(officialLetters)
+    .where(eq(officialLetters.status, "issued"))
+    .orderBy(desc(officialLetters.issuedAt));
+
+  const result: RegenerateLettersResult = {
+    total: letters.length,
+    regenerated: [],
+    skipped: [],
+  };
+
+  const { buildOfficialLetterPdf } = await import("./officialLetterPdfService");
+  const storage = new ObjectStorageService();
+
+  for (const letter of letters) {
+    try {
+      const resolved = await resolveLetterSubject(letter.subjectUserId, {
+        includeNationalId: true,
+      });
+      if (!resolved) {
+        result.skipped.push({
+          referenceCode: letter.referenceCode,
+          reason: "تعذر تكوين بيانات المنسوب",
+        });
+        continue;
+      }
+
+      const pdf = await buildOfficialLetterPdf({
+        referenceCode: letter.referenceCode,
+        letterType: letter.letterType as OfficialLetterType,
+        recipientEntity: letter.recipientEntity,
+        purposeNote: letter.purposeNote,
+        subject: resolved.subject,
+        issuedAt: letter.issuedAt,
+      });
+
+      const key =
+        letter.fileKey || `.private/official-letters/${letter.referenceCode}.pdf`;
+      const stored = await storage.uploadPrivateDocument(key, pdf, "application/pdf");
+      if (!letter.fileKey) {
+        await db
+          .update(officialLetters)
+          .set({ fileKey: stored.path || key })
+          .where(eq(officialLetters.id, letter.id));
+      }
+      result.regenerated.push(letter.referenceCode);
+    } catch (error) {
+      console.error(
+        `[officialLetters] regenerate failed for ${letter.referenceCode}:`,
+        error,
+      );
+      result.skipped.push({
+        referenceCode: letter.referenceCode,
+        reason: "فشل التوليد أو الرفع — راجع اللوج",
+      });
+    }
+  }
+
+  return result;
+}
+
 // ────────────────────────────────────────────────────────────────────
 // القوائم والتحقق
 // ────────────────────────────────────────────────────────────────────

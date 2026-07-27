@@ -27,6 +27,7 @@ import {
   issueLetter,
   listLetterRequests,
   listLetters,
+  regenerateLetterPdfs,
   rejectLetterRequest,
   requestSelfLetter,
   resolveLetterSubject,
@@ -308,6 +309,29 @@ router.post(
       const badInput = /سبب/.test(msg);
       if (!badInput) console.error("[officialLetters] revoke failed:", error);
       res.status(badInput ? 400 : 500).json({ message: msg });
+    }
+  },
+);
+
+/**
+ * إعادة توليد ملفات PDF للشهادات السارية بعد تحديث قالب التصميم —
+ * يستبدل الملف المخزّن بنفس الرقم المرجعي ورابط التحقق، دون إلغاء
+ * ودون أي إجراء من المنسوب سوى إعادة التحميل.
+ */
+router.post(
+  "/api/official-letters/regenerate-pdfs",
+  requirePermission("staff_profiles.manage"),
+  async (req: Request, res: Response) => {
+    try {
+      const actorId = currentUserId(req)!;
+      const result = await regenerateLetterPdfs();
+      console.log(
+        `[officialLetters] regenerate by ${actorId}: ${result.regenerated.length}/${result.total} ok, ${result.skipped.length} skipped`,
+      );
+      res.json({ ok: true, ...result });
+    } catch (error: any) {
+      console.error("[officialLetters] regenerate failed:", error);
+      res.status(500).json({ message: error?.message || "تعذرت إعادة توليد الملفات" });
     }
   },
 );

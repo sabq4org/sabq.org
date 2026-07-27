@@ -1,6 +1,6 @@
 # الخطابات الرسمية (`official-letters`)
 
-> آخر مراجعة: 2026-07-26 | المالك: platform
+> آخر مراجعة: 2026-07-27 | المالك: platform
 
 ## الغرض
 إصدار شهادات رسمية من صحيفة سبق للمنسوبين (كتّاب رأي، مراسلون، موظفون): شهادة
@@ -38,6 +38,7 @@
 | `POST /api/official-letters` | `staff_profiles.manage` |
 | `GET /api/official-letters/:id/file.pdf` | `staff_profiles.view` أو صاحب الخطاب |
 | `POST /api/official-letters/:id/revoke` | `staff_profiles.manage` |
+| `POST /api/official-letters/regenerate-pdfs` | `staff_profiles.manage` — يعيد بناء ملفات الشهادات السارية بعد تحديث القالب (زر «تحديث ملفات PDF» في اللوحة) |
 | `GET/POST /api/official-letters/requests*` | جلسة: الإصدار الذاتي يتطلب `profileReviewStatus=approved` + اكتمال الحقول المهمة · `staff_profiles.manage` لمسار الإدارة |
 | `GET /api/official-letters/my-readiness?letterType=` | جلسة — نواقص البيانات + حالة مراجعة الملف |
 
@@ -49,6 +50,10 @@
 - **الخطاب وثيقة ثابتة.** يُرفع PDF إلى التخزين الخاص (`.private/official-letters/`)
   ويُحفظ `fileKey`. أي تعديل لاحق على ملف المنسوب لا يغيّر خطاباً صادراً.
   عند غياب التخزين يُعاد التوليد من البيانات الحالية (تطوير محلي فقط).
+  **الاستثناء الوحيد:** `regenerate-pdfs` (قرار المالك 2026-07-27) يعيد بناء
+  ملفات الشهادات السارية بعد تحديث قالب التصميم ويستبدلها على نفس المفتاح —
+  الرقم المرجعي وتاريخ الإصدار ورابط التحقق لا يتغيرون، والبيانات تُقرأ من
+  ملف المنسوب الحالي (رقم الهوية ليس في اللقطة).
 - **رقم الهوية لا يُحفظ في `snapshot`** ولا يعود للواجهة — يبقى داخل ملف PDF في
   التخزين الخاص. كشفه للطباعة يتطلب `staff_documents.view`.
 - **صفحة التحقق** تعرض الاسم والصفة والحالة فقط — بلا هوية أو تواصل، و`/verify`
