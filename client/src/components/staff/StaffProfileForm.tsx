@@ -322,10 +322,9 @@ export function StaffProfileForm({
         <SelectContent position="popper" className="max-h-[60vh]">
           {visibleSections.map((s) => {
             const missing = sectionMissingCount(s.id);
-            const label = missing > 0 ? `${s.labelAr} — ${missing} نواقص` : `${s.labelAr} — مكتمل`;
             return (
               <SelectItem key={s.id} value={s.id} className="font-bold">
-                {label}
+                {missing > 0 ? `${s.labelAr} (${missing})` : s.labelAr}
               </SelectItem>
             );
           })}
@@ -549,7 +548,7 @@ export function StaffProfileForm({
       )}
 
       {activeSection === "docs" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
             {isSelf
               ? "تخزين خاص — يمكنك رفع السيرة وصورة الهوية والترخيص. العقد يبقى لدى الموارد البشرية."
