@@ -163,19 +163,19 @@ struct RoshnView: View {
         }
     }
 
-    // MARK: الترويسة — ملعب ليلي احترافي يطابق روح /roshn
+    // MARK: الترويسة — ضباب صباحي ناعم (هوية «صباح الملعب»)
 
     private var header: some View {
         ZStack {
             RoshnTheme.heroGradient
 
-            // خطوط ملعب خافتة تعطي هوية رياضية من دون صورة ثقيلة.
+            // خطوط ملعب خافتة على الخلفية الفاتحة.
             Circle()
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
                 .frame(width: 190, height: 190)
                 .offset(x: 135, y: 40)
             Rectangle()
-                .stroke(.white.opacity(0.06), lineWidth: 1)
+                .stroke(RoshnTheme.pitch.opacity(0.10), lineWidth: 1)
                 .frame(width: 175, height: 88)
                 .offset(x: -145, y: 78)
 
@@ -187,16 +187,16 @@ struct RoshnView: View {
                         .padding(7)
                         .frame(width: 64, height: 64)
                         .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(.white))
-                        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(.white.opacity(0.55), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.22), radius: 12, y: 7)
+                        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
+                        .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 10, y: 5)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("دوري روشن السعودي")
                             .font(SabqFonts.app(size: 23, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(RoshnTheme.heroOn)
                         Text(seasonSubtitle)
                             .font(SabqFonts.app(size: 11.5))
-                            .foregroundStyle(.white.opacity(0.70))
+                            .foregroundStyle(RoshnTheme.heroOnSoft)
                             .lineLimit(1)
                     }
 
@@ -228,19 +228,19 @@ struct RoshnView: View {
                                 .lineLimit(1).minimumScaleFactor(0.75)
                         }
                         .font(SabqFonts.app(size: 12.5, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(RoshnTheme.sky)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.11)))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.12), lineWidth: 1))
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.72)))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
                     }
                 }
             }
             .padding(17)
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1))
-        .shadow(color: RoshnTheme.navy.opacity(0.22), radius: 18, y: 10)
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
+        .shadow(color: RoshnTheme.sky.opacity(0.10), radius: 16, y: 8)
     }
 
     private func heroMetric(value: String, label: String, icon: String) -> some View {
@@ -249,10 +249,11 @@ struct RoshnView: View {
             Text(value).font(SabqFonts.app(size: 14, weight: .bold)).monospacedDigit()
             Text(label).font(SabqFonts.app(size: 10.5))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(RoshnTheme.heroOn)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.09)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.70)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.heroStroke.opacity(0.7), lineWidth: 1))
     }
 
     private var seasonSubtitle: String {
@@ -279,7 +280,7 @@ struct RoshnView: View {
                         .foregroundStyle(tab == item ? .white : RoshnTheme.inkSoft)
                         .padding(.horizontal, 15).padding(.vertical, 10)
                         .background(
-                            Capsule().fill(tab == item ? RoshnTheme.navy : RoshnTheme.card)
+                            Capsule().fill(tab == item ? RoshnTheme.sky : RoshnTheme.card)
                         )
                         .overlay(Capsule().stroke(tab == item ? Color.clear : RoshnTheme.line, lineWidth: 1))
                     }

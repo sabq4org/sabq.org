@@ -73,7 +73,7 @@ struct RoshnTeamView: View {
         ZStack {
             RoshnTheme.heroGradient
             Circle()
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
                 .frame(width: 170, height: 170)
                 .offset(x: -135, y: 45)
 
@@ -82,29 +82,30 @@ struct RoshnTeamView: View {
                     .padding(9)
                     .frame(width: 84, height: 84)
                     .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white))
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.white.opacity(0.5), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.24), radius: 12, y: 7)
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
+                    .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 10, y: 5)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(profile?.team.name ?? previewName)
                         .font(SabqFonts.app(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(RoshnTheme.heroOn)
                         .lineLimit(2)
                     if let competition = profile?.competitionName, !competition.isEmpty {
                         Label(competition, systemImage: "trophy.fill")
                             .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.72))
+                            .foregroundStyle(RoshnTheme.heroOnSoft)
                     } else {
                         Text("دوري روشن السعودي")
                             .font(SabqFonts.app(size: 11))
-                            .foregroundStyle(.white.opacity(0.68))
+                            .foregroundStyle(RoshnTheme.heroOnSoft)
                     }
                     if let standing = profile?.standing {
                         Text("المركز \(RsFormat.latin(standing.rank)) · \(RsFormat.latin(standing.points)) نقطة")
                             .font(SabqFonts.app(size: 12.5, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(RoshnTheme.sky)
                             .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Capsule().fill(.white.opacity(0.11)))
+                            .background(Capsule().fill(.white.opacity(0.75)))
+                            .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
                     }
                 }
                 Spacer(minLength: 0)
@@ -112,7 +113,8 @@ struct RoshnTeamView: View {
             .padding(18)
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: RoshnTheme.navy.opacity(0.2), radius: 16, y: 9)
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
+        .shadow(color: RoshnTheme.sky.opacity(0.10), radius: 14, y: 7)
     }
 
     // MARK: حقائق سريعة

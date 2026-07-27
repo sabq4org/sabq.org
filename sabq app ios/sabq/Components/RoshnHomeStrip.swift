@@ -56,10 +56,10 @@ final class RoshnHomeStore {
 
 // MARK: - شريط دوري روشن في الواجهة الرئيسية
 //
-// بطاقة فاتحة منسّقة (قرار المالك: لا داكن) بهوية روشن: سماوي + زمردي على
-// أرضية بيضاء صباحية. أربع حالات: عدّاد انطلاق الموسم (قبل الموسم) / يوم
-// الجولة / المباراة القادمة أو الحية / بطاقة البطل. تختفي كليًا عند إطفاء
-// البلوك من لوحة التحكم (blockHidden) — نفس مفتاح الويب حرفيًا.
+// بطاقة فاتحة منسّقة (قرار المالك: لا داكن) بهوية «صباح الملعب»: سماوي هادئ
+// + زمرد مُطفأ على ضباب أبيض. أربع حالات: عدّاد انطلاق الموسم / يوم الجولة /
+// المباراة القادمة أو الحية / بطاقة البطل. تختفي كليًا عند إطفاء البلوك من
+// لوحة التحكم (blockHidden) — نفس مفتاح الويب حرفيًا.
 
 struct RoshnHomeStrip: View {
     private let store = RoshnHomeStore.shared
@@ -171,7 +171,7 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: RoshnTheme.sky))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 12, x: 0, y: 6)
+        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
     }
 
     // MARK: بطاقة المباراة القادمة/الحية
@@ -197,7 +197,7 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: f.status.live ? RoshnTheme.liveRed : RoshnTheme.pitch))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 12, x: 0, y: 6)
+        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
     }
 
     // MARK: بطاقة يوم الجولة (عدّاد مشترك)
@@ -239,7 +239,7 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: RoshnTheme.pitch))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 12, x: 0, y: 6)
+        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
     }
 
     // MARK: بطاقة البطل (عطلة ما بين الموسمين)
@@ -281,24 +281,23 @@ struct RoshnHomeStrip: View {
         .background(lightCard(glow: RoshnTheme.gold))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.gold.opacity(0.35), lineWidth: 1))
-        .shadow(color: RoshnTheme.gold.opacity(0.15), radius: 12, x: 0, y: 6)
+        .shadow(color: RoshnTheme.gold.opacity(0.10), radius: 10, x: 0, y: 4)
     }
 
     // MARK: عناصر مشتركة
 
     private func identity(subtitle: String, subtitleColor: Color = RoshnTheme.inkSoft) -> some View {
         HStack(spacing: 10) {
-            // شارة الدوري: كرة على تدرّج سماوي — بديل أنيق حتى يتوفر أصل الشعار.
+            // شارة الدوري: كرة على تدرّج هادئ — بلا نيون أخضر/سماوي.
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(LinearGradient(colors: [RoshnTheme.sky, RoshnTheme.pitch],
-                                         startPoint: .topTrailing, endPoint: .bottomLeading))
+                    .fill(RoshnTheme.badgeGradient)
                     .frame(width: 38, height: 38)
                 Image(systemName: "soccerball")
                     .font(SabqFonts.app(size: 18, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.white.opacity(0.95))
             }
-            .shadow(color: RoshnTheme.sky.opacity(0.25), radius: 5, y: 2)
+            .shadow(color: RoshnTheme.sky.opacity(0.14), radius: 4, y: 2)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
@@ -312,11 +311,11 @@ struct RoshnHomeStrip: View {
         }
     }
 
-    /// أرضية فاتحة بتوهّج لوني ناعم في الزاوية — بديل التدرّج الداكن.
+    /// أرضية فاتحة بتوهّج لوني خافت في الزاوية — بديل التدرّج الداكن.
     private func lightCard(glow: Color) -> some View {
         RoshnTheme.stripGradient.overlay(alignment: .topLeading) {
             Circle()
-                .fill(glow.opacity(0.10))
+                .fill(glow.opacity(0.07))
                 .frame(width: 150, height: 150)
                 .blur(radius: 50)
                 .offset(x: -30, y: -50)
