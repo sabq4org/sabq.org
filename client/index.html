@@ -461,11 +461,17 @@
     <link rel="preconnect" href="https://api.sabq.org" crossorigin>
     <link rel="dns-prefetch" href="https://api.sabq.org">
 
+    <!--
+      Preload the Arabic subset of IBM Plex 400 only (body text / LCP).
+      URL must match the unicode-range file Google Fonts CSS serves for
+      wght@400 arabic — a stale hash shows as "preloaded but not used"
+      in Safari/Chrome. Re-check after bumping the Google Fonts family URL.
+    -->
     <link
       rel="preload"
       as="font"
       type="font/woff2"
-      href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPi-OCRXMRrKATtYV0.woff2"
+      href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys43PW5fslBEg0.woff2"
       crossorigin
     >
 

@@ -93,7 +93,36 @@ import {
   setFollowNotify,
 } from "../services/sportsFollowsService";
 import { getSportsSummary } from "../services/sportsSummaryService";
-import { requireAnyPermission, requireAuth } from "../rbac";
+import { requireAuth, userHasPermission, type PermissionCode } from "../rbac";
+import type { NextFunction } from "express";
+
+/**
+ * حماية معاينة/سرد المباراة للتحرير فقط — لكن بـ403 لا 401 عند غياب جلسة الويب.
+ *
+ * لماذا: تطبيق VARA يُرفق Bearer عضوية `/api/v1` على طلبات `/api/sports/*` العامة،
+ * و`requireAnyPermission` الافتراضي يرد 401 لمن بلا Passport، فيفسّر العميل ذلك
+ * كـ«انتهت الجلسة» ويمسح الدخول (ظهر فجأة بعد 866af4b في 2026-07-26).
+ */
+function requireSportsAiEditor(...codes: PermissionCode[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated?.() || !(req as any).user?.id) {
+      return res.status(403).json({
+        message: "غير مصرح",
+        messageEn: "Forbidden",
+      });
+    }
+    const userId = (req as any).user.id as string;
+    const ok = (await Promise.all(codes.map((c) => userHasPermission(userId, c)))).some(Boolean);
+    if (!ok) {
+      return res.status(403).json({
+        message: "لا توجد لديك صلاحيات للوصول إلى هذه الخدمة",
+        messageEn: "You don't have permission to access this service",
+        required: codes,
+      });
+    }
+    next();
+  };
+}
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -1689,7 +1718,7 @@ export function registerSportsRoutes(app: Express) {
   // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية).
   // مقصورة على أهل التحرير (لوحة التحكم) — كانت مفتوحة للعموم بلا مصادقة ولا حدّ،
   // وكل معرّف مباراة جديد يشغّل توليد LLM + استدعاءات API-Football مدفوعة.
-  app.get("/api/sports/match/:id/story", requireAnyPermission("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
+  app.get("/api/sports/match/:id/story", requireSportsAiEditor("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "غير متاح" });
       return;
@@ -1716,7 +1745,7 @@ export function registerSportsRoutes(app: Express) {
 
   // المرحلة 2 (ذكاء): معاينة ما قبل المباراة (للمباريات غير المبدوءة فقط).
   // مقصورة على أهل التحرير كما «السرد» أعلاه — لا توليد AI مفتوحًا للعموم.
-  app.get("/api/sports/match/:id/preview", requireAnyPermission("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
+  app.get("/api/sports/match/:id/preview", requireSportsAiEditor("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "غير متاح" });
       return;

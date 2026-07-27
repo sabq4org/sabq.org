@@ -208,7 +208,6 @@
         "server/smartCategoriesEngine.ts",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
         "client/src/pages/dashboard/EditorAlertsSettings.tsx",
-        "client/src/pages/dashboard/SmartJournalist.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
         "client/src/pages/AnnouncementsList.tsx",
@@ -219,7 +218,6 @@
         "client/src/pages/AnnouncementsArchive.tsx",
         "client/src/components/InternalAnnouncement.tsx",
         "tests/unit/internalAnnouncementTargeting.test.ts",
-        "client/src/pages/DataStoryGenerator.tsx",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
         "client/src/pages/admin/publishers/**",
@@ -489,7 +487,9 @@
         "sabq app ios/sabq/Services/RoshnModels.swift",
         "sabq app ios/sabq/Components/RoshnHomeStrip.swift",
         "sabq app ios/sabq/Screens/Roshn*.swift",
-        "sabq app ios/sabqTests/RoshnModelsTests.swift"
+        "sabq app ios/sabqTests/RoshnModelsTests.swift",
+        "sports app ios/SabqSports/Services/APIClient.swift",
+        "sports app ios/SabqSports/Services/AuthStore.swift"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -582,6 +582,8 @@
         "server/services/memberSessionService.ts",
         "shared/rbac-constants.ts",
         "client/src/hooks/useAuth.ts",
+        "client/src/hooks/useRoleProtection.ts",
+        "client/src/components/ProtectedRoute.tsx",
         "docs/architecture/AUTHENTICATION_FLOW.md"
       ],
       "aiFeatureKeys": [],
@@ -630,7 +632,6 @@
         "server/routes/topicComments.ts",
         "server/ai/commentModeration.ts",
         "server/sentiment-analyzer.ts",
-        "client/src/pages/dashboard/SentimentAnalytics.tsx",
         "client/src/pages/admin/SentimentInsights.tsx"
       ],
       "aiFeatureKeys": [
@@ -639,7 +640,7 @@
       ],
       "dashboardPath": "/dashboard/ai-moderation",
       "owners": ["engagement"],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-07-27"
     },
     {
       "id": "deep-analysis",
