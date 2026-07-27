@@ -2452,10 +2452,16 @@ export async function getTeamProfile(teamId: number, opts?: { withExtras?: boole
   const withExtras = opts?.withExtras === true;
   // غلاف SWR على الصفحة كاملة — كان كل طلب بارد يعيد تجميع standings×N + تشكيلة
   // فيصل ~4ث في APM حتى مع كاش الأجزاء.
+  // TTL أطول من MEDIUM عمدًا (تشخيص 2026-07-27): هوية النادي وتشكيلته شبه
+  // ثابتة، وطزاجة 5 دقائق كانت تُبرد أندية الذيل الطويل (خارج روشن خاصة —
+  // تدفع جولة «روشن أولًا» التسلسلية) فيصطدم كل زائر أول بمهلة 3ث → 503.
+  // البائت الطويل يعني: زيارة بعد ساعة تُخدم فورًا من الكاش وتجدَّد بالخلفية —
+  // صف الترتيب داخل الصفحة قد يتأخر حتى 15د بعد جولة، والواجهات الحية تعرض
+  // النتائج من مسارات live لا من هنا.
   return withSWR(
     `spl:teamprofile:v3:${teamId}:${withExtras ? "x" : "b"}`,
-    CACHE_TTL.MEDIUM,
-    CACHE_TTL.MEDIUM * 2,
+    CACHE_TTL.LONG,
+    CACHE_TTL.LONG * 4,
     async () => buildTeamProfile(teamId, withExtras),
   );
 }
@@ -2944,15 +2950,30 @@ export async function getPlayerForm(playerId: number): Promise<SplPlayerForm> {
       dob: bridge.dob,
     }).catch(() => ({ available: false, matches: [] }));
     if (!form.available || form.matches.length === 0) return { available: false, matches: [] };
-    const tr = await resolveNames(form.matches.map((m) => m.opponent)).catch(() => null);
-    return {
+    // لا ننتظر ترجمة الـAI داخل الطلب: مهلة المسار 2.5ث ونداء LLM واحد لاسم
+    // خصم جديد يتجاوزها وحده (تشخيص 2026-07-27 — كان هذا الموضع الوحيد في
+    // المسار الحار بلا skipAi). نفس نمط البطاقة/التشكيلة/الهدّافين: نرجع
+    // بالمتاح فورًا وترقية كاش خلفية تعرّب الأسماء عند اكتمال الترجمة.
+    const rawOpponents = form.matches.map((m) => m.opponent);
+    const tr = await resolveNames(rawOpponents, { skipAi: true }).catch(() => null);
+    const build = (translate: ((name: string | null | undefined) => string) | null): SplPlayerForm => ({
       available: true,
       matches: form.matches.map((m) => ({
         ...m,
-        opponent: (tr ? tr(m.opponent) : m.opponent) || m.opponent,
+        opponent: (translate ? translate(m.opponent) : m.opponent) || m.opponent,
         league: localizeSplCompetition(m.league),
       })),
-    };
+    });
+    const storeKey = `spl:form:${playerId}${isEnglishSports() ? ":en" : ""}`;
+    const incomplete = tr != null && !isEnglishSports() && rawOpponents.some((n) => n && tr(n) === n);
+    if (incomplete) {
+      void resolveNames(rawOpponents)
+        .then((tr2) => {
+          swrCache.set(storeKey, build(tr2), PLAYER_FORM_TTL, PLAYER_FORM_TTL * 2);
+        })
+        .catch(() => {});
+    }
+    return build(tr);
   });
 }
 
