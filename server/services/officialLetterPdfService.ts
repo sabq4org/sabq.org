@@ -22,9 +22,12 @@ import type { LetterSubject } from "./officialLetterService";
 
 const BRAND = {
   cyan: "#1BADF8",
-  text: "#1F2937",
-  muted: "#6B7280",
-  divider: "#E5E7EB",
+  // درجة أغمق من سماوي الهوية للنصوص فوق الأبيض — تبقى مقروءة في الطباعة
+  // بالتدرج الرمادي حيث يبهت ‎#1BADF8‎ كثيراً.
+  cyanDark: "#0B7CBD",
+  text: "#111827",
+  muted: "#4B5563",
+  divider: "#D1D5DB",
   headerBg: "#F8FBFD",
 };
 
@@ -83,18 +86,25 @@ function brandAsset(...names: string[]): string | null {
   return firstExisting(candidates);
 }
 
-function resolveFonts(): { regular: string | null; bold: string | null } {
+function resolveFonts(): {
+  regular: string | null;
+  medium: string | null;
+  bold: string | null;
+} {
   const dir = path.join(process.cwd(), "server/fonts");
   const regular = firstExisting([
     path.join(dir, "IBMPlexSansArabic-Regular.ttf"),
     path.join(dir, "NotoSansArabic-Regular.ttf"),
+  ]);
+  const medium = firstExisting([
+    path.join(dir, "IBMPlexSansArabic-SemiBold.ttf"),
   ]);
   const bold = firstExisting([
     path.join(dir, "IBMPlexSansArabic-Bold.ttf"),
     path.join(dir, "IBMPlexSansArabic-SemiBold.ttf"),
     path.join(dir, "NotoSansArabic-Bold.ttf"),
   ]);
-  return { regular, bold: bold ?? regular };
+  return { regular, medium, bold: bold ?? regular };
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -195,6 +205,12 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
     }
     @font-face {
       font-family: 'SabqArabic';
+      src: url('${fonts.medium ?? fonts.bold ?? fonts.regular}') format('truetype');
+      font-weight: 600;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'SabqArabic';
       src: url('${fonts.bold ?? fonts.regular}') format('truetype');
       font-weight: 700;
       font-style: normal;
@@ -218,6 +234,7 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
 <title>${escapeHtml(input.referenceCode)}</title>
 <style>
   ${fontFaces}
+  /* الأحجام بوحدة pt لأن المخرج ورقة A4 مطبوعة — لا شاشة. */
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
   body {
@@ -229,35 +246,41 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
   .page {
     width: 210mm;
     min-height: 297mm;
-    padding: 16mm 18mm 14mm;
+    padding: 14mm 18mm 12mm;
     display: flex;
     flex-direction: column;
     position: relative;
   }
+
+  /* فواصل مرنة توزّع الفراغ المتبقي رأسياً بدل تكدّس المحتوى أعلى الصفحة.
+     عند امتلاء الصفحة (بيانات طويلة) تنكمش إلى حدّها الأدنى فقط. */
+  .gap-a { flex: 2 0 0; min-height: 3mm; }
+  .gap-b { flex: 3 0 0; min-height: 4mm; }
+  .gap-c { flex: 5 0 0; min-height: 5mm; }
 
   /* الترويسة */
   .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 14px;
     background: ${BRAND.headerBg};
     border: 1px solid ${BRAND.divider};
-    border-radius: 8px;
-    padding: 10px 14px;
+    border-radius: 10px;
+    padding: 10px 16px;
   }
-  .header .brand { display: flex; align-items: center; gap: 10px; }
+  .header .brand { display: flex; align-items: center; gap: 12px; }
   /* القفل الكامل للشعار الرسمي عريض نسبياً — نكبّره قليلاً في الترويسة */
-  .header img.logo { height: 52px; width: auto; max-width: 150px; object-fit: contain; }
-  .header .brand-text .name { font-size: 12.5px; font-weight: 700; }
-  .header .brand-text .sub { font-size: 8.5px; color: ${BRAND.muted}; margin-top: 2px; }
+  .header img.logo { height: 54px; width: auto; max-width: 170px; object-fit: contain; }
+  .header .brand-text .name { font-size: 13.5pt; font-weight: 700; }
+  .header .brand-text .sub { font-size: 10pt; color: ${BRAND.muted}; margin-top: 3px; }
   .header .doc-type {
-    font-size: 9px;
-    color: ${BRAND.cyan};
+    font-size: 11pt;
+    color: ${BRAND.cyanDark};
     font-weight: 700;
-    border: 1px solid ${BRAND.cyan}33;
+    border: 1.5px solid ${BRAND.cyan}55;
     border-radius: 999px;
-    padding: 4px 10px;
+    padding: 6px 14px;
     white-space: nowrap;
   }
 
@@ -266,92 +289,94 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
     display: flex;
     justify-content: space-between;
     margin-top: 10px;
-    font-size: 9px;
+    font-size: 10.5pt;
     color: ${BRAND.muted};
   }
   .meta b { color: ${BRAND.text}; font-weight: 700; }
 
-  /* العنوان */
+  /* العنوان — بلا letter-spacing: يفصل الحروف العربية المتصلة */
   h1.title {
     text-align: center;
-    font-size: 15px;
+    font-size: 24pt;
     font-weight: 700;
-    margin: 16px 0 4px;
-    letter-spacing: 0.5px;
+    margin: 6mm 0 5px;
   }
   .title-rule {
-    width: 54px;
-    height: 2px;
+    width: 88px;
+    height: 3px;
     background: ${BRAND.cyan};
-    margin: 0 auto 14px;
+    margin: 0 auto;
     border-radius: 2px;
   }
 
-  /* المخاطَب — أُزيل بقرار المالك؛ الشهادة تبدأ مباشرة بـ «تشهد…» */
-  .salutation { font-size: 10.5px; margin: 10px 0 12px; }
-
-  /* جدول البيانات */
-  .lead { font-size: 10.5px; margin: 14px 0 8px; }
+  /* جدول البيانات — المخاطَب أُزيل بقرار المالك؛ الشهادة تبدأ بـ «تشهد…» */
+  .lead { font-size: 14pt; margin: 0 0 10px; }
   table.details {
     width: 100%;
     border-collapse: collapse;
     border: 1px solid ${BRAND.divider};
-    border-radius: 6px;
+    border-radius: 8px;
     overflow: hidden;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
   }
-  table.details td { padding: 6px 10px; font-size: 10.5px; border-bottom: 1px solid ${BRAND.divider}; }
+  table.details tr { break-inside: avoid; page-break-inside: avoid; }
+  table.details td {
+    padding: 6px 14px;
+    border-bottom: 1px solid ${BRAND.divider};
+    vertical-align: middle;
+  }
   table.details tr:last-child td { border-bottom: none; }
   table.details td.label {
-    width: 34%;
+    width: 28%;
     color: ${BRAND.muted};
-    font-size: 9px;
+    font-size: 12pt;
     background: ${BRAND.headerBg};
     white-space: nowrap;
   }
-  table.details td.value { font-weight: 700; }
+  table.details td.value { font-size: 14pt; font-weight: 600; line-height: 1.45; }
 
   /* الفقرات */
-  p.body { font-size: 10.5px; line-height: 2; margin: 0 0 10px; text-align: justify; }
-  p.note { font-size: 10.5px; line-height: 2; margin: 0 0 10px; }
+  p.body { font-size: 14pt; line-height: 1.75; margin: 0 0 8px; text-align: justify; }
+  p.note { font-size: 12.5pt; line-height: 1.75; margin: 0 0 8px; color: ${BRAND.muted}; }
 
-  /* التوقيع */
-  .signoff { margin-top: 18px; font-size: 10.5px; }
+  /* التوقيع — كتلة واحدة لا تنقسم بين الصفحات */
+  .signoff { font-size: 14pt; break-inside: avoid; page-break-inside: avoid; }
   .sign-block {
     margin-top: 10px;
     display: flex;
     justify-content: flex-start;
-    gap: 18px;
+    gap: 26px;
     align-items: flex-end;
   }
-  .sign-col { text-align: center; min-width: 180px; }
-  .sign-col .org { font-size: 11px; font-weight: 700; }
-  .sign-col .role { font-size: 9px; color: ${BRAND.muted}; margin-top: 2px; }
-  .sign-col img.signature { height: 42px; margin-top: 6px; }
-  .stamp img { height: 84px; opacity: 0.92; }
+  .sign-col { text-align: center; min-width: 210px; }
+  .sign-col .org { font-size: 15pt; font-weight: 700; }
+  .sign-col .role { font-size: 11.5pt; color: ${BRAND.muted}; margin-top: 3px; }
+  .sign-col img.signature { height: 52px; margin-top: 8px; }
+  .stamp img { height: 96px; opacity: 0.92; }
   .sign-placeholder {
-    margin-top: 8px;
-    border-top: 1px dashed ${BRAND.divider};
-    width: 150px;
+    margin-top: 10px;
+    border-top: 1.5px dashed #9CA3AF;
+    width: 180px;
     margin-inline: auto;
   }
 
   /* التذييل */
   .footer {
-    margin-top: auto;
     padding-top: 10px;
     border-top: 1px solid ${BRAND.divider};
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    font-size: 8px;
+    gap: 16px;
+    font-size: 10pt;
     color: ${BRAND.muted};
-    line-height: 1.7;
+    line-height: 1.8;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
-  .footer .verify-text { max-width: 78%; }
+  .footer .verify-text { max-width: 76%; }
   .footer .verify-text b { color: ${BRAND.text}; }
-  .footer img.qr { width: 54px; height: 54px; }
+  .footer img.qr { width: 64px; height: 64px; flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -383,6 +408,8 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
     <h1 class="title">${escapeHtml(meta.documentTitleAr)}</h1>
     <div class="title-rule"></div>
 
+    <div class="gap-a"></div>
+
     <p class="lead">تشهد ${OFFICIAL_LETTER_BRAND_AR} بأن:</p>
 
     <table class="details">
@@ -394,6 +421,8 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
     <p class="body">${escapeHtml(meta.purposeAr)}</p>
 
     ${input.purposeNote ? `<p class="note">${escapeHtml(input.purposeNote)}</p>` : ""}
+
+    <div class="gap-b"></div>
 
     <div class="signoff">
       <div>وتفضلوا بقبول فائق التحية والتقدير،</div>
@@ -410,6 +439,8 @@ function buildHtml(input: BuildOfficialLetterInput, verifyUrl: string, qrDataUrl
         ${stamp ? `<div class="stamp"><img src="${stamp}" alt="" /></div>` : ""}
       </div>
     </div>
+
+    <div class="gap-c"></div>
 
     <div class="footer">
       <div class="verify-text">
