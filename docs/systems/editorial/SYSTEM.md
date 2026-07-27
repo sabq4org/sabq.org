@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-27 | المالك: editorial
+> آخر مراجعة: 2026-07-27 (تجاوب ملف المنسوب v2 للجوال) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -74,11 +74,11 @@
   `pending_review` تلقائياً. HR يعتمد عبر `POST .../approve` أو يطلب تصحيحاً.
   الإصدار الذاتي للشهادة يتطلب `approved` فقط (تفاصيل في
   `official-letters/SYSTEM.md`).
-- **تجاوب نموذج ملف المنسوب (جوال):** `StaffProfileForm` في `mode="dialog"`
-  (التعديل السريع من `/dashboard/staff-profiles`) يستخدم تبويبات أفقية قابلة
-  للتمرير تحت `md`، وجانبية عمودية من `md` فما فوق. لا تُرجع السايدبار العمودي
-  على عرض الشاشة الكاملة — يضغط الحقول على iPhone. الحوار نفسه
-  `w-[calc(100%-1rem)]` + `max-h-[min(92vh,100dvh)]` لتجنّب القصّ خلف شريط Safari.
+- **تجاوب نموذج ملف المنسوب (جوال):** تحت `md` لا شريط تبويبات ولا تمرير أفقي —
+  قائمة `Select` للقسم + أزرار سابق/تالي + حفظ لاصق أسفل الشاشة (safe-area).
+  من `md`: صفحة = تبويبات أفقية، حوار = سايدبار عمودي. حوار التعديل السريع
+  ملء الشاشة على الجوال (`inset-0` / `100dvh`) ويصبح متمركزاً من `sm`.
+  تلميحات الحقول مخفية على الجوال لتقليل الضوضاء.
 - **Visual AI (`visualAiService.analyzeImage`):** الرد ثلاثي اللغة كان يُقطع عند `maxOutputTokens: 2048` فيفشل `JSON.parse` (`Failed to parse JSON response`). السقف 4096، والتحليل عبر `parseVisualAiJson` (أسوار markdown + إصلاح JSON مقطوع)، وفشل التحليل يعيد التوليد داخل `pRetry`.
 - **عدادات إدارة المقالات:** `GET /api/admin/articles/metrics` → `getArticlesMetrics` يستعلاماً واحداً بـ `count(*) FILTER` + كاش ذاكرة `admin:articles:metrics` لمدة `CACHE_TTL.SHORT` (بدل 4 COUNT متتالية كانت ~2.5s في APM).
 - **نبض غرفة الأخبار (`GET /api/admin/dashboard/stats`):** عبر `adminDashboardStatsService.getCachedAdminDashboardStats` — SWR (طازج 5 دقائق / stale حتى 15 مع تحديث خلفي + single-flight). الـ warmup وتحديث كل 4 دقائق يعملان على **كل replica** (كاش الذاكرة per-process). `reading_history` يُجمَّع على آخر 7 أيام فقط؛ تفاعلات اليوم باستعلام منفصل بفلتر تاريخ. الموبايل `full-stats` يشارك نفس الكاش. KPI الجانبية (`deepAnalyses`, `audioNewsletters`, `publishers`, …) تُغلَّف بـ soft-fail داخل `getAdminDashboardStats` حتى لا يُسقط عمود ناقص في الإنتاج (مثل `deep_analyses.status`) المسار كاملاً.
