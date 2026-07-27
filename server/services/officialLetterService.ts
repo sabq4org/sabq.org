@@ -450,13 +450,17 @@ export async function regenerateLetterPdfs(): Promise<RegenerateLettersResult> {
         issuedAt: letter.issuedAt,
       });
 
-      const key =
-        letter.fileKey || `.private/official-letters/${letter.referenceCode}.pdf`;
+      // نفس المسار المنطقي المستخدم عند الإصدار — لا تمرر fileKey هنا:
+      // uploadPrivateDocument يضيف بادئة `.private/` بنفسه، وfileKey المحفوظ
+      // هو الناتج النهائي بعد الإضافة؛ تمريره للرفع يهبط على مفتاح مختلف
+      // ويبقى التنزيل على الملف القديم.
+      const key = `.private/official-letters/${letter.referenceCode}.pdf`;
       const stored = await storage.uploadPrivateDocument(key, pdf, "application/pdf");
-      if (!letter.fileKey) {
+      const storedKey = stored.path || key;
+      if (letter.fileKey !== storedKey) {
         await db
           .update(officialLetters)
-          .set({ fileKey: stored.path || key })
+          .set({ fileKey: storedKey })
           .where(eq(officialLetters.id, letter.id));
       }
       result.regenerated.push(letter.referenceCode);
