@@ -18,6 +18,8 @@
  * ونعيد المحاولة مرّة واحدة بعد حجز دورٍ جديد.
  */
 
+import { warnThrottled } from "../utils/throttledWarn";
+
 const API_BASE = "https://v3.football.api-sports.io";
 const WINDOW_MS = 60_000;
 const DEFAULT_RPM = 250;
@@ -120,6 +122,17 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
     );
   }
   if (wait > 0) {
+    // رصد (تشخيص 2026-07-27): انتظار الطابور «القانوني» غير مرئي في السجلات —
+    // نعرف الرفض عند التشبّع لكن لا نعرف كم ينتظر الطلب التفاعلي خلف التسخين
+    // (warmSquadPlayerCards) أو خلف موجة نداءات. سطر مخنوق لكل tag يكفي
+    // لقياس الفرضية دون إغراق السجل أيام المباريات.
+    if (wait > 1_000) {
+      warnThrottled(
+        `afqueue:${tag}`,
+        `[APIFootball] queue wait ${wait}ms for ${tag} ${path} (pending=${pendingWaiters}, rpm=${currentRpm()})`,
+        10_000,
+      );
+    }
     const maxPending = envMs("APIFOOTBALL_MAX_PENDING_WAITERS", DEFAULT_MAX_PENDING_WAITERS);
     if (pendingWaiters >= maxPending) {
       throw new Error(

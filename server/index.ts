@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
 import * as Sentry from "@sentry/node";
+import { shouldSendServerEvent } from "./utils/sentryServerNoise";
 // Sentry error monitoring — enabled only when SENTRY_DSN is set. Errors-only:
 // tracing/profiling/logs deliberately off (quota + overhead on a site this
 // size). exitEvenIfOtherHandlersAreRegistered=false preserves the
@@ -14,6 +15,12 @@ if (process.env.SENTRY_DSN) {
     integrations: [
       Sentry.onUncaughtExceptionIntegration({ exitEvenIfOtherHandlersAreRegistered: false }),
     ],
+    // قطعُ العميل للاتصال (read ECONNRESET الواصل عبر sentryErrorMiddleware)
+    // ليس خللًا في التطبيق: لا سطر يُصلَح ولا مستخدم يُحمى. يُسقط بشرطين
+    // معًا — توقيع القطع، وخلوّ المكدس من إطار من كودنا — حتى لا نخفي
+    // ECONNRESET صادرًا من Postgres/Redis. التفصيل في utils/sentryServerNoise.ts.
+    beforeSend: (event, hint) =>
+      shouldSendServerEvent(event, hint?.originalException) ? event : null,
   });
   console.log("[Server] ✅ Sentry error monitoring enabled");
 } else {
@@ -346,6 +353,11 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token', 'x-agent-secret'],
+  // بلا exposedHeaders لا يستطيع المتصفح قراءة ترويسة من أصل مختلف — وتطبيقا
+  // كاباسيتور يخاطبان api.sabq.org مباشرة. X-Session-Degraded تميّز «تعذّرت
+  // قراءة جلستك الآن» عن «انتهت جلستك»، فبدونها يُطرد المستخدم إلى صفحة
+  // الدخول عند عطل عابر في Redis.
+  exposedHeaders: ['X-Session-Degraded'],
 }));
 
 // Security headers with Helmet.js - 'unsafe-inline' and 'unsafe-eval' needed for Swagger UI

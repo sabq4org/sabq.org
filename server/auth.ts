@@ -15,7 +15,17 @@ import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { getRedisSessionAdapter } from "./redis";
 import { RedisStore } from "connect-redis";
-import { SessionFailoverStore } from "./sessionFailoverStore";
+import {
+  SESSION_DEGRADED_HEADER,
+  SessionFailoverStore,
+  sessionIdFromCookieHeader,
+} from "./sessionFailoverStore";
+
+/**
+ * مرجع لمخزن الجلسات الثنائي حين يكون Redis مفعّلًا. يحتاجه الوسيط أدناه
+ * ليعرف هل تعذّرت قراءة جلسة هذا الطلب فيَسِم الرد بالترويسة.
+ */
+let activeFailoverStore: SessionFailoverStore | null = null;
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -43,7 +53,9 @@ export function getSession() {
       prefix: "sess:",
       ttl: Math.floor(sessionTtl / 1000),
     });
-    store = new SessionFailoverStore(redisStore, pgStore);
+    const failoverStore = new SessionFailoverStore(redisStore, pgStore);
+    activeFailoverStore = failoverStore;
+    store = failoverStore;
     console.log("[Session] Redis primary + isolated PostgreSQL failover (commandTimeout 2.5s)");
   } else {
     console.log("[Session] Using isolated PostgreSQL store (add REDIS_URL for Redis primary + failover)");
@@ -134,8 +146,20 @@ export async function setupAuth(app: Express) {
     if (!needsSession(req)) {
       return next();
     }
+    // المعرّف يُلتقط من الكوكي **قبل** الوسيط: حين تعود القراءة فارغة يولّد
+    // express-session معرّفًا جديدًا فورًا، فلا يعود req.sessionID هو المعرّف
+    // الذي فشلت قراءته.
+    const incomingSid = activeFailoverStore
+      ? sessionIdFromCookieHeader(req.headers.cookie)
+      : null;
+
     sessionMiddleware(req, res, (err?: any) => {
       if (err) return next(err);
+      // تعذّرت قراءة الجلسة (لا أنها انتهت): نَسِم الرد كي تعيد الواجهة
+      // المحاولة بدل عرض «انتهت صلاحية جلستك» وطرد المستخدم.
+      if (incomingSid && activeFailoverStore?.consumeDegradedRead(incomingSid)) {
+        res.setHeader(SESSION_DEGRADED_HEADER, "1");
+      }
       passportInit(req, res, (err2?: any) => {
         if (err2) return next(err2);
         passportSession(req, res, next);

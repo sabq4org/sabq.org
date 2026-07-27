@@ -23,7 +23,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
   Check, Link2, Loader2, Lock, LockOpen, LogOut, Mic, MicOff,
-  MonitorUp, MonitorX, NotebookPen, PhoneOff, Radio, ScreenShare, Users, X,
+  MonitorUp, MonitorX, NotebookPen, PhoneOff, Radio, ScreenShare, Users, Volume2, X,
 } from "lucide-react";
 
 type ParticipantMeta = {
@@ -122,6 +122,12 @@ export function MeetingRoomView({
   const [isLocked, setIsLocked] = useState(isLockedInitial);
   const [panelOpen, setPanelOpen] = useState(true);
   const [now, setNow] = useState(Date.now());
+  // سياسة التشغيل التلقائي في المتصفحات تمنع تشغيل الصوت بلا إيماءة مستخدم.
+  // يحدث ذلك عمليًا حين يعود المستخدم إلى التبويب بعد تصغيره (خصوصًا سفاري
+  // على iOS): يظل متصلًا بالغرفة وشريط الحالة يقول «مباشر» لكنه لا يسمع
+  // أحدًا ولا يعرف السبب. LiveKit يبلّغنا بذلك عبر AudioPlaybackStatusChanged
+  // فنعرض له زرًّا يعيد التشغيل بإيماءة حقيقية.
+  const [audioBlocked, setAudioBlocked] = useState(false);
 
   const bump = useCallback(() => setTick((t) => t + 1), []);
 
@@ -233,6 +239,10 @@ export function MeetingRoomView({
       setConnected(false);
       onLeft(leftReasonRef.current ?? "ended");
     };
+    const onAudioPlaybackChanged = () => {
+      if (cancelled) return;
+      setAudioBlocked(!room.canPlaybackAudio);
+    };
 
     room
       .on(RoomEvent.TrackSubscribed, onTrackSubscribed)
@@ -245,6 +255,7 @@ export function MeetingRoomView({
       .on(RoomEvent.TrackUnmuted, onAnyChange)
       .on(RoomEvent.ActiveSpeakersChanged, bump)
       .on(RoomEvent.ParticipantMetadataChanged, bump)
+      .on(RoomEvent.AudioPlaybackStatusChanged, onAudioPlaybackChanged)
       .on(RoomEvent.Disconnected, onDisconnected);
 
     (async () => {
@@ -252,9 +263,11 @@ export function MeetingRoomView({
         await room.connect(livekitUrl, token);
         if (cancelled) return;
         await room.localParticipant.setMicrophoneEnabled(!muteOnJoin);
-        await room.startAudio().catch(() => {
-          /* سيُعاد تشغيله بأول نقرة */
-        });
+        // بلا إيماءة مستخدم قد يرفض المتصفح التشغيل — ليس عطلًا بل سياسة
+        // تشغيل تلقائي. نلتقط الرفض ونعكسه في الواجهة زرًّا صريحًا بدل
+        // بلعه صامتًا وترك المستخدم في اجتماع بلا صوت.
+        await room.startAudio().catch(() => undefined);
+        if (!cancelled) setAudioBlocked(!room.canPlaybackAudio);
         setConnected(true);
         bump();
       } catch (e) {
@@ -292,10 +305,28 @@ export function MeetingRoomView({
 
   // ── إجراءات ──
 
+  // تشغيل الصوت بإيماءة مستخدم حقيقية — المسار الوحيد الذي تقبله سياسة
+  // التشغيل التلقائي في سفاري/iOS بعد العودة من الخلفية.
+  const enableAudio = async () => {
+    if (!room) return;
+    try {
+      await room.startAudio();
+    } catch {
+      toast({
+        title: "تعذر تشغيل الصوت",
+        description: "تأكد من عدم كتم صوت المتصفح أو الجهاز ثم حاول مجدداً",
+        variant: "destructive",
+      });
+    } finally {
+      setAudioBlocked(!room.canPlaybackAudio);
+    }
+  };
+
   const toggleMic = async () => {
     if (!room) return;
     try {
-      await room.startAudio().catch(() => {});
+      await room.startAudio().catch(() => undefined);
+      setAudioBlocked(!room.canPlaybackAudio);
       await room.localParticipant.setMicrophoneEnabled(!localMicOn);
       bump();
     } catch {
@@ -405,6 +436,19 @@ export function MeetingRoomView({
     <div dir="rtl" className="flex h-full flex-col overflow-hidden bg-[#101820] text-[#e8eef4]">
       {/* حاوية الصوت البعيد — غير مرئية */}
       <div ref={audioContainerRef} className="hidden" />
+
+      {/* الصوت محجوب بسياسة التشغيل التلقائي — المستخدم متصل لكنه لا يسمع */}
+      {audioBlocked ? (
+        <button
+          type="button"
+          onClick={enableAudio}
+          data-testid="button-enable-audio"
+          className="flex w-full items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-bold text-[#101820] transition hover:bg-amber-400"
+        >
+          <Volume2 className="h-4 w-4" />
+          الصوت متوقف — اضغط لتشغيل صوت الاجتماع
+        </button>
+      ) : null}
 
       {/* الشريط العلوي */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2b3a48] px-4 py-2.5">

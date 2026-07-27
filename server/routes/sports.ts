@@ -13,6 +13,7 @@
 import type { Express, Request, Response } from "express";
 import { applyProvisionalTable } from "../services/liveStandings";
 import { bestEffortWithin } from "../utils/bestEffortDeadline";
+import { warnThrottled } from "../utils/throttledWarn";
 import {
   generateMatchPreview,
   generateMatchStory,
@@ -317,7 +318,7 @@ export function registerSportsRoutes(app: Express) {
           timeoutMs: 3_000,
           onTimeout: () => {
             timedOut = true;
-            console.warn(`[Sports] cards deadline exceeded for ${comp.slug}`);
+            warnThrottled(`deadline:cards:${comp.slug}`, `[Sports] cards deadline exceeded for ${comp.slug}`);
           },
         },
       );
@@ -620,7 +621,7 @@ export function registerSportsRoutes(app: Express) {
         timeoutMs: 3_000,
         onTimeout: () => {
           timedOut = true;
-          console.warn(`[Sports] scorers deadline exceeded for ${comp.slug}`);
+          warnThrottled(`deadline:scorers:${comp.slug}`, `[Sports] scorers deadline exceeded for ${comp.slug}`);
         },
       });
       if (scorers == null) {
@@ -674,7 +675,7 @@ export function registerSportsRoutes(app: Express) {
         timeoutMs: 3_000,
         onTimeout: () => {
           timedOut = true;
-          console.warn(`[Sports] assists deadline exceeded for ${comp.slug}`);
+          warnThrottled(`deadline:assists:${comp.slug}`, `[Sports] assists deadline exceeded for ${comp.slug}`);
         },
       });
       if (assists == null) {
@@ -1364,7 +1365,7 @@ export function registerSportsRoutes(app: Express) {
         timeoutMs: 3_000,
         onTimeout: () => {
           timedOut = true;
-          console.warn(`[Sports] team profile deadline exceeded for ${id}`);
+          warnThrottled(`deadline:team-profile:${id}`, `[Sports] team profile deadline exceeded for ${id}`);
         },
       });
       if (!profile) {
@@ -1494,7 +1495,7 @@ export function registerSportsRoutes(app: Express) {
       const transfers = await bestEffortWithin(getTeamTransfers(id), {
         fallback: empty,
         timeoutMs: 3_000,
-        onTimeout: () => console.warn(`[Sports] team transfers deadline exceeded for ${id}`),
+        onTimeout: () => warnThrottled(`deadline:team-transfers:${id}`, `[Sports] team transfers deadline exceeded for ${id}`),
       });
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
       res.json(transfers);
@@ -1621,7 +1622,7 @@ export function registerSportsRoutes(app: Express) {
         timeoutMs: 3_000,
         onTimeout: () => {
           timedOut = true;
-          console.warn(`[Sports] player card deadline exceeded for ${id}`);
+          warnThrottled(`deadline:player-card:${id}`, `[Sports] player card deadline exceeded for ${id}`);
         },
       });
       const extrasPromise = wantExtras
@@ -1680,7 +1681,7 @@ export function registerSportsRoutes(app: Express) {
         fallback: empty,
         // كان يبلغ 17ث خلف بطاقة اللاعب الكاملة + TheSports؛ نخفي القسم ونكمل الجلب للكاش.
         timeoutMs: 3_500,
-        onTimeout: () => console.warn(`[Sports] player market deadline exceeded for ${id}`),
+        onTimeout: () => warnThrottled(`deadline:player-market:${id}`, `[Sports] player market deadline exceeded for ${id}`),
       });
       res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
       res.json(market);
@@ -1705,7 +1706,7 @@ export function registerSportsRoutes(app: Express) {
       const form = await bestEffortWithin(getPlayerForm(id), {
         fallback: { available: false, matches: [] },
         timeoutMs: 2_500,
-        onTimeout: () => console.warn(`[Sports] player form deadline exceeded for ${id}`),
+        onTimeout: () => warnThrottled(`deadline:player-form:${id}`, `[Sports] player form deadline exceeded for ${id}`),
       });
       res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
       res.json(form);
