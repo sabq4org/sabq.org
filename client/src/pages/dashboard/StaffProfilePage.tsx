@@ -99,19 +99,19 @@ export default function StaffProfilePage() {
   return (
     <DashboardLayout>
       <div dir="rtl" className="space-y-4 p-1">
-        <div className="flex items-center gap-4 rounded-2xl border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-3 sm:gap-4 sm:p-5">
           <Link href="/dashboard/staff-profiles">
-            <Button size="icon" variant="ghost" className="text-muted-foreground"><ArrowRight className="h-5 w-5" /></Button>
+            <Button size="icon" variant="ghost" className="shrink-0 text-muted-foreground"><ArrowRight className="h-5 w-5" /></Button>
           </Link>
           {data?.user?.profileImageUrl ? (
-            <img src={data.user.profileImageUrl} alt="" className="h-14 w-14 rounded-full border-2 border-sky-500/30 object-cover" />
+            <img src={data.user.profileImageUrl} alt="" className="h-12 w-12 shrink-0 rounded-full border-2 border-sky-500/30 object-cover sm:h-14 sm:w-14" />
           ) : (
-            <div className="grid h-14 w-14 place-items-center rounded-full bg-sky-500/15 text-lg font-black text-sky-600">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-sky-500/15 text-lg font-black text-sky-600 sm:h-14 sm:w-14">
               {name.slice(0, 1)}
             </div>
           )}
-          <div className="min-w-0">
-            <h1 className="text-lg font-black text-foreground">{name}</h1>
+          <div className="min-w-0 flex-1 basis-[12rem]">
+            <h1 className="truncate text-base font-black text-foreground sm:text-lg">{name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="inline-block rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-bold text-sky-600" dir="ltr">
                 {data?.profile?.employeeNumber ?? "بلا رقم وظيفي بعد"}
@@ -136,12 +136,12 @@ export default function StaffProfilePage() {
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">ملاحظة التصحيح: {reviewNote}</p>
             )}
           </div>
-          <div className="mr-auto text-center">
+          <div className="mr-auto shrink-0 text-center">
             <div
-              className="grid h-16 w-16 place-items-center rounded-full"
+              className="grid h-14 w-14 place-items-center rounded-full sm:h-16 sm:w-16"
               style={{ background: `conic-gradient(#1CA4F0 ${percent}%, hsl(var(--muted)) 0)` }}
             >
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-card text-sm font-black text-foreground">{percent}%</div>
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-card text-sm font-black text-foreground sm:h-12 sm:w-12">{percent}%</div>
             </div>
             <div className="mt-1 text-[10px] text-muted-foreground">اكتمال الملف</div>
           </div>

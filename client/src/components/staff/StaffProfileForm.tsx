@@ -3,7 +3,8 @@
 //
 // وضعان بنفس المكوّن:
 //   mode="page"   → تبويبات أفقية لاصقة (داخل اللوحة، لا تزاحم قائمتها)
-//   mode="dialog" → تبويبات جانبية عمودية (البوب أب يغطي الشاشة فلا مزاحمة)
+//   mode="dialog" → تبويبات أفقية قابلة للتمرير على الشاشات الضيقة،
+//                   وجانبية عمودية من md فما فوق (البوب أب يغطي الشاشة)
 //
 // الحقول الملزمة تُعلَّم بنجمة وتُبرز حمراء عند النقص، وشريط الحفظ يعدّد
 // النواقص بالاسم. الهوية الوطنية مقنّعة وكشفها عبر صلاحية الوثائق.
@@ -293,8 +294,9 @@ export function StaffProfileForm({
       className={
         mode === "page"
           ? "sticky top-2 z-10 flex flex-nowrap gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 shadow-sm [-webkit-overflow-scrolling:touch]"
-          : "flex flex-col gap-1 rounded-xl border bg-card p-1.5 min-w-[190px]"
+          : "flex flex-nowrap gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 [-webkit-overflow-scrolling:touch] md:min-w-[190px] md:shrink-0 md:flex-col md:overflow-visible"
       }
+      aria-label="أقسام ملف المنسوب"
     >
       {visibleSections.map((s) => {
         const missing = sectionMissingCount(s.id);
@@ -308,7 +310,7 @@ export function StaffProfileForm({
               active ? "bg-sky-500/10 text-sky-600" : "text-muted-foreground hover:bg-muted"
             }`}
           >
-            <s.icon className="h-4 w-4" />
+            <s.icon className="h-4 w-4 shrink-0" />
             {s.labelAr}
             {missing > 0 ? (
               <span className="rounded-full bg-red-500/10 px-1.5 text-[10px] font-extrabold text-red-500">{missing}</span>
@@ -322,7 +324,7 @@ export function StaffProfileForm({
   );
 
   const panels = (
-    <div className="flex-1 rounded-xl border bg-card p-5">
+    <div className="min-w-0 flex-1 rounded-xl border bg-card p-3 sm:p-5">
       {activeSection === "identity" && (
         <div className="grid gap-4 sm:grid-cols-2">
           {field("officialFullNameAr", "الاسم الرباعي (للشهادات الرسمية)",
@@ -348,16 +350,16 @@ export function StaffProfileForm({
             <Input dir="ltr" className={missingClass("phoneNumber")} value={String(form.phoneNumber ?? "")} onChange={(e) => set("phoneNumber", e.target.value)} />,
             { required: true })}
           {field("nationalId", "الهوية الوطنية / الإقامة",
-            <div className="flex gap-2">
+            <div className="flex min-w-0 gap-2">
               <Input
                 dir="ltr"
-                className={`tracking-[3px] ${missingClass("nationalId")}`}
+                className={`min-w-0 flex-1 tracking-[3px] ${missingClass("nationalId")}`}
                 placeholder={data.profile?.hasNationalId ? `•••••• ${data.profile?.nationalIdLast4 ?? ""}` : "10 أرقام"}
                 value={revealedId ?? nationalIdInput}
                 onChange={(e) => { setRevealedId(null); setNationalIdInput(e.target.value.replace(/\D/g, "").slice(0, 10)); }}
               />
               {data.profile?.hasNationalId && !revealedId && (
-                <Button type="button" variant="outline" size="sm" onClick={reveal}><Eye className="h-4 w-4" /></Button>
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={reveal}><Eye className="h-4 w-4" /></Button>
               )}
             </div>,
             {
@@ -539,34 +541,45 @@ export function StaffProfileForm({
           أكمل <b>الاسم الرباعي</b> كما في الهوية لإصدار شهادة التعريف. هذا الاسم للشهادة فقط ولن يظهر في مقالاتك.
         </p>
       )}
-      <div className={mode === "dialog" ? "flex gap-3 items-start" : "flex flex-col gap-3"}>
+      <div
+        className={
+          mode === "dialog"
+            ? "flex flex-col gap-3 md:flex-row md:items-start"
+            : "flex flex-col gap-3"
+        }
+      >
         {tabs}
         <div
-          className={selfLocked ? "pointer-events-none select-none opacity-70" : undefined}
+          className={`min-w-0 flex-1 ${selfLocked ? "pointer-events-none select-none opacity-70" : ""}`}
           aria-disabled={selfLocked || undefined}
         >
           {panels}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+      <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center">
         {!data.profile ? (
-          <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-600">
+          <Badge variant="outline" className="w-fit border-sky-500/40 bg-sky-500/10 text-sky-600">
             الملف لم يُنشأ بعد — الحفظ الأول ينشئه برقم وظيفي
           </Badge>
         ) : selfLocked ? (
-          <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-600">
+          <Badge variant="outline" className="w-fit border-sky-500/40 bg-sky-500/10 text-sky-600">
             {reviewStatus === "approved" ? "معتمد — التعديل مقفل" : "قيد المراجعة — التعديل مقفل"}
           </Badge>
         ) : missingLabels.length > 0 ? (
-          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600">
+          <Badge variant="outline" className="w-fit whitespace-normal border-amber-500/40 bg-amber-500/10 text-amber-600">
             ⚠ {missingLabels.length} نواقص ملزمة: {missingLabels.slice(0, 4).join("، ")}{missingLabels.length > 4 ? "…" : ""}
           </Badge>
         ) : (
-          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600">✓ الملف مكتمل</Badge>
+          <Badge variant="outline" className="w-fit border-emerald-500/40 bg-emerald-500/10 text-emerald-600">✓ الملف مكتمل</Badge>
         )}
         {!selfLocked && (
-          <Button className="mr-auto" disabled={save.isPending} onClick={() => save.mutate()} data-testid="button-save-staff-profile">
+          <Button
+            className="w-full sm:mr-auto sm:w-auto"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+            data-testid="button-save-staff-profile"
+          >
             {save.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />} حفظ الملف
           </Button>
         )}
