@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, Newspaper, Brain, Trophy, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search } from "lucide-react";
+import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -96,7 +96,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "مُقترب", href: "/muqtarab" },
     { name: "لحظة بلحظة", href: "/moment-by-moment" },
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
-    { name: "روشن", href: "/roshn", icon: Trophy },
   ];
 
   return (
@@ -211,9 +210,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                     {section.icon && (
                       <section.icon
                         className={`h-3.5 w-3.5 ${
-                          section.href === "/sabq-ai" || section.href === "/roshn"
-                            ? "text-primary"
-                            : ""
+                          section.href === "/sabq-ai" ? "text-primary" : ""
                         }`}
                         aria-hidden="true"
                       />
@@ -438,16 +435,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   >
                     <Brain className="h-5 w-5 text-primary" aria-hidden="true" />
                     عقل سبق
-                  </span>
-                </Link>
-                <Link href="/roshn">
-                  <span
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                    onClick={() => setMobileMenuOpen(false)}
-                    data-testid="link-mobile-roshn"
-                  >
-                    <Trophy className="h-5 w-5 text-primary" aria-hidden="true" />
-                    روشن
                   </span>
                 </Link>
                 <Link href="/lite">
