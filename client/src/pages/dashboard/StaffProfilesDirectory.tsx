@@ -618,11 +618,11 @@ export default function StaffProfilesDirectory() {
 
         <Dialog open={quickEditUserId !== null} onOpenChange={(open) => !open && setQuickEditUserId(null)}>
           <DialogContent
-            className="max-h-[min(92vh,100dvh)] w-[calc(100%-1rem)] max-w-4xl overflow-y-auto overscroll-contain p-4 sm:w-full sm:p-6"
+            className="max-h-[100dvh] w-full max-w-4xl gap-3 overflow-y-auto overscroll-contain rounded-none border-0 p-3 pt-12 sm:max-h-[min(92vh,100dvh)] sm:w-[calc(100%-1.5rem)] sm:rounded-lg sm:border sm:p-6 sm:pt-6 md:left-[50%] md:top-[50%] md:translate-x-[-50%] md:translate-y-[-50%] max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-[100dvh] max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0"
             dir="rtl"
           >
-            <DialogHeader className="pr-8 text-right sm:pr-0">
-              <DialogTitle>تعديل سريع — ملف المنسوب</DialogTitle>
+            <DialogHeader className="space-y-1 text-right">
+              <DialogTitle className="text-base sm:text-lg">تعديل ملف المنسوب</DialogTitle>
             </DialogHeader>
             {quickEditUserId && (
               <StaffProfileForm userId={quickEditUserId} mode="dialog" onSaved={() => setQuickEditUserId(null)} />

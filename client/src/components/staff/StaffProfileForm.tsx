@@ -2,9 +2,11 @@
 // فورم ملف المنسوب الموحّد — التصميم المعتمد (2026-07-21)
 //
 // وضعان بنفس المكوّن:
-//   mode="page"   → تبويبات أفقية لاصقة (داخل اللوحة، لا تزاحم قائمتها)
-//   mode="dialog" → تبويبات أفقية قابلة للتمرير على الشاشات الضيقة،
-//                   وجانبية عمودية من md فما فوق (البوب أب يغطي الشاشة)
+//   mode="page"   → على سطح المكتب: تبويبات أفقية لاصقة
+//   mode="dialog" → على سطح المكتب: تبويبات جانبية عمودية
+//
+// على الجوال (كلا الوضعين): قائمة اختيار للقسم + أزرار سابق/تالي —
+// بلا شريط تمرير أفقي. الحقول عمود واحد، والحفظ لاصق أسفل الشاشة.
 //
 // الحقول الملزمة تُعلَّم بنجمة وتُبرز حمراء عند النقص، وشريط الحفظ يعدّد
 // النواقص بالاسم. الهوية الوطنية مقنّعة وكشفها عبر صلاحية الوثائق.
@@ -25,6 +27,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { DateField } from "@/components/staff/DateField";
 import {
   IdCard, Briefcase, Newspaper, Phone, Globe, FolderLock, Eye, Loader2, Plus, Upload, ExternalLink,
+  ChevronRight, ChevronLeft,
 } from "lucide-react";
 
 type Lookups = {
@@ -275,7 +278,9 @@ export function StaffProfileForm({
         {label} {opts?.required && <span className="text-red-500">*</span>}
       </label>
       {input}
-      {opts?.hint && <span className="text-[10px] text-muted-foreground">{opts.hint}</span>}
+      {opts?.hint && (
+        <span className="hidden text-[10px] text-muted-foreground sm:inline">{opts.hint}</span>
+      )}
     </div>
   );
 
@@ -289,12 +294,79 @@ export function StaffProfileForm({
     return true;
   });
 
-  const tabs = (
+  const sectionIndex = Math.max(0, visibleSections.findIndex((s) => s.id === activeSection));
+  const activeMeta = visibleSections[sectionIndex] ?? visibleSections[0];
+  const ActiveIcon = activeMeta.icon;
+  const goSection = (delta: number) => {
+    const next = sectionIndex + delta;
+    if (next < 0 || next >= visibleSections.length) return;
+    setActiveSection(visibleSections[next].id);
+  };
+
+  /** جوال: قائمة اختيار + سابق/تالي — بلا شريط تمرير. */
+  const mobileNav = (
+    <div className="flex flex-col gap-2 md:hidden" data-testid="staff-profile-mobile-nav">
+      <label className="text-xs font-bold text-muted-foreground">القسم الحالي</label>
+      <Select value={activeSection} onValueChange={setActiveSection}>
+        <SelectTrigger className="h-12 w-full gap-2 font-bold" data-testid="select-staff-profile-section">
+          <ActiveIcon className="h-4 w-4 shrink-0 text-sky-600" />
+          <SelectValue />
+          {sectionMissingCount(activeSection) > 0 ? (
+            <span className="mr-auto rounded-full bg-red-500/10 px-1.5 text-[10px] font-extrabold text-red-500">
+              {sectionMissingCount(activeSection)}
+            </span>
+          ) : (
+            <span className="mr-auto text-[10px] font-extrabold text-emerald-600">✓</span>
+          )}
+        </SelectTrigger>
+        <SelectContent position="popper" className="max-h-[60vh]">
+          {visibleSections.map((s) => {
+            const missing = sectionMissingCount(s.id);
+            return (
+              <SelectItem key={s.id} value={s.id} className="font-bold">
+                {missing > 0 ? `${s.labelAr} (${missing})` : s.labelAr}
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 flex-1 gap-1"
+          disabled={sectionIndex <= 0}
+          onClick={() => goSection(-1)}
+          data-testid="button-section-prev"
+        >
+          <ChevronRight className="h-4 w-4" />
+          السابق
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 flex-1 gap-1"
+          disabled={sectionIndex >= visibleSections.length - 1}
+          onClick={() => goSection(1)}
+          data-testid="button-section-next"
+        >
+          التالي
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+      </div>
+      <p className="text-center text-[11px] text-muted-foreground">
+        {sectionIndex + 1} من {visibleSections.length} — {activeMeta.labelAr}
+      </p>
+    </div>
+  );
+
+  /** سطح المكتب فقط: تبويبات صفحة أفقية أو سايدبار حوار. */
+  const desktopTabs = (
     <nav
       className={
         mode === "page"
-          ? "sticky top-2 z-10 flex flex-nowrap gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 shadow-sm [-webkit-overflow-scrolling:touch]"
-          : "flex flex-nowrap gap-1 overflow-x-auto rounded-xl border bg-card p-1.5 [-webkit-overflow-scrolling:touch] md:min-w-[190px] md:shrink-0 md:flex-col md:overflow-visible"
+          ? "sticky top-2 z-10 hidden gap-1 rounded-xl border bg-card p-1.5 shadow-sm md:flex md:flex-wrap"
+          : "hidden min-w-[190px] shrink-0 flex-col gap-1 rounded-xl border bg-card p-1.5 md:flex"
       }
       aria-label="أقسام ملف المنسوب"
     >
@@ -306,7 +378,7 @@ export function StaffProfileForm({
             key={s.id}
             type="button"
             onClick={() => setActiveSection(s.id)}
-            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-bold transition-colors ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-bold transition-colors ${
               active ? "bg-sky-500/10 text-sky-600" : "text-muted-foreground hover:bg-muted"
             }`}
           >
@@ -324,9 +396,9 @@ export function StaffProfileForm({
   );
 
   const panels = (
-    <div className="min-w-0 flex-1 rounded-xl border bg-card p-3 sm:p-5">
+    <div className="min-w-0 flex-1 md:rounded-xl md:border md:bg-card md:p-5">
       {activeSection === "identity" && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {field("officialFullNameAr", "الاسم الرباعي (للشهادات الرسمية)",
             <Input
               className={missingClass("officialFullNameAr")}
@@ -379,7 +451,7 @@ export function StaffProfileForm({
       )}
 
       {activeSection === "job" && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {field("jobTitleId", "المسمى الوظيفي",
             <div className="flex gap-2">
               <Select value={(form.jobTitleId as string) ?? ""} onValueChange={(v) => set("jobTitleId", v)}>
@@ -415,7 +487,7 @@ export function StaffProfileForm({
       )}
 
       {activeSection === "press" && !isSelf && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
             هذه الحقول تغذي بطاقة Apple Wallet الصحفية مباشرة، وتُزامَن تلقائياً مع النظام القديم.
           </p>
@@ -433,7 +505,7 @@ export function StaffProfileForm({
       )}
 
       {activeSection === "contact" && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {field("officialPhone", "الجوال الرسمي",
             <Input dir="ltr" value={String(form.officialPhone ?? "")} onChange={(e) => set("officialPhone", e.target.value)} />)}
           {field("officialEmail", "البريد الرسمي",
@@ -453,7 +525,7 @@ export function StaffProfileForm({
       )}
 
       {activeSection === "public" && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {field("bioAr", "نبذة عربية",
             <Textarea rows={3} value={String(form.bioAr ?? "")} onChange={(e) => set("bioAr", e.target.value)} />, { wide: true })}
           {field("specializations", "التخصصات",
@@ -476,7 +548,7 @@ export function StaffProfileForm({
       )}
 
       {activeSection === "docs" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <p className="sm:col-span-2 rounded-lg bg-sky-500/5 px-3 py-2 text-xs text-muted-foreground">
             {isSelf
               ? "تخزين خاص — يمكنك رفع السيرة وصورة الهوية والترخيص. العقد يبقى لدى الموارد البشرية."
@@ -524,7 +596,7 @@ export function StaffProfileForm({
   );
 
   return (
-    <div dir="rtl" className="flex flex-col gap-3">
+    <div dir="rtl" className="flex flex-col gap-3 pb-20 md:pb-0">
       {selfLocked && (
         <p
           className="rounded-xl border border-sky-300/70 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100"
@@ -548,7 +620,8 @@ export function StaffProfileForm({
             : "flex flex-col gap-3"
         }
       >
-        {tabs}
+        {mobileNav}
+        {desktopTabs}
         <div
           className={`min-w-0 flex-1 ${selfLocked ? "pointer-events-none select-none opacity-70" : ""}`}
           aria-disabled={selfLocked || undefined}
@@ -557,25 +630,28 @@ export function StaffProfileForm({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:static md:z-auto md:flex md:flex-row md:flex-wrap md:items-center md:gap-3 md:rounded-xl md:border md:bg-card md:p-3 md:pb-3 md:backdrop-blur-none">
         {!data.profile ? (
-          <Badge variant="outline" className="w-fit border-sky-500/40 bg-sky-500/10 text-sky-600">
-            الملف لم يُنشأ بعد — الحفظ الأول ينشئه برقم وظيفي
+          <Badge variant="outline" className="mb-2 w-fit border-sky-500/40 bg-sky-500/10 text-sky-600 md:mb-0">
+            ملف جديد
           </Badge>
         ) : selfLocked ? (
-          <Badge variant="outline" className="w-fit border-sky-500/40 bg-sky-500/10 text-sky-600">
-            {reviewStatus === "approved" ? "معتمد — التعديل مقفل" : "قيد المراجعة — التعديل مقفل"}
+          <Badge variant="outline" className="mb-2 w-fit border-sky-500/40 bg-sky-500/10 text-sky-600 md:mb-0">
+            {reviewStatus === "approved" ? "معتمد — مقفل" : "قيد المراجعة — مقفل"}
           </Badge>
         ) : missingLabels.length > 0 ? (
-          <Badge variant="outline" className="w-fit whitespace-normal border-amber-500/40 bg-amber-500/10 text-amber-600">
-            ⚠ {missingLabels.length} نواقص ملزمة: {missingLabels.slice(0, 4).join("، ")}{missingLabels.length > 4 ? "…" : ""}
+          <Badge variant="outline" className="mb-2 w-fit border-amber-500/40 bg-amber-500/10 text-amber-600 md:mb-0 md:whitespace-normal">
+            <span className="md:hidden">⚠ {missingLabels.length} نواقص</span>
+            <span className="hidden md:inline">
+              ⚠ {missingLabels.length} نواقص ملزمة: {missingLabels.slice(0, 4).join("، ")}{missingLabels.length > 4 ? "…" : ""}
+            </span>
           </Badge>
         ) : (
-          <Badge variant="outline" className="w-fit border-emerald-500/40 bg-emerald-500/10 text-emerald-600">✓ الملف مكتمل</Badge>
+          <Badge variant="outline" className="mb-2 w-fit border-emerald-500/40 bg-emerald-500/10 text-emerald-600 md:mb-0">✓ مكتمل</Badge>
         )}
         {!selfLocked && (
           <Button
-            className="w-full sm:mr-auto sm:w-auto"
+            className="h-12 w-full md:mr-auto md:h-10 md:w-auto"
             disabled={save.isPending}
             onClick={() => save.mutate()}
             data-testid="button-save-staff-profile"
