@@ -139,6 +139,9 @@
       "pathGlobs": [
         "client/src/components/staff/MyStaffProfileCard.tsx",
         "client/src/components/staff/MyServicesHomeLink.tsx",
+        "client/src/components/staff/StaffProfileForm.tsx",
+        "client/src/pages/dashboard/StaffProfilesDirectory.tsx",
+        "client/src/pages/dashboard/StaffProfilePage.tsx",
         "client/src/pages/dashboard/MyServicesPage.tsx",
         "server/routes/staffProfiles.ts",
         "server/services/staffProfileService.ts",
@@ -256,7 +259,7 @@
       ],
       "dashboardPath": "/dashboard",
       "owners": ["editorial"],
-      "lastReviewed": "2026-07-26"
+      "lastReviewed": "2026-07-27"
     },
     {
       "id": "ifox",
