@@ -17578,26 +17578,11 @@ Respond in valid JSON format only:
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
   // Smart Headline Comparison - Multi-Model AI
-  app.post("/api/ai/compare-headlines", isAuthenticated, async (req: any, res) => {
+  // نفس صلاحية باقي أدوات العناوين (generate-titles / proofread-title) —
+  // الفحص القديم بـ articles:write + أدوار نصية كان يرفض محررين لديهم articles.ai_generate.
+  app.post("/api/ai/compare-headlines", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE), async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      
-      // Allow editors, admins, and reporters to use AI headline generation
-      const userPermissions = await getUserPermissions(user.id);
-      const canUseAI = user.role === "admin" || 
-                       user.role === "editor" || 
-                       user.role === "reporter" ||
-                       userPermissions.includes("articles:write");
-      
-      if (!canUseAI) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
       const { content, currentTitle } = req.body;
       if (!content) {
         return res.status(400).json({ message: "Content is required" });
