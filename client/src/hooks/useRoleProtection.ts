@@ -2,15 +2,16 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import type { User } from "@shared/schema";
+import { hasRole, type User } from "@/hooks/useAuth";
 
-interface UserWithRoles extends User {
-  roles?: string[];
-}
-
+/**
+ * Page-level role gate (legacy). Prefer ProtectedRoute + permissions where
+ * possible. Must use hasRole so system_admin / superadmin satisfy requiredRole
+ * "admin" the same way ProtectedRoute and the sidebar do.
+ */
 export function useRoleProtection(requiredRole: string) {
-  const { data: user, isLoading } = useQuery<UserWithRoles>({ 
-    queryKey: ['/api/auth/user'],
+  const { data: user, isLoading } = useQuery<User>({
+    queryKey: ["/api/auth/user"],
     retry: false,
   });
   const [, navigate] = useLocation();
@@ -19,21 +20,13 @@ export function useRoleProtection(requiredRole: string) {
   useEffect(() => {
     if (isLoading) return;
 
-    // Check if user exists and has the required role
-    const hasRequiredRole = user && (
-      // Check new RBAC roles array first
-      (user.roles && user.roles.includes(requiredRole)) ||
-      // Fallback to legacy role field
-      user.role === requiredRole
-    );
-
-    if (!hasRequiredRole) {
-      toast({ 
+    if (!hasRole(user, requiredRole)) {
+      toast({
         variant: "destructive",
-        title: "غير مصرح", 
-        description: "ليس لديك صلاحية لعرض هذه الصفحة" 
+        title: "غير مصرح",
+        description: "ليس لديك صلاحية لعرض هذه الصفحة",
       });
-      navigate('/');
+      navigate("/");
     }
   }, [user, isLoading, requiredRole, navigate, toast]);
 

@@ -18,7 +18,6 @@ export default function ComingSoon() {
     "/dashboard/analytics": "لوحات التحليلات",
     "/dashboard/analytics/trending": "تحليل الرائج",
     "/dashboard/analytics/behavior": "سلوك المستخدمين",
-    "/dashboard/analytics/ab-tests": "اختبارات A/B",
     "/dashboard/integrations": "التكاملات الخارجية",
     "/dashboard/storage": "إدارة التخزين",
     "/dashboard/audit-logs": "سجلات النشاط",

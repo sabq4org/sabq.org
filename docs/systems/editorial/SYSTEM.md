@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-27 (تجاوب ملف المنسوب v2 للجوال) | المالك: editorial
+> آخر مراجعة: 2026-07-27 (إزالة صفحات أدوات ذكية/تحليلات قديمة من اللوحة) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -19,7 +19,7 @@
 | الإعلانات الداخلية | `server/routes/announcements.ts`، `/api/announcements/*`، وصفحات `/dashboard/announcements` |
 | AI تحريري | `ai-content-tools`, `journalist-agent-ai`, `aiArticleGenerator`, `seo-generator` |
 | رادار الفجوات | `server/services/coverageGapMatcher.ts` (محرك المطابقة الدلالية), `server/routes/coverageGaps.ts` (`/api/admin/dashboard/coverage-gaps` + تعيين/مسودة/استبعاد) |
-| Web | `/dashboard`, SmartJournalist, Communications, DataStory |
+| Web | `/dashboard`, Communications, Prompt Studio, Voice Management |
 | صفحة الكاتب بالاسم | `GET /api/authors/by-name` → `authorProfileService`؛ واجهة `/author/:name`؛ من مقال الرأي يُفضَّل `/reporter/:slug` إن وُجد `staff.slug` وإلا `/author/:name` (مثل iOS) |
 
 ## عقود مهمة

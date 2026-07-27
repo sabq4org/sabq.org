@@ -252,7 +252,6 @@ const MuqtarabReview = lazy(() => retryImport(() => import("@/pages/dashboard/Mu
 
 // === LAZY IMPORTS (Smart Features) ===
 const SmartLinksManagement = lazy(() => retryImport(() => import("@/pages/dashboard/SmartLinksManagement")));
-const SmartJournalist = lazy(() => retryImport(() => import("@/pages/dashboard/SmartJournalist")));
 const TermDetail = lazy(() => retryImport(() => import("@/pages/TermDetail")));
 const EntityDetail = lazy(() => retryImport(() => import("@/pages/EntityDetail")));
 const SmartBlocksPage = lazy(() => retryImport(() => import("@/pages/dashboard/SmartBlocksPage")));
@@ -263,13 +262,8 @@ const SmartCategoriesManagement = lazy(() => retryImport(() => import("@/pages/S
 const ComingSoon = lazy(() => retryImport(() => import("@/pages/ComingSoon")));
 const UserBehavior = lazy(() => retryImport(() => import("@/pages/UserBehavior")));
 const AdvancedAnalytics = lazy(() => retryImport(() => import("@/pages/AdvancedAnalytics")));
-const RecommendationAnalytics = lazy(() => retryImport(() => import("@/pages/RecommendationAnalytics")));
-const SentimentAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/SentimentAnalytics")));
-const PersonalizationAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/PersonalizationAnalytics")));
 const NewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/NewsletterAnalytics")));
 const ArticleAnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/ArticleAnalyticsDashboard")));
-const ABTestsManagement = lazy(() => retryImport(() => import("@/pages/ABTestsManagement")));
-const ABTestDetail = lazy(() => retryImport(() => import("@/pages/ABTestDetail")));
 
 // === LAZY IMPORTS (Notifications) ===
 const Notifications = lazy(() => retryImport(() => import("@/pages/Notifications")));
@@ -342,8 +336,6 @@ const RssFeedsManager = lazy(() => retryImport(() => import("@/pages/dashboard/R
 const SportmonksNewsImporter = lazy(() => retryImport(() => import("@/pages/dashboard/SportmonksNewsImporter")));
 const SportsNamesManager = lazy(() => retryImport(() => import("@/pages/dashboard/SportsNamesManager")));
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
-const AITools = lazy(() => retryImport(() => import("@/pages/dashboard/AITools")));
-const DataStoryGenerator = lazy(() => retryImport(() => import("@/pages/DataStoryGenerator")));
 const PromptStudio = lazy(() => retryImport(() => import("@/pages/PromptStudio")));
 const PromptStudioPublic = lazy(() => retryImport(() => import("@/pages/PromptStudioPublic")));
 const DeepAnalysis = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysis")));
@@ -352,7 +344,6 @@ const TasksPage = lazy(() => retryImport(() => import("@/pages/dashboard/TasksPa
 const DashboardProfile = lazy(() => retryImport(() => import("@/pages/dashboard/DashboardProfile")));
 const AdminTools = lazy(() => retryImport(() => import("@/pages/dashboard/AdminTools")));
 const VoiceManagement = lazy(() => retryImport(() => import("@/pages/dashboard/VoiceManagement")));
-const TranscriptionTool = lazy(() => retryImport(() => import("@/pages/dashboard/TranscriptionTool")));
 
 // === LAZY IMPORTS (Omq) ===
 const Omq = lazy(() => retryImport(() => import("@/pages/Omq")));
@@ -919,7 +910,6 @@ function Router() {
         </Route>
         <Route path="/dashboard/categories">{() => <LazyRoute component={CategoriesManagement} />}</Route>
         <Route path="/dashboard/media-library">{() => <LazyRoute component={MediaLibrary} />}</Route>
-        <Route path="/dashboard/ai-tools">{() => <LazyRoute component={AITools} />}</Route>
         {/* Infographic Studio - restricted from reporters */}
         <Route path="/dashboard/infographic-studio">
           {() => (
@@ -1128,9 +1118,7 @@ function Router() {
         <Route path="/dashboard/ai-moderation">{() => <LazyRoute component={AIModerationDashboard} />}</Route>
         <Route path="/dashboard/sentiment-insights">{() => <LazyRoute component={SentimentInsights} />}</Route>
         <Route path="/admin/comments/suspicious-words">{() => <LazyRoute component={SuspiciousWordsManagement} />}</Route>
-        <Route path="/dashboard/data-stories">{() => <LazyRoute component={DataStoryGenerator} />}</Route>
         <Route path="/dashboard/prompt-studio">{() => <LazyRoute component={PromptStudio} />}</Route>
-        <Route path="/dashboard/smart-journalist">{() => <LazyRoute component={SmartJournalist} />}</Route>
         <Route path="/dashboard/tasks">{() => <LazyRoute component={TasksPage} />}</Route>
         <Route path="/dashboard/ai/summaries">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/ai/deep-analysis-list">{() => <LazyRoute component={DeepAnalysisList} />}</Route>
@@ -1141,11 +1129,6 @@ function Router() {
         <Route path="/dashboard/analytics/trending">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/analytics/behavior">{() => <LazyRoute component={UserBehavior} />}</Route>
         <Route path="/dashboard/analytics/advanced">{() => <LazyRoute component={AdvancedAnalytics} />}</Route>
-        <Route path="/dashboard/analytics/ab-tests/:id">{() => <LazyRoute component={ABTestDetail} />}</Route>
-        <Route path="/dashboard/analytics/ab-tests">{() => <LazyRoute component={ABTestsManagement} />}</Route>
-        <Route path="/dashboard/analytics/recommendations">{() => <LazyRoute component={RecommendationAnalytics} />}</Route>
-        <Route path="/dashboard/sentiment-analytics">{() => <LazyRoute component={SentimentAnalytics} />}</Route>
-        <Route path="/dashboard/personalization-analytics">{() => <LazyRoute component={PersonalizationAnalytics} />}</Route>
         <Route path="/dashboard/newsletter-analytics">{() => <LazyRoute component={NewsletterAnalytics} />}</Route>
         <Route path="/dashboard/rss-feeds">{() => <LazyRoute component={RssFeedsManager} />}</Route>
         <Route path="/dashboard/sportmonks-news">{() => <LazyRoute component={SportmonksNewsImporter} />}</Route>
@@ -1236,7 +1219,6 @@ function Router() {
         {/* Legacy redirects */}
         <Route path="/dashboard/email-agent">{() => <LazyRoute component={CommunicationsManagement} />}</Route>
         <Route path="/dashboard/voice-management">{() => <LazyRoute component={VoiceManagement} />}</Route>
-        <Route path="/dashboard/transcription-tool">{() => <LazyRoute component={TranscriptionTool} />}</Route>
         <Route path="/admin/whatsapp">{() => <LazyRoute component={CommunicationsManagement} />}</Route>
         
         {/* Admin Routes */}
