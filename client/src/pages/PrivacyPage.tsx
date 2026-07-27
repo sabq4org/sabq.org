@@ -16,6 +16,7 @@ import {
   Shield,
   SlidersHorizontal,
   Sparkles,
+  Trophy,
   Volume2,
 } from "lucide-react";
 import { Header } from "@/components/Header";
@@ -114,7 +115,7 @@ export default function PrivacyPage() {
             data-testid="text-intro-content"
           >
             كيف نجمع بياناتك ونستخدمها ونحميها — بما في ذلك خدمات الذكاء الاصطناعي
-            مثل التوصيات وإشراف التعليقات والصوت والنشرات.
+            مثل التوصيات وإشراف التعليقات والصوت والنشرات، وتطبيق VARA الرياضي.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <span data-testid="text-last-updated">
@@ -124,6 +125,12 @@ export default function PrivacyPage() {
             <span>ملتزمون بنظام حماية البيانات الشخصية في المملكة</span>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
+            <a href="#vara">
+              <Button variant="outline" size="sm" className="gap-2" data-testid="button-vara-privacy-top">
+                <Trophy className="w-4 h-4" aria-hidden="true" />
+                خصوصية تطبيق VARA
+              </Button>
+            </a>
             <Link href="/settings/notifications">
               <Button variant="outline" size="sm" className="gap-2" data-testid="button-manage-preferences-top">
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
@@ -326,19 +333,100 @@ export default function PrivacyPage() {
               </div>
             </section>
 
-            {/* 7 */}
-            <section>
-              <SectionHeading id="changes" number="07" title="التغييرات على هذه السياسة" />
-              <p className="text-[15px] text-muted-foreground leading-relaxed">
-                قد نحدّث هذه السياسة مع تطوّر خدماتنا — بما في ذلك خدمات الذكاء الاصطناعي. عند
-                تغييرات جوهرية سننشر النسخة المحدّثة هنا مع تحديث تاريخ «آخر تحديث»، وقد نُعلمك عبر
-                المنصة أو البريد عند الاقتضاء.
-              </p>
+            {/* 7 — VARA app (Play Store / الموبايل) */}
+            <section id="vara" className="scroll-mt-28" data-testid="section-vara-privacy">
+              <div className="rounded-2xl border border-border bg-muted/20 px-4 py-6 sm:px-6 sm:py-8 md:px-8">
+                <div className="flex items-start gap-3 mb-5">
+                  <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
+                    <Trophy className="w-5 h-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-medium tabular-nums tracking-wide text-muted-foreground mb-1" dir="ltr">
+                      07
+                    </p>
+                    <h2 className="text-xl md:text-2xl font-extrabold tracking-tight">
+                      تطبيق VARA الرياضي
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="space-y-5 text-[15px] leading-relaxed text-muted-foreground">
+                  <p>
+                    تطبيق <b className="text-foreground font-semibold">VARA</b> منتج من منتجات
+                    صحيفة سبق الإلكترونية (الحزمة: <span dir="ltr" className="text-foreground font-medium">com.sabq.sports</span>).
+                    تدخل إليه بعضوية سبق نفسها، وتنطبق عليه أحكام هذه السياسة ما لم يُذكر خلاف ذلك
+                    أدناه.
+                  </p>
+
+                  <div>
+                    <h3 className="text-foreground font-bold mb-1.5">ما الذي نجمعه عبر VARA؟</h3>
+                    <ul className="space-y-3 list-none">
+                      <li className="ps-3 border-s-2 border-primary/40">
+                        <b className="text-foreground">حساب العضوية:</b> بيانات تسجيل الدخول والملف
+                        (مثل الاسم والبريد أو الجوال) المرتبطة بعضوية سبق المشتركة مع المنصة.
+                      </li>
+                      <li className="ps-3 border-s-2 border-border">
+                        <b className="text-foreground">التفضيلات والمتابعات:</b> الفرق والمباريات
+                        والبطولات التي تتابعها، والفريق المفضّل، وإعدادات اللغة والمظهر، لتخصيص
+                        التجربة والتنبيهات.
+                      </li>
+                      <li className="ps-3 border-s-2 border-border">
+                        <b className="text-foreground">الإشعارات:</b> عند تفعيلها قد نُسجّل معرّف
+                        جهاز للإشعارات الفورية (مثل FCM) لإرسال تنبيهات المباريات والأحداث التي
+                        اخترتها. يمكنك إيقافها من إعدادات التطبيق أو النظام في أي وقت.
+                      </li>
+                      <li className="ps-3 border-s-2 border-border">
+                        <b className="text-foreground">التوقّعات والمشاركة:</b> إن استخدمت «توقّع
+                        VARA» نحتفظ بتوقّعاتك ونقاطك الرمزية وترتيبك لغرض المنافسة والتسلية داخل
+                        الخدمة. النظام ليس رهانًا ولا مقابلًا ماديًا، والنقاط لا تمثّل قيمة نقدية.
+                      </li>
+                      <li className="ps-3 border-s-2 border-border">
+                        <b className="text-foreground">بيانات تقنية:</b> نوع الجهاز ونظام التشغيل
+                        ومعلومات أساسية لاستقرار التطبيق والأمان، بما يتوافق مع ممارسات المنصة أعلاه.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h3 className="text-foreground font-bold mb-1.5">كيف نستخدمها؟</h3>
+                    <p>
+                      لتقديم جداول المباريات والمراكز والإحصاءات، وتخصيص التنبيهات والمتابعات،
+                      وتشغيل التوقّعات ولوحة المتصدّرين، وتحسين أداء التطبيق وأمانه. لا نبيع
+                      معلوماتك الشخصية لأغراض تسويقية لأطراف ثالثة دون موافقتك الصريحة.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-foreground font-bold mb-1.5">حقوقك داخل التطبيق</h3>
+                    <p>
+                      يمكنك إدارة التنبيهات والمتابعات من الإعدادات، وتعديل ملفك حيث يتيسّر ذلك،
+                      وطلب حذف حسابك وبياناتك المرتبطة من داخل التطبيق أو عبر{" "}
+                      <a
+                        href="mailto:privacy@sabq.org"
+                        className="text-primary font-semibold hover:underline underline-offset-2"
+                      >
+                        privacy@sabq.org
+                      </a>
+                      {" "}وفق الأنظمة المعمول بها.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </section>
 
             {/* 8 */}
             <section>
-              <SectionHeading id="contact" number="08" title="الاتصال بنا" />
+              <SectionHeading id="changes" number="08" title="التغييرات على هذه السياسة" />
+              <p className="text-[15px] text-muted-foreground leading-relaxed">
+                قد نحدّث هذه السياسة مع تطوّر خدماتنا — بما في ذلك خدمات الذكاء الاصطناعي وتطبيق
+                VARA. عند تغييرات جوهرية سننشر النسخة المحدّثة هنا مع تحديث تاريخ «آخر تحديث»، وقد
+                نُعلمك عبر المنصة أو البريد أو التطبيق عند الاقتضاء.
+              </p>
+            </section>
+
+            {/* 9 */}
+            <section>
+              <SectionHeading id="contact" number="09" title="الاتصال بنا" />
               <div className="rounded-2xl border border-border bg-muted/30 px-5 py-6 sm:px-7">
                 <p className="text-[15px] text-muted-foreground leading-relaxed mb-5">
                   لأسئلة الخصوصية أو طلبات البيانات الشخصية:
