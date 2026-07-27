@@ -96,7 +96,7 @@ struct RoshnMatchCenter: View {
         ZStack {
             RoshnTheme.heroGradient
             Circle()
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
                 .frame(width: 160, height: 160)
 
             VStack(spacing: 12) {
@@ -106,13 +106,13 @@ struct RoshnMatchCenter: View {
                     if d.fixture.started {
                         Text("\(d.fixture.goals.away ?? 0) - \(d.fixture.goals.home ?? 0)")
                             .font(SabqFonts.app(size: 30, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(RoshnTheme.heroOn)
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
                         Text(RsFormat.time(d.fixture))
                             .font(SabqFonts.app(size: 22, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(RoshnTheme.heroOn)
                     }
                     statusChip(d.fixture)
                 }
@@ -123,11 +123,11 @@ struct RoshnMatchCenter: View {
             VStack(spacing: 3) {
                 Text("\(RsFormat.day(d.fixture)) · \(RsFormat.time(d.fixture))")
                     .font(SabqFonts.app(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.72))
+                    .foregroundStyle(RoshnTheme.heroOnSoft)
                 if !d.fixture.round.isEmpty || !d.fixture.venue.name.isEmpty {
                     Text([d.fixture.round, d.fixture.venue.name].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(SabqFonts.app(size: 10.5))
-                        .foregroundStyle(.white.opacity(0.64))
+                        .foregroundStyle(RoshnTheme.heroOnSoft.opacity(0.9))
                         .lineLimit(1).minimumScaleFactor(0.75)
                 }
             }
@@ -138,16 +138,16 @@ struct RoshnMatchCenter: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.1), lineWidth: 1)
+                .stroke(RoshnTheme.heroStroke, lineWidth: 1)
         )
         .overlay(alignment: .top) {
             // خط الهوية السماوي أعلى البطاقة — لمسة روشن المميزة.
             RoundedRectangle(cornerRadius: 2)
-                .fill(LinearGradient(colors: [RoshnTheme.sky, RoshnTheme.pitch],
-                                     startPoint: .trailing, endPoint: .leading))
+                .fill(RoshnTheme.badgeGradient)
                 .frame(height: 3)
                 .padding(.horizontal, 40)
         }
+        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 12, y: 6)
     }
 
     private func teamColumn(_ team: RsTeam) -> some View {
@@ -155,11 +155,11 @@ struct RoshnMatchCenter: View {
             WCRemoteImage(url: team.logo)
                 .padding(5).frame(width: 58, height: 58)
                 .background(Circle().fill(.white))
-                .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1))
-                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                .overlay(Circle().stroke(RoshnTheme.heroStroke, lineWidth: 1))
+                .shadow(color: RoshnTheme.sky.opacity(0.10), radius: 5, y: 2)
             Text(team.name)
                 .font(SabqFonts.app(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(RoshnTheme.heroOn)
                 .lineLimit(2).minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
         } }
@@ -181,9 +181,10 @@ struct RoshnMatchCenter: View {
             } else {
                 Text(f.status.label.isEmpty ? "قادمة" : f.status.label)
                     .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(RoshnTheme.sky)
                     .padding(.horizontal, 11).padding(.vertical, 5)
-                    .background(Capsule().fill(.white.opacity(0.12)))
+                    .background(Capsule().fill(.white.opacity(0.75)))
+                    .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
             }
         }
     }

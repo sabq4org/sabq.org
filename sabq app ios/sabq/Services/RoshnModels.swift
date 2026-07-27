@@ -563,43 +563,67 @@ extension APIClient {
 
 // MARK: - هوية روشن البصرية — لوحة فاتحة منسّقة
 //
-// قرار المالك: تصميم فاتح غير داكن بألوان منسّقة. الأدوار الأربعة (نهج نظام
-// كأس آسيا المعتمد): سماوي روشن أساسًا، زمردي الملعب ثانويًا، ذهبي للتتويج
-// والسباقات، وحبر كحلي للنصوص — كلها على أرضيات بيضاء/سماوية ناعمة.
+// قرار المالك: تصميم فاتح غير داكن بألوان منسّقة. الهوية البصرية (2026-07-27):
+// «صباح الملعب» — سماوي هادئ + زمرد مُطفأ + ذهب شامبانيا على أرضيات ضبابية،
+// بلا هيرو ليلي قاتم يُرهق العين عند الانتقال من البنر إلى المركز.
 
 nonisolated enum RoshnTheme {
-    /// السماوي الأساسي — هوية روشن (أزرار/روابط/إبراز).
-    static let sky = Color(red: 0.02, green: 0.45, blue: 0.73)
+    /// السماوي الأساسي — هوية روشن (أزرار/روابط/إبراز) بتشبّع أخف.
+    static let sky = Color(red: 0.14, green: 0.48, blue: 0.70)
     /// أرضية سماوية ناعمة (خلفيات بطاقات/شارات).
-    static let skySoft = Color(red: 0.88, green: 0.95, blue: 0.99)
-    /// زمردي الملعب — ثانوي (فوز/مؤشرات إيجابية).
-    static let pitch = Color(red: 0.02, green: 0.55, blue: 0.38)
-    static let pitchSoft = Color(red: 0.90, green: 0.97, blue: 0.93)
-    /// ذهبي التتويج — الهدّافون واللقب والمراكز الأولى.
-    static let gold = Color(red: 0.83, green: 0.55, blue: 0.05)
-    static let goldSoft = Color(red: 0.99, green: 0.95, blue: 0.85)
+    static let skySoft = Color(red: 0.91, green: 0.96, blue: 0.99)
+    /// زمردي الملعب — ثانوي مُطفأ (فوز/مؤشرات إيجابية).
+    static let pitch = Color(red: 0.18, green: 0.52, blue: 0.42)
+    static let pitchSoft = Color(red: 0.93, green: 0.97, blue: 0.95)
+    /// ذهبي التتويج — شامبانيا دافئ بدل البرتقالي الحاد.
+    static let gold = Color(red: 0.78, green: 0.58, blue: 0.22)
+    static let goldSoft = Color(red: 0.99, green: 0.96, blue: 0.90)
     /// حبر كحلي للنصوص الأساسية، ورمادي مائل للزرقة للثانوية.
-    static let ink = Color(red: 0.09, green: 0.16, blue: 0.25)
-    static let inkSoft = Color(red: 0.42, green: 0.49, blue: 0.58)
+    static let ink = Color(red: 0.14, green: 0.20, blue: 0.28)
+    static let inkSoft = Color(red: 0.45, green: 0.52, blue: 0.58)
     /// حدود وفواصل هادئة.
-    static let line = Color(red: 0.89, green: 0.92, blue: 0.95)
-    static let liveRed = Color(red: 0.90, green: 0.24, blue: 0.28)
+    static let line = Color(red: 0.90, green: 0.93, blue: 0.95)
+    static let liveRed = Color(red: 0.86, green: 0.32, blue: 0.34)
     /// هبوط (المراكز الثلاثة الأخيرة في الترتيب).
-    static let danger = Color(red: 0.86, green: 0.28, blue: 0.28)
-    /// كحلي ليلي مستوحى من هيرو /roshn على الويب.
-    static let navy = Color(red: 0.035, green: 0.12, blue: 0.20)
-    static let navyDeep = Color(red: 0.018, green: 0.065, blue: 0.11)
-    static let canvas = Color(red: 0.965, green: 0.978, blue: 0.986)
+    static let danger = Color(red: 0.82, green: 0.34, blue: 0.34)
+    /// كحلي للإبراز الداكن الخفيف (شارات/أفاتار) — ليس خلفية هيرو.
+    static let navy = Color(red: 0.16, green: 0.28, blue: 0.38)
+    static let navyDeep = Color(red: 0.10, green: 0.20, blue: 0.28)
+    static let canvas = Color(red: 0.97, green: 0.98, blue: 0.99)
     static let card = Color.white
 
-    /// تدرّج بطاقة الشريط — فاتح صباحي: سماوي ناعم → أبيض → نسمة زمردية.
+    /// نص على الهيرو الفاتح — بديل الأبيض فوق الخلفية الليلية القديمة.
+    static let heroOn = ink
+    static let heroOnSoft = inkSoft
+    /// حدّ ناعم حول بطاقات الهيرو.
+    static let heroStroke = Color(red: 0.82, green: 0.88, blue: 0.92)
+
+    /// تدرّج بطاقة الشريط — ضباب صباحي: سماوي باهت → أبيض → نسمة زمردية.
     static let stripGradient = LinearGradient(
-        colors: [skySoft, .white, pitchSoft],
+        colors: [
+            Color(red: 0.93, green: 0.97, blue: 0.99),
+            .white,
+            Color(red: 0.94, green: 0.97, blue: 0.95),
+        ],
         startPoint: .topTrailing, endPoint: .bottomLeading
     )
 
+    /// هيرو المركز/النادي/المباراة — ضباب سماوي-زمردي فاتح مريح للعين.
     static let heroGradient = LinearGradient(
-        colors: [navyDeep, navy, Color(red: 0.015, green: 0.30, blue: 0.27)],
+        colors: [
+            Color(red: 0.88, green: 0.94, blue: 0.98),
+            Color(red: 0.94, green: 0.97, blue: 0.96),
+            Color(red: 0.90, green: 0.95, blue: 0.93),
+        ],
+        startPoint: .topTrailing, endPoint: .bottomLeading
+    )
+
+    /// شارة الهوية على البنر — تدرّج هادئ بلا تشبّع نيون.
+    static let badgeGradient = LinearGradient(
+        colors: [
+            Color(red: 0.22, green: 0.52, blue: 0.68),
+            Color(red: 0.20, green: 0.50, blue: 0.48),
+        ],
         startPoint: .topTrailing, endPoint: .bottomLeading
     )
 }
