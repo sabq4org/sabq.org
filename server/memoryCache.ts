@@ -396,6 +396,7 @@ export class MemoryCache {
 
   delete(key: string): void {
     this.cache.delete(key);
+    poisonInflightCacheKey(key);
   }
 
   // Invalidate cache patterns and broadcast to all SSE clients
@@ -403,7 +404,7 @@ export class MemoryCache {
     const regex = new RegExp(pattern);
     const keys = Array.from(this.cache.keys());
     let invalidatedCount = 0;
-    
+
     for (const key of keys) {
       if (regex.test(key)) {
         this.cache.delete(key);
@@ -411,6 +412,7 @@ export class MemoryCache {
       }
     }
 
+    poisonInflightCacheFetches((k) => regex.test(k));
     invalidatedCount += swrCache.invalidatePattern(pattern);
     
     if (broadcast && invalidatedCount > 0) {
@@ -441,6 +443,8 @@ export class MemoryCache {
       }
     }
     
+    poisonInflightCacheFetches((k) => regexes.some((r) => r.test(k)));
+
     // Invalidate SWR cache too
     for (let i = 0; i < patterns.length; i++) {
       if (swrCache.invalidatePattern(patterns[i]) > 0) {
@@ -469,6 +473,7 @@ export class MemoryCache {
         invalidatedCount++;
       }
     }
+    poisonInflightCacheFetches((k) => k.startsWith(prefix));
     invalidatedCount += swrCache.invalidateByPrefix(prefix);
     
     if (broadcast && invalidatedCount > 0) {
@@ -481,6 +486,7 @@ export class MemoryCache {
 
   clear(): void {
     this.cache.clear();
+    poisonInflightCacheFetches(() => true);
   }
 
   size(): number {
@@ -506,6 +512,38 @@ export const CACHE_TTL = {
   SMART_BLOCKS: 2 * 60 * 1000, // 2 minutes - for smart block queries
 } as const;
 
+// ============================================================================
+// single-flight لـ withCache
+// ============================================================================
+// حادث 2026-07-28: عند بثّ خبر عاجل يُمسح الكاش أولًا ثم يصل ٣٨ ألف جهاز خلال
+// ثوانٍ على مفتاح واحد بارد. بلا دمج، كل طلب متزامن كان ينفّذ getArticleBySlug
+// الثقيل بشكل مستقل فتمتلئ بركة القاعدة (max=50) ويتحول البطء إلى الموقع كله.
+// swrCache فيه هذه الآلية منذ البداية، لكن مسار المقال وأربعين مستدعيًا آخر
+// (seoInjector، socialCrawler) يمرّون من هنا. نضعها في withCache بدل نقل
+// المفاتيح إلى swrCache: الأخير مثبَّت عند سقفه (5000) ويُخلي باستمرار، بينما
+// memoryCache حول 1500 من 5000 — فالنقل كان سيزيد الطفح لا ينقصه.
+const inflightCacheFetches = new Map<string, Promise<any>>();
+
+// مفاتيح أُبطلت أثناء جلب جارٍ: نتيجة ذلك الجلب قُرئت قبل الإبطال فلا يجوز
+// تخزينها بعده، وإلا بقي المحتوى القديم حيًّا طوال TTL رغم التعديل. الإبطال
+// وحده لا يكفي لأن الجلب لم يكن في الكاش أصلًا ليُحذف منه.
+const poisonedCacheKeys = new Set<string>();
+
+/** تُستدعى من MemoryCache عند إبطال بنمط أو ببادئة أو مسح كامل. */
+function poisonInflightCacheFetches(matches: (key: string) => boolean): void {
+  for (const key of Array.from(inflightCacheFetches.keys())) {
+    if (matches(key)) {
+      inflightCacheFetches.delete(key);
+      poisonedCacheKeys.add(key);
+    }
+  }
+}
+
+/** نسخة المفتاح الواحد — delete() تُستدعى في مسارات ساخنة فلا نمشّط الخريطة. */
+function poisonInflightCacheKey(key: string): void {
+  if (inflightCacheFetches.delete(key)) poisonedCacheKeys.add(key);
+}
+
 export function withCache<T>(
   cacheKey: string,
   ttl: number,
@@ -516,10 +554,29 @@ export function withCache<T>(
     return Promise.resolve(cached);
   }
 
-  return fetcher().then((data) => {
+  // جلب واحد فقط جارٍ لكل مفتاح؛ المتنافسون عليه ينتظرون نفس الوعد.
+  const inflight = inflightCacheFetches.get(cacheKey) as Promise<T> | undefined;
+  if (inflight) return inflight;
+
+  const promise = fetcher().then((data) => {
+    // إن أُبطل المفتاح أثناء الجلب فالنتيجة قديمة — تُسلَّم للمنتظرين ولا تُخزَّن.
+    if (poisonedCacheKeys.delete(cacheKey)) return data;
     memoryCache.set(cacheKey, data, ttl);
     return data;
   });
+
+  inflightCacheFetches.set(cacheKey, promise);
+  // then(cleanup, cleanup) لا finally: الأخيرة تولّد وعدًا مرفوضًا غير معالَج
+  // عند فشل الجلب. الفشل لا يلوّث الكاش — لا set في مسار الرفض.
+  const cleanup = () => {
+    if (inflightCacheFetches.get(cacheKey) === promise) {
+      inflightCacheFetches.delete(cacheKey);
+    }
+    poisonedCacheKeys.delete(cacheKey);
+  };
+  promise.then(cleanup, cleanup);
+
+  return promise;
 }
 
 export function createCachedFetcher<TArgs extends any[], TResult>(
