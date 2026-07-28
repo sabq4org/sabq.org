@@ -438,7 +438,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: صباح الملعب (فاتح) + نسخة ليلية متكيفة.",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). روشن ويب/iOS: جدول الجولات الـ٣٤.",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
