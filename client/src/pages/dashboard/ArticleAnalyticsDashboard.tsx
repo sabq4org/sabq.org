@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -624,8 +624,13 @@ export default function ArticleAnalyticsDashboard() {
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
-  const getDateRange = useCallback(() => {
+  // The date range feeds the queryKey, so it MUST be stable across renders.
+  // A raw `new Date()` recomputed on every render produced a fresh key each time
+  // → React Query refetched forever and the list never left its loading state.
+  // Anchored to the current minute so repeat renders resolve to the same value.
+  const dateRangeParams = useMemo(() => {
     const now = new Date();
+    now.setSeconds(0, 0);
     switch (dateRange) {
       case "7days":
         return { from: subDays(now, 7).toISOString(), to: now.toISOString() };
@@ -640,7 +645,7 @@ export default function ArticleAnalyticsDashboard() {
     }
   }, [dateRange]);
 
-  const buildQueryParams = useCallback(() => {
+  const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     if (debouncedSearchQuery) params.set("query", debouncedSearchQuery);
     if (selectedCategory !== "all") params.set("categoryId", selectedCategory);
@@ -648,21 +653,21 @@ export default function ArticleAnalyticsDashboard() {
     if (sortBy) params.set("sortBy", sortBy);
     params.set("limit", String(limit));
     params.set("offset", String(offset));
-    
-    const { from, to } = getDateRange();
+
+    const { from, to } = dateRangeParams;
     if (from) params.set("dateFrom", from);
     if (to) params.set("dateTo", to);
-    
+
     return params.toString();
-  }, [debouncedSearchQuery, selectedCategory, selectedStatus, sortBy, offset, getDateRange]);
+  }, [debouncedSearchQuery, selectedCategory, selectedStatus, sortBy, offset, dateRangeParams]);
 
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
-  const { data: searchData, isLoading: isSearching, refetch } = useQuery<SearchResponse>({
-    queryKey: [`/api/admin/article-analytics/search?${buildQueryParams()}`],
+  const { data: searchData, isLoading: isSearching } = useQuery<SearchResponse>({
+    queryKey: [`/api/admin/article-analytics/search?${queryParams}`],
     enabled: !!user,
   });
 
