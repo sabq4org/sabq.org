@@ -1142,20 +1142,18 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       });
     }
 
-    // Check if phone already exists (if provided)
+    // Check if phone already exists (if provided) — أي صيغة لنفس الرقم.
+    let normalizedRegisterPhone: string | null = null;
     if (phone) {
-      const [existingPhone] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
-        .limit(1);
-      
-      if (existingPhone) {
-        return res.status(409).json({ 
-          success: false, 
-          message: "رقم الجوال مسجل مسبقاً" 
+      const { assertPhoneAvailable } = await import("../services/phoneAuth");
+      const phoneCheck = await assertPhoneAvailable(phone);
+      if (!phoneCheck.ok) {
+        return res.status(409).json({
+          success: false,
+          message: phoneCheck.message,
         });
       }
+      normalizedRegisterPhone = phoneCheck.e164;
     }
 
     // Hash password
@@ -1169,7 +1167,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       passwordHash,
       firstName: firstName?.trim(),
       lastName: lastName?.trim(),
-      phoneNumber: phone?.trim() || null,
+      phoneNumber: normalizedRegisterPhone,
       gender,
       city: city?.trim(),
       country: country || "SA",
@@ -8569,7 +8567,7 @@ router.post("/admin/articles/:id/archive", async (req: Request, res: Response) =
       .set({ status: "archived", reviewStatus: null, reviewNotes: reason, updatedAt: new Date() })
       .where(eq(articles.id, req.params.id));
 
-    await notifyArticleStakeholders(article, "archived", reason);
+    await notifyArticleStakeholders(article, "archived", reason, { excludeUserId: admin.userId });
 
     res.json({ success: true, item: await fetchAdminArticleItem(req.params.id) });
   } catch (error) {
@@ -8606,7 +8604,7 @@ router.post("/admin/articles/:id/request-revision", async (req: Request, res: Re
       })
       .where(eq(articles.id, req.params.id));
 
-    await notifyArticleStakeholders(article, "needs_revision", notes);
+    await notifyArticleStakeholders(article, "needs_revision", notes, { excludeUserId: admin.userId });
 
     res.json({ success: true, item: await fetchAdminArticleItem(req.params.id) });
   } catch (error) {
@@ -8635,7 +8633,7 @@ router.delete("/admin/articles/:id/permanent", async (req: Request, res: Respons
 
     await db.delete(articles).where(eq(articles.id, req.params.id));
 
-    await notifyArticleStakeholders(article, "deleted", reason);
+    await notifyArticleStakeholders(article, "deleted", reason, { excludeUserId: admin.userId });
 
     res.json({ success: true });
   } catch (error) {

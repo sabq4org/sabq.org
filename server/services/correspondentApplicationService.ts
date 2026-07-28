@@ -18,6 +18,7 @@ import {
 import { isMediaLicenseExpired } from "./mediaLicenseService";
 import { invalidateAllUserSessions } from "../auth";
 import { invalidateUserPermissionCache } from "../rbac";
+import { claimPhoneForStaffAccount, normalizePhone } from "./phoneAuth";
 
 // Only plain reader-type accounts may be auto-upgraded on approval. A
 // staff/admin account with the same email must be handled manually — silently
@@ -193,6 +194,17 @@ export async function approveCorrespondentApplication(
     .from(users)
     .where(sql`lower(${users.email}) = ${applicantEmail}`);
 
+  // اربط جوال الطلب بالحساب الرسمي (E.164) حتى يجد OTP نفس العضوية لاحقاً.
+  // إن وُجد قارئ بنفس الرقم يُلغى ويُحرَّر الجوال للمنسوب.
+  const phoneCheck = await claimPhoneForStaffAccount(
+    application.phone,
+    existingUser?.id ?? null,
+  );
+  if (!phoneCheck.ok) {
+    throw new Error(phoneCheck.message);
+  }
+  const normalizedPhone = phoneCheck.e164 ?? normalizePhone(application.phone);
+
   let finalUser: User;
   const temporaryPassword = nanoid(12);
   const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
@@ -233,6 +245,8 @@ export async function approveCorrespondentApplication(
         bio: application.bio || existingUser.bio,
         city: application.city || existingUser.city,
         profileImageUrl: application.profilePhotoUrl || existingUser.profileImageUrl,
+        phoneNumber: normalizedPhone || existingUser.phoneNumber,
+        phoneVerified: Boolean(normalizedPhone) || existingUser.phoneVerified,
         isProfileComplete: true,
         status: "active",
         passwordHash: hashedPassword,
@@ -251,6 +265,8 @@ export async function approveCorrespondentApplication(
         firstName: application.arabicName.split(" ")[0] || application.arabicName,
         lastName: application.arabicName.split(" ").slice(1).join(" ") || "",
         profileImageUrl: application.profilePhotoUrl,
+        phoneNumber: normalizedPhone,
+        phoneVerified: Boolean(normalizedPhone),
         status: "active",
         passwordHash: hashedPassword,
         emailVerified: true,
