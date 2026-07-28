@@ -189,13 +189,15 @@ function bucketFixtures(fixtures: SplFixture[]) {
   const today = fixtures.filter(
     (f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey
   );
+  // 54 ≈ 6 جولات × 9 مباريات (روشن) — السقف السابق 20 كان يقطع منتصف الجولة
+  // الثالثة. الجدول الكامل يبقى عبر /rounds + /round لا عبر هذه المعاينة.
   const upcoming = fixtures
     .filter((f) => !f.status.live && !f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
-    .slice(0, 20);
+    .slice(0, 54);
   const results = fixtures
     .filter((f) => f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 20);
+    .slice(0, 54);
 
   return { live, today, upcoming, results };
 }
