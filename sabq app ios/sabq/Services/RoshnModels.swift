@@ -213,6 +213,29 @@ nonisolated struct RsMatchBuckets: Decodable, Hashable {
     let results: [RsFixture]
 }
 
+// MARK: متصفّح الجولات (/api/sports/pro-league/rounds + /round?name=<key>)
+//
+// المفتاح التقني للجولة إنجليزي ("Regular Season - 1") بينما label عربي
+// للعرض ("الجولة 1")؛ مباريات الجولة تُطلب بالمفتاح لا بالتسمية.
+
+nonisolated struct RsRound: Decodable, Identifiable, Hashable {
+    let key: String
+    let label: String
+    var id: String { key }
+}
+
+nonisolated struct RsRoundsResponse: Decodable {
+    let configured: Bool?
+    let rounds: [RsRound]
+    /// مفتاح الجولة الحالية (أو أقرب قادمة قبل الموسم) — قد يغيب خارج الدوريات.
+    let current: String?
+}
+
+nonisolated struct RsRoundFixturesResponse: Decodable {
+    let configured: Bool?
+    let fixtures: [RsFixture]
+}
+
 // MARK: مركز المباراة (/api/sports/match/:id — نفس شكل كأس الملك)
 
 nonisolated struct RsMatchEvent: Decodable, Identifiable, Hashable {
@@ -479,6 +502,17 @@ extension APIClient {
                            ignoreCache: ignoreCache)
     }
 
+    func fetchRoshnRounds(ignoreCache: Bool = false) async throws -> RsRoundsResponse {
+        try await roshnGet(RsRoundsResponse.self, path: "/sports/pro-league/rounds",
+                           ignoreCache: ignoreCache)
+    }
+
+    /// مباريات جولة واحدة — `key` هو المفتاح التقني القادم من /rounds لا التسمية العربية.
+    func fetchRoshnRoundFixtures(key: String, ignoreCache: Bool = false) async throws -> [RsFixture] {
+        try await roshnGet(RsRoundFixturesResponse.self, path: "/sports/pro-league/round",
+                           query: ["name": key], ignoreCache: ignoreCache).fixtures
+    }
+
     func fetchRoshnStandings(ignoreCache: Bool = false) async throws -> [RsStandingRow] {
         try await roshnGet(RsStandingsResponse.self, path: "/sports/pro-league/standings",
                            ignoreCache: ignoreCache).standings
@@ -561,64 +595,90 @@ extension APIClient {
     }
 }
 
-// MARK: - هوية روشن البصرية — لوحة فاتحة منسّقة
+// MARK: - هوية روشن البصرية — «صباح الملعب» فاتحة + نسخة ليلية متكيفة
 //
-// قرار المالك: تصميم فاتح غير داكن بألوان منسّقة. الهوية البصرية (2026-07-27):
-// «صباح الملعب» — سماوي هادئ + زمرد مُطفأ + ذهب شامبانيا على أرضيات ضبابية،
-// بلا هيرو ليلي قاتم يُرهق العين عند الانتقال من البنر إلى المركز.
+// قرار المالك: الوضع الفاتح يبقى «صباح الملعب» كما هو حرفيًا — سماوي هادئ +
+// زمرد مُطفأ + ذهب شامبانيا على أرضيات ضبابية، بلا هيرو كحلي قاتم يُرهق العين.
+// الوضع الليلي (2026-07-28): نفس الروح على أسطح داكنة هادئة — ضباب ليلي
+// سماوي-زمردي خافت لا كحلي صارخ — يتبدّل تلقائيًا مع userInterfaceStyle
+// (نفس نمط SabqTheme المعتمد في بقية التطبيق).
 
 nonisolated enum RoshnTheme {
+    /// لون متكيف مع نمط الواجهة — قيمة الفاتح ثابتة لا تتغير، والليلي إضافة جديدة.
+    private static func adaptive(
+        light: (CGFloat, CGFloat, CGFloat),
+        dark: (CGFloat, CGFloat, CGFloat)
+    ) -> Color {
+        Color(UIColor { t in
+            let c = t.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+    }
+
     /// السماوي الأساسي — هوية روشن (أزرار/روابط/إبراز) بتشبّع أخف.
-    static let sky = Color(red: 0.14, green: 0.48, blue: 0.70)
+    static let sky = adaptive(light: (0.14, 0.48, 0.70), dark: (0.32, 0.60, 0.86))
     /// أرضية سماوية ناعمة (خلفيات بطاقات/شارات).
-    static let skySoft = Color(red: 0.91, green: 0.96, blue: 0.99)
+    static let skySoft = adaptive(light: (0.91, 0.96, 0.99), dark: (0.14, 0.20, 0.27))
     /// زمردي الملعب — ثانوي مُطفأ (فوز/مؤشرات إيجابية).
-    static let pitch = Color(red: 0.18, green: 0.52, blue: 0.42)
-    static let pitchSoft = Color(red: 0.93, green: 0.97, blue: 0.95)
+    static let pitch = adaptive(light: (0.18, 0.52, 0.42), dark: (0.30, 0.60, 0.48))
+    static let pitchSoft = adaptive(light: (0.93, 0.97, 0.95), dark: (0.12, 0.20, 0.17))
     /// ذهبي التتويج — شامبانيا دافئ بدل البرتقالي الحاد.
-    static let gold = Color(red: 0.78, green: 0.58, blue: 0.22)
-    static let goldSoft = Color(red: 0.99, green: 0.96, blue: 0.90)
+    static let gold = adaptive(light: (0.78, 0.58, 0.22), dark: (0.85, 0.65, 0.30))
+    static let goldSoft = adaptive(light: (0.99, 0.96, 0.90), dark: (0.24, 0.19, 0.11))
     /// حبر كحلي للنصوص الأساسية، ورمادي مائل للزرقة للثانوية.
-    static let ink = Color(red: 0.14, green: 0.20, blue: 0.28)
-    static let inkSoft = Color(red: 0.45, green: 0.52, blue: 0.58)
+    static let ink = adaptive(light: (0.14, 0.20, 0.28), dark: (0.92, 0.95, 0.97))
+    static let inkSoft = adaptive(light: (0.45, 0.52, 0.58), dark: (0.60, 0.66, 0.72))
     /// حدود وفواصل هادئة.
-    static let line = Color(red: 0.90, green: 0.93, blue: 0.95)
+    static let line = adaptive(light: (0.90, 0.93, 0.95), dark: (0.24, 0.28, 0.32))
     static let liveRed = Color(red: 0.86, green: 0.32, blue: 0.34)
     /// هبوط (المراكز الثلاثة الأخيرة في الترتيب).
     static let danger = Color(red: 0.82, green: 0.34, blue: 0.34)
     /// كحلي للإبراز الداكن الخفيف (شارات/أفاتار) — ليس خلفية هيرو.
     static let navy = Color(red: 0.16, green: 0.28, blue: 0.38)
     static let navyDeep = Color(red: 0.10, green: 0.20, blue: 0.28)
-    static let canvas = Color(red: 0.97, green: 0.98, blue: 0.99)
-    static let card = Color.white
+    static let canvas = adaptive(light: (0.97, 0.98, 0.99), dark: (0.07, 0.09, 0.12))
+    static let card = adaptive(light: (1.00, 1.00, 1.00), dark: (0.12, 0.15, 0.19))
 
-    /// نص على الهيرو الفاتح — بديل الأبيض فوق الخلفية الليلية القديمة.
+    /// نص على الهيرو — حبر داكن فوق الضباب الفاتح، وحبر فاتح فوق الليلي.
     static let heroOn = ink
     static let heroOnSoft = inkSoft
     /// حدّ ناعم حول بطاقات الهيرو.
-    static let heroStroke = Color(red: 0.82, green: 0.88, blue: 0.92)
+    static let heroStroke = adaptive(light: (0.82, 0.88, 0.92), dark: (0.27, 0.33, 0.39))
 
-    /// تدرّج بطاقة الشريط — ضباب صباحي: سماوي باهت → أبيض → نسمة زمردية.
-    static let stripGradient = LinearGradient(
-        colors: [
-            Color(red: 0.93, green: 0.97, blue: 0.99),
-            .white,
-            Color(red: 0.94, green: 0.97, blue: 0.95),
-        ],
-        startPoint: .topTrailing, endPoint: .bottomLeading
-    )
+    /// شارة زجاجية فوق الهيرو (عدّاد/مقاييس/حالات) — بيضاء شفافة فاتحًا، دخانية ليليًا.
+    static let heroChip = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.34, green: 0.40, blue: 0.48, alpha: 0.35)
+            : UIColor(white: 1, alpha: 0.72)
+    })
 
-    /// هيرو المركز/النادي/المباراة — ضباب سماوي-زمردي فاتح مريح للعين.
-    static let heroGradient = LinearGradient(
-        colors: [
-            Color(red: 0.88, green: 0.94, blue: 0.98),
-            Color(red: 0.94, green: 0.97, blue: 0.96),
-            Color(red: 0.90, green: 0.95, blue: 0.93),
-        ],
-        startPoint: .topTrailing, endPoint: .bottomLeading
-    )
+    /// تدرّج بطاقة الشريط — ضباب صباحي فاتحًا (سماوي باهت → أبيض → نسمة زمردية)،
+    /// وضباب ليلي هادئ داكنًا.
+    static var stripGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                adaptive(light: (0.93, 0.97, 0.99), dark: (0.11, 0.16, 0.21)),
+                adaptive(light: (1.00, 1.00, 1.00), dark: (0.12, 0.15, 0.19)),
+                adaptive(light: (0.94, 0.97, 0.95), dark: (0.11, 0.16, 0.16)),
+            ],
+            startPoint: .topTrailing, endPoint: .bottomLeading
+        )
+    }
 
-    /// شارة الهوية على البنر — تدرّج هادئ بلا تشبّع نيون.
+    /// هيرو المركز/النادي/المباراة — فاتحًا: ضباب سماوي-زمردي مريح للعين (لا يُرجَع
+    /// إلى كحلي قاتم). داكنًا: ضباب ليلي خافت بنفس الروح لا كحلي صارخ.
+    static var heroGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                adaptive(light: (0.88, 0.94, 0.98), dark: (0.13, 0.19, 0.26)),
+                adaptive(light: (0.94, 0.97, 0.96), dark: (0.13, 0.17, 0.22)),
+                adaptive(light: (0.90, 0.95, 0.93), dark: (0.12, 0.19, 0.19)),
+            ],
+            startPoint: .topTrailing, endPoint: .bottomLeading
+        )
+    }
+
+    /// شارة الهوية على البنر — تدرّج هادئ بلا تشبّع نيون (مشترك بين النمطين).
     static let badgeGradient = LinearGradient(
         colors: [
             Color(red: 0.22, green: 0.52, blue: 0.68),

@@ -24,6 +24,15 @@ final class RoshnHomeStore {
         if let result = try? await APIClient.shared.fetchRoshnHero() {
             hero = result
             lastFetch = Date()
+        } else if hero == nil {
+            // فشل الجلب الأول كان يخفي البانر حتى إعادة تشغيل التطبيق —
+            // إعادة واحدة بعد ثانيتين (نمط لوحات الموسم الموثّق).
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if Task.isCancelled { return }
+            if let result = try? await APIClient.shared.fetchRoshnHero(ignoreCache: true) {
+                hero = result
+                lastFetch = Date()
+            }
         }
     }
 
@@ -56,10 +65,10 @@ final class RoshnHomeStore {
 
 // MARK: - شريط دوري روشن في الواجهة الرئيسية
 //
-// بطاقة فاتحة منسّقة (قرار المالك: لا داكن) بهوية «صباح الملعب»: سماوي هادئ
-// + زمرد مُطفأ على ضباب أبيض. أربع حالات: عدّاد انطلاق الموسم / يوم الجولة /
-// المباراة القادمة أو الحية / بطاقة البطل. تختفي كليًا عند إطفاء البلوك من
-// لوحة التحكم (blockHidden) — نفس مفتاح الويب حرفيًا.
+// بطاقة بهوية «صباح الملعب»: سماوي هادئ + زمرد مُطفأ على ضباب أبيض في الوضع
+// الفاتح، ونسخة ليلية متكيفة تلقائيًا عبر RoshnTheme (2026-07-28). أربع حالات:
+// عدّاد انطلاق الموسم / يوم الجولة / المباراة القادمة أو الحية / بطاقة البطل.
+// تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden) — نفس مفتاح الويب حرفيًا.
 
 struct RoshnHomeStrip: View {
     private let store = RoshnHomeStore.shared
@@ -311,7 +320,7 @@ struct RoshnHomeStrip: View {
         }
     }
 
-    /// أرضية فاتحة بتوهّج لوني خافت في الزاوية — بديل التدرّج الداكن.
+    /// أرضية «صباح الملعب» بتوهّج لوني خافت في الزاوية — تتكيف ليليًا عبر stripGradient.
     private func lightCard(glow: Color) -> some View {
         RoshnTheme.stripGradient.overlay(alignment: .topLeading) {
             Circle()

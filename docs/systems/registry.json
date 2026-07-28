@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-27",
+  "updatedAt": "2026-07-28",
   "systems": [
     {
       "id": "account-center",
@@ -438,7 +438,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: صباح الملعب (فاتح).",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: صباح الملعب (فاتح) + نسخة ليلية متكيفة.",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -510,7 +510,7 @@
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
       "owners": ["sports"],
-      "lastReviewed": "2026-07-27"
+      "lastReviewed": "2026-07-28"
     },
     {
       "id": "push-notifications",

@@ -1,9 +1,17 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-07-27 (جلسة VARA: Bearer على /api/v1 فقط) | المالك: sports
+> آخر مراجعة: 2026-07-28 (روشن iOS: دعم الوضع الليلي عبر RoshnTheme متكيف) | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
+
+## تطبيق VARA على Android
+- **نقطة الدخول:** وحدة Gradle مستقلة `android-native/vara`، الحزمة الإنتاجية `com.sabq.sports`، و`minSdk 26`. لا تستبدل تطبيق سبق العام في `android-native/app` ولا تمس `android/` القديم.
+- **الواجهة (منذ 2026-07-27):** إعادة بناء كاملة بمطابقة iOS شاشةً بشاشة — ملف Kotlin مستقل لكل شاشة كبيرة (`MatchesCenterScreen` / `RoshnHomeScreen` / `MatchCenterScreen` / `CompetitionScreens` / `LiveScreens` / `TeamPlayerScreens` / `TransferScreens` / `AccountScreens`). خريطة التكافؤ والفجوات المتبقية الموثقة في [`android-native/vara/PARITY.md`](../../../android-native/vara/PARITY.md).
+- **البيانات:** العام من `/api/sports/*` و`/api/world-cup/*` بلا Bearer؛ العضوية والتوقعات والإشعارات من `/api/v1/*` فقط. كاش HTTP قرصي (OkHttp 20MB) مع `ignoreCache` للتحديث القسري/الحي.
+- **التحديث الحي:** لا SSE على Android — استطلاع متكيف (`PollEffect`) بالمقدمة فقط: 10ث أثناء مباراة جارية / 25–30ث قرب الانطلاق / 45–60ث خاملًا، مع تحديث فوري عند كل عودة للمقدمة، ودقيقة مباراة ذاتية العدّ من `clockStartEpoch` (نظير `SpMatchClock`).
+- **التوقيت:** كل التواريخ والتجميع اليومي بتوقيت الرياض الثابت + أرقام لاتينية + ميلادي (`VaraFormat`) — لا `systemDefault` كي يطابق iOS/الويب لأي مستخدم خارج +03.
+- **التشغيل:** `./gradlew :vara:assembleDebug` أو `:vara:assembleRelease`. توقيع release بمفتاح رفع VARA مستقل (قيم `vara.*` في `android-native/local.properties` أو متغيرات بيئة `VARA_*`؛ المخزن خارج المستودع) — غيابها يسقط آمنًا لمفتاح debug للبناء المحلي فقط. FCM عبر مشروع Firebase `sabq-vara` (الملف gitignored).
 
 ## تقرير كأس العالم 2026 بالأرقام
 - **الرئيسية:** مخفي منذ 2026-07-20 — لا يُعرض `WorldCupHomeSection` تحت الهيرو. المكوّن يبقى في الكود لإعادة التفعيل.
@@ -32,9 +40,11 @@
 
 ## روشن في تطبيق سبق iOS (2026-07-27)
 - **نقاط الدخول:** `sabq app ios/sabq/Screens/RoshnView.swift` للمركز، `RoshnMatchCenter.swift` للمباراة، و`RoshnTeamView.swift` لصفحة النادي المتكاملة. العقود وطلبات API في `Services/RoshnModels.swift`.
-- **هوية الألوان «صباح الملعب»:** `RoshnTheme` فاتح بالكامل — بنر الرئيسية + هيرو المركز/النادي/المباراة على تدرّج ضبابي سماوي-زمردي، ونص `heroOn`/`heroOnSoft` بدل الأبيض فوق خلفية ليلية. لا تُرجع `heroGradient` إلى كحلي قاتم؛ التباين الحاد كان يُرهق العين. الشارة تستخدم `badgeGradient` الهادئ.
+- **تبويب «الجدول» (2026-07-28):** حلّ محل تبويب «الأندية» في المركز — متصفّح الجولات الـ٣٤ عبر `GET /api/sports/pro-league/rounds` (قائمة `{key,label}` + `current`) و`/round?name=<key>` للمباريات. المفتاح التقني إنجليزي (`Regular Season - 1`) والتسمية عربية؛ المباريات تُطلب بالمفتاح. التحميل كسل عند أول فتح للتبويب، والجولة الحالية تُنتقى وتُمركز تلقائيًا. صفحات الأندية تبقى متاحة من صفوف الترتيب وأعمدة مركز المباراة.
+- **هوية الألوان «صباح الملعب» + نسخة ليلية (2026-07-28):** `RoshnTheme` متكيف مع `userInterfaceStyle` بنمط `SabqTheme` (UIColor dynamicProvider). **الوضع الفاتح يبقى «صباح الملعب» بقيمه الحرفية** — بنر الرئيسية + هيرو المركز/النادي/المباراة على تدرّج ضبابي سماوي-زمردي، ونص `heroOn`/`heroOnSoft`. لا تُرجع `heroGradient` الفاتح إلى كحلي قاتم؛ التباين الحاد كان يُرهق العين. **الوضع الليلي:** نفس الروح على أسطح داكنة هادئة (ضباب ليلي خافت لا كحلي صارخ). الأسطح التي كانت `.white` صريحة في الشاشات الأربع صارت `RoshnTheme.card`، وشارات الهيرو الزجاجية (`.white.opacity(0.7x)`) صارت `RoshnTheme.heroChip`. دوائر/بلاطات الشعارات تبقى بيضاء عمدًا في النمطين (وضوح شعارات الأندية PNG). الشارة تستخدم `badgeGradient` الهادئ المشترك بين النمطين.
 - **تكافؤ الويب:** iOS يستهلك نفس `/api/rsl/hero` و`/api/sports/pro-league/*` و`/api/sports/team/:id?with=stats` المستخدمة في `/roshn`؛ الواجهة أصلية للموبايل وليست WebView. الهوية البصرية على iOS مستقلة (فاتحة) عن بطاقة الويب الليلية في `RoshnHomeSection`.
 - **تحميل لوحات الموسم:** الهدافون والصناعة والبطاقات طلبات مستقلة. لا تجعل فشل إحداها يخفي البقية. مسارات 503 المؤقتة أثناء تسخين SWR تُعاد مرة واحدة بعد ثانيتين ثم تظهر حالة خطأ صريحة للمستخدم.
+- **بانر الرئيسية (2026-07-28):** `RoshnHomeStore.loadIfNeeded` يعيد جلب `hero` مرة واحدة بعد ثانيتين (`ignoreCache`) إن فشل الجلب الأول — سابقًا كان الفشل العابر يخفي البانر بصمت حتى إعادة تشغيل التطبيق.
 - **عقد البطاقات القديم:** `cards` قد يعيد `team` كنص + `teamLogo`، بينما `assists` يعيده ككائن. `RsLeader` يطبّع الشكلين؛ لا تفترض شكلاً واحدًا قبل توحيد عقد الخادم.
 - **الأرقام:** كامل السطح يستخدم `ar_SA-u-ca-gregory-nu-latn` و`RsFormat`؛ مواسم مثل `2026-27` تُعزل باتجاه LTR داخل الجملة العربية.
 - **روابط الويب:** `/roshn` و`/roshn/*` و`/sports/team/*` مسجلة في `client/public/.well-known/apple-app-site-association` للتطبيق `CBU7MJEC5R.com.sabq.sabqorg`. التطبيق يعلن `applinks:sabq.org` ويحلل روابط HTTPS ونظام `sabq://roshn` عبر `NotificationsStore`.

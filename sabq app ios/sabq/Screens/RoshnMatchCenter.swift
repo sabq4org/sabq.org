@@ -183,7 +183,7 @@ struct RoshnMatchCenter: View {
                     .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(RoshnTheme.sky)
                     .padding(.horizontal, 11).padding(.vertical, 5)
-                    .background(Capsule().fill(.white.opacity(0.75)))
+                    .background(Capsule().fill(RoshnTheme.heroChip))
                     .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
             }
         }
@@ -298,7 +298,7 @@ struct RoshnMatchCenter: View {
         .padding(.horizontal, 12).padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(isGoal ? RoshnTheme.pitchSoft : .white)
+                .fill(isGoal ? RoshnTheme.pitchSoft : RoshnTheme.card)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -345,7 +345,7 @@ struct RoshnMatchCenter: View {
                 }
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white))
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.card))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
         }
     }
@@ -428,7 +428,7 @@ struct RoshnMatchCenter: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.card))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
     }
 
@@ -515,7 +515,7 @@ struct RoshnMatchCenter: View {
                                 }
                             }
                             .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(.white))
+                            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(RoshnTheme.card))
                             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
                         }
                     }
