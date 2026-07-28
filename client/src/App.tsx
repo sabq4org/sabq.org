@@ -497,6 +497,8 @@ const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTrans
 const TransferStory = lazy(() => retryImport(() => import("@/pages/TransferStory")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
+// البوابة الرياضية بستايل «سعودي سبورت» مربوطة بمباريات دوري روشن — /sports55
+const Sports55 = lazy(() => retryImport(() => import("@/pages/Sports55")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -1075,6 +1077,8 @@ function Router() {
         {/* مركز دوري روشن السعودي بنظام تصميم المونديال — /rsl يحوّل إليه */}
         <Route path="/roshn/predictions">{() => <Redirect to="/predictions?competition=rsl-2026" />}</Route>
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
+        {/* البوابة الرياضية بستايل «سعودي سبورت» مربوطة بمباريات دوري روشن الحيّة */}
+        <Route path="/sports55">{() => <LazyRoute component={Sports55} />}</Route>
         <Route path="/rsl/predictions">{() => <Redirect to="/predictions?competition=rsl-2026" />}</Route>
         <Route path="/rsl">{() => <Redirect to="/roshn" />}</Route>
         {/* توحيد البوابة الرياضية: التجارب القديمة (/sports10، /sports22) اندمجت في
