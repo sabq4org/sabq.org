@@ -5387,7 +5387,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (parsed.data.lastName !== undefined) updateData.lastName = parsed.data.lastName;
       if (parsed.data.firstNameEn !== undefined) updateData.firstNameEn = parsed.data.firstNameEn || null;
       if (parsed.data.lastNameEn !== undefined) updateData.lastNameEn = parsed.data.lastNameEn || null;
-      if (parsed.data.phoneNumber !== undefined) updateData.phoneNumber = parsed.data.phoneNumber || null;
+      if (parsed.data.phoneNumber !== undefined) {
+        if (parsed.data.phoneNumber) {
+          const { assertPhoneAvailable, normalizePhone } = await import("./services/phoneAuth");
+          const phoneCheck = await assertPhoneAvailable(parsed.data.phoneNumber, targetUserId);
+          if (!phoneCheck.ok) {
+            return res.status(409).json({ message: phoneCheck.message });
+          }
+          updateData.phoneNumber = phoneCheck.e164 ?? normalizePhone(parsed.data.phoneNumber) ?? parsed.data.phoneNumber;
+        } else {
+          updateData.phoneNumber = null;
+        }
+      }
       if (parsed.data.profileImageUrl !== undefined) updateData.profileImageUrl = parsed.data.profileImageUrl || null;
       if (parsed.data.status !== undefined) updateData.status = parsed.data.status;
       if (parsed.data.emailVerified !== undefined) updateData.emailVerified = parsed.data.emailVerified;
@@ -5811,6 +5822,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.log("ℹ️ [CREATE USER] Email already registered", { email: normalizedEmail, existingUserId: existingUser.id });
         return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", existingUser });
       }
+
+      if (parsed.data.phoneNumber) {
+        const { assertPhoneAvailable, normalizePhone } = await import("./services/phoneAuth");
+        const phoneCheck = await assertPhoneAvailable(parsed.data.phoneNumber);
+        if (!phoneCheck.ok) {
+          return res.status(409).json({ message: phoneCheck.message });
+        }
+        parsed.data.phoneNumber = phoneCheck.e164 ?? normalizePhone(parsed.data.phoneNumber) ?? parsed.data.phoneNumber;
+      }
+
       console.log("✅ [CREATE USER] Creating new user with roles", {
         email: parsed.data.email,
         roleIds: parsed.data.roleIds,
@@ -7559,7 +7580,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               authorId: newArticle.authorId,
               reporterId: newArticle.reporterId,
               submitterId: newArticle.submitterId,
-            }, event);
+            }, event, undefined, { excludeUserId: req.user?.id });
           } catch (notifyErr: any) {
             console.error('[CreateArticle Notify] error:', notifyErr?.message || notifyErr);
           }
@@ -8093,12 +8114,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
             // status: draft/needs_review → scheduled
             if (updatedArticle.status === "scheduled" && existingArticle.status !== "scheduled") {
-              await notifyArticleStakeholders(articleForNotify, "scheduled");
+              await notifyArticleStakeholders(articleForNotify, "scheduled", undefined, { excludeUserId: userId });
             }
 
             // status: anything → published (only first transition)
             if (updatedArticle.status === "published" && existingArticle.status !== "published") {
-              await notifyArticleStakeholders(articleForNotify, "published");
+              await notifyArticleStakeholders(articleForNotify, "published", undefined, { excludeUserId: userId });
             }
 
             // reviewStatus: anything → rejected (carries reviewer note)
@@ -8106,7 +8127,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "rejected",
-                updatedArticle.reviewNotes
+                updatedArticle.reviewNotes,
+                { excludeUserId: userId },
               );
             }
 
@@ -8115,7 +8137,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "needs_revision",
-                updatedArticle.reviewNotes
+                updatedArticle.reviewNotes,
+                { excludeUserId: userId },
               );
             }
 
@@ -8129,7 +8152,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "archived",
-                updatedArticle.reviewNotes
+                updatedArticle.reviewNotes,
+                { excludeUserId: userId },
               );
 
               const archiveReasonForEmail =
@@ -8753,6 +8777,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             },
             "needs_revision",
             reviewNotes.trim(),
+            { excludeUserId: userId },
           );
           if (updatedArticle.articleType === "opinion") {
             await sendOpinionAuthorRevisionEmail(updatedArticle.id, reviewNotes.trim());
@@ -8941,6 +8966,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[ARCHIVE] Push notification failed:", notifyErr);
@@ -9380,6 +9406,7 @@ Respond in valid JSON format only:
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[ARCHIVE-DELETE] Push notification failed:", notifyErr);
@@ -9499,7 +9526,7 @@ Respond in valid JSON format only:
       // response is not blocked on MailerSend / APNs latency.
       setImmediate(async () => {
         try {
-          await notifyArticleStakeholders(articleSnapshot, "deleted", finalReason);
+          await notifyArticleStakeholders(articleSnapshot, "deleted", finalReason, { excludeUserId: userId });
         } catch (notifyErr) {
           console.error("[PERMANENT-DELETE] Push notification failed:", notifyErr);
         }
@@ -9618,7 +9645,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const a of archivedArticles) {
           try {
-            await notifyArticleStakeholders(a, "archived", reviewNotes);
+            await notifyArticleStakeholders(a, "archived", reviewNotes, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[BULK ARCHIVE] Push notification failed for ${a.id}:`, notifyErr);
           }
@@ -9745,7 +9772,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const snap of snapshots) {
           try {
-            await notifyArticleStakeholders(snap, "deleted", snap.reason);
+            await notifyArticleStakeholders(snap, "deleted", snap.reason, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[BULK PERMANENT-DELETE] Push notification failed for ${snap.id}:`, notifyErr);
           }
@@ -15314,6 +15341,7 @@ Respond in valid JSON format only:
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[EN ARCHIVE] Push notification failed:", notifyErr);
@@ -15633,7 +15661,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const a of archivedRows) {
           try {
-            await notifyArticleStakeholders(a, "archived", reviewNotes);
+            await notifyArticleStakeholders(a, "archived", reviewNotes, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[EN BULK ARCHIVE] Push failed for ${a.id}:`, notifyErr);
           }
@@ -15723,7 +15751,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const a of archivedRows) {
           try {
-            await notifyArticleStakeholders(a, "archived", reviewNotes);
+            await notifyArticleStakeholders(a, "archived", reviewNotes, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[EN BULK DELETE] Push failed for ${a.id}:`, notifyErr);
           }
@@ -25948,7 +25976,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           authorId: updatedArticle.authorId,
           reporterId: updatedArticle.reporterId,
           submitterId: updatedArticle.submitterId,
-        }, "rejected", reviewNotes);
+        }, "rejected", reviewNotes, { excludeUserId: userId });
       } catch (notifyErr: any) {
         console.error("[OpinionReject] push notify failed:", notifyErr?.message || notifyErr);
       }
@@ -26077,7 +26105,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             authorId: articleForNotification.authorId,
             reporterId: articleForNotification.reporterId,
             submitterId: articleForNotification.submitterId,
-          }, "published");
+          }, "published", undefined, { excludeUserId: userId });
         } catch (notifyErr: any) {
           console.error("[OpinionPublish] push notify failed:", notifyErr?.message || notifyErr);
         }
@@ -26143,7 +26171,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             authorId: updatedArticle.authorId,
             reporterId: updatedArticle.reporterId,
             submitterId: updatedArticle.submitterId,
-          }, "needs_revision", reviewNotes);
+          }, "needs_revision", reviewNotes, { excludeUserId: userId });
           if (updatedArticle.articleType === "opinion") {
             await sendOpinionAuthorRevisionEmail(updatedArticle.id, reviewNotes);
           } else {
@@ -29965,6 +29993,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[UR ARCHIVE] Push notification failed:", notifyErr);

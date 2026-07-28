@@ -20445,6 +20445,13 @@ export class DatabaseStorage implements IStorage {
     // correspondentApplicationService.approveCorrespondentApplication for why this matters).
     const applicantEmail = application.email.toLowerCase().trim();
     const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
+
+    const { claimPhoneForStaffAccount, normalizePhone } = await import("./services/phoneAuth");
+    const phoneCheck = await claimPhoneForStaffAccount(application.phone, existingUser?.id ?? null);
+    if (!phoneCheck.ok) {
+      throw new Error(phoneCheck.message);
+    }
+    const normalizedPhone = phoneCheck.e164 ?? normalizePhone(application.phone);
     
     let finalUser: User;
     let temporaryPassword = '';
@@ -20479,6 +20486,8 @@ export class DatabaseStorage implements IStorage {
           bio: existingUser.bio || application.bio,
           city: existingUser.city || application.city,
           profileImageUrl: existingUser.profileImageUrl || application.profilePhotoUrl,
+          phoneNumber: normalizedPhone || existingUser.phoneNumber,
+          phoneVerified: Boolean(normalizedPhone) || existingUser.phoneVerified,
           isProfileComplete: true,
         })
         .where(eq(users.id, existingUser.id))
@@ -20505,6 +20514,8 @@ export class DatabaseStorage implements IStorage {
         firstName: application.arabicName.split(' ')[0] || application.arabicName,
         lastName: application.arabicName.split(' ').slice(1).join(' ') || '',
         profileImageUrl: application.profilePhotoUrl,
+        phoneNumber: normalizedPhone,
+        phoneVerified: Boolean(normalizedPhone),
         status: 'active',
         passwordHash: hashedPassword,
         emailVerified: true,

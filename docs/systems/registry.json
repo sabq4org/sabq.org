@@ -160,6 +160,7 @@
         "server/routes/smartInsightsRoutes.ts",
         "server/routes/autoImageRoutes.ts",
         "server/services/editorialNotifications.ts",
+        "server/services/editorialStakeholderIds.ts",
         "server/services/editorAlerts.ts",
         "server/services/dashboardPulseService.ts",
         "server/services/adminDashboardStatsService.ts",
@@ -218,6 +219,7 @@
         "client/src/pages/AnnouncementsArchive.tsx",
         "client/src/components/InternalAnnouncement.tsx",
         "tests/unit/internalAnnouncementTargeting.test.ts",
+        "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
         "client/src/pages/admin/publishers/**",
@@ -580,7 +582,9 @@
         "server/twoFactor.ts",
         "server/sessionFailoverStore.ts",
         "server/services/memberSessionService.ts",
+        "server/services/phoneAuth.ts",
         "shared/rbac-constants.ts",
+        "tests/unit/phoneAuth.test.ts",
         "client/src/hooks/useAuth.ts",
         "client/src/hooks/useRoleProtection.ts",
         "client/src/components/ProtectedRoute.tsx",
@@ -589,7 +593,7 @@
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": ["platform"],
-      "lastReviewed": "2026-07-27"
+      "lastReviewed": "2026-07-28"
     },
     {
       "id": "seo-ssr",

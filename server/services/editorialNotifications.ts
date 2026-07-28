@@ -29,6 +29,18 @@ import {
   createCustomNotificationPayload,
   isApnsConfigured,
 } from "./apnsService";
+import {
+  isNonHumanAccount,
+  resolveArticleStakeholderIds,
+  type ResolveStakeholdersOptions,
+} from "./editorialStakeholderIds";
+
+export {
+  NEWSPAPER_REPORTER_ID,
+  isNonHumanAccount,
+  resolveArticleStakeholderIds,
+  type ResolveStakeholdersOptions,
+} from "./editorialStakeholderIds";
 
 export type EditorialEvent =
   | "scheduled"
@@ -56,24 +68,12 @@ export interface NotifyEditorialArgs {
   reviewerNote?: string | null;
 }
 
-/** Generic "صحيفة سبق" byline account — not a human colleague. */
-export const NEWSPAPER_REPORTER_ID = "RnP7eDOAl5T5rGpib9_8d";
-
 const PREFS_DEFAULTS = {
   scheduledEnabled: true,
   publishedEnabled: true,
   rejectedEnabled: true,
   revisionEnabled: true,
 };
-
-function isNonHumanAccount(userId: string): boolean {
-  return (
-    userId === "newspaper" ||
-    userId === "system" ||
-    userId === "sabq-newspaper" ||
-    userId === NEWSPAPER_REPORTER_ID
-  );
-}
 
 async function fetchUserPrefs(userId: string) {
   const [row] = await db
@@ -104,38 +104,6 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
     case "deleted":
       return true;
   }
-}
-
-/** Who should receive editorial pushes for this article? */
-export function resolveArticleStakeholderIds(article: {
-  reporterId?: string | null;
-  authorId?: string | null;
-  submitterId?: string | null;
-}): string[] {
-  const seen = new Set<string>();
-  const add = (id?: string | null) => {
-    if (!id || isNonHumanAccount(id) || seen.has(id)) return;
-    seen.add(id);
-  };
-
-  const reporter = article.reporterId;
-  const author = article.authorId;
-
-  // Prefer the human byline reporter. When the dropdown still points at the
-  // generic newspaper account, fall through to authorId (staff writer / editor
-  // who filed the piece) so someone actually receives the alert.
-  if (reporter && !isNonHumanAccount(reporter)) {
-    add(reporter);
-  } else if (author) {
-    add(author);
-  } else if (reporter) {
-    add(reporter);
-  }
-
-  if (author) add(author);
-  if (article.submitterId) add(article.submitterId);
-
-  return [...seen];
 }
 
 /** Format `scheduled_at` as a short Arabic date+time. Uses the
@@ -375,20 +343,24 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
 }
 
 /**
- * Helper used by `routes.ts` to fan out to ALL of an article's stakeholders
+ * Helper used by `routes.ts` to fan out to an article's content owners
  * (author + reporter, when they differ). Deduplicates on userId.
+ * Pass `excludeUserId` as the acting editor/admin so they never get the
+ * author-facing copy for their own action.
  */
 export async function notifyArticleStakeholders(
   article: NotifyEditorialArgs["article"] & { authorId?: string | null; reporterId?: string | null; submitterId?: string | null },
   event: EditorialEvent,
   reviewerNote?: string | null,
+  options?: ResolveStakeholdersOptions,
 ): Promise<void> {
-  const targets = resolveArticleStakeholderIds(article);
+  const targets = resolveArticleStakeholderIds(article, options);
 
   if (targets.length === 0) {
     console.warn(
       `[Editorial Notify] No human stakeholders for article ${article.id} ` +
-      `(reporterId=${article.reporterId ?? "null"}, authorId=${article.authorId ?? "null"}) — ` +
+      `(reporterId=${article.reporterId ?? "null"}, authorId=${article.authorId ?? "null"}, ` +
+      `submitterId=${article.submitterId ?? "null"}, exclude=${options?.excludeUserId ?? "null"}) — ` +
       `event=${event} skipped`,
     );
     return;
