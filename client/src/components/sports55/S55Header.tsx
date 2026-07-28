@@ -21,12 +21,9 @@ export function S55Header() {
   return (
     <header className="header">
       <div className="wrap">
-        <a className="brand" href="/sports55" onClick={go("/sports55")} aria-label="البوابة الرياضية">
-          <div className="mark">س</div>
-          <div className="wm">
-            <b>سبق الرياضية</b>
-            <span>SPORTS · 55</span>
-          </div>
+        <a className="brand" href="/sports55" onClick={go("/sports55")} aria-label="سبق الرياضية">
+          <span className="brand-word">سبق</span>
+          <span className="brand-tag">الرياضية</span>
         </a>
 
         <nav className="nav" aria-label="التنقّل الرياضي">
