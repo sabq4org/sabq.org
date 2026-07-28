@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import sabqLogo from "@assets/sabq-logo.png";
 
 const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -40,12 +41,8 @@ export function S55Footer() {
       <div className="wrap">
         <div className="fgrid">
           <div className="fcol fabout">
-            <a className="brand" href="/sports55" onClick={go("/sports55")}>
-              <div className="mark">س</div>
-              <div className="wm">
-                <b>سبق الرياضية</b>
-                <span>SPORTS · 55</span>
-              </div>
+            <a className="brand" href="/sports55" onClick={go("/sports55")} aria-label="سبق الرياضية">
+              <img className="foot-logo" src={sabqLogo} alt="سبق" />
             </a>
             <p>
               بوابة رياضية تنقل مباريات دوري روشن السعودي، النتائج المباشرة، الترتيب والهدّافين
