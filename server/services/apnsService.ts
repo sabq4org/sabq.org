@@ -212,6 +212,154 @@ interface ApnsResponse {
   timestamp?: number;
 }
 
+// ============================================================================
+// جلسة HTTP/2 مشتركة وطويلة العمر لكل مضيف APNs
+// ============================================================================
+// حادث 2026-07-28: كان كل إشعار يفتح http2.connect() خاصًا به ثم يغلقه بعد
+// إشعار واحد. في بث عاجل (38,035 جهازًا، 100 متزامنة لكل دفعة) صار ذلك
+// 38 ألف مصافحة TLS متلاحقة: قفز fd من 122 إلى 439 وsockets من 85 إلى 380،
+// وتأخّر حلقة الحدث من 25ms إلى 541ms — فبطؤت كل طلبات الموقع، بما فيها
+// المخدومة أصلًا من الكاش (مصافحة TLS شغل تشفير على الحلقة نفسها).
+//
+// APNs مصمّم عكس ذلك تمامًا: اتصال HTTP/2 واحد طويل العمر تُضاعَف عليه آلاف
+// الطلبات كـstreams. الجلسة هنا مشتركة بين الإشعارات العادية وLive Activity
+// (الأخيرة تُرسل بكثافة أثناء المباريات المباشرة، وكانت تدفع الثمن نفسه).
+const APNS_SESSION_IDLE_MS = 5 * 60 * 1000;
+const APNS_REQUEST_TIMEOUT_MS = 10_000;
+
+interface PooledApnsSession {
+  session: http2.ClientHttp2Session;
+  pending: number;
+}
+
+const apnsSessions = new Map<string, PooledApnsSession>();
+
+function getApnsSession(host: string): PooledApnsSession {
+  const existing = apnsSessions.get(host);
+  if (existing && !existing.session.closed && !existing.session.destroyed) {
+    return existing;
+  }
+
+  const session = http2.connect(`https://${host}:${APNS_PORT}`);
+  const pooled: PooledApnsSession = { session, pending: 0 };
+
+  // جلسة خاملة يجب ألا تمنع العملية من الخروج؛ نعيد ref عند أول طلب معلّق.
+  session.unref();
+
+  session.setTimeout(APNS_SESSION_IDLE_MS, () => {
+    if (pooled.pending === 0) session.close();
+  });
+
+  // GOAWAY يعني أن APNs سيغلق الجلسة: الـstreams الجارية تكتمل، لكن أي طلب
+  // جديد يجب أن يفتح جلسة أخرى — لذا نُخرجها من البركة فورًا بلا تدمير.
+  session.on("goaway", () => {
+    if (apnsSessions.get(host) === pooled) apnsSessions.delete(host);
+  });
+
+  session.on("close", () => {
+    if (apnsSessions.get(host) === pooled) apnsSessions.delete(host);
+  });
+
+  // بدون مستمع هنا يصير خطأ الجلسة unhandled فيُسقط العملية. الـstreams الجارية
+  // تستقبل الخطأ كلٌّ على حدة فتُحلّ وعودها في apnsRequest.
+  session.on("error", (err) => {
+    if (apnsSessions.get(host) === pooled) apnsSessions.delete(host);
+    console.error(`[APNs] Session error (${host}):`, err.message);
+  });
+
+  apnsSessions.set(host, pooled);
+  return pooled;
+}
+
+/**
+ * ينفّذ طلب APNs واحدًا على الجلسة المشتركة للمضيف.
+ *
+ * `allowRetry` يغطي فشل مستوى الاتصال فقط (جلسة أُغلقت في سباق، أو انقطاع قبل
+ * وصول أي رد). لا نعيد المحاولة بعد مهلة أو بعد رد فعلي من APNs: الأولى قد
+ * تكون وصلت أصلًا فيتكرر الإشعار على المستخدم، والثانية رفض صريح لا ينفع معه
+ * التكرار.
+ */
+function apnsRequest(
+  host: string,
+  headers: http2.OutgoingHttpHeaders,
+  payload: unknown,
+  allowRetry = true,
+): Promise<ApnsResponse> {
+  return new Promise((resolve) => {
+    let pooled: PooledApnsSession;
+    let req: http2.ClientHttp2Stream;
+
+    try {
+      pooled = getApnsSession(host);
+      req = pooled.session.request(headers);
+    } catch (error: any) {
+      // سباق نادر: أُغلقت الجلسة بين الفحص وإنشاء الـstream. أسقطها فقط إن كانت
+      // هي المعطوبة فعلًا — قد تكون جلسة سليمة حلّت محلّها بين اللحظتين.
+      const current = apnsSessions.get(host);
+      if (current && (current.session.closed || current.session.destroyed)) {
+        apnsSessions.delete(host);
+      }
+      if (allowRetry) return resolve(apnsRequest(host, headers, payload, false));
+      return resolve({ success: false, reason: error.message });
+    }
+
+    if (pooled.pending++ === 0) pooled.session.ref();
+
+    let settled = false;
+    let responseData = "";
+    let apnsId: string | undefined;
+    let statusCode: number | undefined;
+
+    const finish = (result: ApnsResponse, retriable = false) => {
+      if (settled) return;
+      settled = true;
+      if (--pooled.pending === 0) pooled.session.unref();
+
+      if (retriable && allowRetry) {
+        // لا تُسقط إلا الجلسة التي فشل عليها هذا الطلب.
+        if (apnsSessions.get(host) === pooled) apnsSessions.delete(host);
+        return resolve(apnsRequest(host, headers, payload, false));
+      }
+      resolve(result);
+    };
+
+    // بلا سقف زمني يبقى أي stream معلّق محجوزًا ضمن maxConcurrentStreams للجلسة
+    // المشتركة — تسريب يخنق كل الإشعارات التالية، لا هذا الإشعار وحده. (مع
+    // اتصال لكل إشعار كان الضرر محصورًا في صاحبه، فلم تكن المهلة ضرورية.)
+    req.setTimeout(APNS_REQUEST_TIMEOUT_MS, () => {
+      req.close(http2.constants.NGHTTP2_CANCEL);
+      finish({ success: false, reason: "timeout" });
+    });
+
+    req.on("response", (h) => {
+      apnsId = h["apns-id"] as string;
+      statusCode = h[":status"] as number;
+    });
+
+    req.on("data", (chunk) => {
+      responseData += chunk;
+    });
+
+    req.on("end", () => {
+      if (statusCode === 200) {
+        return finish({ success: true, apnsId, statusCode });
+      }
+      let reason = "Unknown error";
+      try {
+        reason = JSON.parse(responseData).reason || reason;
+      } catch {}
+      finish({ success: false, apnsId, statusCode, reason });
+    });
+
+    req.on("error", (err: any) => {
+      // لم يصل رد أصلًا → عطب اتصال، يستحق محاولة واحدة بجلسة جديدة.
+      finish({ success: false, reason: err.message }, statusCode === undefined);
+    });
+
+    req.end(JSON.stringify(payload));
+  });
+}
+
 /**
  * Send a push notification to a single device
  */
@@ -267,71 +415,17 @@ function sendPushRaw(
   },
 ): Promise<ApnsResponse> {
   const token = generateApnsToken(credentials);
-  const path = `/3/device/${deviceToken}`;
 
-  return new Promise((resolve) => {
-    try {
-      const client = http2.connect(`https://${host}:${APNS_PORT}`);
-
-      client.on("error", (err) => {
-        console.error("[APNs] Connection error:", err);
-        resolve({ success: false, reason: err.message });
-      });
-
-      const headers = {
-        ":method": "POST",
-        ":path": path,
-        "authorization": `bearer ${token}`,
-        "apns-topic": options.topic || credentials.bundleId,
-        "apns-push-type": options.pushType || "alert",
-        "apns-priority": options.priority || "10",
-        ...(options.expiration && { "apns-expiration": options.expiration.toString() }),
-        ...(options.collapseId && { "apns-collapse-id": options.collapseId }),
-      };
-
-      const req = client.request(headers);
-
-      let responseData = "";
-      let apnsId: string | undefined;
-      let statusCode: number | undefined;
-
-      req.on("response", (headers) => {
-        apnsId = headers["apns-id"] as string;
-        statusCode = headers[":status"] as number;
-      });
-
-      req.on("data", (chunk) => {
-        responseData += chunk;
-      });
-
-      req.on("end", () => {
-        client.close();
-
-        if (statusCode === 200) {
-          resolve({ success: true, apnsId, statusCode });
-        } else {
-          let reason = "Unknown error";
-          try {
-            const parsed = JSON.parse(responseData);
-            reason = parsed.reason || reason;
-          } catch {}
-          resolve({ success: false, apnsId, statusCode, reason });
-        }
-      });
-
-      req.on("error", (err) => {
-        client.close();
-        console.error("[APNs] Request error:", err);
-        resolve({ success: false, reason: err.message });
-      });
-
-      req.write(JSON.stringify(payload));
-      req.end();
-    } catch (error: any) {
-      console.error("[APNs] Error:", error);
-      resolve({ success: false, reason: error.message });
-    }
-  });
+  return apnsRequest(host, {
+    ":method": "POST",
+    ":path": `/3/device/${deviceToken}`,
+    "authorization": `bearer ${token}`,
+    "apns-topic": options.topic || credentials.bundleId,
+    "apns-push-type": options.pushType || "alert",
+    "apns-priority": options.priority || "10",
+    ...(options.expiration && { "apns-expiration": options.expiration.toString() }),
+    ...(options.collapseId && { "apns-collapse-id": options.collapseId }),
+  }, payload);
 }
 
 // ============================================================================
@@ -459,43 +553,15 @@ function sendLiveActivityHttp2(
   payload: Record<string, unknown>,
 ): Promise<ApnsResponse> {
   const token = generateApnsToken(credentials);
-  return new Promise((resolve) => {
-    try {
-      const client = http2.connect(`https://${host}:${APNS_PORT}`);
-      client.on("error", (err) => resolve({ success: false, reason: err.message }));
-      const req = client.request({
-        ":method": "POST",
-        ":path": `/3/device/${deviceToken}`,
-        authorization: `bearer ${token}`,
-        "apns-topic": `${bundleId}.push-type.liveactivity`,
-        "apns-push-type": "liveactivity",
-        "apns-priority": priority,
-      });
-      let responseData = "";
-      let apnsId: string | undefined;
-      let statusCode: number | undefined;
-      req.on("response", (h) => {
-        apnsId = h["apns-id"] as string;
-        statusCode = h[":status"] as number;
-      });
-      req.on("data", (chunk) => { responseData += chunk; });
-      req.on("end", () => {
-        client.close();
-        if (statusCode === 200) return resolve({ success: true, apnsId, statusCode });
-        let reason = "Unknown error";
-        try { reason = JSON.parse(responseData).reason || reason; } catch {}
-        resolve({ success: false, apnsId, statusCode, reason });
-      });
-      req.on("error", (err) => {
-        client.close();
-        resolve({ success: false, reason: err.message });
-      });
-      req.write(JSON.stringify(payload));
-      req.end();
-    } catch (error: any) {
-      resolve({ success: false, reason: error.message });
-    }
-  });
+
+  return apnsRequest(host, {
+    ":method": "POST",
+    ":path": `/3/device/${deviceToken}`,
+    authorization: `bearer ${token}`,
+    "apns-topic": `${bundleId}.push-type.liveactivity`,
+    "apns-push-type": "liveactivity",
+    "apns-priority": priority,
+  }, payload);
 }
 
 /**
@@ -540,7 +606,6 @@ function sendLiveActivityRaw(
   options: LiveActivityUpdateOptions,
 ): Promise<ApnsResponse> {
   const token = generateApnsToken(credentials);
-  const path = `/3/device/${activityPushToken}`;
 
   const aps: Record<string, unknown> = {
     timestamp: Math.floor(Date.now() / 1000),
@@ -556,59 +621,16 @@ function sendLiveActivityRaw(
   }
   const payload = { aps };
 
-  return new Promise((resolve) => {
-    try {
-      const client = http2.connect(`https://${host}:${APNS_PORT}`);
-      client.on("error", (err) => {
-        resolve({ success: false, reason: err.message });
-      });
-
-      const headers = {
-        ":method": "POST",
-        ":path": path,
-        authorization: `bearer ${token}`,
-        // الموضوع الخاص بأنشطة Live Activity — يتبع bundle التطبيق المُصدِر
-        // (الرياضة com.sabq.sports)، وإلا الـbundle الافتراضي للخادم.
-        "apns-topic": `${options.bundleId || credentials.bundleId}.push-type.liveactivity`,
-        "apns-push-type": "liveactivity",
-        "apns-priority": options.priority || "10",
-      };
-
-      const req = client.request(headers);
-      let responseData = "";
-      let apnsId: string | undefined;
-      let statusCode: number | undefined;
-
-      req.on("response", (h) => {
-        apnsId = h["apns-id"] as string;
-        statusCode = h[":status"] as number;
-      });
-      req.on("data", (chunk) => {
-        responseData += chunk;
-      });
-      req.on("end", () => {
-        client.close();
-        if (statusCode === 200) {
-          resolve({ success: true, apnsId, statusCode });
-        } else {
-          let reason = "Unknown error";
-          try {
-            reason = JSON.parse(responseData).reason || reason;
-          } catch {}
-          resolve({ success: false, apnsId, statusCode, reason });
-        }
-      });
-      req.on("error", (err) => {
-        client.close();
-        resolve({ success: false, reason: err.message });
-      });
-
-      req.write(JSON.stringify(payload));
-      req.end();
-    } catch (error: any) {
-      resolve({ success: false, reason: error.message });
-    }
-  });
+  return apnsRequest(host, {
+    ":method": "POST",
+    ":path": `/3/device/${activityPushToken}`,
+    authorization: `bearer ${token}`,
+    // الموضوع الخاص بأنشطة Live Activity — يتبع bundle التطبيق المُصدِر
+    // (الرياضة com.sabq.sports)، وإلا الـbundle الافتراضي للخادم.
+    "apns-topic": `${options.bundleId || credentials.bundleId}.push-type.liveactivity`,
+    "apns-push-type": "liveactivity",
+    "apns-priority": options.priority || "10",
+  }, payload);
 }
 
 /**
