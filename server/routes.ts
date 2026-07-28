@@ -27126,19 +27126,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // POST English Category (Admin only)
-  app.post("/api/en/categories", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = req.user as User;
-    
-    // Check if user has EN language permission and is admin/editor
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'editor', 'chief_editor'].includes(user.role)) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات للمحتوى الإنجليزي" });
-    }
-
+  // POST English Category — legacy; prefer /api/en/dashboard/categories
+  app.post("/api/en/categories", requireAuth, requirePermission("categories.create"), async (req, res) => {
     try {
       const validatedData = insertEnCategorySchema.parse(req.body);
       
@@ -27159,18 +27148,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // PATCH English Category (Admin only)
-  app.patch("/api/en/categories/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = req.user as User;
-    
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'editor', 'chief_editor'].includes(user.role)) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
-    }
-
+  // PATCH English Category — legacy; prefer /api/en/dashboard/categories/:id
+  app.patch("/api/en/categories/:id", requireAuth, requirePermission("categories.update"), async (req, res) => {
     try {
       const updated = await db
         .update(enCategories)
@@ -28069,33 +28048,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // POST English Article (Editor/Admin only)
-  app.post("/api/en/articles", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      console.log('[EN Article] User not authenticated');
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
+  // POST English Article — legacy path; prefer /api/en/dashboard/articles.
+  // Auth via RBAC (articles.create), not users.allowed_languages (defaults to ar-only).
+  app.post("/api/en/articles", requireAuth, requirePermission("articles.create"), async (req, res) => {
     const user = req.user as User;
-    
-    console.log('[EN Article POST] User check:', {
-      userId: user.id,
-      role: user.role,
-      allowedLanguages: user.allowedLanguages,
-      hasEnglish: user.allowedLanguages?.includes('en'),
-      hasValidRole: ['admin', 'editor', 'chief_editor', 'reporter', 'opinion_author'].includes(user.role)
-    });
-    
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'editor', 'chief_editor', 'reporter', 'opinion_author'].includes(user.role)) {
-      console.log('[EN Article] Permission denied - Language or role check failed');
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات للمحتوى الإنجليزي" });
-    }
 
     try {
       const validatedData = insertEnArticleSchema.parse(req.body);
 
-      // The role list admits `reporter`/`opinion_author` but says nothing
-      // about publishing.
       const denial = await denyPublish(user.id, validatedData.status);
       if (denial) {
         return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
@@ -28126,17 +28086,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // PATCH English Article
-  app.patch("/api/en/articles/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
+  // PATCH English Article — legacy path; prefer /api/en/dashboard/articles/:id
+  app.patch("/api/en/articles/:id", requireAuth, async (req, res) => {
     const user = req.user as User;
-    
-    if (!user.allowedLanguages?.includes('en')) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
-    }
 
     try {
       // Check if article exists and user has permission
@@ -28150,8 +28102,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Only admins and the author can edit
-      if (user.role !== 'admin' && user.id !== existing[0].authorId) {
+      const userPermissions = await getUserPermissions(user.id);
+      const canEditOwn = userPermissions.includes("articles.edit_own");
+      const canEditAny = userPermissions.includes("articles.edit_any");
+
+      if (!canEditAny && (!canEditOwn || existing[0].authorId !== user.id)) {
         return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
       }
 
@@ -28194,18 +28149,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // DELETE English Article
-  app.delete("/api/en/articles/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = req.user as User;
-    
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'chief_editor'].includes(user.role)) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
-    }
-
+  // DELETE English Article — legacy; prefer /api/en/dashboard/articles/:id
+  app.delete("/api/en/articles/:id", requireAuth, requirePermission("articles.delete"), async (req, res) => {
     try {
       await db
         .delete(enArticles)

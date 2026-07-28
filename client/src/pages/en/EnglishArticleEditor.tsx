@@ -338,16 +338,16 @@ export default function EnglishArticleEditor() {
       });
 
       if (isNewArticle) {
-        console.log('[Save Article] Creating NEW article via POST /api/en/articles');
-        const result = await apiRequest("/api/en/articles", {
+        console.log('[Save Article] Creating NEW article via POST /api/en/dashboard/articles');
+        const result = await apiRequest("/api/en/dashboard/articles", {
           method: "POST",
           body: JSON.stringify(articleData),
         });
         console.log('[Save Article] POST result:', result);
         return result;
       } else {
-        console.log('[Save Article] Updating EXISTING article via PATCH /api/en/articles/' + id);
-        const result = await apiRequest(`/api/en/articles/${id}`, {
+        console.log('[Save Article] Updating EXISTING article via PATCH /api/en/dashboard/articles/' + id);
+        const result = await apiRequest(`/api/en/dashboard/articles/${id}`, {
           method: "PATCH",
           body: JSON.stringify(articleData),
         });
@@ -362,7 +362,7 @@ export default function EnglishArticleEditor() {
       
       // If updating existing article, also invalidate its specific query
       if (!isNewArticle && id) {
-        queryClient.invalidateQueries({ queryKey: ["/api/en/articles", id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/en/dashboard/articles", id] });
       }
       
       toast({
@@ -438,11 +438,12 @@ export default function EnglishArticleEditor() {
       let articleId = id;
       
       // If new article (no id), auto-save as draft first
-      if (!articleId && title && content) {
-        const saveResponse = await apiRequest(`/api/en/articles`, {
+      if ((!articleId || isNewArticle) && title && content) {
+        const savedArticle = await apiRequest<{ id: string }>(`/api/en/dashboard/articles`, {
           method: "POST",
           body: JSON.stringify({
             title,
+            slug: slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
             subtitle: subtitle || "",
             content,
             excerpt: excerpt || "",
@@ -462,11 +463,10 @@ export default function EnglishArticleEditor() {
             },
           }),
         });
-        const savedArticle = await saveResponse.json();
         articleId = savedArticle.id;
         
         // Update URL to edit mode
-        window.history.replaceState({}, '', `/dashboard/en/articles/edit/${articleId}`);
+        window.history.replaceState({}, '', `/en/dashboard/articles/${articleId}/edit`);
       }
       
       if (!articleId) {
@@ -496,8 +496,8 @@ export default function EnglishArticleEditor() {
       }
       
       // Invalidate queries to refetch article with updated SEO data
-      queryClient.invalidateQueries({ queryKey: ['/api/en/articles', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/en/dashboard/articles', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/en/dashboard/articles'] });
       
       // Show success toast
       toast({
