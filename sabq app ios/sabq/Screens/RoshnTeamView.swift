@@ -104,7 +104,7 @@ struct RoshnTeamView: View {
                             .font(SabqFonts.app(size: 12.5, weight: .semibold))
                             .foregroundStyle(RoshnTheme.sky)
                             .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Capsule().fill(.white.opacity(0.75)))
+                            .background(Capsule().fill(RoshnTheme.heroChip))
                             .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
                     }
                 }

@@ -2,10 +2,11 @@ import SwiftUI
 
 // MARK: - مركز دوري روشن السعودي
 //
-// الشاشة الكاملة خلف شريط الرئيسية: المباريات جولةً بجولة، جدول الترتيب
-// الملوّن، سباقات الموسم (هدّافون/صنّاع/بطاقات)، والأندية. تصميم فاتح منسّق
-// بهوية روشن (قرار المالك: لا داكن) — أبيض صباحي، سماوي أساسي، زمردي
-// للملعب، ذهبي للتتويج. البيانات من /api/rsl/hero و/api/sports/pro-league/*.
+// الشاشة الكاملة خلف شريط الرئيسية: المباريات بدلاء الخادم، جدول الترتيب
+// الملوّن، سباقات الموسم (هدّافون/صنّاع/بطاقات)، و«الجدول» — متصفّح الجولات
+// الـ٣٤ بكل مباريات الموسم (منذ 2026-07-28 بدل تبويب الأندية؛ صفحات الأندية
+// تبقى متاحة من الترتيب ومركز المباراة). هوية «صباح الملعب» فاتحة + نسخة
+// ليلية متكيفة عبر RoshnTheme. البيانات من /api/rsl/hero و/api/sports/pro-league/*.
 
 @Observable
 @MainActor
@@ -23,6 +24,16 @@ final class RoshnHubStore {
     var matchesError: String?
     var standingsError: String?
     var racesError: String?
+
+    // متصفّح الجولات (تبويب «الجدول») — يُحمَّل كسلًا عند أول فتح للتبويب.
+    var rounds: [RsRound] = []
+    var currentRoundKey: String?
+    var selectedRoundKey: String?
+    var roundFixtures: [RsFixture] = []
+    var loadingSchedule = false
+    var loadingRound = false
+    var scheduleError: String?
+    private(set) var didLoadSchedule = false
 
     func loadMatches(force: Bool = false) async {
         if loadingMatches { return }
@@ -84,6 +95,48 @@ final class RoshnHubStore {
             : "اكتملت بعض اللوحات فقط؛ سنعيد تحميل البقية عند المحاولة."
     }
 
+    /// قائمة الجولات + الجولة الحالية، ثم مباريات الجولة المختارة — تحميل كسل
+    /// (لا كلفة على من لا يفتح التبويب) مع إبقاء آخر اختيار عند العودة.
+    func loadSchedule(force: Bool = false) async {
+        if loadingSchedule { return }
+        if didLoadSchedule, !force { return }
+        loadingSchedule = true
+        defer { loadingSchedule = false }
+        do {
+            let res = try await APIClient.shared.fetchRoshnRounds(ignoreCache: force)
+            rounds = res.rounds
+            currentRoundKey = res.current
+            if selectedRoundKey == nil || !res.rounds.contains(where: { $0.key == selectedRoundKey }) {
+                selectedRoundKey = res.current ?? res.rounds.first?.key
+            }
+            didLoadSchedule = true
+            scheduleError = nil
+            if let key = selectedRoundKey {
+                await loadRoundFixtures(key, force: force)
+            }
+        } catch {
+            scheduleError = message(for: error)
+        }
+    }
+
+    func selectRound(_ key: String) async {
+        guard key != selectedRoundKey, !loadingRound else { return }
+        selectedRoundKey = key
+        await loadRoundFixtures(key)
+    }
+
+    func loadRoundFixtures(_ key: String, force: Bool = false) async {
+        if loadingRound { return }
+        loadingRound = true
+        defer { loadingRound = false }
+        do {
+            roundFixtures = try await APIClient.shared.fetchRoshnRoundFixtures(key: key, ignoreCache: force)
+            scheduleError = nil
+        } catch {
+            scheduleError = message(for: error)
+        }
+    }
+
     private func message(for error: Error) -> String {
         if let api = error as? APIError, let text = api.errorDescription { return text }
         return "تعذّر الاتصال بمصدر البيانات حاليًا"
@@ -102,14 +155,14 @@ struct RoshnView: View {
         case matches = "المباريات"
         case standings = "الترتيب"
         case races = "الهدّافون"
-        case teams = "الأندية"
+        case schedule = "الجدول"
 
         var icon: String {
             switch self {
             case .matches: "calendar"
             case .standings: "list.number"
             case .races: "trophy.fill"
-            case .teams: "shield.fill"
+            case .schedule: "list.bullet.rectangle"
             }
         }
     }
@@ -126,7 +179,7 @@ struct RoshnView: View {
                     RoshnRacesSection(store: store) {
                         Task { await store.loadRaces(hero: homeStore.hero, force: true) }
                     }
-                case .teams: teamsTab
+                case .schedule: scheduleTab
                 }
             }
             .padding(.horizontal, 14)
@@ -144,12 +197,17 @@ struct RoshnView: View {
             async let races: Void = store.loadRaces(hero: homeStore.hero)
             _ = await (matches, standings, races)
         }
+        // متصفّح الجولات كسل: لا يُطلب إلا عند فتح تبويب «الجدول» أول مرة.
+        .task(id: tab) {
+            if tab == .schedule { await store.loadSchedule() }
+        }
         .refreshable {
             await homeStore.refreshLive()
             async let matches: Void = store.loadMatches(force: true)
             async let standings: Void = store.loadStandings(force: true)
             async let races: Void = store.loadRaces(hero: homeStore.hero, force: true)
             _ = await (matches, standings, races)
+            if store.didLoadSchedule { await store.loadSchedule(force: true) }
         }
         .sheet(isPresented: $showMatchCenter) {
             if let fixture = selectedFixture {
@@ -231,7 +289,7 @@ struct RoshnView: View {
                         .foregroundStyle(RoshnTheme.sky)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.72)))
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.heroChip))
                         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
                     }
                 }
@@ -252,7 +310,7 @@ struct RoshnView: View {
         .foregroundStyle(RoshnTheme.heroOn)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.70)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.heroChip))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RoshnTheme.heroStroke.opacity(0.7), lineWidth: 1))
     }
 
@@ -458,46 +516,80 @@ struct RoshnView: View {
         .padding(.horizontal, 10)
     }
 
-    // MARK: تبويب الأندية
+    // MARK: تبويب الجدول — متصفّح الجولات الـ٣٤ (كل مباريات الموسم)
 
-    private var teamsTab: some View {
-        VStack(spacing: 12) {
-            sectionHeading("أندية دوري روشن", subtitle: "صفحات متكاملة: أرقام، مباريات، هدّافون وقائمة", icon: "shield.fill")
-            if let error = store.standingsError {
-                retryBanner(error) { Task { await store.loadStandings(force: true) } }
+    private var scheduleTab: some View {
+        VStack(spacing: 10) {
+            sectionHeading("جدول الموسم", subtitle: "كل مباريات الدوري جولةً بجولة", icon: "list.bullet.rectangle")
+
+            if let error = store.scheduleError, store.rounds.isEmpty {
+                retryBanner(error) { Task { await store.loadSchedule(force: true) } }
             }
-            if store.standings.isEmpty {
-                emptyState(icon: "shield", text: "قائمة أندية الموسم تظهر مع اعتماد الجدول")
+
+            if store.loadingSchedule, store.rounds.isEmpty {
+                loadingRows(count: 6, height: 74)
+            } else if store.rounds.isEmpty {
+                emptyState(icon: "calendar", text: "جدول الموسم يُعلن قريبًا — ستجده هنا فور اعتماده")
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 10)], spacing: 10) {
-                    ForEach(store.standings.sorted { $0.team.name < $1.team.name }) { row in
-                        Button { selectedTeam = row.team } label: {
-                            VStack(spacing: 8) {
-                                ZStack(alignment: .bottomTrailing) {
-                                    WCRemoteImage(url: row.team.logo)
-                                        .padding(7).frame(width: 60, height: 60)
-                                        .background(Circle().fill(.white))
-                                        .overlay(Circle().stroke(RoshnTheme.line, lineWidth: 1))
-                                    Text(RsFormat.latin(row.rank))
-                                        .font(SabqFonts.app(size: 9, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(Circle().fill(RoshnTheme.navy))
-                                }
-                                Text(row.team.name)
-                                    .font(SabqFonts.app(size: 12.5, weight: .semibold))
-                                    .foregroundStyle(RoshnTheme.ink)
-                                    .lineLimit(1).minimumScaleFactor(0.7)
-                                Text("\(RsFormat.latin(row.points)) نقطة")
-                                    .font(SabqFonts.app(size: 9.5))
-                                    .foregroundStyle(RoshnTheme.inkSoft)
+                roundPicker
+                roundFixturesList
+            }
+        }
+    }
+
+    /// شريط الجولات الأفقي — يفتتح على الجولة الحالية ويتمرّك حول المختارة.
+    private var roundPicker: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(store.rounds) { round in
+                        let selected = round.key == store.selectedRoundKey
+                        Button {
+                            Task { await store.selectRound(round.key) }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(round.key, anchor: .center)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(RoshnTheme.card))
-                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+                        } label: {
+                            Text(round.label)
+                                .font(SabqFonts.app(size: 12, weight: selected ? .semibold : .regular))
+                                .foregroundStyle(selected ? .white : RoshnTheme.inkSoft)
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Capsule().fill(selected ? RoshnTheme.sky : RoshnTheme.card))
+                                .overlay(Capsule().stroke(selected ? Color.clear : RoshnTheme.line, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
+                        .id(round.key)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .onAppear { proxy.scrollTo(store.selectedRoundKey ?? "", anchor: .center) }
+            .onChange(of: store.rounds.count) { _, _ in
+                // وصول القائمة بعد ظهور الشريط: انتقل فورًا إلى الجولة الحالية.
+                proxy.scrollTo(store.selectedRoundKey ?? "", anchor: .center)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var roundFixturesList: some View {
+        if let error = store.scheduleError, store.roundFixtures.isEmpty {
+            retryBanner(error) {
+                Task {
+                    if let key = store.selectedRoundKey { await store.loadRoundFixtures(key, force: true) }
+                }
+            }
+        }
+        if store.loadingRound {
+            loadingRows(count: 5, height: 74)
+        } else if store.roundFixtures.isEmpty {
+            emptyState(icon: "calendar", text: "مباريات هذه الجولة تُعلن قريبًا")
+        } else {
+            LazyVStack(spacing: 8) {
+                ForEach(store.roundFixtures) { fixture in
+                    RoshnMatchRow(fixture: fixture) {
+                        selectedFixture = fixture
+                        showMatchCenter = true
                     }
                 }
             }
@@ -577,7 +669,7 @@ struct RoshnMatchRow: View {
                 teamSide(fixture.away, alignment: .leading)
             }
             .padding(.horizontal, 12).padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(RoshnTheme.card))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(fixture.status.live ? RoshnTheme.liveRed.opacity(0.45) : RoshnTheme.line, lineWidth: 1)
@@ -707,7 +799,7 @@ struct RoshnStandingRowView: View {
                 .monospacedDigit().frame(width: 30)
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(RoshnTheme.card))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(row.live == true ? RoshnTheme.liveRed.opacity(0.35) : RoshnTheme.line, lineWidth: 1)
@@ -932,7 +1024,7 @@ struct RoshnRacesSection: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(RoshnTheme.card))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
     }
 }
