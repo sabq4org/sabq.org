@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-27 (إزالة صفحات أدوات ذكية/تحليلات قديمة من اللوحة) | المالك: editorial
+> آخر مراجعة: 2026-07-28 (محرّر EN عبر dashboard API + RBAC) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -87,6 +87,7 @@
 - **نبض غرفة الأخبار (`GET /api/admin/dashboard/stats`):** عبر `adminDashboardStatsService.getCachedAdminDashboardStats` — SWR (طازج 5 دقائق / stale حتى 15 مع تحديث خلفي + single-flight). الـ warmup وتحديث كل 4 دقائق يعملان على **كل replica** (كاش الذاكرة per-process). `reading_history` يُجمَّع على آخر 7 أيام فقط؛ تفاعلات اليوم باستعلام منفصل بفلتر تاريخ. الموبايل `full-stats` يشارك نفس الكاش. KPI الجانبية (`deepAnalyses`, `audioNewsletters`, `publishers`, …) تُغلَّف بـ soft-fail داخل `getAdminDashboardStats` حتى لا يُسقط عمود ناقص في الإنتاج (مثل `deep_analyses.status`) المسار كاملاً.
 - **ملف المراسل العام:** `getReporterProfile` v3 — آخر 5 مقالات فقط + تجميع يومي SQL للسلسلة (لا سحب كل مقالات 90 يوماً) + كاش `CACHE_TTL.MEDIUM` + single-flight + CDN `s-maxage=300`. أُسقط AVG(reading_history) من المسار الحار.
 - **نظرة عامة لبوابة الناشر:** `getPortalOverview` خلف كاش دقيقة `publisher:portal:overview:{id}` مع إبطال عند الإرسال/النشر/الحذف.
+- **محرّر الأخبار الإنجليزية:** الحفظ عبر `/api/en/dashboard/articles` (+ PATCH) بصلاحيات RBAC (`articles.create` / `edit_*`) — مثل الأوردو. المسار القديم `/api/en/articles` كان يرفض بـ `allowedLanguages.includes('en')` (الافتراضي `['ar']` فقط) فيظهر «لا توجد لديك صلاحيات للمحتوى الإنجليزي» حتى للأدمن.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
