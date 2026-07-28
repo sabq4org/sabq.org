@@ -964,7 +964,11 @@ export default function ArticleAnalyticsDashboard() {
                   <div className="text-center py-12 text-muted-foreground">
                     <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>لا توجد نتائج مطابقة للبحث</p>
-                    <p className="text-sm">جرب تغيير معايير البحث</p>
+                    <p className="text-sm">
+                      {debouncedSearchQuery.length > 0 && debouncedSearchQuery.length < 3
+                        ? "اكتب 3 أحرف على الأقل للبحث في العناوين"
+                        : "جرب تغيير معايير البحث"}
+                    </p>
                   </div>
                 ) : (
                   <>
