@@ -9864,7 +9864,8 @@ Respond in valid JSON format only:
           const parts = path.split("/").filter(Boolean);
           const articleIdx = parts.findIndex((p) => p === "article");
           if (articleIdx >= 0 && parts[articleIdx + 1]) {
-            searchQuery = parts[articleIdx + 1];
+            // Browser-copied Arabic URLs arrive percent-encoded; the slug column is not.
+            searchQuery = decodeURIComponent(parts[articleIdx + 1]);
           }
         } catch {
           // keep raw query
@@ -9893,14 +9894,28 @@ Respond in valid JSON format only:
             .map((row) => row.sourceArticleId)
             .filter((id): id is string => !!id);
 
-          const textMatch = or(
-            ilike(articles.title, pattern),
-            ilike(articles.subtitle, pattern),
-            ilike(articles.excerpt, pattern),
-            ilike(articles.slug, pattern),
-            ilike(articles.englishSlug, pattern),
+          // Every branch of this OR must be index-backed. `articles` holds ~940k rows,
+          // and a single non-indexable branch makes Postgres drop the whole OR into an
+          // ordered scan over every published article — which only terminates early when
+          // the term is common. A term matching one or two rows scanned the lot and died
+          // on the 15s statement timeout (verified on production: 15s+ before, 207ms after).
+          //   title / excerpt      → GIN pg_trgm, needs >= 3 chars to be usable
+          //   slug / english_slug  → btree equality only (this is the pasted-URL path;
+          //                          partial slug text is covered by the title trigram)
+          //   subtitle             → no index in production (dropped 2026-07-25, unused)
+          const exactMatch = or(
+            eq(articles.slug, searchQuery),
+            eq(articles.englishSlug, searchQuery),
             eq(articles.id, searchQuery),
           );
+          const textMatch =
+            searchQuery.length >= 3
+              ? or(
+                  ilike(articles.title, pattern),
+                  ilike(articles.excerpt, pattern),
+                  exactMatch,
+                )
+              : exactMatch;
 
           whereConditions.push(
             linkedArIds.length > 0
