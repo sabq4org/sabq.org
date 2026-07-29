@@ -181,18 +181,33 @@ function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   return now >= f.timestamp - KICKOFF_HOT_BEFORE_SEC && now <= f.timestamp + KICKOFF_HOT_AFTER_SEC;
 }
 
+/** مباشر → قادمة → منتهية (يمنع ظهور «انتهت» فوق «مباشر» داخل نفس القائمة). */
+function compareByMatchPhase(
+  a: Pick<SplFixture, "timestamp" | "status">,
+  b: Pick<SplFixture, "timestamp" | "status">,
+): number {
+  const rank = (f: Pick<SplFixture, "status">) =>
+    f.status.live ? 0 : f.status.finished ? 2 : 1;
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return b.timestamp - a.timestamp;
+  return a.timestamp - b.timestamp;
+}
+
 /** يقسّم جدول البطولة إلى مباشر/اليوم/قادمة/نتائج جاهزة للعرض. */
 function bucketFixtures(fixtures: SplFixture[]) {
   const todayKey = riyadhDayKey(Math.floor(Date.now() / 1000));
 
-  const live = fixtures.filter((f) => f.status.live);
-  const today = fixtures.filter(
-    (f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey
-  );
+  const live = fixtures.filter((f) => f.status.live).sort(compareByMatchPhase);
+  const today = fixtures
+    .filter((f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey)
+    .sort(compareByMatchPhase);
   // 54 ≈ 6 جولات × 9 مباريات (روشن) — السقف السابق 20 كان يقطع منتصف الجولة
   // الثالثة. الجدول الكامل يبقى عبر /rounds + /round لا عبر هذه المعاينة.
   const upcoming = fixtures
     .filter((f) => !f.status.live && !f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
+    .sort(compareByMatchPhase)
     .slice(0, 54);
   const results = fixtures
     .filter((f) => f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
@@ -560,7 +575,9 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const fixtures = await getFixturesByRound(comp, name, parseSeason(req));
+      const fixtures = [...(await getFixturesByRound(comp, name, parseSeason(req)))].sort(
+        compareByMatchPhase,
+      );
       res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
       res.json({ configured: true, fixtures });
     } catch (error) {

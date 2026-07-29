@@ -372,7 +372,20 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });
-  const roundFixtures = Array.isArray(roundData?.fixtures) ? roundData.fixtures : [];
+  const roundFixturesRaw = Array.isArray(roundData?.fixtures) ? roundData.fixtures : [];
+  /** مباشر → قادمة → منتهية (قائمة الدور كانت تُرتَّب بالوقت فقط فتظهر «انتهت» فوق المباشر). */
+  const roundFixtures = useMemo(
+    () =>
+      [...roundFixturesRaw].sort((a, b) => {
+        const rank = (f: SpLiveItem) => (f.status.live ? 0 : f.status.finished ? 2 : 1);
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra === 2) return b.timestamp - a.timestamp;
+        return a.timestamp - b.timestamp;
+      }),
+    [roundFixturesRaw],
+  );
   const selectedRoundLabel = rounds.find((r) => r.key === effectiveRound)?.label ?? effectiveRound ?? "";
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (id: number) =>
