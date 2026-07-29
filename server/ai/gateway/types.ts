@@ -87,7 +87,14 @@ export interface CompleteResult {
   content: string;
   provider: AIHubProvider;
   modelId: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    /** Anthropic prompt-cache hits (0.1× base input). */
+    cacheReadInputTokens?: number;
+    /** Anthropic prompt-cache writes (1.25× base for 5m TTL). */
+    cacheCreationInputTokens?: number;
+  };
   latencyMs: number;
   estimatedCostUsd: number;
   truncated: boolean;
@@ -156,9 +163,12 @@ export interface AdapterCompleteParams {
 
 export interface AdapterCompleteResult {
   content: string;
+  /** Total input tokens (cache read + cache write + uncached). */
   inputTokens: number;
   outputTokens: number;
   truncated: boolean;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
 }
 
 export interface AdapterEmbedParams {

@@ -1,7 +1,14 @@
-// Anthropic adapter: text completion only.
+// Anthropic adapter: text completion with prompt caching on stable prefixes.
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { AdapterCompleteParams, AdapterCompleteResult, ProviderAdapter } from "../types";
+import {
+  buildCachedSystemBlocks,
+  isAnthropicPromptCachingEnabled,
+  normalizeAnthropicUsage,
+  shouldCacheGrowingConversation,
+  withTrailingMessageCacheBreakpoint,
+} from "../anthropicPromptCache";
 
 let client: Anthropic | null = null;
 
@@ -32,23 +39,34 @@ export const anthropicAdapter: ProviderAdapter = {
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
+    const cachingEnabled = isAnthropicPromptCachingEnabled();
+    const systemText = systemParts.length ? systemParts.join("\n\n") : "";
+    const system = systemText
+      ? buildCachedSystemBlocks(systemText, cachingEnabled)
+      : undefined;
+    const cacheConversation = shouldCacheGrowingConversation(chat, cachingEnabled);
+    const messages = withTrailingMessageCacheBreakpoint(chat, cacheConversation);
+
     const response = await getClient().messages.create(
       {
         model: modelId,
         max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-        ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
-        messages: chat.length ? chat : [{ role: "user", content: "" }],
+        ...(system ? { system } : {}),
+        messages: messages.length ? messages : [{ role: "user", content: "" }],
       },
       { timeout: params.timeoutMs },
     );
 
     const content = response.content[0];
+    const usage = normalizeAnthropicUsage(response.usage);
     return {
       content: content?.type === "text" ? content.text : "",
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
       truncated: response.stop_reason === "max_tokens",
+      cacheReadInputTokens: usage.cacheReadInputTokens,
+      cacheCreationInputTokens: usage.cacheCreationInputTokens,
     };
   },
 };
