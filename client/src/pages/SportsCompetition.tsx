@@ -386,7 +386,6 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
       }),
     [roundFixturesRaw],
   );
-  const selectedRoundLabel = rounds.find((r) => r.key === effectiveRound)?.label ?? effectiveRound ?? "";
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (id: number) =>
     setExpanded((prev) => {
