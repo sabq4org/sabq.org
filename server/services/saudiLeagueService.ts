@@ -646,6 +646,8 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
     }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
       if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
+      if (a.status.finished !== b.status.finished) return a.status.finished ? 1 : -1;
+      if (a.status.finished && b.status.finished) return b.timestamp - a.timestamp;
       return a.timestamp - b.timestamp;
     });
   });

@@ -464,10 +464,28 @@ function ScoreboardCard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: n
   const others = orderToday(items.filter((f) => f.competitionSlug !== "world-cup"));
   const worldCupShown = worldCup.slice(0, 4);
   const othersShown = others.slice(0, worldCupShown.length > 0 ? 3 : 5);
+  // مجموعات فيها مباشر أولًا — لا تُثبَّت بطولة منتهية فوق مباراة جارية.
   const groups = [
-    { key: "world-cup", title: "كأس العالم", items: worldCupShown },
-    { key: "others", title: "بطولات أخرى", items: othersShown },
-  ].filter((group) => group.items.length > 0);
+    {
+      key: "world-cup",
+      title: "كأس العالم",
+      items: worldCupShown,
+      liveCount: worldCupShown.filter((f) => f.status.live).length,
+    },
+    {
+      key: "others",
+      title: "بطولات أخرى",
+      items: othersShown,
+      liveCount: othersShown.filter((f) => f.status.live).length,
+    },
+  ]
+    .filter((group) => group.items.length > 0)
+    .sort((a, b) => {
+      if (a.liveCount !== b.liveCount) return b.liveCount - a.liveCount;
+      if (a.key === "world-cup" && b.key !== "world-cup") return -1;
+      if (b.key === "world-cup" && a.key !== "world-cup") return 1;
+      return 0;
+    });
 
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">

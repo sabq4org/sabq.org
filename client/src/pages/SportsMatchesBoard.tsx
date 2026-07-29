@@ -163,10 +163,7 @@ function mergeLiveMatches(today: SpLiveItem[], live: SpLiveItem[], includeLive: 
     if (!seen.has(m.id)) merged.push(m);
   }
 
-  return merged.sort((a, b) => {
-    if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
-    return a.timestamp - b.timestamp;
-  });
+  return merged.sort(compareMatches);
 }
 
 // ---------- الحالة ----------
@@ -702,15 +699,15 @@ export default function SportsMatchesBoard() {
     });
   }, [filtered, compMeta]);
 
-  // ترتيب المجموعات: البطولات المثبّتة (كأس العالم) أولًا دائمًا، ثم الأكثر
-  // مباريات مباشرة، ثم أبكر موعد.
+  // ترتيب المجموعات: الأكثر مباشرًا أولًا، ثم المثبّتة (كأس العالم)، ثم أبكر موعد.
+  // لا تثبّت بطولة منتهية فوق بطولة فيها مباشر.
   const sortedGroups = useMemo(
     () =>
       [...groups].sort((a, b) => {
+        if (a.liveCount !== b.liveCount) return b.liveCount - a.liveCount;
         const ap = a.slug && PINNED_COMP_SLUGS.includes(a.slug) ? PINNED_COMP_SLUGS.indexOf(a.slug) : 99;
         const bp = b.slug && PINNED_COMP_SLUGS.includes(b.slug) ? PINNED_COMP_SLUGS.indexOf(b.slug) : 99;
         if (ap !== bp) return ap - bp;
-        if (a.liveCount !== b.liveCount) return b.liveCount - a.liveCount;
         return (a.matches[0]?.timestamp ?? 0) - (b.matches[0]?.timestamp ?? 0);
       }),
     [groups]
