@@ -430,18 +430,27 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
         </div>
       </div>
     );
+  const roundLiveCount = roundFixtures.filter((f) => f.status.live).length;
+  // عند وجود أدوار: متصفّح الدور وحده — لا نكرّر نفس المباريات في «مباشر/اليوم/قادمة/نتائج».
+  const showRoundBrowser = rounds.length > 0;
+
   return (
     <div className="space-y-4">
-      {rounds.length > 0 && (
+      {showRoundBrowser && (
         <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
           <div className="flex items-center gap-2.5 border-b border-border bg-gradient-to-l from-primary/10 to-transparent px-3 py-2.5 sm:px-4 sm:py-3">
             <Trophy className="h-4 w-4 text-primary" />
             <span className="flex-1 font-black text-foreground">أدوار البطولة</span>
-            {roundsData?.current && (
+            {roundLiveCount > 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-bold text-red-600 dark:text-red-400">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                {roundLiveCount} مباشر
+              </span>
+            ) : roundsData?.current ? (
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
                 الجاري الآن
               </span>
-            )}
+            ) : null}
           </div>
           <div className="border-b border-border px-3 py-2 sm:px-4">
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -466,9 +475,6 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">جارٍ تحميل مباريات الدور…</div>
           ) : roundFixtures.length > 0 ? (
             <div>
-              <div className="flex items-center gap-1.5 border-b border-border bg-muted/40 px-3 py-1.5 text-[11px] font-bold text-muted-foreground sm:px-4">
-                <CalendarDays className="h-3.5 w-3.5 text-primary" /> {selectedRoundLabel}
-              </div>
               {roundFixtures.map((f) => (
                 <MatchRow key={f.id} f={f} expanded={expanded.has(f.id)} onToggle={() => toggle(f.id)} onOpen={onOpen} />
               ))}
@@ -478,10 +484,14 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
           )}
         </div>
       )}
-      {section("مباشر الآن", live, { accentLive: true })}
-      {section("مباريات اليوم", today.filter((t) => !live.some((l) => l.id === t.id)))}
-      {section("مباريات قادمة", upcoming.slice(0, 20), { byDay: true })}
-      {section("أحدث النتائج", results.slice(0, 20), { byDay: true })}
+      {!showRoundBrowser && (
+        <>
+          {section("مباشر الآن", live, { accentLive: true })}
+          {section("مباريات اليوم", today.filter((t) => !live.some((l) => l.id === t.id)))}
+          {section("مباريات قادمة", upcoming.slice(0, 20), { byDay: true })}
+          {section("أحدث النتائج", results.slice(0, 20), { byDay: true })}
+        </>
+      )}
     </div>
   );
 }
