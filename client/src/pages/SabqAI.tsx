@@ -4,7 +4,10 @@
  * صفحة تعريفية عامة بمنظومة الذكاء الاصطناعي في سبق: أول صحيفة سعودية وعربية
  * تدمج الذكاء في كامل دورة العمل التحريري. التركيب المعتمد من المالك:
  * بنية «من الإشارة إلى القصة» (خط إنتاج من خمس محطات، «عين المحرر» محطة
- * إجبارية بارزة) + ميثاق الذكاء الاصطناعي بثماني مواد + شريط «من داخل المنظومة».
+ * إجبارية بارزة) + ميثاق الذكاء الاصطناعي بثماني مواد + شريط «من داخل المنظومة»
+ * + توسعة 2026-07-29 (معتمدة للترشح لقائمة «ذكاء السعودية 50»): «تحت الغطاء»
+ * (الرسم الهيكلي للبوابة الموحدة) و«الحوكمة أثناء التشغيل» و«في عام الذكاء
+ * الاصطناعي». كل ادعاء في هذه الأقسام موثّق من الكود الفعلي — لا مبالغات.
  *
  * قاعدة مصداقية ملزمة: لا أرقام لحظية وهمية. قسم «الأرقام تتحدث» يقرأ
  * أرقامه من /api/public/ai-stats (استعلامات إنتاج حقيقية بكاش 5 دقائق)؛
@@ -26,6 +29,7 @@ import {
   Mic,
   Newspaper,
   PenLine,
+  RefreshCcw,
   Satellite,
   Send,
   ShieldCheck,
@@ -58,10 +62,67 @@ const PIPELINE = [
 ];
 
 const STATS = [
-  { value: "+40", label: "خدمة ذكية تعمل في المنظومة" },
+  { value: "+60", label: "خدمة ذكية تعمل في المنظومة" },
   { value: "5", label: "بطولات تُغطّى بمحرّكات آلية" },
   { value: "3", label: "لغات نشر من منظومة واحدة" },
   { value: "100%", label: "من المواد بمسؤولية تحريرية بشرية" },
+];
+
+/* ==================== «تحت الغطاء» — الرسم الهيكلي للمنظومة ==================== */
+
+/** كل بند هنا موثّق من الكود الفعلي (بوابة server/ai/gateway وسجل docs/systems/registry.json) */
+const UNDER_HOOD_SOURCES = [
+  "وكالات الأنباء",
+  "رادار المصادر العالمية",
+  "بيانات المباريات الرسمية",
+  "مراسلون عبر واتساب والبريد",
+  "منصة X",
+  "أرشيف سبق",
+];
+
+const GATEWAY_PROVIDERS = [
+  { name: "OpenAI", desc: "GPT للتحرير والتضمين والصوت" },
+  { name: "Anthropic", desc: "Claude للتحليل والصياغة الرصينة" },
+  { name: "Google", desc: "Gemini للبصريات والإنفوجرافيك" },
+  { name: "ElevenLabs", desc: "الأصوات العربية للنشرات المسموعة" },
+];
+
+const GATEWAY_CONTROLS = [
+  { name: "توجيه مستقل لكل خدمة", desc: "لكل مهمة نموذج أساسي وسلسلة بدائل" },
+  { name: "تحويل تلقائي عند التعثر", desc: "يتدخل النموذج البديل دون توقف الخدمة" },
+  { name: "قاطع دائرة", desc: "النموذج المتعثر يُعزل مؤقتًا ويُعاد فحصه آليًا" },
+  { name: "ميزانيات وسجل كامل", desc: "حدود إنفاق، وقيد لكل عملية: نجاحها وزمنها وتكلفتها" },
+];
+
+const UNDER_HOOD_DOMAINS = [
+  { title: "التحرير الذكي", sub: "عُمق، الرادار، التوليد" },
+  { title: "الرياضة اللحظية", sub: "5 بطولات، تعريب فوري" },
+  { title: "الأخبار المسموعة", sub: "نشرات وبودكاست" },
+  { title: "الاستوديو البصري", sub: "صور وإنفوجرافيك" },
+  { title: "لكل قارئ صحيفته", sub: "توصيات وتضمين دلالي" },
+  { title: "الجودة والإشراف", sub: "فحص التعليقات والمشاعر" },
+  { title: "ثلاث لغات", sub: "عربي، إنجليزي، أردو" },
+  { title: "البوابة الموحدة", sub: "البنية والقياس" },
+];
+
+const PUBLISH_CHANNELS = ["الويب والتطبيقات", "صوت وبودكاست", "ثلاث لغات من منظومة واحدة"];
+
+/** «الحوكمة أثناء التشغيل» — آليات مبرمجة فعلًا في المنظومة، لا وعود */
+const GOVERNANCE = [
+  { kicker: "صحة النماذج", title: "قاطع دائرة آلي", desc: "ثلاثة إخفاقات متتالية تعزل النموذج مؤقتًا وتحوّل المسار لبديله — ويُعاد فحصه آليًا كل خمس دقائق." },
+  { kicker: "إنذار مبكر", title: "تنبيه يصل الإنسان", desc: "أي تدهور في مزوّد ذكاء يصل رئيس التحرير برسالة فورية — الآلة لا تتعثر بصمت." },
+  { kicker: "انضباط مالي", title: "ميزانيات بعتبات إنذار", desc: "حدود إنفاق شهرية لكل مزوّد وكل خدمة، بإنذارين عند 80% و100% من السقف." },
+  { kicker: "مساءلة", title: "سجل تدقيق كامل", desc: "كل تغيير في إعدادات النماذج مقيّد: من غيّر، وماذا غيّر، ومتى — لا إعداد بلا مسؤول." },
+  { kicker: "تعلم من البشر", title: "معايرة بشرية مستمرة", desc: "قرارات المشرفين على التعليقات تعود أمثلةً تضبط بها الرقابة الذكية أحكامها التالية." },
+  { kicker: "صرامة المصدر", title: "لا رقم بلا مصدر", desc: "في التغطيات الرياضية: كل رقم في النص المولّد يجب أن يرد حرفيًا في بيانات المباراة الرسمية." },
+];
+
+/** «في عام الذكاء الاصطناعي» — الاصطفاف الوطني بلغة وقائع */
+const NATIONAL = [
+  { title: "عربيةٌ أولًا", desc: "أسلوب الدار وقواعد اللغة مكتوبة داخل كل نموذج توليد — الذكاء هنا يتحدث العربية أصالةً، لا ترجمةً." },
+  { title: "تعريب شامل للرياضة العالمية", desc: "أسماء اللاعبين والملاعب والمدربين تُعرّب عبر طبقات تحقق متعددة بمراجعة تحريرية — فلا يصل القارئ حرف أجنبي." },
+  { title: "أدوات مفتوحة للجمهور", desc: "استوديو البرومبت أداة مجانية لكل زائر لتحسين صياغة أوامره للذكاء الاصطناعي — مساهمة في رفع الوعي التقني.", href: "/prompt-studio", linkLabel: "جرّب استوديو البرومبت" },
+  { title: "اصطفاف مع الرؤية", desc: "منظومة إعلامية سعودية تخدم أهداف الاستراتيجية الوطنية للبيانات والذكاء الاصطناعي — بقرار بشري في كل مادة." },
 ];
 
 const TOURNAMENTS = [
@@ -196,6 +257,128 @@ function Pipeline() {
   );
 }
 
+/* ==================== تحت الغطاء — كيف تعمل النماذج ==================== */
+
+function UnderHoodStageLabel({ no, label, human = false }: { no: string; label: string; human?: boolean }) {
+  return (
+    <div className="flex items-center gap-2 md:gap-2.5 mb-2 md:mb-2.5 text-[11px] md:text-xs font-extrabold text-[#8FA3B4]">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${human ? "bg-emerald-400" : "bg-primary"}`} aria-hidden="true" />
+      <span className="shrink-0 tabular-nums" dir="ltr">{no}</span>
+      <span className="shrink min-w-0">{label}</span>
+      <span className="h-px flex-1 min-w-4 bg-[#1B2732]" aria-hidden="true" />
+    </div>
+  );
+}
+
+function UnderHoodArrow() {
+  return <ArrowDown className="mx-auto my-2.5 md:my-3.5 w-4 h-4 md:w-5 md:h-5 text-[#8FA3B4]/60" aria-hidden="true" />;
+}
+
+/** الرسم الهيكلي الكامل: النسخة التفصيلية لخط الإنتاج — البوابة الموحدة وحلقة القياس */
+function UnderHood() {
+  return (
+    <section className="bg-[#0E1620] text-[#E7EEF4] px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-under-hood">
+      <div className="max-w-4xl mx-auto min-w-0">
+        <h2 className="text-lg md:text-2xl font-extrabold text-center mb-1">
+          تحت الغطاء: <span className="text-primary">كيف تعمل النماذج</span> في سبق
+        </h2>
+        <p className="text-xs md:text-sm text-[#8FA3B4] text-center max-w-xl mx-auto mb-5 md:mb-8 leading-relaxed">
+          المخطط أعلاه هو الرحلة — وهذا هو المحرّك. كل نداء ذكاء اصطناعي في سبق، من تقرير
+          المباراة إلى فحص التعليق، يمرّ عبر البنية نفسها.
+        </p>
+
+        <UnderHoodStageLabel no="1" label="مصادر الإشارة" />
+        <div className="flex flex-wrap justify-center gap-1.5 md:gap-2">
+          {UNDER_HOOD_SOURCES.map((s) => (
+            <span key={s} className="text-[11.5px] md:text-[13px] font-bold rounded-full border border-[#1B2732] bg-white/[.045] px-3 py-1 md:py-1.5">
+              {s}
+            </span>
+          ))}
+        </div>
+
+        <UnderHoodArrow />
+
+        <UnderHoodStageLabel no="2" label="البوابة الموحدة" />
+        <div className="rounded-lg md:rounded-xl border-[1.5px] border-primary bg-gradient-to-b from-primary/10 to-transparent px-3 py-4 md:p-6">
+          <h3 className="text-sm md:text-base font-extrabold text-center">بوابة الذكاء الموحدة</h3>
+          <p className="text-[11px] md:text-xs text-[#8FA3B4] text-center mb-3.5 md:mb-5">
+            باب واحد لكل عملية ذكاء في المنظومة — لا نداء يخرج عنه
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+            <div className="min-w-0">
+              <h4 className="text-[11px] md:text-xs font-extrabold text-primary mb-1.5 md:mb-2">
+                أربعة مزودين، أكثر من 20 نموذجًا
+              </h4>
+              <ul className="flex flex-col gap-1.5">
+                {GATEWAY_PROVIDERS.map((p) => (
+                  <li key={p.name} className="rounded-md md:rounded-lg border border-[#1B2732] bg-white/[.045] px-2.5 py-1.5 md:px-3 md:py-2 text-[12px] md:text-[13px]">
+                    <b>{p.name}</b> <span className="text-[#8FA3B4] text-[11px] md:text-xs">— {p.desc}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-[11px] md:text-xs font-extrabold text-primary mb-1.5 md:mb-2">كيف تُدار</h4>
+              <ul className="flex flex-col gap-1.5">
+                {GATEWAY_CONTROLS.map((c) => (
+                  <li key={c.name} className="rounded-md md:rounded-lg border border-[#1B2732] bg-white/[.045] px-2.5 py-1.5 md:px-3 md:py-2 text-[12px] md:text-[13px]">
+                    <b>{c.name}</b> <span className="text-[#8FA3B4] text-[11px] md:text-xs">— {c.desc}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <UnderHoodArrow />
+
+        <UnderHoodStageLabel no="3" label="أكثر من 60 خدمة في ثمانية مجالات" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2">
+          {UNDER_HOOD_DOMAINS.map((d) => (
+            <div key={d.title} className="rounded-md md:rounded-lg border border-[#1B2732] bg-white/[.045] px-2 py-1.5 md:px-3 md:py-2.5 text-center min-w-0">
+              <div className="text-[11.5px] md:text-[13px] font-extrabold leading-snug">{d.title}</div>
+              <div className="text-[10px] md:text-[11px] text-[#8FA3B4] leading-snug">{d.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        <UnderHoodArrow />
+
+        <UnderHoodStageLabel no="4" label="المحطة الإلزامية" human />
+        <div className="relative rounded-lg md:rounded-xl border-2 border-emerald-500 bg-emerald-500/5 px-3 pt-4 pb-3 md:p-5 text-center">
+          <span className="absolute -top-2.5 right-1/2 translate-x-1/2 bg-emerald-600 text-white text-[10px] md:text-[11px] font-bold rounded-full px-2.5 md:px-3 py-0.5 whitespace-nowrap">
+            قرار بشري
+          </span>
+          <h3 className="text-sm md:text-base font-extrabold">عين المحرر</h3>
+          <p className="text-[11px] md:text-[13px] text-[#8FA3B4] mt-0.5 leading-relaxed">
+            كل مسار توليد في المخطط يمرّ من هنا إجباريًا — مراجعة، ثم إجازة أو ردّ. لا استثناءات.
+          </p>
+        </div>
+
+        <UnderHoodArrow />
+
+        <UnderHoodStageLabel no="5" label="النشر" />
+        <div className="flex flex-wrap justify-center gap-1.5 md:gap-2">
+          {PUBLISH_CHANNELS.map((c) => (
+            <span key={c} className="text-[11.5px] md:text-[13px] font-bold rounded-full border border-[#1B2732] bg-white/[.045] px-3 py-1 md:py-1.5">
+              {c}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-5 md:mt-7 flex items-start gap-2.5 md:gap-3.5 rounded-lg md:rounded-xl border border-dashed border-primary/60 px-3 py-3 md:px-5 md:py-4">
+          <RefreshCcw className="w-4 h-4 md:w-5 md:h-5 shrink-0 text-primary mt-0.5" aria-hidden="true" />
+          <p className="text-[11.5px] md:text-[13px] text-[#8FA3B4] leading-relaxed min-w-0">
+            <b className="text-[#E7EEF4]">حلقة القياس — وبها يكتمل الشكل:</b> كل عملية تُسجَّل لحظة
+            وقوعها (نجحت أم أخفقت، كم استغرقت، كم كلّفت)، تغذّي لوحة مراقبة داخلية وقسم «الأرقام
+            تتحدث» أدناه، ثم تعود لتضبط اختيار النماذج وإعداداتها. المنظومة تقيس نفسها وتتحسن بها.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StatsBand() {
   return (
     <section className="px-4 py-6 md:py-8">
@@ -224,10 +407,15 @@ interface AiPublicStats {
     successRate: number;
     sinceDate: string | null;
     daily: { date: string; count: number }[];
+    /** اختيارية: قد تصل استجابة CDN قديمة بلا الحقول الجديدة أثناء النشر التدريجي */
+    todayByDomain?: { editorial: number; sports: number; visual: number; audio: number };
   };
   comments: { total: number; aiAnalyzed: number };
   stories: { total: number };
   articles: { totalPublished: number; todayPublished: number };
+  audio?: { totalMinutes: number };
+  radar?: { totalItems: number };
+  sports?: { totalOps: number };
 }
 
 /** عدّاد تصاعدي: يبدأ عند دخوله الشاشة، ويكمل من قيمته الحالية عند كل تحديث */
@@ -376,9 +564,13 @@ function LiveStatsBand() {
       ? Math.round((100 * stats.comments.aiAnalyzed) / stats.comments.total)
       : null;
   const tokensM = stats.ai.totalTokens / 1_000_000;
+  const audioMinutes = stats.audio?.totalMinutes ?? 0;
+  const radarItems = stats.radar?.totalItems ?? 0;
+  const sportsOps = stats.sports?.totalOps ?? 0;
+  const byDomain = stats.ai.todayByDomain;
 
   return (
-    <section className="bg-[#0E1620] text-[#E7EEF4] px-4 py-7 md:py-11 overflow-x-hidden" data-testid="sabqai-live-stats">
+    <section className="bg-[#0E1620] text-[#E7EEF4] border-t border-[#1B2732] px-4 py-7 md:py-11 overflow-x-hidden" data-testid="sabqai-live-stats">
       <div className="max-w-5xl mx-auto min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5 mb-1.5">
           <h2 className="text-lg md:text-2xl font-extrabold">
@@ -457,6 +649,50 @@ function LiveStatsBand() {
             </div>
             <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">خبرًا في الأرشيف</div>
           </div>
+          {audioMinutes > 0 && (
+            <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+              <div className="text-lg md:text-2xl font-extrabold">
+                <CountUp value={audioMinutes} />
+              </div>
+              <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">دقيقة صوت أُنتجت آليًا</div>
+            </div>
+          )}
+          {radarItems > 0 && (
+            <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+              <div className="text-lg md:text-2xl font-extrabold">
+                <CountUp value={radarItems} />
+              </div>
+              <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">مادة رصدها رادار المصادر العالمية</div>
+            </div>
+          )}
+          {sportsOps > 0 && (
+            <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+              <div className="text-lg md:text-2xl font-extrabold text-primary">
+                <CountUp value={sportsOps} />
+              </div>
+              <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">عملية ذكاء في التغطيات الرياضية</div>
+            </div>
+          )}
+          {byDomain && stats.ai.todayOps > 0 && (
+            <div className="col-span-2 md:col-span-3 rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-3.5 min-w-0">
+              <div className="text-[11px] md:text-xs text-[#8FA3B4] mb-1.5 md:mb-2">عمليات اليوم حسب المجال</div>
+              <div className="grid grid-cols-4 gap-1 text-center">
+                {[
+                  { label: "تحرير", value: byDomain.editorial },
+                  { label: "رياضة", value: byDomain.sports },
+                  { label: "بصري", value: byDomain.visual },
+                  { label: "صوت", value: byDomain.audio },
+                ].map((d) => (
+                  <div key={d.label} className="min-w-0">
+                    <div className="text-sm md:text-lg font-extrabold">
+                      <CountUp value={d.value} />
+                    </div>
+                    <div className="text-[10px] md:text-[11px] text-[#8FA3B4]">{d.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {daily.length >= 3 && <DailyOpsChart daily={daily} />}
@@ -511,7 +747,7 @@ function DomainsGrid() {
     <section className="px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-domains">
       <div className="max-w-5xl mx-auto min-w-0">
         <h2 className="text-lg md:text-2xl font-extrabold text-center mb-1">
-          ثمانية مجالات… أكثر من 40 خدمة
+          ثمانية مجالات… أكثر من 60 خدمة
         </h2>
         <p className="text-xs md:text-sm text-muted-foreground text-center mb-4 md:mb-6">
           منظومة واحدة تخدم غرفة التحرير والقارئ معًا — على مدار الساعة
@@ -528,6 +764,67 @@ function DomainsGrid() {
               <span className="text-[10px] md:text-[11px] font-bold text-primary tracking-wide">{d.kicker}</span>
               <h3 className="text-[13px] md:text-[15px] font-extrabold mt-0.5 mb-0.5 md:mb-1 leading-snug">{d.title}</h3>
               <p className="text-[11px] md:text-[13px] text-muted-foreground leading-snug md:leading-relaxed">{d.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** الحوكمة أثناء التشغيل — الميثاق وعدٌ، وهذه أدواته المبرمجة */
+function GovernanceBand() {
+  return (
+    <section className="border-t border-border px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-governance">
+      <div className="max-w-5xl mx-auto min-w-0">
+        <h2 className="text-lg md:text-2xl font-extrabold text-center mb-1">
+          الحوكمة <span className="text-primary">أثناء التشغيل</span>
+        </h2>
+        <p className="text-xs md:text-sm text-muted-foreground text-center max-w-xl mx-auto mb-4 md:mb-6">
+          الميثاق أدناه وعدٌ معلن — وهذه أدواته المبرمجة داخل المنظومة، تعمل دون تدخل أحد:
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+          {GOVERNANCE.map((g) => (
+            <div
+              key={g.title}
+              className="rounded-lg md:rounded-xl border border-border bg-card p-3 md:p-4 transition-colors hover:border-primary min-w-0"
+            >
+              <span className="text-[10px] md:text-[11px] font-bold text-primary tracking-wide">{g.kicker}</span>
+              <h3 className="text-[13px] md:text-[15px] font-extrabold mt-0.5 mb-0.5 md:mb-1 leading-snug">{g.title}</h3>
+              <p className="text-[11px] md:text-[13px] text-muted-foreground leading-snug md:leading-relaxed">{g.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** الاصطفاف الوطني — عام الذكاء الاصطناعي 2026 بلغة وقائع لا شعارات */
+function NationalBand() {
+  return (
+    <section className="bg-[#0E2233] text-white px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-national">
+      <div className="max-w-5xl mx-auto min-w-0">
+        <h2 className="text-lg md:text-2xl font-extrabold text-center mb-1">
+          في <span className="text-primary">عام الذكاء الاصطناعي</span>
+        </h2>
+        <p className="text-xs md:text-sm text-slate-300 text-center max-w-xl mx-auto mb-4 md:mb-6 leading-relaxed">
+          اعتمدت المملكة 2026 عامًا للذكاء الاصطناعي — وفي غرفة أخبار سبق، كان العام قد بدأ قبل ذلك.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
+          {NATIONAL.map((n) => (
+            <div key={n.title} className="rounded-lg md:rounded-xl border border-white/15 bg-white/5 p-3 md:p-4 min-w-0">
+              <h3 className="text-[13px] md:text-[15px] font-extrabold mb-0.5 md:mb-1 leading-snug">{n.title}</h3>
+              <p className="text-[11px] md:text-[13px] text-slate-300 leading-snug md:leading-relaxed">{n.desc}</p>
+              {n.href && (
+                <Link
+                  href={n.href}
+                  className="mt-2 inline-flex items-center gap-1 text-[11px] md:text-[13px] font-bold text-primary hover:underline"
+                >
+                  {n.linkLabel}
+                  <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                </Link>
+              )}
             </div>
           ))}
         </div>
@@ -595,10 +892,13 @@ export default function SabqAI() {
         <Hero />
         <Ticker />
         <Pipeline />
+        <UnderHood />
         <LiveStatsBand />
         <SportsBand />
         <DomainsGrid />
+        <GovernanceBand />
         <Charter />
+        <NationalBand />
       </main>
 
       <Footer />
