@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:name=".VaraApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_vara_launcher"
+        android:label="VARA"
+        android:localeConfig="@xml/vara_locales"
+        android:roundIcon="@mipmap/ic_vara_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Vara">
+
+        <activity
+            android:name=".VaraActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- فلتران منفصلان: دمج data في فلتر واحد يوحّد السمات فيشترط
+                 host=roshn على sabqsports:// ويعطّل كل الروابط الخارجية. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabqsports" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabq" android:host="roshn" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="sabq.org" android:pathPrefix="/roshn" />
+                <data android:scheme="https" android:host="sabq.org" android:pathPrefix="/sports" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".push.VaraMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".push.MatchReminderReceiver"
+            android:exported="false" />
+
+        <!-- نظامي: BOOT_COMPLETED يحتاج exported=true ليصل من النظام. -->
+        <receiver
+            android:name=".push.MatchReminderBootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

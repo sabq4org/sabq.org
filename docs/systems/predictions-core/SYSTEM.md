@@ -1,6 +1,6 @@
 # نظام التوقعات المركزي (`predictions-core`)
 
-> آخر مراجعة: 2026-07-17 | المالك: sports
+> آخر مراجعة: 2026-07-27 | المالك: sports
 
 ## الغرض
 محرك توقعات موحّد + ملفات نقاط versioned + دفتر append-only يخدم البطولات — **عدا** كأس العالم 2026 الذي يبقى على محرك `wc*` القديم حتى نهاية البطولة.
@@ -15,6 +15,7 @@
 |--------|--------|
 | Backend | `server/services/predictions/`, `server/routes/predictionsCore.ts` |
 | Web | `client/src/pages/PredictionCenter.tsx` |
+| Android VARA | `android-native/vara/src/main/kotlin/com/sabq/vara/ui/AccountScreens.kt` |
 | مرجع | `docs/PREDICTION_CORE.md` (**المصدر الرسمي**) |
 
 ## التوثيق المرتبط
@@ -24,6 +25,7 @@
 ## عقود مهمة / Gotchas
 - بطولة جديدة = إعداد (Competition + Profiles + fixture source) وليس محرك كود جديد.
 - التسوية عبر strategies في `predictions/strategies/` — لا تكتب نقاطاً مباشرة في الجداول التشغيلية.
+- Android VARA يستهلك النظائر تحت `/api/v1/predictions/*` بنماذج typed مطابقة لعقود `PredictionCoreModels` في iOS: يقرأ `contestType` (بطاقات النتيجة لـ`match_score` فقط)، و`myRank` من رد leaderboards (لا حقل `isMe` — غير موجود في العقد)، ويعرض التسوية ببطاقة مزدوجة (نقاط البطولة / محفظة ×N من `award.wallet`) وتفكيك «كيف حُسبت نقاطي؟» بأربع خطوات من `breakdown`. صفحة «لك» تقرأ `/api/v1/sports/predictions/mine` الموحدة (لا مسار `/world-cup/predictions/mine` القديم).
 
 ## صحة وتشغيل
 - راجع `docs/PREDICTION_CORE.md` لمسارات الصحة والـ outbox

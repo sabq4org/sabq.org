@@ -1,19 +1,9 @@
 import SwiftUI
 
-// صبغة هَب روشن تتبع لون التطبيق المحوري؛ البطولات لا تعيد صبغ الشاشة.
-private var rslAccent: Color { SpTheme.compAccent("pro-league") }
-
 // ════════════════════════════════════════════════════════════════════════
-//  HomeView — تطبيق VARA الرياضي · واجهة «دوري روشن» (إعادة تصميم)
-//
-//  بديل مباشر لـ Screens/HomeView.swift. يستخدم نفس المكوّنات (SpTheme،
-//  SportsFonts، SpTeamLogo، SpMatchCenter…) ونفس نقاط الـAPI القائمة
-//  (/api/sports/pro-league/*). التصميم: هيرو مباراة مباشرة جريء + تبويبات
-//  نظرة/مباريات/ترتيب/هدّافون، مع نظرة عامة غنية (المفضّل، جولة الأسبوع،
-//  سباق اللقب، الهدّافون، الأرقام اللافتة). التحليل العميق عبر SpMatchCenter.
-//
-//  ملاحظة دمج: انسخ هذا الملف فوق Screens/HomeView.swift (يحتوي NewsView
-//  كما هو بالأسفل، فيبقى بديلاً مباشراً).
+//  HomeView — تبويب «فريقي»: هب الفريق المفضّل بدوريه (لا دوري روشن الثابت).
+//  بلا مفضّل → دعوة اختيار. مع مفضّل → مباريات/ترتيب/نبض بطولته
+//  (/api/sports/{competitionSlug}/*) مع أولوية هيرو لمباريات الفريق.
 // ════════════════════════════════════════════════════════════════════════
 
 struct HomeView: View {
@@ -26,6 +16,8 @@ struct HomeView: View {
     @Environment(SpLanguage.self) private var language
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
 
+    /// بطولة هب فريقي المكتشفة/المحفوظة (مثل pro-league أو egypt-premier-league).
+    @State private var hubSlug: String?
     @State private var comp: SpCompetition?
     @State private var outlook: SpOutlook?
     @State private var matches: SpMatchesResponse?
@@ -33,6 +25,10 @@ struct HomeView: View {
     @State private var scorers: [SpScorer] = []
     @State private var assists: [SpScorer] = []
     @State private var transfers: [SpLeagueTransfer] = []
+
+    private var hubAccent: Color { SpTheme.compAccent(hubSlug ?? favorites.team?.competitionSlug ?? "pro-league") }
+    private var isRoshnHub: Bool { (hubSlug ?? favorites.team?.competitionSlug) == "pro-league" }
+    private var hasFavorite: Bool { favorites.team != nil }
 
     // إثراء الهيرو (أفضل جهد) — إحصائيات + xG + تعليق لمباراة الواجهة التي بدأت.
     // (الزخم/الضغط/الوقائع أُخرجت من الهيرو إلى مركز المباراة — تخفيف زحمة 2026-07-06.)
@@ -111,14 +107,16 @@ struct HomeView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 18)
 
-                    if loading && matches == nil && standings.isEmpty {
-                        SpLoading().padding(.top, 40)
-                    } else if let loadError, matches == nil, standings.isEmpty, outlook == nil {
-                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
-                            .padding(.horizontal, 16)
-                    } else {
-                        dashboardContent
-                            .padding(.bottom, 28)
+                    if hasFavorite {
+                        if loading && matches == nil && standings.isEmpty {
+                            SpLoading().padding(.top, 40)
+                        } else if let loadError, matches == nil, standings.isEmpty, outlook == nil {
+                            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                                .padding(.horizontal, 16)
+                        } else {
+                            dashboardContent
+                                .padding(.bottom, 28)
+                        }
                     }
                 }
             }
@@ -135,7 +133,7 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showForYou) { SpForYouView() }
             .navigationDestination(isPresented: $showTransferCenter) { TransferCenterView() }
         }
-        .task { await loadAll() }
+        .task(id: favorites.team?.id) { await loadAll() }
         .task { await pollHero() }
         // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري للهيرو.
         .onChange(of: scenePhase) { _, phase in
@@ -187,15 +185,16 @@ struct HomeView: View {
     /// الأثقل (xG/زخم/ضغط) يبقى على loadAll (السحب اليدوي) — الأرقام الحيوية هنا
     /// هي النتيجة والأحداث وحراك الجدول.
     private func refreshHero() async {
+        guard let slug = hubSlug ?? favorites.team?.competitionSlug, !slug.isEmpty else { return }
         // كسر الكاش فقط أثناء مباراة جارية — قرب الانطلاق يكفي كاش البروتوكول.
         let bust = featured?.status.live == true || standings.contains { $0.live == true }
-        if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: bust) {
+        if let m = try? await APIClient.shared.fetchMatches(comp: slug, ignoreCache: bust) {
             matches = m
         }
         // الترتيب اللحظي: الجدول المصغّر وسباق اللقب يتحرّكان مع الأهداف بدل
         // التجمّد حتى السحب اليدوي — الطبقة اللحظية نفسها يحسبها الخادم.
         if Date().timeIntervalSince(lastLiveStandingsAt) >= 30,
-           let s = try? await APIClient.shared.fetchStandings(comp: SportsConstants.defaultComp, ignoreCache: bust) {
+           let s = try? await APIClient.shared.fetchStandings(comp: slug, ignoreCache: bust) {
             standings = s.standings
             lastLiveStandingsAt = Date()
         }
@@ -212,27 +211,70 @@ struct HomeView: View {
     @ViewBuilder private var heroSection: some View {
         VStack(spacing: 14) {
             topBar
-            leagueStrip
-            if let f = featured {
-                heroMatch(f)
-                    .transition(.opacity)
-            } else if let o = outlook, !loading {
-                // البطاقة الاحتياطية «بطل الموسم» — تظهر فقط بعد استقرار التحميل
-                // ووجود يقينٍ بعدم توفّر مباراة مميّزة. لولا قيد !loading لومضت لحظيًّا
-                // قبل أن يُحسم featured ثم قفزت لبطاقة المباراة (الوميض المُبلَّغ عنه).
-                SpOutlookCard(outlook: o)
-                    .transition(.opacity)
+            if !hasFavorite {
+                // بلا مفضّل: بيت فريقي فارغ — دعوة اختيار كاملة (لا هب روشن).
+                pickFavoritePanel
+            } else {
+                teamHubStrip
+                if let f = featured {
+                    heroMatch(f)
+                        .transition(.opacity)
+                } else if isRoshnHub, let o = outlook, !loading {
+                    // outlook خاص بروشن فقط — لا يُعرض لدوري الزمالك وغيره.
+                    SpOutlookCard(outlook: o)
+                        .transition(.opacity)
+                }
+                SpMyTeamCard(
+                    standings: standings,
+                    onOpenMatch: { selectedMatch = $0 },
+                    onOpenTeam: { selectedTeam = IDBox(id: $0) },
+                    onPickTeam: { showSearch = true }
+                )
             }
-            // أثناء التحميل: لا هيرو احتياطي — مؤشّر SpLoading أسفل القسم يكفي، بلا قفز.
-            // بلوك «فريقي» بعد الهيرو — الهيرو يتصدّر الواجهة ومباريات المفضّل تليه.
-            SpMyTeamCard(
-                standings: standings,
-                onOpenMatch: { selectedMatch = $0 },
-                onOpenTeam: { selectedTeam = IDBox(id: $0) },
-                onPickTeam: { showAllStandings = true }
-            )
         }
         .animation(.easeInOut(duration: 0.25), value: loading)
+    }
+
+    /// شاشة اختيار المفضّل — مصدر هوية تبويب فريقي قبل أي دوري.
+    private var pickFavoritePanel: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "shield.lefthalf.filled")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(SpTheme.green)
+                .padding(.top, 28)
+            Text(L("اختر فريقك"))
+                .font(SportsFonts.app(size: 24, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
+            Text(L("هذه صفحتك: مباريات فريقك وترتيبه ونبض دوريه. ابحث عن ناديك وثبّته بالنجمة."))
+                .font(SportsFonts.app(size: 13.5, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+            Button { showSearch = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(L("ابحث عن فريقك"))
+                        .font(SportsFonts.app(size: 15, weight: .heavy))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 22)
+                .frame(height: 48)
+                .background(Capsule().fill(SpTheme.green))
+            }
+            .buttonStyle(SpPressStyle())
+            .padding(.bottom, 20)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(SpTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(SpTheme.cardStroke, lineWidth: 1)
+        )
     }
 
     // شريط علوي واحد — علامة VARA يمينًا والأدوات (بحث/لك/الحساب) يسارًا.
@@ -254,33 +296,31 @@ struct HomeView: View {
         .padding(.top, 6)
     }
 
-    // ترويسة الدوري — هوية فقط بلا أدوات: شعار روشن + الاسم + سطر الموسم.
-    private var leagueStrip: some View {
-        HStack(spacing: 11) {
-            Image("RoshnLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-            VStack(alignment: .leading, spacing: 2) {
-                Group {
-                    if SpLanguage.shared.isEnglish {
-                        (Text("Roshn").foregroundStyle(rslAccent)
-                            + Text(" League").foregroundStyle(SpTheme.onDark))
-                    } else {
-                        (Text("دوري ").foregroundStyle(SpTheme.onDark)
-                            + Text("روشن").foregroundStyle(rslAccent))
-                    }
+    // ترويسة فريقي — شعار النادي أولًا (هوية الفريق لا الدوري).
+    @ViewBuilder private var teamHubStrip: some View {
+        if let fav = favorites.team {
+            HStack(spacing: 11) {
+                SpTeamLogo(logo: fav.logo ?? "", size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fav.name)
+                        .font(SportsFonts.app(size: 19, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                        .lineLimit(1)
+                    Text(fav.competitionName ?? comp?.name ?? metaText)
+                        .font(SportsFonts.app(size: 11, weight: .semibold))
+                        .foregroundStyle(hubAccent)
+                        .lineLimit(1)
                 }
-                    .font(SportsFonts.app(size: 19, weight: .heavy))
-                Text(metaText)
-                    .font(SportsFonts.app(size: 11, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkDim)
+                Spacer(minLength: 0)
+                Button { selectedTeam = IDBox(id: fav.id) } label: {
+                    Text(L("صفحة الفريق"))
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                }
+                .buttonStyle(SpPressStyle())
             }
-            Spacer(minLength: 0)
+            .padding(.top, 2)
         }
-        .padding(.top, 2)
     }
 
     // مؤشّر الحساب في الترويسة: ضيف = حبّة «دخول» ذهبية تفتح ورقة الدخول العامّة؛
@@ -358,6 +398,19 @@ struct HomeView: View {
         return L("الموسم سينطلق قريبًا")
     }
 
+    /// شارة سياق الهيرو: مباراة المفضّل أو اسم دوريه (لا «دوري روشن» الثابت).
+    private func heroBadgeText(for f: SpFixture) -> String {
+        let round = f.round.trimmingCharacters(in: .whitespacesAndNewlines)
+        if heroIsFavorite {
+            return round.isEmpty ? L("فريقي المفضّل") : "\(L("فريقي المفضّل")) · \(round)"
+        }
+        let league = favorites.team?.competitionName
+            ?? comp?.name
+            ?? f.competition
+            ?? L("الدوري")
+        return round.isEmpty ? league : "\(league) · \(round)"
+    }
+
     // بطاقة الهيرو الهادئة — المواجهة والنتيجة أولًا وسطر سياق واحد كحدّ أقصى.
     // التحليل الغنيّ (ضغط/زخم/طقس/غيابات) كلّه في مركز المباراة: «الإثراء في
     // التفاصيل لا في الواجهة» (قاعدة المالك 2026-06-29، عُمّمت على الهيرو).
@@ -369,13 +422,11 @@ struct HomeView: View {
                         if heroIsFavorite {
                             Image(systemName: "star.fill").font(.system(size: 9, weight: .bold))
                         }
-                        Text(heroIsFavorite
-                             ? (f.round.isEmpty ? L("فريقي المفضّل") : "\(L("فريقي المفضّل")) · \(f.round)")
-                             : (f.round.isEmpty ? L("دوري روشن") : "\(L("دوري روشن")) · \(f.round)"))
+                        Text(heroBadgeText(for: f))
                             .lineLimit(1)
                     }
                     .font(SportsFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(rslAccent)
+                    .foregroundStyle(hubAccent)
                     Spacer(minLength: 8)
                     heroStatusBadge(f)
                     // البطاقة كلها زرّ لمركز المباراة — سهم خافت يكفي بدل سطر دعوة كامل.
@@ -427,7 +478,7 @@ struct HomeView: View {
         HStack(spacing: 7) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(rslAccent)
+                .foregroundStyle(hubAccent)
             Text(text)
                 .font(SportsFonts.app(size: 11.5, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkDim)
@@ -501,9 +552,9 @@ struct HomeView: View {
                 .background(Capsule().fill(SpTheme.chipFill))
         } else {
             Text(L("قادمة")).font(SportsFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(rslAccent)
+                .foregroundStyle(hubAccent)
                 .padding(.horizontal, 9).padding(.vertical, 5)
-                .background(Capsule().fill(rslAccent.opacity(0.10)))
+                .background(Capsule().fill(hubAccent.opacity(0.10)))
         }
     }
 
@@ -547,7 +598,7 @@ struct HomeView: View {
     }
 
 
-    // MARK: - لوحة دوري روشن (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
+    // MARK: - لوحة فريقي (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
 
     private var favoriteTeamId: Int? { favorites.team?.id }
     private var favoriteTeamName: String? { favorites.team?.name }
@@ -603,14 +654,14 @@ struct HomeView: View {
     private var fullStandingsPage: some View {
         ScrollView { standingsContent.padding(16) }
             .background(SpAmbientBackground())
-            .navigationTitle(L("ترتيب دوري روشن"))
+            .navigationTitle(favorites.team?.competitionName.map { Lf("ترتيب %@", $0) } ?? L("الترتيب"))
             .navigationBarTitleDisplayMode(.inline)
     }
 
     private var fullScorersPage: some View {
         ScrollView { scorersContent.padding(16) }
             .background(SpAmbientBackground())
-            .navigationTitle(L("هدّافو دوري روشن"))
+            .navigationTitle(favorites.team?.competitionName.map { Lf("هدّافو %@", $0) } ?? L("الهدّافون"))
             .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -632,11 +683,11 @@ struct HomeView: View {
                 if let row = favoriteRow {
                     Text(Lf("المركز %d", row.rank))
                         .font(SportsFonts.app(size: 11, weight: .bold))
-                        .foregroundStyle(rslAccent)
+                        .foregroundStyle(hubAccent)
                 } else if let g = gap {
                     Text(g == 0 ? L("صدارة مشتعلة") : Lf("الفارق %d نقطة", g))
                         .font(SportsFonts.app(size: 11, weight: .bold))
-                        .foregroundStyle(rslAccent)
+                        .foregroundStyle(hubAccent)
                 }
             }
             .padding(.horizontal, 16)
@@ -714,7 +765,7 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text(SpFormat.kickoffDay(f.date))
-                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(rslAccent)
+                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(hubAccent)
                         .lineLimit(1).minimumScaleFactor(0.7)
                     Spacer(minLength: 6)
                     Text(SpFormat.kickoffTime(f.date))
@@ -757,7 +808,7 @@ struct HomeView: View {
                     HStack(spacing: 3) {
                         Text(L("الترتيب الكامل")).font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold))
-                    }.foregroundStyle(rslAccent)
+                    }.foregroundStyle(hubAccent)
                 }
             }
             VStack(spacing: 0) {
@@ -781,7 +832,7 @@ struct HomeView: View {
                                     .foregroundStyle(SpTheme.onDark).monospacedDigit()
                                 Text(titleRaceGap(row, leader: leader))
                                     .font(SportsFonts.app(size: 9.5, weight: .bold))
-                                    .foregroundStyle(isFavorite ? rslAccent : row.rank == 1 ? rslAccent : SpTheme.onDarkFaint)
+                                    .foregroundStyle(isFavorite ? hubAccent : row.rank == 1 ? hubAccent : SpTheme.onDarkFaint)
                                     .lineLimit(1)
                             }
                         }
@@ -789,7 +840,7 @@ struct HomeView: View {
                         .background {
                             if isFavorite {
                                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(rslAccent.opacity(0.055))
+                                    .fill(hubAccent.opacity(0.055))
                             }
                         }
                         .contentShape(Rectangle())
@@ -821,7 +872,7 @@ struct HomeView: View {
                 ForEach(Array(chars.enumerated()), id: \.offset) { _, c in
                     Group {
                         switch c {
-                        case "W", "w": Circle().fill(rslAccent)
+                        case "W", "w": Circle().fill(hubAccent)
                         case "L", "l": Circle().stroke(SpTheme.onDarkFaint, lineWidth: 1.3)
                         default: Circle().fill(SpTheme.onDarkFaint.opacity(0.5))
                         }
@@ -846,7 +897,7 @@ struct HomeView: View {
                     HStack(spacing: 3) {
                         Text(L("الكل")).font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold))
-                    }.foregroundStyle(rslAccent)
+                    }.foregroundStyle(hubAccent)
                 }
             }
             if !assists.isEmpty {
@@ -933,8 +984,8 @@ struct HomeView: View {
                 HStack(spacing: 8) {
                     Text(L("مركز الانتقالات")).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
-                    Text(L("المركز الكامل")).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(rslAccent)
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold)).foregroundStyle(rslAccent)
+                    Text(L("المركز الكامل")).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(hubAccent)
+                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold)).foregroundStyle(hubAccent)
                 }
                 .contentShape(Rectangle())
             }
@@ -1041,7 +1092,7 @@ struct HomeView: View {
                 .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
 
                 HStack(spacing: 14) {
-                    legendChip(rslAccent, L("أبطال آسيا"))
+                    legendChip(hubAccent, L("أبطال آسيا"))
                     legendChip(SpTheme.crimson, L("الهبوط"))
                 }
                 .padding(.horizontal, 4)
@@ -1085,7 +1136,7 @@ struct HomeView: View {
     }
 
     private func zoneColor(_ rank: Int) -> Color {
-        if rank <= 3 { return rslAccent }
+        if rank <= 3 { return hubAccent }
         return SpTheme.onDarkFaint
     }
 
@@ -1125,7 +1176,7 @@ struct HomeView: View {
         return Button { selectedPlayer = IDBox(id: s.id) } label: {
             HStack(spacing: compact ? 9 : 11) {
                 Text("\(s.rank)").font(SportsFonts.app(size: compact ? 12.5 : 13, weight: .heavy))
-                    .foregroundStyle(s.rank <= 3 ? rslAccent : SpTheme.onDarkFaint)
+                    .foregroundStyle(s.rank <= 3 ? hubAccent : SpTheme.onDarkFaint)
                     .monospacedDigit().frame(width: compact ? 18 : 22)
                 playerAvatar(photo: s.photo, teamLogo: s.team.logo, size: avatarSize)
                 VStack(alignment: .leading, spacing: compact ? 1 : 2) {
@@ -1134,7 +1185,7 @@ struct HomeView: View {
                 }
                 Spacer(minLength: 0)
                 VStack(spacing: 1) {
-                    Text("\(primary)").font(SportsFonts.app(size: compact ? 16 : 18, weight: .heavy)).foregroundStyle(rslAccent).monospacedDigit()
+                    Text("\(primary)").font(SportsFonts.app(size: compact ? 16 : 18, weight: .heavy)).foregroundStyle(hubAccent).monospacedDigit()
                     Text(primaryLabel).font(SportsFonts.app(size: compact ? 8.5 : 9)).foregroundStyle(SpTheme.onDarkFaint)
                 }
                 if secondary > 0 {
@@ -1157,8 +1208,44 @@ struct HomeView: View {
     // «اختر فريقك» لثوانٍ بلا داعٍ.
 
     private func loadAll(force: Bool = false) async {
+        // بلا مفضّل: لا نحمّل هب دوري غريب — الدعوة وحدها.
+        guard let fav = favorites.team else {
+            hubSlug = nil
+            matches = nil
+            standings = []
+            outlook = nil
+            scorers = []
+            assists = []
+            transfers = []
+            comp = nil
+            featuredDetail = nil
+            featuredXg = nil
+            featuredCommentary = nil
+            loadError = nil
+            loading = false
+            await loadSmartSnaps(force: force)
+            return
+        }
+
         if !force { loading = true }
-        let slug = SportsConstants.defaultComp
+
+        var slug = fav.competitionSlug?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if slug == nil || slug?.isEmpty == true {
+            if let profile = try? await APIClient.shared.fetchTeamProfile(id: fav.id, withStats: false) {
+                favorites.updateCompetition(slug: profile.competitionSlug, name: profile.competitionName)
+                slug = profile.competitionSlug
+            }
+        }
+        guard let slug, !slug.isEmpty else {
+            hubSlug = nil
+            matches = nil
+            standings = []
+            loading = false
+            loadError = nil
+            await loadSmartSnaps(force: force)
+            return
+        }
+        hubSlug = slug
 
         async let matchesOpt = try? APIClient.shared.fetchMatches(comp: slug, ignoreCache: force)
         async let standingsOpt = try? APIClient.shared.fetchStandings(comp: slug, ignoreCache: force)
@@ -1177,10 +1264,14 @@ struct HomeView: View {
         if Task.isCancelled { return }
 
         async let compsOpt = try? APIClient.shared.fetchCompetitions(ignoreCache: force)
-        async let outlookOpt = try? APIClient.shared.fetchOutlook(comp: slug, ignoreCache: force)
+        async let outlookOpt: SpOutlookResponse? = slug == "pro-league"
+            ? (try? await APIClient.shared.fetchOutlook(comp: slug, ignoreCache: force))
+            : nil
         async let scorersOpt = try? APIClient.shared.fetchScorers(comp: slug, ignoreCache: force)
         async let assistsOpt = try? APIClient.shared.fetchAssists(comp: slug, ignoreCache: force)
-        async let transfersOpt = try? APIClient.shared.fetchLeagueTransfers(ignoreCache: force)
+        async let transfersOpt: SpLeagueTransfersResponse? = slug == "pro-league"
+            ? (try? await APIClient.shared.fetchLeagueTransfers(ignoreCache: force))
+            : nil
 
         self.comp = (await compsOpt)?.competitions.first { $0.slug == slug }
         self.outlook = (await outlookOpt)?.outlook
@@ -1192,11 +1283,8 @@ struct HomeView: View {
             self.loadError = L("تعذّر الاتصال بخادم البيانات")
         }
 
-        // لا نستدعي matchFollows.refresh() هنا — auto-refresh + SSE يغطيان الحالة
-        // وتكرار detail كامل لكل مباراة متابَعة يضاعف زمن التحميل.
         await loadSmartSnaps(force: force)
 
-        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + آخر مجريات.
         if let f = featured, f.started {
             async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: force)
             async let xgOpt = try? APIClient.shared.fetchXg(matchId: f.id, ignoreCache: force)
@@ -1210,7 +1298,6 @@ struct HomeView: View {
             self.featuredCommentary = nil
         }
 
-        // مزامنة ودجت الشاشة الرئيسية «المباراة القادمة» (أفضل جهد — يكيّش الشعارين).
         await SpWidgetBridge.sync(matches: matches, follows: SpMatchFollows.shared.visibleItems, favoriteId: favorites.team?.id)
     }
 
@@ -1284,7 +1371,7 @@ struct NewsView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(SpTheme.onDarkFaint)
             TextField("", text: $query, prompt: Text(L("ابحث في الأخبار")).foregroundStyle(SpTheme.onDarkFaint))
-                .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(rslAccent)
+                .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(hubAccent)
                 .autocorrectionDisabled()
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(SpTheme.onDarkFaint) }

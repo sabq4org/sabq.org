@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-28",
+  "updatedAt": "2026-07-29",
   "systems": [
     {
       "id": "account-center",
@@ -32,7 +32,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": ["platform"],
+      "owners": [
+        "platform"
+      ],
       "lastReviewed": "2026-07-25"
     },
     {
@@ -61,8 +63,10 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/official-letters",
-      "owners": ["platform"],
-      "lastReviewed": "2026-07-27"
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-07-26"
     },
     {
       "id": "loyalty",
@@ -96,7 +100,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/loyalty-admin",
-      "owners": ["platform"],
+      "owners": [
+        "platform"
+      ],
       "lastReviewed": "2026-07-21"
     },
     {
@@ -121,7 +127,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": ["sports"],
+      "owners": [
+        "sports"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -258,7 +266,9 @@
         "coverage-gap-matcher"
       ],
       "dashboardPath": "/dashboard",
-      "owners": ["editorial"],
+      "owners": [
+        "editorial"
+      ],
       "lastReviewed": "2026-07-28"
     },
     {
@@ -290,7 +300,9 @@
         "ai-task-executor"
       ],
       "dashboardPath": "/dashboard/admin/ifox",
-      "owners": ["ai"],
+      "owners": [
+        "ai"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -324,7 +336,9 @@
         "entity-extraction"
       ],
       "dashboardPath": "/dashboard/ai-hub",
-      "owners": ["ai"],
+      "owners": [
+        "ai"
+      ],
       "lastReviewed": "2026-07-19"
     },
     {
@@ -347,9 +361,13 @@
         "docs/MUQTARAB.md",
         "docs/MUQTARAB_IOS_PLAN.md"
       ],
-      "aiFeatureKeys": ["muqtarab-ai"],
+      "aiFeatureKeys": [
+        "muqtarab-ai"
+      ],
       "dashboardPath": "/dashboard/muqtarab",
-      "owners": ["editorial"],
+      "owners": [
+        "editorial"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -377,9 +395,15 @@
         "docs/RADAR_X_WATCHES.md",
         "docs/radar-source-licensing.md"
       ],
-      "aiFeatureKeys": ["radar", "radar-clustering", "radar-relevance"],
+      "aiFeatureKeys": [
+        "radar",
+        "radar-clustering",
+        "radar-relevance"
+      ],
       "dashboardPath": "/dashboard/radar",
-      "owners": ["editorial"],
+      "owners": [
+        "editorial"
+      ],
       "lastReviewed": "2026-07-18"
     },
     {
@@ -406,9 +430,13 @@
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
         "docs/AUDIO_NEWSLETTER_SYSTEM.md"
       ],
-      "aiFeatureKeys": ["audio-newsletter"],
+      "aiFeatureKeys": [
+        "audio-newsletter"
+      ],
       "dashboardPath": "/dashboard/audio-newsletters",
-      "owners": ["content"],
+      "owners": [
+        "content"
+      ],
       "lastReviewed": "2026-07-25"
     },
     {
@@ -429,9 +457,13 @@
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx"
       ],
-      "aiFeatureKeys": ["media-caption"],
+      "aiFeatureKeys": [
+        "media-caption"
+      ],
       "dashboardPath": "/dashboard/media-library",
-      "owners": ["content"],
+      "owners": [
+        "content"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -440,7 +472,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). روشن ويب/iOS: جدول الجولات الـ٣٤.",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح).",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -511,8 +543,10 @@
         "sports-intel-match-post"
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
-      "owners": ["sports"],
-      "lastReviewed": "2026-07-28"
+      "owners": [
+        "sports"
+      ],
+      "lastReviewed": "2026-07-29"
     },
     {
       "id": "push-notifications",
@@ -533,12 +567,15 @@
         "server/jobs/pushWorker.ts",
         "server/notificationBus.ts",
         "server/routes/pushNotificationRoutes.ts",
+        "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
         "docs/APPLE_PUSH_SETUP.md"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
-      "owners": ["platform"],
-      "lastReviewed": "2026-07-17"
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-07-29"
     },
     {
       "id": "ads",
@@ -561,7 +598,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
-      "owners": ["monetization"],
+      "owners": [
+        "monetization"
+      ],
       "lastReviewed": "2026-07-25"
     },
     {
@@ -592,7 +631,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
-      "owners": ["platform"],
+      "owners": [
+        "platform"
+      ],
       "lastReviewed": "2026-07-28"
     },
     {
@@ -618,7 +659,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": ["platform"],
+      "owners": [
+        "platform"
+      ],
       "lastReviewed": "2026-07-26"
     },
     {
@@ -643,7 +686,9 @@
         "sentiment-analysis"
       ],
       "dashboardPath": "/dashboard/ai-moderation",
-      "owners": ["engagement"],
+      "owners": [
+        "engagement"
+      ],
       "lastReviewed": "2026-07-27"
     },
     {
@@ -660,9 +705,13 @@
         "client/src/pages/dashboard/DeepAnalysis.tsx",
         "client/src/pages/dashboard/DeepAnalysisList.tsx"
       ],
-      "aiFeatureKeys": ["deep-analysis"],
+      "aiFeatureKeys": [
+        "deep-analysis"
+      ],
       "dashboardPath": "/dashboard/deep-analysis",
-      "owners": ["editorial"],
+      "owners": [
+        "editorial"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -684,9 +733,13 @@
         "client/src/pages/CalendarEventDetail.tsx",
         "docs/architecture/CALENDAR_SYSTEM.md"
       ],
-      "aiFeatureKeys": ["calendar-ai"],
+      "aiFeatureKeys": [
+        "calendar-ai"
+      ],
       "dashboardPath": "/dashboard/calendar",
-      "owners": ["editorial"],
+      "owners": [
+        "editorial"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -712,7 +765,9 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/systems-catalog",
-      "owners": ["platform"],
+      "owners": [
+        "platform"
+      ],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -736,7 +791,10 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/smart-blocks",
-      "owners": ["editorial", "platform"],
+      "owners": [
+        "editorial",
+        "platform"
+      ],
       "lastReviewed": "2026-07-19",
       "notes": "Homepage bundle + SWR cache under blocks:smart:* to avoid DB pressure"
     }

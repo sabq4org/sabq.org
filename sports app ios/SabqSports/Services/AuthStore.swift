@@ -50,9 +50,35 @@ final class SpAuthStore {
 
     private let tokenKey = "sabqsports.session.token"
     private let memberKey = "sabqsports.session.member"
+    /// بيانات دخول عضوية سبق مربوطة بهذا الجهاز (بعد أول نجاح) — تُملأ تلقائيًا في النموذج.
+    private let credIdKey = "sabqsports.credentials.identifier"
+    private let credPwKey = "sabqsports.credentials.password"
+    /// محفوظ مؤقتًا أثناء تحدّي 2FA — يُكتب للـKeychain بعد نجاح الرمز فقط.
+    private var pendingMembershipCredentials: (identifier: String, password: String)?
     private var appleCoordinator: SpAppleSignInCoordinator?
 
     private init() {}
+
+    /// بيانات عضوية سبق المحفوظة على الجهاز (للإكمال التلقائي في شاشة الدخول).
+    func savedMembershipCredentials() -> (identifier: String, password: String)? {
+        guard let id = SpKeychain.load(credIdKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+              let pw = SpKeychain.load(credPwKey), !pw.isEmpty else { return nil }
+        return (id, pw)
+    }
+
+    func clearSavedMembershipCredentials() {
+        pendingMembershipCredentials = nil
+        SpKeychain.delete(credIdKey)
+        SpKeychain.delete(credPwKey)
+    }
+
+    private func rememberMembershipCredentials(identifier: String, password: String) {
+        let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !password.isEmpty else { return }
+        SpKeychain.save(credIdKey, value: id)
+        SpKeychain.save(credPwKey, value: password)
+        pendingMembershipCredentials = nil
+    }
 
     /// استرجاع الجلسة المحفوظة عند الإقلاع.
     func restore() async {
@@ -239,17 +265,20 @@ final class SpAuthStore {
         errorMessage = nil
         errorSource = .none
         pending2FAChallengeToken = nil
+        pendingMembershipCredentials = nil
         do {
             let resp = try await APIClient.shared.loginWithIdentifier(id, password: password)
             // الحساب مفعّل للتحقّق بخطوتين: الخادم يرجع requires2FA + تحدّيًا
             // (HTTP 200 بلا توكن) بدل الجلسة. ننتقل لخطوة إدخال الرمز بدل عرض
             // رسالة التحدّي كخطأ.
             if resp.requires2FA == true, let challenge = resp.challengeToken {
+                pendingMembershipCredentials = (id, password)
                 pending2FAChallengeToken = challenge
                 isLoading = false
                 return
             }
             try await applySession(resp)
+            rememberMembershipCredentials(identifier: id, password: password)
         } catch {
             errorMessage = friendly(error)
             errorSource = .credentials
@@ -271,6 +300,9 @@ final class SpAuthStore {
                 challengeToken: challenge, code: code, backupCode: backupCode
             )
             try await applySession(resp)
+            if let pending = pendingMembershipCredentials {
+                rememberMembershipCredentials(identifier: pending.identifier, password: pending.password)
+            }
             pending2FAChallengeToken = nil
             return true
         } catch {
@@ -285,6 +317,7 @@ final class SpAuthStore {
     /// إلغاء خطوة المصادقة الثنائية والرجوع لنموذج الدخول.
     func cancelTwoFactor() {
         pending2FAChallengeToken = nil
+        pendingMembershipCredentials = nil
         errorMessage = nil
         errorSource = .none
     }
@@ -476,6 +509,7 @@ final class SpAuthStore {
             let body = try JSONEncoder().encode(["password": password])
             _ = try await APIClient.shared.send(method: "DELETE", path: "/members/account",
                                                 jsonBody: body, apiRoot: URLConstants.mobileAPI)
+            clearSavedMembershipCredentials()
             signOut()
             return true
         } catch let e as APIError {
@@ -542,21 +576,42 @@ final class SpFavorites {
 
     func isFavorite(_ id: Int) -> Bool { team?.id == id }
 
-    func toggle(id: Int, name: String, logo: String?) {
-        if team?.id == id { clear() } else { set(id: id, name: name, logo: logo) }
+    func toggle(id: Int, name: String, logo: String?, competitionSlug: String? = nil, competitionName: String? = nil) {
+        if team?.id == id { clear() } else {
+            set(id: id, name: name, logo: logo, competitionSlug: competitionSlug, competitionName: competitionName)
+        }
     }
 
-    func set(id: Int, name: String, logo: String?) {
-        let t = SpFavTeam(id: id, name: name, logo: logo)
+    func set(id: Int, name: String, logo: String?, competitionSlug: String? = nil, competitionName: String? = nil) {
+        let t = SpFavTeam(
+            id: id, name: name, logo: logo,
+            competitionSlug: competitionSlug, competitionName: competitionName
+        )
         team = t
-        if let data = try? JSONEncoder().encode(t) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
+        persist(t)
+    }
+
+    /// يحدّث بطولة المفضّل بعد اكتشافها من ملف النادي (للإصدارات القديمة بلا slug).
+    func updateCompetition(slug: String?, name: String?) {
+        guard let t = team else { return }
+        let next = SpFavTeam(
+            id: t.id, name: t.name, logo: t.logo,
+            competitionSlug: slug ?? t.competitionSlug,
+            competitionName: name ?? t.competitionName
+        )
+        team = next
+        persist(next)
     }
 
     func clear() {
         team = nil
         UserDefaults.standard.removeObject(forKey: key)
+    }
+
+    private func persist(_ t: SpFavTeam) {
+        if let data = try? JSONEncoder().encode(t) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
     }
 }
 
@@ -564,6 +619,9 @@ nonisolated struct SpFavTeam: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String?
+    /// بطولة الدوري الأساسية للنادي — مصدر هب «فريقي» (مثل egypt-premier-league).
+    let competitionSlug: String?
+    let competitionName: String?
 }
 
 // MARK: - البطولات المفضّلة (تخصيص محلّي خفيف)
@@ -613,6 +671,13 @@ final class SpCompetitionFavorites {
     func removeAll() {
         guard !items.isEmpty else { return }
         items = []
+        persist()
+    }
+
+    /// يحدّد كل بطولات السجل المتاحة — ورقة «بطولات الجدول» → «تحديد الكل».
+    func selectAll(from competitions: [SpCompetition]) {
+        guard !competitions.isEmpty else { return }
+        items = competitions
         persist()
     }
 
