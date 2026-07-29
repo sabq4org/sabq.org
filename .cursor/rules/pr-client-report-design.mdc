@@ -15,7 +15,7 @@ alwaysApply: false
 - ولّد **HTML + `dir="rtl"`** ثم اطبع PDF عبر **Puppeteer/Chromium**.
 - pdfmake/pdfkit يقلب العربية؛ لا تستخدمها لنص عربي موجّه للعميل.
 - في Railway: Chromium من صورة Alpine عبر `PUPPETEER_EXECUTABLE_PATH` / `/usr/bin/sabq-chromium`.
-- الصور: JPEG/PNG فقط (WebP/AVIF يفشل) مع إعادة المحاولة بدون صورة البطل.
+- الصور: حوّل WebP/AVIF إلى JPEG عبر `sharp` قبل التضمين (`bufferToPdfImageDataUrl`). مسارات R2 `media.sabq.org/.../wNNN.webp` تجرب `original.*` أيضاً. عند فشل الجلب: أعد المحاولة بدون صورة البطل.
 
 ## الهوية البصرية
 
