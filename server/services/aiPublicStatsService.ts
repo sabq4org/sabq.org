@@ -19,10 +19,15 @@ export interface AiPublicStats {
     successRate: number; // 0–100 بمنزلة عشرية واحدة
     sinceDate: string | null; // أول يوم في سجل الاستخدام (إطلاق مركز القياس)
     daily: { date: string; count: number }[]; // آخر 14 يومًا تصاعديًا
+    /** عمليات اليوم موزعة على المجالات — تحرير هو «كل ما عدا الثلاثة الأخرى» */
+    todayByDomain: { editorial: number; sports: number; visual: number; audio: number };
   };
   comments: { total: number; aiAnalyzed: number };
   stories: { total: number };
   articles: { totalPublished: number; todayPublished: number };
+  audio: { totalMinutes: number }; // دقائق صوت منتجة فعليًا (tts_usage_logs الناجحة)
+  radar: { totalItems: number }; // مواد رصدها الرادار من المصادر العالمية
+  sports: { totalOps: number }; // عمليات الذكاء في التغطيات الرياضية
 }
 
 const CACHE_KEY = "public:ai-stats";
@@ -39,7 +44,14 @@ async function computeStats(): Promise<AiPublicStats> {
   // من فهارس created_at/published_at.
   const riyadhDayStartUtc = sql`(date_trunc('day', now() + interval '3 hours') - interval '3 hours')`;
 
-  const [aiAgg, aiDaily, commentsAgg, storiesAgg, articlesAgg] = await Promise.all([
+  // مفاتيح المجال الرياضي كما في docs/systems/registry.json (نظام sports-tournaments)
+  const sportsKeyPredicate = sql`(
+    feature_key LIKE 'sports-%'
+    OR feature_key LIKE 'saudi-league-%'
+    OR feature_key IN ('world-cup-news', 'sportmonks-news', 'kings-cup-news')
+  )`;
+
+  const [aiAgg, aiDaily, commentsAgg, storiesAgg, articlesAgg, ttsAgg, radarAgg, sportsAgg, domainAgg] = await Promise.all([
     db.execute(sql`
       SELECT
         count(*)::bigint AS total_ops,
@@ -70,11 +82,44 @@ async function computeStats(): Promise<AiPublicStats> {
       FROM articles
       WHERE status = 'published'
     `),
+    db.execute(sql`
+      SELECT coalesce(sum(duration_ms), 0)::bigint AS total_duration_ms
+      FROM tts_usage_logs
+      WHERE success = true
+    `),
+    db.execute(sql`SELECT count(*)::bigint AS total FROM radar_items`),
+    db.execute(sql`
+      SELECT count(*)::bigint AS total
+      FROM ai_usage_logs
+      WHERE ${sportsKeyPredicate}
+    `),
+    db.execute(sql`
+      SELECT
+        CASE
+          WHEN ${sportsKeyPredicate} THEN 'sports'
+          WHEN operation = 'image' OR feature_key IN (
+            'visual-ai', 'nano-banana-images', 'smart-thumbnail', 'infographic-ai',
+            'image-generation', 'story-cards', 'media-caption'
+          ) THEN 'visual'
+          WHEN operation = 'tts' OR feature_key = 'audio-newsletter' THEN 'audio'
+          ELSE 'editorial'
+        END AS domain,
+        count(*)::bigint AS count
+      FROM ai_usage_logs
+      WHERE created_at >= ${riyadhDayStartUtc}
+      GROUP BY 1
+    `),
   ]);
 
   const agg = aiAgg.rows[0] ?? {};
   const commentsRow = commentsAgg.rows[0] ?? {};
   const articlesRow = articlesAgg.rows[0] ?? {};
+
+  const todayByDomain = { editorial: 0, sports: 0, visual: 0, audio: 0 };
+  for (const row of domainAgg.rows) {
+    const domain = String(row.domain) as keyof typeof todayByDomain;
+    if (domain in todayByDomain) todayByDomain[domain] = num(row.count);
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -85,6 +130,7 @@ async function computeStats(): Promise<AiPublicStats> {
       successRate: num(agg.success_rate),
       sinceDate: agg.since_date ? String(agg.since_date) : null,
       daily: aiDaily.rows.map((r) => ({ date: String(r.date), count: num(r.count) })),
+      todayByDomain,
     },
     comments: {
       total: num(commentsRow.total),
@@ -95,6 +141,9 @@ async function computeStats(): Promise<AiPublicStats> {
       totalPublished: num(articlesRow.total_published),
       todayPublished: num(articlesRow.today_published),
     },
+    audio: { totalMinutes: Math.round(num(ttsAgg.rows[0]?.total_duration_ms) / 60_000) },
+    radar: { totalItems: num(radarAgg.rows[0]?.total) },
+    sports: { totalOps: num(sportsAgg.rows[0]?.total) },
   };
 }
 
