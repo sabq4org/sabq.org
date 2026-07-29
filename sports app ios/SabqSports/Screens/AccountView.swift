@@ -740,6 +740,8 @@ struct SpMembershipLogin: View {
     @State private var mode: SpLoginMode = .phone
     @State private var identifier = ""
     @State private var password = ""
+    /// true بعد تحميل بيانات عضوية سبق المحفوظة على الجهاز.
+    @State private var hasSavedCredentials = false
     // خطوة إدخال رمز المصادقة الثنائية — تظهر حين يرجع الخادم تحدّيًا
     // (auth.pending2FAChallengeToken != nil) بدل جلسة كاملة.
     @State private var twoFactorCode = ""
@@ -754,6 +756,14 @@ struct SpMembershipLogin: View {
             } else {
                 loginContent
             }
+        }
+        .onAppear {
+            guard !hasSavedCredentials, identifier.isEmpty, password.isEmpty,
+                  let saved = auth.savedMembershipCredentials() else { return }
+            identifier = saved.identifier
+            password = saved.password
+            mode = .membership
+            hasSavedCredentials = true
         }
     }
 
@@ -951,12 +961,19 @@ struct SpMembershipLogin: View {
         .buttonStyle(.plain)
     }
 
-    // تبويب عضوية سبق — بريد/جوال + كلمة مرور.
+    // تبويب عضوية سبق — بريد/جوال + كلمة مرور (محفوظة على الجهاز بعد أول نجاح).
     private var membershipFields: some View {
         VStack(spacing: 12) {
             VStack(spacing: 10) {
                 field(text: $identifier, placeholder: L("البريد الإلكتروني أو الجوال"), icon: "person", secure: false)
                 field(text: $password, placeholder: L("كلمة المرور"), icon: "lock", secure: true)
+            }
+            if hasSavedCredentials {
+                Text(L("بيانات الدخول محفوظة على هذا الجهاز"))
+                    .font(SportsFonts.app(size: 11))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
             Button {
                 Task { await auth.loginWithCredentials(identifier: identifier, password: password) }

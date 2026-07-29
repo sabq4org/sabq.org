@@ -106,7 +106,13 @@ struct SpTeamPage: View {
         let fav = favorites.isFavorite(teamId)
         let info = profile?.team
         return Button {
-            favorites.toggle(id: teamId, name: info?.name ?? previewName ?? "", logo: info?.logo ?? previewLogo)
+            favorites.toggle(
+                id: teamId,
+                name: info?.name ?? previewName ?? "",
+                logo: info?.logo ?? previewLogo,
+                competitionSlug: profile?.competitionSlug,
+                competitionName: profile?.competitionName
+            )
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: fav ? "star.fill" : "star").font(.system(size: 13, weight: .bold))

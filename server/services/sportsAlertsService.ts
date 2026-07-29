@@ -944,6 +944,8 @@ async function detectEventAlerts(
 
 /** معرّف حزمة تطبيق VARA الرياضي على iOS — مرجع توجيه الإشعارات الرياضية. */
 export const SPORTS_APP_BUNDLE_ID = "com.sabq.sports";
+/** حزمة debug للمحاكي/التطوير — نفس جمهور تنبيهات VARA. */
+export const SPORTS_APP_DEBUG_BUNDLE_ID = "com.sabq.sports.dev";
 
 /** حزم تطبيق سبق (الأخبار) — لا تُرسل لها إشعارات مباريات. */
 const NEWS_APP_BUNDLE_IDS = new Set([
@@ -961,14 +963,14 @@ type PushDeviceRow = {
 
 /**
  * جهاز صالح لإشعار رياضي؟
- * - فارا صراحةً (`com.sabq.sports`)
+ * - فارا إنتاج (`com.sabq.sports`) أو debug (`com.sabq.sports.dev`)
  * - توكن APNs قديم بلا bundleId: نجرّب topic الرياضة؛ توكن سبق يُرفض من Apple
  *   بـ DeviceTokenNotForTopic دون أن يصل كإشعار في تطبيق الأخبار
  * - نستبعد حزم سبق المعروفة دائماً
  */
 function isSportsAppDevice(d: Pick<PushDeviceRow, "bundleId" | "provider">): boolean {
   if (d.bundleId && NEWS_APP_BUNDLE_IDS.has(d.bundleId)) return false;
-  if (d.bundleId === SPORTS_APP_BUNDLE_ID) return true;
+  if (d.bundleId === SPORTS_APP_BUNDLE_ID || d.bundleId === SPORTS_APP_DEBUG_BUNDLE_ID) return true;
   // توكنات قديمة بلا bundleId — APNs فقط (FCM بلا تمييز حزمة قد يضرب أندرويد سبق)
   if (!d.bundleId && d.provider === "apns") return true;
   return false;
@@ -1066,7 +1068,11 @@ export async function pushToUserDevices(
 
     const apnsDevices = targetDevices.filter((d) => d.provider === "apns");
     const fcmTokens = targetDevices
-      .filter((d) => d.provider === "fcm" && d.bundleId === SPORTS_APP_BUNDLE_ID)
+      .filter(
+        (d) =>
+          d.provider === "fcm" &&
+          (d.bundleId === SPORTS_APP_BUNDLE_ID || d.bundleId === SPORTS_APP_DEBUG_BUNDLE_ID),
+      )
       .map((d) => d.token);
 
     if (apnsDevices.length > 0 && isApnsConfigured()) {

@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "sabq-android"
 include(":app")
+include(":vara")
