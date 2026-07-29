@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { createHash } from "crypto";
+import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, enArticles, readingHistory } from "@shared/schema";
@@ -178,6 +179,29 @@ function fileToDataUrl(filePath: string): string | null {
   }
 }
 
+/** JPEG/PNG كما هي؛ WebP/AVIF/غيرها → JPEG عبر sharp (صور R2 على media.sabq.org). */
+async function bufferToPdfImageDataUrl(buf: Buffer): Promise<string | null> {
+  if (buf.byteLength < 24 || buf.byteLength > 8_000_000) return null;
+
+  const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
+  const isPng =
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  if (isJpeg) return `data:image/jpeg;base64,${buf.toString("base64")}`;
+  if (isPng) return `data:image/png;base64,${buf.toString("base64")}`;
+
+  try {
+    const jpeg = await sharp(buf, { failOn: "truncated" })
+      .rotate()
+      .resize({ width: 1200, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toBuffer();
+    if (jpeg.byteLength < 24) return null;
+    return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchImageAsDataUrl(url: string | null | undefined): Promise<string | null> {
   if (!url || !/^https?:\/\//i.test(url)) return null;
 
@@ -193,18 +217,13 @@ async function fetchImageAsDataUrl(url: string | null | undefined): Promise<stri
       const res = await fetch(candidate, {
         signal: controller.signal,
         redirect: "error",
-        headers: { Accept: "image/jpeg,image/png,image/*;q=0.8,*/*;q=0.5" },
+        headers: { Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8,*/*;q=0.5" },
       });
       clearTimeout(timer);
       if (!res.ok) continue;
       const ab = await res.arrayBuffer();
-      if (ab.byteLength < 24 || ab.byteLength > 8_000_000) continue;
-      const buf = Buffer.from(ab);
-      const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
-      const isPng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
-      if (!isJpeg && !isPng) continue;
-      const mime = isJpeg ? "image/jpeg" : "image/png";
-      return `data:${mime};base64,${buf.toString("base64")}`;
+      const dataUrl = await bufferToPdfImageDataUrl(Buffer.from(ab));
+      if (dataUrl) return dataUrl;
     } catch {
       /* try next candidate */
     }
@@ -212,7 +231,7 @@ async function fetchImageAsDataUrl(url: string | null | undefined): Promise<stri
   return null;
 }
 
-/** Prefer JPEG/PNG variants for CDNs that default to WebP. */
+/** Prefer JPEG/PNG (or convertible) sources — Cloudflare Images + R2 news paths. */
 function jpegFriendlyCandidates(url: string): string[] {
   const out = [url];
   try {
@@ -225,6 +244,22 @@ function jpegFriendlyCandidates(url: string): string[] {
         out.unshift(`${u.origin}/${base}/public`);
       }
     }
+
+    // R2 news delivery is often …/w730.webp — try original.* next to the variant.
+    const r2Variant = u.pathname.match(
+      /^(\/news\/\d{4}\/\d{2}\/[^/]+)\/w\d+\.(webp|avif|jpg|jpeg|png)$/i,
+    );
+    if (r2Variant) {
+      const prefix = r2Variant[1];
+      for (const ext of ["jpg", "jpeg", "png", "webp"]) {
+        out.unshift(`${u.origin}${prefix}/original.${ext}`);
+      }
+    } else if (/\.webp$/i.test(u.pathname)) {
+      out.unshift(u.origin + u.pathname.replace(/\.webp$/i, ".jpg"));
+      out.unshift(u.origin + u.pathname.replace(/\.webp$/i, ".jpeg"));
+      out.unshift(u.origin + u.pathname.replace(/\.webp$/i, ".png"));
+    }
+
     if (!u.searchParams.has("format")) {
       const withFmt = new URL(url);
       withFmt.searchParams.set("format", "jpeg");
