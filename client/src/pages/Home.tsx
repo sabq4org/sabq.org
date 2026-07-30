@@ -45,6 +45,7 @@ const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSec
 const SportsPortalStrip = lazyDefault(() => import("@/components/sports/SportsPortalStrip"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
+const NationalDay96Block = lazyNamed(() => import("@/components/seasonal/NationalDay96Block"), "NationalDay96Block");
 const SahraaTvBlock = lazyNamed(() => import("@/components/SahraaTvBlock"), "SahraaTvBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
@@ -504,6 +505,15 @@ export default function Home() {
           <ErrorBoundary fallback={null}>
             <Suspense fallback={null}>
               <HajjBlock />
+            </Suspense>
+          </ErrorBoundary>
+
+          {/* بلوك اليوم الوطني الـ96 — يظهر فقط عند تفعيله من اللوحة وداخل
+              نافذة الموسم؛ /api/national-day-block يرجع isVisible:false
+              خارجها فلا يُنتج أي DOM بقية السنة. */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <NationalDay96Block />
             </Suspense>
           </ErrorBoundary>
 

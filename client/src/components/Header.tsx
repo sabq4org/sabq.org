@@ -28,6 +28,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ThemeProvider";
 import logoImage from "@assets/sabq-logo.png";
 import kingsCupEmblem from "@assets/kings-cup-logo.png";
+import {
+  ND96_SCOPE_CLASS,
+  ND96_SCOPE_STYLE,
+  NationalDay96GreetingBar,
+  NationalDay96ScopeStyles,
+  NationalDaySaduStrip,
+  useNationalDay96Season,
+} from "@/components/seasonal/NationalDay96Theme";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
 import { getMobileToolsItems } from "@/nav/accountMenuItems";
@@ -45,6 +53,10 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
   const { theme, appTheme } = useTheme();
+
+  // سمة اليوم الوطني الـ96: تصحو تلقائيًا 21–25 سبتمبر 2026 (توقيت الرياض)
+  // وتنطفئ بعدها — بلا أي تدخل. للمعاينة خارج الموعد: ?nd96=force
+  const nd96 = useNationalDay96Season();
 
   // Determine logo based on theme and active app theme
   const currentLogo = appTheme?.assets?.logoLight && theme === 'light'
@@ -100,7 +112,14 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
 
   return (
     <>
-    <header role="banner" aria-label="رأس الصفحة الرئيسي" className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60`} dir="rtl">
+    <header
+      role="banner"
+      aria-label="رأس الصفحة الرئيسي"
+      className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
+      style={nd96.active ? ND96_SCOPE_STYLE : undefined}
+      dir="rtl"
+    >
+      {nd96.active && <NationalDay96ScopeStyles />}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
@@ -568,6 +587,16 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
         </SheetContent>
       </Sheet>
       <BreakingNewsTicker />
+      {nd96.active && (
+        <>
+          <NationalDaySaduStrip />
+          <NationalDay96GreetingBar
+            active
+            dismissed={nd96.dismissed}
+            onDismiss={nd96.dismiss}
+          />
+        </>
+      )}
     </header>
     </>
   );
