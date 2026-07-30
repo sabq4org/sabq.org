@@ -518,8 +518,17 @@ class VaraPreferences(context: Context) {
 class VaraApi(private val context: Context, private val sessions: SecureSessionStore, private val preferences: VaraPreferences) {
     // كاش HTTP قرصي — يخدم الفتح المتكرر ووضع عدم الاتصال؛ ignoreCache يتجاوزه للتحديث القسري.
     private val httpCache = okhttp3.Cache(java.io.File(context.cacheDir, "vara_http_cache"), 20L * 1024 * 1024)
+    // افتراضي OkHttp: maxRequestsPerHost=5 — شاشات البطولة تفتح 6–8 نداءات متوازية
+    // فتتزاحم على الطابور. نرفع سقف الطلبات لكل مضيف عبر الـDispatcher العام
+    // (عمليًا هذا العميل لا يخاطب إلا api.sabq.org) — حارس ثانوي؛ الإصلاح الأول
+    // هو ترتيب النداءات في شاشات البطولة (سطح الفتح أولًا ثم الإثراء).
+    private val httpDispatcher = okhttp3.Dispatcher().apply {
+        maxRequests = 64
+        maxRequestsPerHost = 16
+    }
     private val client = OkHttpClient.Builder()
         .cache(httpCache)
+        .dispatcher(httpDispatcher)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)

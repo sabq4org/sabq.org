@@ -341,6 +341,9 @@ fun MatchesScreen(nav: NavHostController, vm: VaraViewModel) {
 
     // — المشتقّات
     val isMixed = selection == "all" || selection.startsWith("lens:")
+    // عدسة الفئة وحدها تحتاج السجل لمعرفة category (انظر mxEffectiveSlugs)؛ بمفضّلة
+    // محفوظة يمكن فتح الجدول قبل وصول /sports/competitions ‏(≈0.6ث).
+    val canLoadBeforeRegistry = favorites.isNotEmpty() && !selection.startsWith("lens:category:")
     val todayDate = VaraFormat.today()
     val visibleDays = remember(fixtures, liveOnly) { mxMakeDays(fixtures, liveOnly) }
     val daySignature = visibleDays.joinToString("|") { it.id }
@@ -537,7 +540,8 @@ fun MatchesScreen(nav: NavHostController, vm: VaraViewModel) {
 
     // — التأثيرات
 
-    // سجل البطولات عند الفتح: مزامنة المفضّلة (حذف المسحوبة) قبل أول طلب جدول.
+    // سجل البطولات عند الفتح: مزامنة المفضّلة (حذف المسحوبة) في الخلفية — الجدول
+    // يبدأ فورًا عبر canLoadBeforeRegistry دون انتظار هذا النداء.
     LaunchedEffect(Unit) {
         runCatching { findArray(vm.api.publicGet("/sports/competitions"), "competitions", "items").mapNotNull(::parseCompetition) }
             .onSuccess { comps ->
@@ -559,9 +563,10 @@ fun MatchesScreen(nav: NavHostController, vm: VaraViewModel) {
     }
 
     // إعادة التحميل مع كل تغيير فلتر أو تعديل للمفضّلة (المهمة السابقة تُلغى).
-    val reloadKey = "$registryReady|$selection|${favorites.sorted().joinToString(",")}"
+    val canLoad = registryReady || canLoadBeforeRegistry
+    val reloadKey = "$canLoad|$selection|${favorites.sorted().joinToString(",")}"
     LaunchedEffect(reloadKey) {
-        if (!registryReady) return@LaunchedEffect
+        if (!canLoad) return@LaunchedEffect
         mxLoad(force = false)
     }
 

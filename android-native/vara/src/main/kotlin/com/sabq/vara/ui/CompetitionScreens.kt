@@ -732,25 +732,39 @@ fun CompetitionScreen(nav: NavHostController, vm: VaraViewModel, slug: String, i
         }
     }
 
-    // الجلب المتوازي — فشل نداء واحد لا يحجب الصفحة، والتحديث الفاشل لا يمحو المعروض.
+    // مسار الفتح = iOS CompetitionDetailView.loadAll: المباريات أولًا بلا منافسة
+    // من نداءات الإثراء، ثم تُفتح الصفحة، ثم الترتيب/الهدّافون/… في الخلفية.
+    // الجلب السابق كان يطلق 7–8 طلبات معًا فيتنافس matches مع insights/rounds.
     LaunchedEffect(slug, revision) {
         val force = revision > 0
         if (!d.hasAny) loading = true
-        coroutineScope {
-            val metaJob = async {
-                runCatching { findArray(vm.api.publicGet("/sports/competitions"), "competitions", "items") }.getOrNull()
+        // الاسم/الشعار/الموسم/الحالة من ردّ الخادم — لا خرائط أسماء ثابتة.
+        // الكاش المحلي يكفي عند الفتح؛ التجديد عند التحديث القسري فقط.
+        suspend fun fetchMeta(): JsonArray? {
+            if (d.meta != null && !force) return null
+            return runCatching { findArray(vm.api.publicGet("/sports/competitions"), "competitions", "items") }.getOrNull()
+        }
+        fun applyMeta(raw: JsonArray) {
+            val list = raw.mapNotNull(::CpParseComp)
+            if (list.isNotEmpty()) {
+                CpCompCache.save(context, raw, list)
+                list.firstOrNull { it.slug == slug }?.let { d = d.copy(meta = it) }
             }
-            if (isWorldCup) {
-                val fx = async { runCatching { vm.api.publicGet("/world-cup/fixtures", ignoreCache = force) }.getOrNull() }
+        }
+        if (isWorldCup) {
+            val fx = runCatching { vm.api.publicGet("/world-cup/fixtures", ignoreCache = force) }
+            fx.onSuccess { d = d.copy(wcFixtures = CpParseWcFixtures(it)) }
+            error = if (d.hasAny) null else fx.exceptionOrNull()?.message
+            loading = false
+            refreshing = false
+            coroutineScope {
                 val st = async { runCatching { vm.api.publicGet("/world-cup/standings", ignoreCache = force) }.getOrNull() }
                 val br = async { runCatching { vm.api.publicGet("/world-cup/bracket", ignoreCache = force) }.getOrNull() }
                 val sc = async { runCatching { vm.api.publicGet("/world-cup/scorers", ignoreCache = force) }.getOrNull() }
                 val asx = async { runCatching { vm.api.publicGet("/world-cup/assists", ignoreCache = force) }.getOrNull() }
                 val cd = async { runCatching { vm.api.publicGet("/world-cup/cards", ignoreCache = force) }.getOrNull() }
-                fx.await()?.let { d = d.copy(wcFixtures = CpParseWcFixtures(it)) }
+                val meta = async { fetchMeta() }
                 st.await()?.let { d = d.copy(wcGroups = CpParseWcGroups(it)) }
-                // الترتيب والمباريات هما سطح الفتح — تُفتح الصفحة فور وصولهما.
-                if (d.hasAny) loading = false
                 br.await()?.let { root ->
                     val (rounds, columns) = CpParseBracket(root)
                     d = d.copy(wcBracketRounds = rounds, wcColumns = columns)
@@ -758,8 +772,16 @@ fun CompetitionScreen(nav: NavHostController, vm: VaraViewModel, slug: String, i
                 sc.await()?.let { d = d.copy(wcScorers = CpParseWcLeaders(it, "scorers", "leaders", "items")) }
                 asx.await()?.let { d = d.copy(wcAssists = CpParseWcLeaders(it, "leaders", "assists", "items")) }
                 cd.await()?.let { d = d.copy(wcCards = CpParseWcLeaders(it, "leaders", "cards", "items")) }
-            } else {
-                val matches = async { runCatching { vm.api.publicGet("/sports/$slug/matches", ignoreCache = force) }.getOrNull() }
+                meta.await()?.let(::applyMeta)
+            }
+        } else {
+            // سطح الفتح: matches فقط (نظير iOS) — لا نُنافسه بنداءات الإثراء.
+            val m = runCatching { vm.api.publicGet("/sports/$slug/matches", ignoreCache = force) }
+            m.onSuccess { d = CpApplyMatches(d, it) }
+            error = if (d.hasAny) null else m.exceptionOrNull()?.message
+            loading = false
+            refreshing = false
+            coroutineScope {
                 val standings = async { runCatching { vm.api.publicGet("/sports/$slug/standings", ignoreCache = force) }.getOrNull() }
                 val scorers = async { runCatching { vm.api.publicGet("/sports/$slug/scorers", ignoreCache = force) }.getOrNull() }
                 val assists = async { runCatching { vm.api.publicGet("/sports/$slug/assists", ignoreCache = force) }.getOrNull() }
@@ -769,10 +791,9 @@ fun CompetitionScreen(nav: NavHostController, vm: VaraViewModel, slug: String, i
                 val transfers = if (slug in CpSaudiTransferSlugs) {
                     async { runCatching { vm.api.publicGet("/sports/transfers", mapOf("since" to "4"), ignoreCache = force) }.getOrNull() }
                 } else null
+                val meta = async { fetchMeta() }
 
-                matches.await()?.let { d = CpApplyMatches(d, it) }
                 standings.await()?.let { d = d.copy(standings = CpParseStandings(it)) }
-                if (d.hasAny) loading = false
                 scorers.await()?.let { root ->
                     d = d.copy(scorers = findArray(root, "scorers", "leaders", "items").mapNotNull { parseLeader(it) })
                 }
@@ -789,25 +810,16 @@ fun CompetitionScreen(nav: NavHostController, vm: VaraViewModel, slug: String, i
                     val (list, current) = CpParseRounds(root)
                     d = d.copy(rounds = list, currentRound = current)
                 }
-                // اختيار الدور الافتراضي: المُختار سابقًا ثم الجاري ثم الأول.
                 val pick = selectedRound ?: d.currentRound ?: d.rounds.firstOrNull()?.key
                 if (pick != null && (selectedRound == null || force)) {
                     selectedRound = pick
                     loadRound(pick, force)
                 }
-            }
-            // الاسم/الشعار/الموسم/الحالة من ردّ الخادم — لا خرائط أسماء ثابتة.
-            metaJob.await()?.let { raw ->
-                val list = raw.mapNotNull(::CpParseComp)
-                if (list.isNotEmpty()) {
-                    CpCompCache.save(context, raw, list)
-                    list.firstOrNull { it.slug == slug }?.let { d = d.copy(meta = it) }
-                }
+                meta.await()?.let(::applyMeta)
             }
         }
-        error = if (d.hasAny) null else "تعذّر تحميل بيانات البطولة"
-        loading = false
-        refreshing = false
+        // بعد الإثراء: استرجاع أي بيانات يمسح الخطأ، والصفحة الفارغة تأخذ رسالة عامة.
+        error = if (d.hasAny) null else (error ?: "تعذّر تحميل بيانات البطولة")
     }
 
     // استطلاع حيّ: 8ث عند مباراة/صف جارٍ، 30ث قرب الانطلاق، فحص خامل كل 60ث.
