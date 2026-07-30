@@ -10,6 +10,7 @@ import {
   getSahraaTvBlockConfig,
   saveSahraaTvBlockConfig,
 } from "../services/sahraaTvBlockService";
+import { proxySahraaTvMedia } from "../services/sahraaTvMediaProxy";
 
 const router = Router();
 
@@ -29,6 +30,11 @@ router.get("/", async (_req: Request, res: Response) => {
     console.error("[SahraaTvBlock] GET error:", err);
     res.json({ isVisible: false });
   }
+});
+
+// PUBLIC: GET /api/sahraa-tv-block/media — بث MP4 (يتجاوز حظر Referer لإكس)
+router.get("/media", async (req: Request, res: Response) => {
+  await proxySahraaTvMedia(req, res);
 });
 
 // ADMIN: GET /api/sahraa-tv-block/admin

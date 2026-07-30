@@ -4,6 +4,9 @@
 
 export const SAHRAA_TV_BLOCK_KEY = "sahraa_tv_block";
 
+/** مسار التشغيل العام — بروكسي يتجنّب 403 من video.twimg.com على Referer سبق */
+export const SAHRAA_MEDIA_PATH = "/api/sahraa-tv-block/media";
+
 export const DEFAULT_SAHRAA_TITLE = "قناة الصحراء";
 
 /** رابط افتراضي لأول نشر — يُستبدل يومياً من لوحة التحكم */

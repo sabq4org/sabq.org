@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import sahraaLogo from "@assets/al-sahraa-channel-logo.png";
+import { apiUrl } from "@/lib/queryClient";
 
 export type SahraaTvBlockResponse =
   | { isVisible: false }
@@ -95,7 +96,8 @@ export function SahraaTvBlock() {
                 poster={data.posterUrl || undefined}
                 data-testid="sahraa-video"
               >
-                <source src={data.videoUrl} type="video/mp4" />
+                {/* التشغيل عبر /api/sahraa-tv-block/media — twimg يرفض Referer من sabq.org */}
+                <source src={apiUrl(data.videoUrl)} type="video/mp4" />
                 متصفحك لا يدعم تشغيل الفيديو.
               </video>
             </div>
