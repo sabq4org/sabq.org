@@ -220,7 +220,11 @@ export default function Login() {
         }),
       });
       toast({ title: "تم إنشاء حسابك", description: "أرسلنا رابط تحقق إلى بريدك الإلكتروني" });
-      await completeLogin("phone");
+      // عضو جديد → نفس onboarding مسجّلي البريد (ترحيب ثم اهتمامات)،
+      // بعد تهيئة كاش الجلسة كي لا تعيده الحراس إلى الدخول.
+      await queryClient.fetchQuery<User>({ queryKey: ["/api/auth/user"], staleTime: 0 });
+      trackLogin("phone");
+      navigate("/onboarding/welcome");
     } catch (error: any) {
       setPhoneLoading(false);
       const message: string = error?.message || "تعذّر إكمال التسجيل";
