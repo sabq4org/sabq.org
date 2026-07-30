@@ -67,3 +67,44 @@ export function getOrBuildSitemapXml(
 
   return task;
 }
+
+/**
+ * Drop Redis-cached sitemap XML keys. Used after EN publish/translate so
+ * sitemap-en-articles-* and the index pick up new URLs without waiting 6h TTL.
+ * Best-effort — Redis blips are ignored.
+ */
+export async function invalidateSitemapXmlCache(
+  keyPrefixes: string[] = ["__sitemapEnArticles", "index"],
+): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  for (const prefix of keyPrefixes) {
+    const match = REDIS_PREFIX + prefix + "*";
+    try {
+      let cursor = "0";
+      do {
+        const result = await redis.scan(cursor, "MATCH", match, "COUNT", 100);
+        const next = Array.isArray(result) ? String(result[0] ?? "0") : "0";
+        const keys: string[] = Array.isArray(result?.[1]) ? result[1] : [];
+        if (keys.length > 0) {
+          await redis.del(keys).catch(() => 0);
+        }
+        cursor = next;
+      } while (cursor !== "0");
+    } catch (err) {
+      console.warn(`[SitemapCache] invalidate failed for ${match}:`, err);
+    }
+  }
+
+  // Exact key "index" (no suffix)
+  if (keyPrefixes.includes("index")) {
+    await redis.del(REDIS_PREFIX + "index").catch(() => 0);
+  }
+
+  for (const key of inflight.keys()) {
+    if (keyPrefixes.some((p) => key === p || key.startsWith(p + "_") || key.startsWith(p))) {
+      inflight.delete(key);
+    }
+  }
+}
