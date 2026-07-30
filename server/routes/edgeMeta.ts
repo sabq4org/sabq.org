@@ -938,7 +938,9 @@ const LOCALIZED_STATIC_PAGES: Record<
   { title: string; desc: string; locale: string; siteName: string }
 > = {
   // English
-  "/en": { title: "Sabq News — Smart AI-Powered News", desc: "Sabq News — a smart, AI-powered news platform delivering the latest from Saudi Arabia and the world.", locale: "en_US", siteName: "Sabq News" },
+  // "/en" intentionally NOT here: it has a dynamic ROUTE_HANDLERS entry that
+  // injects the EN discovery-hub links (staticPageMeta wins over handlers, so
+  // listing it here would strip those links again).
   "/en/news": { title: "Latest News — Sabq", desc: "Browse the latest breaking news and updates on Sabq News.", locale: "en_US", siteName: "Sabq News" },
   "/en/categories": { title: "Categories — Sabq", desc: "Browse all news categories on Sabq.", locale: "en_US", siteName: "Sabq News" },
   "/en/about": { title: "About — Sabq", desc: "Learn about Sabq News.", locale: "en_US", siteName: "Sabq News" },
@@ -1237,6 +1239,62 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       };
     },
   },
+  // English homepage — the same discovery-hub fix as "/" above, which was
+  // applied to Arabic only. Without it the crawler-served /en shell exposed
+  // ZERO links (the language switcher is a JS button, so no crawlable path
+  // into the EN edition existed at all): every English article was a
+  // sitemap-only orphan and sat in "Discovered – currently not indexed",
+  // while Arabic articles — linked from the crawlable "/" hub — indexed in
+  // minutes. Meta values are byte-identical to the previous static entry.
+  {
+    pattern: /^\/en$/,
+    handle: async () => {
+      const [rows, cats] = await Promise.all([
+        db
+          .select({
+            slug: enArticles.slug,
+            englishSlug: enArticles.englishSlug,
+            title: enArticles.title,
+          })
+          .from(enArticles)
+          .where(eq(enArticles.status, "published"))
+          .orderBy(desc(enArticles.publishedAt))
+          .limit(60),
+        db
+          .select({ name: enCategories.name, slug: enCategories.slug })
+          .from(enCategories)
+          .where(eq(enCategories.status, "active"))
+          .orderBy(enCategories.displayOrder)
+          .limit(25),
+      ]);
+      const sections = buildLinkListHtml(
+        "Sabq News sections",
+        cats.map((c) => ({
+          href: `/en/category/${c.slug}`,
+          title: c.name || "",
+        })),
+      );
+      const latest = buildLinkListHtml(
+        "Latest news on Sabq",
+        rows.map((r) => ({
+          href: `/en/article/${r.englishSlug || r.slug}`,
+          title: r.title || "",
+        })),
+      );
+      return {
+        title: "Sabq News — Smart AI-Powered News",
+        description:
+          "Sabq News — a smart, AI-powered news platform delivering the latest from Saudi Arabia and the world.",
+        image: BRAND_OG_IMAGE,
+        canonical: `${SITE_URL}/en`,
+        robots: "index,follow",
+        type: "website",
+        locale: "en_US",
+        siteName: "Sabq News",
+        semanticHtml: [sections, latest].filter(Boolean).join("") || undefined,
+      };
+    },
+  },
   // Muqtarab topic: /muqtarab/:angleSlug/topic/:topicSlug — share meta + OG image.
   // MUST precede the angle handler below (its pattern would also match this URL).
   {
@@ -1525,6 +1583,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       const slug = safeDecode(m[1]);
       const [row] = await db
         .select({
+          id: enCategories.id,
           name: enCategories.name,
           description: enCategories.description,
           heroImageUrl: enCategories.heroImageUrl,
@@ -1534,6 +1593,18 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .where(eq(enCategories.slug, slug))
         .limit(1);
       if (!row) return null;
+      // Crawlable discovery hub — mirrors the Arabic /category/ handler above;
+      // without it EN section pages exposed zero article links to crawlers.
+      const sectionArticles = await db
+        .select({
+          slug: enArticles.slug,
+          englishSlug: enArticles.englishSlug,
+          title: enArticles.title,
+        })
+        .from(enArticles)
+        .where(and(eq(enArticles.categoryId, row.id), eq(enArticles.status, "published")))
+        .orderBy(desc(enArticles.publishedAt))
+        .limit(40);
       return {
         title: `${row.name} | Sabq`,
         description: trunc(row.description || `Latest news in ${row.name}`, 220),
@@ -1542,6 +1613,13 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         robots: "index,follow",
         type: "website",
         locale: "en_US",
+        semanticHtml: buildLinkListHtml(
+          `Latest news in ${row.name}`,
+          sectionArticles.map((r) => ({
+            href: `/en/article/${r.englishSlug || r.slug}`,
+            title: r.title || "",
+          })),
+        ),
       };
     },
   },
