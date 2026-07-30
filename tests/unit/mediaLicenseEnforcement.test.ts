@@ -6,13 +6,13 @@ import {
 } from "../../shared/mediaLicense";
 
 describe("isMediaLicenseEnforcementActive", () => {
-  it("false قبل منتصف ليل 31 يوليو 2026 الرياض", () => {
-    expect(isMediaLicenseEnforcementActive(new Date("2026-07-30T23:59:59+03:00"))).toBe(false);
+  it("false طوال يوم 31 يوليو 2026 الرياض (آخر يوم مهلة)", () => {
+    expect(isMediaLicenseEnforcementActive(new Date("2026-07-31T23:59:59+03:00"))).toBe(false);
   });
 
-  it("true من بداية 31 يوليو 2026 الرياض", () => {
+  it("true من بداية 1 أغسطس 2026 الرياض", () => {
     expect(isMediaLicenseEnforcementActive(new Date(MEDIA_LICENSE_ENFORCEMENT_AT))).toBe(true);
-    expect(isMediaLicenseEnforcementActive(new Date("2026-07-31T00:00:01+03:00"))).toBe(true);
+    expect(isMediaLicenseEnforcementActive(new Date("2026-08-01T00:00:01+03:00"))).toBe(true);
   });
 });
 

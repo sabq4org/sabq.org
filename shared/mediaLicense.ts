@@ -1,10 +1,10 @@
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "./sabqNewspaper";
 
-/** مهلة تقديم الترخيص المهني — من هذا اليوم يُعطَّل الإرسال بلا ترخيص ساري. */
+/** آخر يوم لمهلة تقديم الترخيص المهني (شامل حتى نهاية اليوم بتوقيت الرياض). */
 export const MEDIA_LICENSE_DEADLINE = "2026-07-31";
 
-/** بداية يوم المهلة بتوقيت الرياض (شامل). */
-export const MEDIA_LICENSE_ENFORCEMENT_AT = "2026-07-31T00:00:00+03:00";
+/** بداية التعطيل الفعلي للإرسال بلا ترخيص ساري — منتصف ليل 1 أغسطس بتوقيت الرياض. */
+export const MEDIA_LICENSE_ENFORCEMENT_AT = "2026-08-01T00:00:00+03:00";
 
 export const GMEDIA_REGISTER_URL =
   "https://gmedia.gov.sa/services/registering-media-professionals";
@@ -12,9 +12,9 @@ export const GMEDIA_REGISTER_URL =
 export const MEDIA_LICENSE_REQUIRED_MESSAGE =
   "يجب الحصول على ترخيص مهني ساري من هيئة تنظيم الإعلام أو تجديده قبل إرسال خبر أو مقال. سجّل أو جدّد ترخيصك عبر منصة الإعلاميين، ثم أرفقه من لوحة التحكم.";
 
-/** تنبيه لوحة التحكم قبل/حول مهلة ٣١ يوليو لمن بلا ترخيص ساري أو بترخيص منتهٍ. */
+/** تنبيه لوحة التحكم لمن بلا ترخيص ساري أو ترخيص يحتاج تحديثاً. */
 export const MEDIA_LICENSE_DASHBOARD_WARNING =
-  "ليس لديك ترخيص مهني ساري (أو ترخيصك منتهٍ). لن تتمكن من المشاركة وإرسال الأخبار أو المقالات بعد تاريخ 31 يوليو 2026. احصل على الترخيص أو جدّده وأرفقه من هنا.";
+  "مهلة استكمال الترخيص المهني تنتهي بنهاية 31 يوليو. ابتداءً من 1 أغسطس لن تتمكنوا من النشر إذا لم يكن لديكم ترخيص ساري أو كان بحاجة لتحديث.";
 
 export const MEDIA_LICENSE_REQUIRED_CODE = "MEDIA_LICENSE_REQUIRED";
 

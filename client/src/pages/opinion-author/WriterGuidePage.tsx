@@ -1,9 +1,11 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { ReactNode } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import {
   ArrowLeft,
   BookOpenCheck,
@@ -88,6 +90,22 @@ const faq = [
 ];
 
 export default function WriterGuidePage() {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
+  const startNewArticle = () => {
+    if (createBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: createBlockedReason,
+        variant: "destructive",
+      });
+      openMediaLicenseForm();
+      return;
+    }
+    navigate("/dashboard/articles/new");
+  };
+
   return (
     <DashboardLayout>
       <main className="mt-3 w-full bg-background pb-12 text-right" dir="rtl">
@@ -101,7 +119,14 @@ export default function WriterGuidePage() {
               هذا الدليل يشرح لك مساحة الكاتب وأدواتها، وكيف تستفيد من الذكاء دون أن يفقد المقال صوتك. اقرأه بالترتيب أو انتقل مباشرة إلى ما تحتاجه.
             </p>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-              <Button asChild className="min-h-11 gap-2"><Link href="/dashboard/articles/new"><PenLine className="h-4 w-4" /> ابدأ مقالًا جديدًا</Link></Button>
+              <Button
+                className={`min-h-11 gap-2${createBlocked ? " opacity-60" : ""}`}
+                title={createBlocked ? createBlockedReason : undefined}
+                onClick={startNewArticle}
+                data-testid="button-writer-guide-new-article"
+              >
+                <PenLine className="h-4 w-4" /> ابدأ مقالًا جديدًا
+              </Button>
               <Button asChild variant="outline" className="min-h-11 gap-2 bg-background/70"><Link href="/dashboard/opinion-author">العودة إلى مساحة الكاتب <ArrowLeft className="h-4 w-4" /></Link></Button>
             </div>
           </div>

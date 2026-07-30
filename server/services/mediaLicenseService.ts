@@ -252,7 +252,7 @@ export type MediaLicenseGateResult =
   | { ok: false; message: string; code: typeof MEDIA_LICENSE_REQUIRED_CODE };
 
 /**
- * بعد مهلة ٣١ يوليو: يمنع الإرسال/النشر إن كان صاحب الاسم بلا ترخيص ساري.
+ * من ١ أغسطس: يمنع الإرسال/النشر إن كان صاحب الاسم بلا ترخيص ساري.
  * قبل المهلة دائماً ok.
  */
 export async function assertMediaLicenseAllowsSubmission(
