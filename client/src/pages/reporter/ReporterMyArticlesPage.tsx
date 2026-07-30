@@ -10,6 +10,7 @@ import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
@@ -120,6 +121,7 @@ function isArchived(status: string) {
 export default function ReporterMyArticlesPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
   const [listFilter, setListFilter] = useState<ListFilter>("active");
 
   const {
@@ -156,6 +158,15 @@ export default function ReporterMyArticlesPage() {
   };
 
   const handleNewArticle = () => {
+    if (createBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: createBlockedReason,
+        variant: "destructive",
+      });
+      openMediaLicenseForm();
+      return;
+    }
     navigate("/dashboard/articles/new");
   };
 
@@ -198,7 +209,8 @@ export default function ReporterMyArticlesPage() {
               <WriterInquiriesButton />
               <Button
                 onClick={handleNewArticle}
-                className="h-10 gap-2 px-4"
+                className={`h-10 gap-2 px-4${createBlocked ? " opacity-60" : ""}`}
+                title={createBlocked ? createBlockedReason : undefined}
                 data-testid="button-reporter-new-article"
               >
                 <PlusCircle className="h-4 w-4" />

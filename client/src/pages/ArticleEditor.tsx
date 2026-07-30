@@ -128,7 +128,8 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { TagInput } from "@/components/TagInput";
 import { ReporterSelect } from "@/components/ReporterSelect";
 import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
-import { MEDIA_LICENSE_REQUIRED_MESSAGE } from "@shared/mediaLicense";
+import { MEDIA_LICENSE_DASHBOARD_WARNING, MEDIA_LICENSE_REQUIRED_MESSAGE } from "@shared/mediaLicense";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import {
   WriterEditorialNoticesAside,
   WriterEditorialNoticesMobile,
@@ -414,21 +415,26 @@ export default function ArticleEditor() {
   // Check if user is an opinion author - opinion authors have restricted editor interface
   const isOpinionAuthor = user?.role === 'opinion_author' || (user?.roles && user.roles.some((r: any) => r.name === 'opinion_author' || r === 'opinion_author'));
 
-  const mediaLicenseEndpoint = isOpinionAuthor
-    ? "/api/opinion-author/media-license"
-    : isReporter
-      ? "/api/reporter/media-license"
-      : null;
-  const { data: ownMediaLicense } = useQuery<{
-    submissionBlocked?: boolean;
-    valid?: boolean;
-    enforcementActive?: boolean;
-  }>({
-    queryKey: [mediaLicenseEndpoint],
-    enabled: Boolean(user && mediaLicenseEndpoint),
-    staleTime: 60_000,
-  });
+  const {
+    createBlocked,
+    createBlockedReason,
+    openMediaLicenseForm,
+    mediaLicense: ownMediaLicense,
+  } = useMediaLicenseGate();
   const ownSubmissionBlocked = Boolean(ownMediaLicense?.submissionBlocked);
+
+  // منع فتح «مقال/خبر جديد» عبر الرابط المباشر دون ترخيص ساري أو مع ترخيص يحتاج تحديثاً
+  const licenseCreateBlockHandledRef = useRef(false);
+  useEffect(() => {
+    if (!isNewArticle || !createBlocked || licenseCreateBlockHandledRef.current) return;
+    licenseCreateBlockHandledRef.current = true;
+    toast({
+      title: "الترخيص المهني مطلوب",
+      description: createBlockedReason || MEDIA_LICENSE_DASHBOARD_WARNING,
+      variant: "destructive",
+    });
+    openMediaLicenseForm();
+  }, [isNewArticle, createBlocked, createBlockedReason, openMediaLicenseForm, toast]);
 
   // Opinion authors (and opinion/column pieces) write "مقال", everyone else "خبر".
   // Drives the editor header wording so a كاتب رأي doesn't see "خبر جديد".
@@ -1851,7 +1857,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       return { ok: false };
     }
 
-    // من ٣١ يوليو: مراسل/كاتب رأي بلا ترخيص ساري لا يرسل ولا ينشر
+    // من ١ أغسطس: مراسل/كاتب رأي بلا ترخيص ساري لا يرسل ولا ينشر
     if ((publishNow || options?.submitForReview) && ownSubmissionBlocked) {
       toast({
         title: "الترخيص المهني مطلوب",

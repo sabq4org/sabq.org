@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
@@ -264,6 +265,19 @@ export default function WriterWorkspacePage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
+  const startWriting = () => {
+    if (createBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: createBlockedReason,
+        variant: "destructive",
+      });
+      openMediaLicenseForm();
+      return;
+    }
+    navigate("/dashboard/articles/new");
+  };
   // شريط الأولويات للجوال — تطبيق iOS أولاً (أو ?writerRail=1 للاختبار)
   const railMode = useIsWriterRail();
   const [activeTab, setActiveTab] = useState("today");
@@ -417,7 +431,13 @@ export default function WriterWorkspacePage() {
                 <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">
                   {greeting()} يا {firstName}
                 </h1>
-                <Button size="sm" className="shrink-0 gap-1.5" onClick={() => navigate("/dashboard/articles/new")}>
+                <Button
+                  size="sm"
+                  className={`shrink-0 gap-1.5${createBlocked ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : undefined}
+                  onClick={startWriting}
+                  data-testid="button-writer-start-writing"
+                >
                   <PenLine className="h-4 w-4" /> ابدأ الكتابة
                 </Button>
               </div>
@@ -478,7 +498,13 @@ export default function WriterWorkspacePage() {
                 >
                   <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
                 </Button>
-                <Button size="sm" className="justify-center gap-1.5" onClick={() => navigate("/dashboard/articles/new")}>
+                <Button
+                  size="sm"
+                  className={`justify-center gap-1.5${createBlocked ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : undefined}
+                  onClick={startWriting}
+                  data-testid="button-writer-start-writing-desktop"
+                >
                   <PenLine className="h-4 w-4" /> ابدأ الكتابة
                 </Button>
               </div>

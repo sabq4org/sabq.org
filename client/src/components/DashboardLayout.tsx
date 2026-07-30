@@ -2,7 +2,6 @@ import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
 import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, Newspaper, BadgeCheck, BadgeAlert } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
@@ -51,8 +50,8 @@ import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
 import { cn } from "@/lib/utils";
-import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
 import { MEDIA_LICENSE_DASHBOARD_WARNING } from "@shared/mediaLicense";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -170,59 +169,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل ومدير المحتوى
   const isIdentitySidebar =
     role === "opinion_author" || role === "angle_writer" || role === "reporter" || role === "content_manager";
-  // ختم الترخيص — كتّاب الرأي والمراسلون (مرخّص / جدّد / منتهٍ / غير مرخّص)
-  const mediaLicenseEndpoint =
-    role === "opinion_author"
-      ? "/api/opinion-author/media-license"
-      : role === "reporter"
-        ? "/api/reporter/media-license"
-        : null;
-  const showMediaLicenseQuery = Boolean(user) && Boolean(mediaLicenseEndpoint);
-  const { data: mediaLicense, isFetched: mediaLicenseFetched } = useQuery<{
-    submitted: boolean;
-    valid?: boolean;
-    expired?: boolean;
-    expiringSoon?: boolean;
-  }>({
-    queryKey: [mediaLicenseEndpoint],
-    enabled: showMediaLicenseQuery,
-    staleTime: 60 * 1000,
-  });
-  const isMediaLicensed = Boolean(mediaLicense?.valid) && !mediaLicense?.expiringSoon;
-  const showExpiringSoonBadge =
-    showMediaLicenseQuery && mediaLicenseFetched && Boolean(mediaLicense?.expiringSoon);
-  const showExpiredBadge =
-    showMediaLicenseQuery && mediaLicenseFetched && Boolean(mediaLicense?.expired);
-  const showUnlicensedBadge =
-    showMediaLicenseQuery &&
-    mediaLicenseFetched &&
-    !mediaLicense?.submitted &&
-    !mediaLicense?.valid;
-  /** بلا ترخيص بعد أو ترخيص منتهٍ — شريط تحذير أحمر في محتوى اللوحة */
-  const showMediaLicenseWarningBanner = showUnlicensedBadge || showExpiredBadge;
-
-  const mediaLicenseFormPath =
-    role === "opinion_author" || role === "reporter"
-      ? "/dashboard/my-services"
-      : null;
-
-  const openMediaLicenseForm = () => {
-    if (!mediaLicenseFormPath) return;
-    const hash = `#${WRITER_MEDIA_LICENSE_ANCHOR}`;
-    const basePath = location.split("?")[0].split("#")[0];
-    if (basePath === mediaLicenseFormPath) {
-      if (window.location.hash !== hash) {
-        window.location.hash = WRITER_MEDIA_LICENSE_ANCHOR;
-      } else {
-        window.dispatchEvent(new HashChangeEvent("hashchange"));
-      }
-      document
-        .getElementById(WRITER_MEDIA_LICENSE_ANCHOR)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    navigate(`${mediaLicenseFormPath}${hash}`);
-  };
+  const {
+    isMediaLicensed,
+    showExpiringSoonBadge,
+    showExpiredBadge,
+    showUnlicensedBadge,
+    showWarningBanner: showMediaLicenseWarningBanner,
+    createBlocked,
+    createBlockedReason,
+    openMediaLicenseForm,
+  } = useMediaLicenseGate();
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
@@ -538,16 +494,30 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               )}
               <div className="mb-3 space-y-3 px-2">
                 {quickCreateItem && (
-                  <Button asChild className="w-full justify-start gap-2 shadow-sm">
-                    <Link
-                      href={quickCreateItem.path || "/dashboard/articles/new"}
-                      onClick={() => handleNavClick(quickCreateItem)}
-                      data-testid="sidebar-quick-create-article"
+                  createBlocked ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full justify-start gap-2 shadow-sm opacity-60"
+                      title={createBlockedReason}
+                      onClick={openMediaLicenseForm}
+                      data-testid="sidebar-quick-create-article-blocked"
                     >
                       <Plus className="h-4 w-4" />
                       <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
-                    </Link>
-                  </Button>
+                    </Button>
+                  ) : (
+                    <Button asChild className="w-full justify-start gap-2 shadow-sm">
+                      <Link
+                        href={quickCreateItem.path || "/dashboard/articles/new"}
+                        onClick={() => handleNavClick(quickCreateItem)}
+                        data-testid="sidebar-quick-create-article"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
+                      </Link>
+                    </Button>
+                  )
                 )}
 
                 <div className="relative">
