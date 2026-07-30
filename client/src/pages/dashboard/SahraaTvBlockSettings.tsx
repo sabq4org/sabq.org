@@ -97,7 +97,7 @@ export default function SahraaTvBlockSettings() {
         <DashboardPageHeader
           icon={Tv}
           title="بلوك قناة الصحراء"
-          description="انشر يومياً اقتباس فيديو من منشور إكس أسفل أخبار الهيرو بهوية القناة"
+          description="انشر يومياً فيديو من رابط منشور إكس (يُعرض الفيديو فقط + وصفك — بدون واجهة التغريدة)"
         />
 
         {settings.isLoading ? (
@@ -157,7 +157,7 @@ export default function SahraaTvBlockSettings() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="sahraa-url">
-                    رابط منشور إكس (اقتباس الفيديو)
+                    رابط فيديو إكس (مصدر فقط)
                   </label>
                   <Input
                     id="sahraa-url"
@@ -169,7 +169,7 @@ export default function SahraaTvBlockSettings() {
                     data-testid="sahraa-url-input"
                   />
                   <p className="text-xs text-muted-foreground">
-                    انسخ رابط المنشور من إكس — يُفضّل منشور يحتوي فيديو البرنامج
+                    يُستخرج ملف الفيديو للتشغيل على سبق — لن تظهر التغريدة نفسها للقراء
                   </p>
                 </div>
 

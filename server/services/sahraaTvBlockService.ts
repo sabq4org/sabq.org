@@ -1,10 +1,11 @@
 /**
  * بلوك قناة الصحراء — إعداد يومي عبر system_settings.
- * يعرض على الرئيسية اقتباس فيديو من منشور إكس + وصف تحريري.
+ * يعرض على الرئيسية فيديو فقط (MP4) + وصف تحريري — بلا واجهة تغريدة.
  */
 import { storage } from "../storage";
 import {
   SAHRAA_TV_BLOCK_KEY,
+  extractTweetId,
   mergeSahraaTvBlockConfig,
   parseSahraaTvBlockConfig,
   toPublicSahraaTvBlock,
@@ -12,15 +13,18 @@ import {
   type SahraaTvBlockPublic,
   type SaveSahraaTvBlockInput,
 } from "./sahraaTvBlockUtils";
+import { resolveXVideoFromPostUrl } from "./sahraaTvVideoResolver";
 
 export {
   SAHRAA_TV_BLOCK_KEY,
   DEFAULT_SAHRAA_TITLE,
   normalizeXPostUrl,
   isValidXPostUrl,
+  extractTweetId,
   parseSahraaTvBlockConfig,
   toPublicSahraaTvBlock,
   mergeSahraaTvBlockConfig,
+  pickBestMp4Url,
   type SahraaTvBlockConfig,
   type SahraaTvBlockPublic,
   type SaveSahraaTvBlockInput,
@@ -35,8 +39,45 @@ export async function getSahraaTvBlockConfig(): Promise<SahraaTvBlockConfig> {
   }
 }
 
+/** يضمن وجود videoUrl مستخرج من رابط إكس، ويُخزّنه إن نجح. */
+async function ensureVideoResolved(
+  config: SahraaTvBlockConfig,
+  persist: boolean,
+): Promise<SahraaTvBlockConfig> {
+  if (!config.isActive) return config;
+  if (config.videoUrl) return config;
+  if (!extractTweetId(config.xPostUrl)) return config;
+
+  const resolved = await resolveXVideoFromPostUrl(config.xPostUrl);
+  const next: SahraaTvBlockConfig = {
+    ...config,
+    videoUrl: resolved.videoUrl,
+    posterUrl: resolved.posterUrl,
+    updatedAt: config.updatedAt ?? new Date().toISOString(),
+  };
+
+  if (persist) {
+    try {
+      await storage.upsertSystemSetting(SAHRAA_TV_BLOCK_KEY, next, "content", true);
+    } catch (e) {
+      console.warn("[SahraaTvBlock] failed to persist resolved video:", e);
+    }
+  }
+  return next;
+}
+
 export async function getPublicSahraaTvBlock(): Promise<SahraaTvBlockPublic> {
-  const config = await getSahraaTvBlockConfig();
+  let config = await getSahraaTvBlockConfig();
+  try {
+    config = await ensureVideoResolved(config, true);
+  } catch (e: any) {
+    console.warn(
+      "[SahraaTvBlock] video resolve failed:",
+      e?.code ?? e?.message ?? e,
+      e?.details ?? "",
+    );
+    return { isVisible: false };
+  }
   return toPublicSahraaTvBlock(config);
 }
 
@@ -44,7 +85,18 @@ export async function saveSahraaTvBlockConfig(
   input: SaveSahraaTvBlockInput,
 ): Promise<SahraaTvBlockConfig> {
   const current = await getSahraaTvBlockConfig();
-  const next = mergeSahraaTvBlockConfig(current, input);
+  let next = mergeSahraaTvBlockConfig(current, input);
+
+  // عند التفعيل (أو تغيير الرابط) نستخرج الفيديو فوراً ونرفض الحفظ بلا فيديو
+  if (next.isActive) {
+    const resolved = await resolveXVideoFromPostUrl(next.xPostUrl);
+    next = {
+      ...next,
+      videoUrl: resolved.videoUrl,
+      posterUrl: resolved.posterUrl,
+    };
+  }
+
   await storage.upsertSystemSetting(SAHRAA_TV_BLOCK_KEY, next, "content", true);
   return next;
 }

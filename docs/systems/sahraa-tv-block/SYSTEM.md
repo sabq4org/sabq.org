@@ -4,16 +4,18 @@
 
 ## الغرض
 
-بلوك يومي على الصفحة الرئيسية (عربي) يعرض **اقتباس فيديو من منشور إكس** لبرنامج/قناة الصحراء، مع وصف تحريري وهوية بصرية للقناة (أحمر عميق + شعار دائري)، مباشرة **أسفل أخبار الهيرو**.
+بلوك يومي على الصفحة الرئيسية (عربي) يعرض **فيديو فقط** مستخرجاً من رابط منشور إكس لقناة الصحراء، مع **وصف تحريري** نضعه نحن — **بدون واجهة التغريدة** — مباشرة **أسفل أخبار الهيرو**.
 
 ## الحدود (In / Out of scope)
 
 - داخل النطاق:
   - إعدادات البلوك عبر `system_settings` بمفتاح `sahraa_tv_block`
+  - استخراج رابط MP4 من منشور إكس (رسمي إن توفّر `X_API_BEARER_TOKEN`، وإلا FxTwitter)
   - API عام + لوحة إدارة
-  - مكوّن العرض `SahraaTvBlock` وتضمين منشور إكس (`widgets.js`)
+  - مكوّن العرض `SahraaTvBlock` بمشغّل `<video>` أصلي
   - موضع العرض أسفل `HeroCarousel` في `Home.tsx`
 - خارج النطاق:
+  - تضمين widget تغريدة إكس / `widgets.js`
   - تطبيقات الموبايل (iOS/Android) — parity لاحق إن طُلب
   - `web-next` SSR homepage (هيكل SEO مبسّط؛ البلوك في SPA فقط)
   - البلوكات الذكية / مسرح الصفحة (`smart-blocks`)
@@ -23,7 +25,7 @@
 
 | الطبقة | المسار |
 |--------|--------|
-| Backend service | `server/services/sahraaTvBlockService.ts` + `sahraaTvBlockUtils.ts` |
+| Backend service | `server/services/sahraaTvBlockService.ts` + `sahraaTvBlockUtils.ts` + `sahraaTvVideoResolver.ts` |
 | Backend routes | `server/routes/sahraaTvBlock.ts` (عبر `splitRoutesIndex.ts`) |
 | إعدادات | `system_settings.key = sahraa_tv_block` |
 | Web home | `client/src/components/SahraaTvBlock.tsx` + `client/src/pages/Home.tsx` |
@@ -32,22 +34,25 @@
 
 ## عقود مهمة / Gotchas
 
-1. **الظهور:** `isVisible` فقط عندما `isActive === true` ورابط منشور إكس صالح (`/status/{id}` أو `/status/{id}/video/1` على `x.com` أو `twitter.com`).
-2. **التضمين:** يُطبَّع الرابط إلى `https://twitter.com/.../status/{id}` (يُزال `/video/1`) لأن `widgets.js` يعتمد نطاق الإكس القديم ورابط المنشور لا رابط الفيديو المباشر.
-3. **الإطلاق:** إن لم تُحفظ إعدادات بعد، يُعرض المنشور الافتراضي لحساب `@Sahraachannel` (قابل للاستبدال من اللوحة).
-4. **لا جدول جديد:** القيمة JSON في `system_settings` — لا يلزم `db:push`.
-5. **ADR-001:** المنطق في الـ service؛ المسارات لا تستورد `db`.
-6. **الصلاحية:** الكتابة تتطلب `system.manage_settings` (أو أدمن عبر `requirePermission`).
-7. **إخفاء نظيف:** إن كان البلوك غير ظاهر لا يترك DOM على الرئيسية.
+1. **الظهور:** `isVisible` فقط عندما `isActive === true` و`videoUrl` (MP4) جاهز.
+2. **لا تغريدة:** الواجهة العامة لا تعرض نص المنشور ولا widget إكس — فيديو + وصف تحريري فقط.
+3. **المصدر:** المحرر يلصق رابط `x.com/.../status/{id}` أو `.../video/1`؛ الخادم يستخرج MP4 ويخزّن `videoUrl`/`posterUrl`.
+4. **الاستخراج:** `X_API_BEARER_TOKEN` أولاً، ثم `api.fxtwitter.com` كاحتياط. عند الحفظ المفعّل يفشل الطلب إن لم يُعثر على فيديو.
+5. **الإطلاق:** إن لم تُحفظ إعدادات بعد، يُستخدم رابط `@Sahraachannel` الافتراضي ويُستخرج الفيديو عند أول طلب عام.
+6. **لا جدول جديد:** القيمة JSON في `system_settings` — لا يلزم `db:push`.
+7. **ADR-001:** المنطق في الـ service؛ المسارات لا تستورد `db`.
+8. **الصلاحية:** الكتابة تتطلب `system.manage_settings`.
+9. **إخفاء نظيف:** إن كان البلوك غير ظاهر لا يترك DOM على الرئيسية.
 
 ## صحة وتشغيل
 
-- عام: `GET /api/sahraa-tv-block` → `{ isVisible, title?, description?, xPostUrl?, updatedAt? }`
+- عام: `GET /api/sahraa-tv-block` → `{ isVisible, title?, description?, videoUrl?, posterUrl?, updatedAt? }`
 - إدارة: `GET|PUT /api/sahraa-tv-block/admin`
 - لوحة: `/dashboard/sahraa-tv-block`
 
 ## عند التعديل
 
 - [ ] حدّث هذا الملف و`lastReviewed` في `registry.json` إن تغيّر العقد
+- [ ] لا تُرجع تضمين تغريدة — الفيديو فقط
 - [ ] لا توسّع إلى موبايل/SSR دون Issue منفصل
-- [ ] اختبر: رابط `x.com` و`twitter.com`، وإخفاء البلوك عند الإيقاف أو رابط فارغ
+- [ ] اختبر: رابط `/video/1`، إخفاء البلوك عند الإيقاف، ورفض منشور بلا فيديو

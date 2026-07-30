@@ -66,7 +66,14 @@ router.put(
     } catch (err: any) {
       if (err?.code === "INVALID_X_POST_URL" || err?.message === "INVALID_X_POST_URL") {
         return res.status(400).json({
-          message: "رابط منشور إكس غير صالح — استخدم رابطاً مثل https://x.com/user/status/123",
+          message: "رابط منشور إكس غير صالح — استخدم رابطاً مثل https://x.com/user/status/123/video/1",
+        });
+      }
+      if (err?.code === "VIDEO_NOT_FOUND" || err?.message === "VIDEO_NOT_FOUND") {
+        return res.status(400).json({
+          message:
+            "تعذر استخراج فيديو من هذا المنشور — تأكد أنه يحتوي فيديو وأن الرابط صحيح",
+          details: err?.details,
         });
       }
       console.error("[SahraaTvBlock] PUT admin error:", err);

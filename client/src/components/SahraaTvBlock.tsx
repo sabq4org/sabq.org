@@ -1,13 +1,5 @@
-import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
 import sahraaLogo from "@assets/al-sahraa-channel-logo.png";
-
-type TwttrWidgets = { widgets?: { load: (el?: HTMLElement) => void } };
-
-function getTwttr(): TwttrWidgets | undefined {
-  return (window as Window & { twttr?: TwttrWidgets }).twttr;
-}
 
 export type SahraaTvBlockResponse =
   | { isVisible: false }
@@ -15,13 +7,14 @@ export type SahraaTvBlockResponse =
       isVisible: true;
       title: string;
       description: string;
-      xPostUrl: string;
+      videoUrl: string;
+      posterUrl?: string;
       updatedAt?: string | null;
     };
 
 /**
  * بلوك قناة الصحراء — أسفل الهيرو.
- * يظهر فقط عندما يعيد الـ API isVisible=true (مفعّل + رابط إكس صالح).
+ * يعرض الفيديو فقط + الوصف التحريري (بدون واجهة تغريدة إكس).
  */
 export function SahraaTvBlock() {
   const { data } = useQuery<SahraaTvBlockResponse>({
@@ -35,7 +28,7 @@ export function SahraaTvBlock() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  if (!data?.isVisible) return null;
+  if (!data?.isVisible || !data.videoUrl) return null;
 
   return (
     <section
@@ -48,7 +41,6 @@ export function SahraaTvBlock() {
       data-testid="block-sahraa-tv"
       aria-label="قناة الصحراء"
     >
-      {/* نسيج رملي خفيف */}
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.12]"
         aria-hidden
@@ -65,7 +57,7 @@ export function SahraaTvBlock() {
 
       <div className="relative container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
         <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 items-stretch">
-          <header className="lg:w-[38%] flex flex-col justify-center gap-4">
+          <header className="lg:w-[36%] flex flex-col justify-center gap-4">
             <div className="flex items-center gap-3">
               <img
                 src={sahraaLogo}
@@ -96,21 +88,26 @@ export function SahraaTvBlock() {
                 {data.description}
               </p>
             ) : null}
-
-            <a
-              href={data.xPostUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-white/75 hover:text-white transition-colors w-fit"
-              data-testid="sahraa-x-link"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              مشاهدة المنشور على إكس
-            </a>
           </header>
 
-          <div className="lg:flex-1 min-w-0">
-            <XPostEmbed url={data.xPostUrl} />
+          <div className="lg:flex-1 min-w-0 flex items-center">
+            <div
+              className="w-full overflow-hidden rounded-xl bg-black/40 shadow-lg ring-1 ring-white/20"
+              data-testid="sahraa-video-wrap"
+            >
+              <video
+                key={data.videoUrl}
+                className="w-full aspect-video max-h-[min(70vh,520px)] bg-black object-contain"
+                controls
+                playsInline
+                preload="metadata"
+                poster={data.posterUrl || undefined}
+                data-testid="sahraa-video"
+              >
+                <source src={data.videoUrl} type="video/mp4" />
+                متصفحك لا يدعم تشغيل الفيديو.
+              </video>
+            </div>
           </div>
         </div>
       </div>
@@ -122,52 +119,6 @@ export function SahraaTvBlock() {
         }
       `}</style>
     </section>
-  );
-}
-
-function XPostEmbed({ url }: { url: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const loadWidgets = () => {
-      getTwttr()?.widgets?.load(el);
-    };
-
-    const existing = document.querySelector(
-      'script[src="https://platform.twitter.com/widgets.js"]',
-    ) as HTMLScriptElement | null;
-
-    if (existing && getTwttr()?.widgets) {
-      loadWidgets();
-      return;
-    }
-
-    if (existing) {
-      existing.addEventListener("load", loadWidgets);
-      return () => existing.removeEventListener("load", loadWidgets);
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://platform.twitter.com/widgets.js";
-    script.async = true;
-    script.charset = "utf-8";
-    script.onload = loadWidgets;
-    document.body.appendChild(script);
-  }, [url]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="rounded-xl bg-white/95 dark:bg-zinc-950/90 p-2 md:p-3 shadow-lg ring-1 ring-white/20 [&_.twitter-tweet]:mx-auto!"
-      data-testid="sahraa-x-embed"
-    >
-      <blockquote className="twitter-tweet" data-lang="ar" data-dnt="true" data-theme="light">
-        <a href={url}>عرض المنشور على إكس</a>
-      </blockquote>
-    </div>
   );
 }
 
