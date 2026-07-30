@@ -447,13 +447,6 @@ export default function Home() {
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
 
-        {/* بلوك قناة الصحراء — أسفل الهيرو؛ يختفي إن كان مطفأً أو بلا رابط إكس صالح */}
-        <ErrorBoundary fallback={null}>
-          <Suspense fallback={null}>
-            <SahraaTvBlock />
-          </Suspense>
-        </ErrorBoundary>
-
         {/* كأس العالم 2026 على الرئيسية — مخفي 2026-07-20؛ إعادة التفعيل: WorldCupHomeSection تحت الهيرو */}
 
         {/* Gulf Cup 27 + Asian Cup 2027 strips — each hides itself entirely
@@ -546,6 +539,13 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* بلوك قناة الصحراء — أسفل بلوك آخر/جميع الأخبار */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <SahraaTvBlock />
+          </Suspense>
+        </ErrorBoundary>
 
         {/* Quad Categories Block - 4 category columns - Below Smart News */}
         <LazySection>
