@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import sahraaLogo from "@assets/al-sahraa-channel-logo.png";
+import { apiUrl } from "@/lib/queryClient";
 
 export type SahraaTvBlockResponse =
   | { isVisible: false }
@@ -51,28 +52,24 @@ export function SahraaTvBlock() {
       />
 
       <div className="relative container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        {/* على المكتبية: الفيديو يمين (محاذاة خبر الهيرو) والنص يسار — عبر order مع dir=rtl */}
         <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 items-stretch">
-          <header className="lg:w-[36%] flex flex-col justify-center gap-4">
-            <div className="flex items-center gap-3">
+          <header className="order-1 lg:order-2 lg:w-[36%] flex flex-col justify-center gap-3">
+            <div className="flex items-center gap-2.5">
               <img
                 src={sahraaLogo}
                 alt="شعار قناة الصحراء"
-                width={64}
-                height={64}
-                className="h-14 w-14 md:h-16 md:w-16 rounded-full object-cover ring-2 ring-white/90 shadow-md motion-safe:animate-[sahraa-glow_3.5s_ease-in-out_infinite]"
+                width={44}
+                height={44}
+                className="h-10 w-10 md:h-11 md:w-11 rounded-full object-cover ring-2 ring-white/90 shadow-md motion-safe:animate-[sahraa-glow_3.5s_ease-in-out_infinite]"
                 data-testid="sahraa-logo"
               />
-              <div>
-                <p className="text-[11px] md:text-xs tracking-wide text-white/70">
-                  بالشراكة مع
-                </p>
-                <h2
-                  className="text-xl md:text-2xl font-bold text-white leading-tight"
-                  data-testid="sahraa-title"
-                >
-                  {data.title}
-                </h2>
-              </div>
+              <h2
+                className="text-xl md:text-2xl font-bold text-white leading-tight"
+                data-testid="sahraa-title"
+              >
+                {data.title}
+              </h2>
             </div>
 
             {data.description ? (
@@ -85,7 +82,7 @@ export function SahraaTvBlock() {
             ) : null}
           </header>
 
-          <div className="lg:flex-1 min-w-0 flex items-center">
+          <div className="order-2 lg:order-1 lg:flex-1 min-w-0 flex items-center">
             <div
               className="w-full overflow-hidden rounded-xl bg-black/40 shadow-lg ring-1 ring-white/20"
               data-testid="sahraa-video-wrap"
@@ -99,7 +96,8 @@ export function SahraaTvBlock() {
                 poster={data.posterUrl || undefined}
                 data-testid="sahraa-video"
               >
-                <source src={data.videoUrl} type="video/mp4" />
+                {/* التشغيل عبر /api/sahraa-tv-block/media — twimg يرفض Referer من sabq.org */}
+                <source src={apiUrl(data.videoUrl)} type="video/mp4" />
                 متصفحك لا يدعم تشغيل الفيديو.
               </video>
             </div>

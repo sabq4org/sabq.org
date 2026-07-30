@@ -3,6 +3,7 @@ import {
   DEFAULT_SAHRAA_DESCRIPTION,
   DEFAULT_SAHRAA_TITLE,
   DEFAULT_SAHRAA_X_POST_URL,
+  SAHRAA_MEDIA_PATH,
   extractTweetId,
   isValidXPostUrl,
   mergeSahraaTvBlockConfig,
@@ -11,6 +12,12 @@ import {
   pickBestMp4Url,
   toPublicSahraaTvBlock,
 } from "../../server/services/sahraaTvBlockUtils";
+
+describe("SAHRAA_MEDIA_PATH", () => {
+  it("points at the same-origin media proxy", () => {
+    expect(SAHRAA_MEDIA_PATH).toBe("/api/sahraa-tv-block/media");
+  });
+});
 
 describe("normalizeXPostUrl", () => {
   it("accepts x.com status URLs and normalizes to twitter.com", () => {

@@ -4,6 +4,7 @@
  */
 import { storage } from "../storage";
 import {
+  SAHRAA_MEDIA_PATH,
   SAHRAA_TV_BLOCK_KEY,
   extractTweetId,
   mergeSahraaTvBlockConfig,
@@ -16,6 +17,7 @@ import {
 import { resolveXVideoFromPostUrl } from "./sahraaTvVideoResolver";
 
 export {
+  SAHRAA_MEDIA_PATH,
   SAHRAA_TV_BLOCK_KEY,
   DEFAULT_SAHRAA_TITLE,
   normalizeXPostUrl,
@@ -78,7 +80,12 @@ export async function getPublicSahraaTvBlock(): Promise<SahraaTvBlockPublic> {
     );
     return { isVisible: false };
   }
-  return toPublicSahraaTvBlock(config);
+  const pub = toPublicSahraaTvBlock(config);
+  // المتصفح يرسل Referer=sabq.org فيُرفض الفيديو من twimg — التشغيل عبر بروكسي نفس المنشأ
+  if (pub.isVisible && pub.videoUrl) {
+    return { ...pub, videoUrl: SAHRAA_MEDIA_PATH };
+  }
+  return pub;
 }
 
 export async function saveSahraaTvBlockConfig(

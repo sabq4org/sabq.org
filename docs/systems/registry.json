@@ -811,6 +811,7 @@
         "server/services/sahraaTvBlockService.ts",
         "server/services/sahraaTvBlockUtils.ts",
         "server/services/sahraaTvVideoResolver.ts",
+        "server/services/sahraaTvMediaProxy.ts",
         "server/routes/sahraaTvBlock.ts",
         "client/src/components/SahraaTvBlock.tsx",
         "client/src/pages/dashboard/SahraaTvBlockSettings.tsx",
