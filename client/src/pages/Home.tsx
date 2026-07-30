@@ -44,6 +44,7 @@ const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/King
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
+const SahraaTvBlock = lazyNamed(() => import("@/components/SahraaTvBlock"), "SahraaTvBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
 // Smart Blocks: معطّلة على واجهة الزائر حالياً (لوحة التحكم فقط).
@@ -445,6 +446,13 @@ export default function Home() {
           {/* Hero Section */}
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
+
+        {/* بلوك قناة الصحراء — أسفل الهيرو؛ يختفي إن كان مطفأً أو بلا رابط إكس صالح */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <SahraaTvBlock />
+          </Suspense>
+        </ErrorBoundary>
 
         {/* كأس العالم 2026 على الرئيسية — مخفي 2026-07-20؛ إعادة التفعيل: WorldCupHomeSection تحت الهيرو */}
 

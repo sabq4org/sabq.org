@@ -59,6 +59,7 @@ import {
   Wrench,
   Trophy,
   Moon,
+  Tv,
   Inbox,
   Radar,
   HeartPulse,
@@ -819,6 +820,17 @@ export const navConfig: NavItem[] = [
     icon: Moon,
     path: "/dashboard/hajj-block",
     roles: ["admin"],
+  },
+
+  // ===== بلوك قناة الصحراء / Al-Sahraa TV =====
+  {
+    id: "sahraa_tv_block",
+    labelKey: "nav.sahraa_tv_block",
+    labelAr: "بلوك الصحراء",
+    icon: Tv,
+    path: "/dashboard/sahraa-tv-block",
+    roles: ["admin"],
+    permissions: ["system.manage_settings"],
   },
 
   // ===== الناشرون والوكالات / Publishers & Agencies =====

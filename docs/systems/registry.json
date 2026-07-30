@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-29",
+  "updatedAt": "2026-07-30",
   "systems": [
     {
       "id": "account-center",
@@ -797,6 +797,34 @@
       ],
       "lastReviewed": "2026-07-19",
       "notes": "Homepage bundle + SWR cache under blocks:smart:* to avoid DB pressure"
+    },
+    {
+      "id": "sahraa-tv-block",
+      "nameAr": "بلوك قناة الصحراء",
+      "nameEn": "Al-Sahraa TV Block",
+      "status": "active",
+      "category": "content",
+      "summary": "بلوك يومي أسفل هيرو الرئيسية: فيديو مستخرج من رابط إكس (بدون واجهة التغريدة) بهوية قناة الصحراء مع وصف تحريري.",
+      "docPath": "docs/systems/sahraa-tv-block/SYSTEM.md",
+      "relatedDocs": [],
+      "pathGlobs": [
+        "server/services/sahraaTvBlockService.ts",
+        "server/services/sahraaTvBlockUtils.ts",
+        "server/services/sahraaTvVideoResolver.ts",
+        "server/routes/sahraaTvBlock.ts",
+        "client/src/components/SahraaTvBlock.tsx",
+        "client/src/pages/dashboard/SahraaTvBlockSettings.tsx",
+        "attached_assets/al-sahraa-channel-logo.png",
+        "docs/systems/sahraa-tv-block/**",
+        "tests/unit/sahraaTvBlock.test.ts"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/sahraa-tv-block",
+      "owners": [
+        "editorial",
+        "platform"
+      ],
+      "lastReviewed": "2026-07-30"
     }
   ]
 }
