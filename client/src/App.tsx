@@ -226,8 +226,10 @@ const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/LoyaltyAccou
 const LoyaltyAdminDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAdminDashboard")));
 const LoyaltyPreview = lazy(() => retryImport(() => import("@/pages/LoyaltyPreview")));
 const SabqPlusPreview = lazy(() => retryImport(() => import("@/pages/SabqPlusPreview")));
+const NationalDay96HeaderPreview = lazy(() => retryImport(() => import("@/pages/NationalDay96HeaderPreview")));
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
+const NationalDayBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/NationalDayBlockSettings")));
 const SahraaTvBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/SahraaTvBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
@@ -702,6 +704,7 @@ function Router() {
         <Route path="/about">{() => <LazyRoute component={AboutPage} />}</Route>
         <Route path="/loyalty-preview">{() => <LazyRoute component={LoyaltyPreview} />}</Route>
         <Route path="/plus-preview">{() => <LazyRoute component={SabqPlusPreview} />}</Route>
+        <Route path="/nd96-preview">{() => <LazyRoute component={NationalDay96HeaderPreview} />}</Route>
         <Route path="/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/ar/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/contact">{() => <LazyRoute component={ContactPage} />}</Route>
@@ -967,6 +970,7 @@ function Router() {
         <Route path="/dashboard/loyalty">{() => <Redirect to="/loyalty" />}</Route>
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
+        <Route path="/dashboard/national-day-block">{() => <LazyRoute component={NationalDayBlockSettings} />}</Route>
         <Route path="/dashboard/sahraa-tv-block">{() => <LazyRoute component={SahraaTvBlockSettings} />}</Route>
         <Route path="/settings/:section">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>

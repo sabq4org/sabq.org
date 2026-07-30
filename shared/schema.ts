@@ -5293,6 +5293,29 @@ export const hajjBlockConfig = pgTable("hajj_block_config", {
 
 export type HajjBlockConfig = typeof hajjBlockConfig.$inferSelect;
 
+// بلوك «اليوم الوطني الـ96» في الرئيسية — singleton على نمط بلوك الحج تمامًا:
+// جمع تلقائي بالكلمات المفتاحية + تثبيت يدوي، ونافذة موسم ميلادية يضبطها
+// المحررون من اللوحة. المكوّن يخفي نفسه خارج النافذة أو عند التعطيل.
+export const nationalDayBlockConfig = pgTable("national_day_block_config", {
+  id: varchar("id").primaryKey().default("default"), // enforced singleton
+  isActive: boolean("is_active").notNull().default(false),
+  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي الـ96"),
+  subtitle: varchar("subtitle", { length: 160 }),
+  // كلمات الاكتشاف التلقائي — تشمل «عزنا بطبعنا» بالهمزة وبدونها لأن
+  // المطابقة نصية (ilike) لا تطبيعية.
+  keywords: jsonb("keywords").$type<string[]>().notNull()
+    .default(sql`'["اليوم الوطني","العيد الوطني","عزنا بطبعنا","عزّنا بطبعنا"]'::jsonb`),
+  articleLimit: integer("article_limit").notNull().default(3),
+  lookbackHours: integer("lookback_hours").notNull().default(72),
+  seasonStartDate: timestamp("season_start_date"),
+  seasonEndDate: timestamp("season_end_date"),
+  pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type NationalDayBlockConfig = typeof nationalDayBlockConfig.$inferSelect;
+
 // ============================================
 // ENGLISH SMART BLOCKS
 // ============================================

@@ -14,6 +14,8 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/verify-email', '/forgot-password', '/reset-password', '/set-password', '/2fa-verify',
   '/select-interests',
   '/plus-preview',
+  // صفحة معاينة داخلية لهيدر اليوم الوطني الـ96 — اختبار تصميم فقط
+  '/nd96-preview',
   '/profile', '/bookmarks', '/reading-history',
   '/my-follows', '/my-keywords', '/my-votes',
   '/notification-settings', '/recommendation-settings',

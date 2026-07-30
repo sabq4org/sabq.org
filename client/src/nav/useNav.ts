@@ -47,6 +47,7 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
       "themes",
       "templates",
       "hajj_block",
+      "national_day_block",
       "sahraa_tv_block",
     ],
   },

@@ -59,6 +59,7 @@ import {
   Wrench,
   Trophy,
   Moon,
+  Flag,
   Tv,
   Inbox,
   Radar,
@@ -819,6 +820,16 @@ export const navConfig: NavItem[] = [
     labelAr: "بلوك الحج",
     icon: Moon,
     path: "/dashboard/hajj-block",
+    roles: ["admin"],
+  },
+
+  // ===== بلوك اليوم الوطني / National Day 96 Block =====
+  {
+    id: "national_day_block",
+    labelKey: "nav.national_day_block",
+    labelAr: "بلوك اليوم الوطني",
+    icon: Flag,
+    path: "/dashboard/national-day-block",
     roles: ["admin"],
   },
 
