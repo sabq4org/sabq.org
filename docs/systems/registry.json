@@ -804,7 +804,7 @@
       "nameEn": "Al-Sahraa TV Block",
       "status": "active",
       "category": "content",
-      "summary": "بلوك يومي أسفل هيرو الرئيسية: فيديو مستخرج من رابط إكس (بدون واجهة التغريدة) بهوية قناة الصحراء مع وصف تحريري.",
+      "summary": "بلوك يومي أسفل آخر الأخبار على الرئيسية: فيديو مستخرج من رابط إكس (بدون واجهة التغريدة) بهوية قناة الصحراء مع وصف تحريري.",
       "docPath": "docs/systems/sahraa-tv-block/SYSTEM.md",
       "relatedDocs": [],
       "pathGlobs": [
