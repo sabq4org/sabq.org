@@ -29,7 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
-import { Loader2, IdCard, User, UserCheck, Phone, Briefcase, Shield, Key, Eye, EyeOff, Mail } from "lucide-react";
+import { Loader2, IdCard, User, UserCheck, Phone, Briefcase, Shield, Key, Eye, EyeOff, Mail, Lock, Wand2 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ImageUpload } from "@/components/ImageUpload";
 
@@ -111,7 +111,10 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   const { user: currentUser } = useAuth();
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  
+  /** رقم بطاقة وُلِّد داخل هذه الجلسة — يقفل الحقل بلا إعادة تحميل تفقد التعديلات */
+  const [issuedPressId, setIssuedPressId] = useState<string | null>(null);
+  const [generatingPressId, setGeneratingPressId] = useState(false);
+
   // Only system_admin can edit staff emails
   const canEditEmail = hasRole(currentUser, "system_admin");
 
@@ -148,6 +151,36 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
       return;
     }
     resetPasswordMutation.mutate(newPassword);
+  };
+
+  /**
+   * توليد رقم البطاقة من النظام المركزي — يُحفظ في الخادم فوراً (مثل رقم
+   * الهوية: يُصدر مرة ولا يتغير)، ثم يُعرض في الحقل. لا نُبطل الكاش هنا
+   * كي لا تُفقد تعديلات النافذة غير المحفوظة.
+   */
+  const generatePressId = async () => {
+    if (!userId) return;
+    setGeneratingPressId(true);
+    try {
+      const result = await apiRequest<{ pressIdNumber: string; created: boolean }>(
+        `/api/staff-profiles/${userId}/press-id-number`,
+        { method: "POST" },
+      );
+      form.setValue("pressIdNumber", result.pressIdNumber, { shouldDirty: true });
+      setIssuedPressId(result.pressIdNumber);
+      toast({
+        title: result.created ? "تم توليد رقم البطاقة" : "للمنسوب رقم صادر مسبقاً",
+        description: `${result.pressIdNumber} — رقم دائم لا يتغير`,
+      });
+    } catch (error: unknown) {
+      toast({
+        title: "تعذر توليد الرقم",
+        description: error instanceof Error ? error.message : "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingPressId(false);
+    }
   };
 
   const { data: rolesRaw, isLoading: rolesLoading } = useQuery<Role[]>({
@@ -296,6 +329,8 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     if (!open) {
       setNewPassword("");
       setShowPassword(false);
+      setIssuedPressId(null);
+      setGeneratingPressId(false);
     }
   }, [open]);
 
@@ -867,18 +902,49 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
                         <FormField
                           control={form.control}
                           name="pressIdNumber"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>رقم البطاقة الصحفية</FormLabel>
-                              <FormControl>
-                                <Input {...field} value={field.value || ''} placeholder="PRESS-12345" data-testid="input-press-id-number" />
-                              </FormControl>
-                              <FormDescription>
-                                رقم فريد للبطاقة الصحفية
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                          render={({ field }) => {
+                            const locked = Boolean((user?.pressIdNumber || issuedPressId || '').trim());
+                            return (
+                              <FormItem>
+                                <FormLabel>رقم البطاقة الصحفية</FormLabel>
+                                <div className="flex gap-2">
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      value={field.value || ''}
+                                      readOnly={locked}
+                                      dir="ltr"
+                                      className={locked ? 'bg-muted/60 font-mono' : 'font-mono'}
+                                      placeholder="اضغط «توليد»"
+                                      data-testid="input-press-id-number"
+                                    />
+                                  </FormControl>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={generatePressId}
+                                    disabled={locked || generatingPressId}
+                                    data-testid="button-generate-press-id"
+                                  >
+                                    {generatingPressId ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : locked ? (
+                                      <Lock className="h-4 w-4" />
+                                    ) : (
+                                      <Wand2 className="h-4 w-4" />
+                                    )}
+                                    <span>{locked ? 'مُصدر' : 'توليد'}</span>
+                                  </Button>
+                                </div>
+                                <FormDescription>
+                                  {locked
+                                    ? 'رقم دائم للصحفي كرقم الهوية — لا يتغير ولا يُعاد إصداره'
+                                    : 'يُولّده النظام المركزي مرة واحدة (SBQ-PR-0001) ويبقى ثابتاً للصحفي'}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
                         />
                         <FormField
                           control={form.control}

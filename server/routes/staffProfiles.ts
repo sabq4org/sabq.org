@@ -35,6 +35,10 @@ import {
   type StaffDocKind,
   type StaffProfilePatch,
 } from "../services/staffProfileService";
+import {
+  assertPressIdNumberChange,
+  ensurePressIdNumber,
+} from "../services/pressCardNumberService";
 
 const router = Router();
 
@@ -45,6 +49,18 @@ function requirePermission(code: string) {
     const perms = await getUserPermissions(user.id);
     if (perms.includes(code) || perms.includes("*")) return next();
     return res.status(403).json({ message: "لا تملك صلاحية الوصول لملفات المنسوبين" });
+  };
+}
+
+/** أي صلاحية من القائمة تكفي — توليد رقم البطاقة متاح من سطحَي الإدارة:
+ *  ملف المنسوب (staff_profiles.manage) ولوحة المستخدمين (users.update). */
+function requireAnyPermission(codes: string[]) {
+  return async (req: Request, res: Response, next: () => void) => {
+    const user = req.user as { id: string } | undefined;
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const perms = await getUserPermissions(user.id);
+    if (perms.includes("*") || codes.some((code) => perms.includes(code))) return next();
+    return res.status(403).json({ message: "لا تملك صلاحية إصدار رقم البطاقة الصحفية" });
   };
 }
 
@@ -365,9 +381,17 @@ router.put(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" });
       }
+      const patch = { ...parsed.data } as StaffProfilePatch & { pressIdNumber?: unknown };
+      // رقم البطاقة دائم: يُقبل أول إدخال، ويُتجاهل الإرسال المطابق/الفارغ،
+      // وتُرفض أي محاولة استبدال (الفورم يقفل الحقل، وهذه بوابة الخادم).
+      const pressIdCheck = await assertPressIdNumberChange(req.params.userId, patch.pressIdNumber);
+      if (!pressIdCheck.ok) return res.status(400).json({ message: pressIdCheck.message });
+      if (pressIdCheck.value === undefined) delete patch.pressIdNumber;
+      else patch.pressIdNumber = pressIdCheck.value ?? undefined;
+
       const result = await upsertStaffProfile(
         req.params.userId,
-        parsed.data as StaffProfilePatch,
+        patch as StaffProfilePatch,
         (req.user as { id: string }).id,
       );
       if (!result.success) return res.status(404).json({ message: result.message });
@@ -376,6 +400,28 @@ router.put(
       console.error("[StaffProfiles] upsert error:", error);
       const message = error instanceof Error ? error.message : "تعذر حفظ الملف";
       res.status(500).json({ message });
+    }
+  },
+);
+
+/**
+ * توليد رقم البطاقة الصحفية مركزياً — SBQ-PR-#### مشتق من الرقم الوظيفي.
+ * idempotent: من له رقم يُعاد رقمه نفسه بلا تغيير (created=false).
+ */
+router.post(
+  "/api/staff-profiles/:userId/press-id-number",
+  requireAnyPermission(["staff_profiles.manage", "users.update"]),
+  async (req: Request, res: Response) => {
+    try {
+      const result = await ensurePressIdNumber(
+        req.params.userId,
+        (req.user as { id: string }).id,
+      );
+      if (!result.success) return res.status(400).json({ message: result.message });
+      res.json(result);
+    } catch (error) {
+      console.error("[StaffProfiles] press-id-number error:", error);
+      res.status(500).json({ message: "تعذر توليد رقم البطاقة الصحفية" });
     }
   },
 );
