@@ -185,7 +185,7 @@ export async function getStaffIdentity(userId: string): Promise<Omit<MeetingIden
     .where(eq(users.id, userId))
     .limit(1);
   if (!row) return null;
-  const name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim() || row.email;
+  const name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim() || row.email || "بدون اسم";
   return {
     identity: row.id,
     name,
@@ -1019,7 +1019,7 @@ export async function getMeetingRsvps(meeting: Meeting): Promise<RsvpEntry[]> {
     .orderBy(meetingParticipants.rsvpAt);
 
   return rows.map((r) => ({
-    name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email,
+    name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email || "بدون اسم",
     avatarUrl: r.officialPhotoUrl || r.profileImageUrl || null,
     department: r.departmentName || null,
     rsvp: r.rsvp!,
@@ -1317,7 +1317,7 @@ export async function getMeetingFormOptions(): Promise<{
     departments,
     staff: staffRows.map((r) => ({
       userId: r.userId,
-      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email,
+      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email || "بدون اسم",
       avatarUrl: r.officialPhotoUrl || r.profileImageUrl || null,
       department: r.departmentName || null,
     })),

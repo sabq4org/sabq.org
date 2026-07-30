@@ -85,6 +85,7 @@ import sahraaTvBlockRouter from "./sahraaTvBlock";
 import wcNumbersReportRouter from "./wcNumbersReport";
 import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
+import phoneRegistrationRouter from "./phoneRegistration";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -180,4 +181,6 @@ export function registerSplitRoutes(app: Express) {
   app.use(wcNumbersReportRouter);
   app.use(accountSecurityRouter);
   app.use(officialLettersRouter);
+  // إكمال تسجيل عضوية الجوال + استكمال الحسابات القديمة (auth-rbac)
+  app.use(phoneRegistrationRouter);
 }

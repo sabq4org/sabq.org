@@ -77,6 +77,7 @@ import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
+import { validatePassword } from "../utils/passwordPolicy";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
 import { newsImageStorageService } from "../services/newsImageStorageService";
@@ -1113,11 +1114,12 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       lastName = parts.length > 1 ? parts.slice(1).join(" ") : undefined;
     }
 
-    // Validate required fields
-    if (!password || password.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" 
+    // Validate required fields — السياسة الموحدة (8+ وقائمة الكلمات المسربة).
+    const registerPwCheck = validatePassword(password);
+    if (!registerPwCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: registerPwCheck.message
       });
     }
 
@@ -1775,24 +1777,46 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
     let user;
     if (email) {
       [user] = await db
-        .select({ id: users.id, email: users.email })
+        .select({
+          id: users.id,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          authProvider: users.authProvider,
+        })
         .from(users)
-        .where(eq(users.email, email.toLowerCase().trim()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else {
       [user] = await db
-        .select({ id: users.id, email: users.email })
+        .select({
+          id: users.id,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          authProvider: users.authProvider,
+        })
         .from(users)
         .where(eq(users.phoneNumber, phone.trim()))
         .limit(1);
     }
 
-    // Always return success to prevent enumeration attacks
-    if (!user) {
-      return res.json({ 
-        success: true, 
-        message: "إذا كان الحساب موجوداً، سيتم إرسال رمز استعادة كلمة المرور" 
-      });
+    // استجابة واحدة لكل الفروع — لا كشف لوجود الحساب ولا لحالة بريده.
+    const genericResponse = {
+      success: true,
+      message: "إذا كان الحساب موجوداً، سيتم إرسال رمز استعادة كلمة المرور",
+      emailSent: true,
+    };
+
+    // لا إرسال إلى بريد اصطناعي/مفقود، ولا إلى بريد لم تُثبت ملكيته —
+    // وإلا استطاع مالك صندوق البريد الاستيلاء على حساب جوال أدخل بريده خطأً.
+    // حسابات authProvider=local بريدها هو هويتها التاريخية فتبقى قابلة للاستعادة.
+    const { hasRealEmail } = await import("@shared/authEmail");
+    const emailEligible =
+      user &&
+      hasRealEmail(user.email) &&
+      (user.emailVerified || user.authProvider === "local");
+
+    if (!user || !emailEligible) {
+      return res.json(genericResponse);
     }
 
     // Generate reset token
@@ -1819,13 +1843,7 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
 
     console.log(`[Mobile API] Password reset for ${user.id}, email sent: ${emailSent}`);
 
-    res.json({ 
-      success: true, 
-      message: emailSent 
-        ? "تم إرسال رمز استعادة كلمة المرور إلى بريدك الإلكتروني"
-        : "تم إنشاء رمز استعادة كلمة المرور",
-      emailSent,
-    });
+    res.json(genericResponse);
   } catch (error) {
     console.error("[Mobile API] auth/forgot-password error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
@@ -1847,11 +1865,11 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       });
     }
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" 
-      });
+    // سياسة كلمة المرور الموحدة (server/utils/passwordPolicy) — كان هنا فحص
+    // 6 أحرف يدوي يتجاوز الحد الأدنى المعتمد (8) وقائمة الكلمات المسربة.
+    const resetPwCheck = validatePassword(newPassword);
+    if (!resetPwCheck.ok) {
+      return res.status(400).json({ success: false, message: resetPwCheck.message });
     }
 
     // Find user
@@ -1866,7 +1884,7 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       [user] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.email, email.toLowerCase().trim()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else if (phone) {
       [user] = await db
@@ -1877,9 +1895,10 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
     }
 
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      // نفس رسالة الرمز الخاطئ — 404 «المستخدم غير موجود» كانت كاشفًا لوجود الحسابات.
+      return res.status(400).json({
+        success: false,
+        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية"
       });
     }
 
@@ -2154,10 +2173,11 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       if (!currentIsSynthetic && currentRow?.email?.trim()) {
         // Already has a real email — ignore silently (same spirit as name lock).
       } else if (nextEmail !== currentRow?.email?.trim().toLowerCase()) {
+        // فرادة غير حساسة لحالة الأحرف — تطابق فهرس users_email_lower_unique.
         const [taken] = await db
           .select({ id: users.id })
           .from(users)
-          .where(eq(users.email, nextEmail))
+          .where(sql`lower(${users.email}) = ${nextEmail}`)
           .limit(1);
         if (taken && taken.id !== session.userId) {
           return res.status(409).json({
@@ -2178,6 +2198,15 @@ router.put("/members/profile", async (req: Request, res: Response) => {
 
     if (Object.keys(updates).length > 0) {
       await db.update(users).set(updates).where(eq(users.id, session.userId));
+    }
+
+    // بريد جديد (بديل الاصطناعي/المفقود) → أرسل رابط التحقق فورًا؛ يبقى
+    // unverified حتى ينجح الرابط. الإرسال لا يعطّل حفظ الملف.
+    if (typeof updates.email === "string" && updates.email) {
+      const { sendVerificationEmail } = await import("../services/email");
+      sendVerificationEmail(session.userId, updates.email).catch((err) =>
+        console.error("[Mobile API] profile email verification send failed:", err),
+      );
     }
 
     // Return the freshly-updated user row so the iOS APIClient can replace
@@ -2408,10 +2437,11 @@ router.post("/members/change-password", async (req: Request, res: Response) => {
       });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" 
+    const changePwCheck = validatePassword(newPassword);
+    if (!changePwCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: changePwCheck.message
       });
     }
 

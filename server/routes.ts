@@ -21,7 +21,7 @@ import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
-import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
+import { normalizePhone, findExistingPhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
@@ -887,7 +887,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
 
       // Send verification email
-      const emailResult = await sendVerificationEmail(newUser.id, newUser.email);
+      const emailResult = await sendVerificationEmail(newUser.id, email.toLowerCase());
       
       if (!emailResult.success) {
         console.warn("⚠️  Failed to send verification email:", emailResult.error);
@@ -951,8 +951,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const check = await varaVerifyOtp(e164, code);
       if (!check.valid) return res.status(401).json({ message: check.message });
 
-      const result = await findOrCreatePhoneUser(e164);
+      const result = await findExistingPhoneUser(e164);
       if (!result.ok) return res.status(result.status).json({ message: result.message });
+
+      // رقم جديد: لا يُنشأ حساب هنا (ولا بريد اصطناعي). نصدر تذكرة إثبات قصيرة
+      // العمر أحادية الاستخدام، والواجهة تعرض نموذج إكمال التسجيل
+      // (الاسم + البريد + كلمة المرور) ثم POST /api/auth/phone/complete-registration.
+      if (!result.user) {
+        const { issuePhoneRegistrationTicket } = await import(
+          "./services/phoneRegistrationService"
+        );
+        const registrationToken = await issuePhoneRegistrationTicket(e164);
+        return res.json({
+          registrationRequired: true,
+          registrationToken,
+          phone: e164,
+          message: "تم توثيق رقم جوالك. أكمل بيانات التسجيل لإنشاء حسابك.",
+        });
+      }
 
       // SECURITY: honour 2FA here exactly as /api/login does. Passing the OTP
       // proves control of the phone number, not of the second factor — without
@@ -974,7 +990,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // جلسة كوكيز عبر Passport (نفس نمط /api/register).
-      req.logIn(result.user as any, (err) => {
+      const phoneUser = result.user;
+      req.logIn(phoneUser as any, (err) => {
         if (err) {
           console.error("❌ phone login session error:", err);
           return res.status(500).json({ message: "تم التحقق ولكن فشل تسجيل الدخول" });
@@ -982,11 +999,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.json({
           message: "تم تسجيل الدخول عبر الجوال",
           user: {
-            id: result.user.id,
-            email: result.user.email,
-            firstName: result.user.firstName,
-            lastName: result.user.lastName,
-            phone: result.user.phoneNumber,
+            id: phoneUser.id,
+            email: phoneUser.email,
+            firstName: phoneUser.firstName,
+            lastName: phoneUser.lastName,
+            phone: phoneUser.phoneNumber,
           },
         });
       });
@@ -1030,7 +1047,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Resend Verification Email
-  app.post("/api/auth/resend-verification", isAuthenticated, async (req, res) => {
+  app.post("/api/auth/resend-verification", isAuthenticated, authLimiter, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
@@ -1053,25 +1070,36 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Forgot Password - Request reset token
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
-      if (!email) {
+      if (!email || typeof email !== "string") {
         return res.status(400).json({ message: "البريد الإلكتروني مطلوب" });
       }
 
-      // Check if user exists
+      // Check if user exists (فرادة البريد غير حساسة لحالة الأحرف)
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.email, email.toLowerCase()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
 
+      // الاستعادة عبر البريد تتطلب بريدًا حقيقيًا مُثبت الملكية:
+      // - لا إرسال إلى بريد اصطناعي تاريخي @phone.sabq.org (صندوق غير موجود).
+      // - حساب جوال/OAuth ببريد غير موثق لا يُستعاد عبره — وإلا استولى مالك
+      //   الصندوق على حساب أُدخل بريده خطأً. استعادة حسابات الجوال تتم بدخول OTP.
+      // - حسابات authProvider=local بريدها هويتها التاريخية فتبقى قابلة للاستعادة.
+      const { hasRealEmail } = await import("@shared/authEmail");
+      const emailEligible =
+        user &&
+        hasRealEmail(user.email) &&
+        (user.emailVerified || user.authProvider === "local");
+
       // Always return success to prevent email enumeration
-      if (!user) {
-        return res.json({ 
-          message: "إذا كان البريد الإلكتروني مسجلاً، سيتم إرسال رابط إعادة تعيين كلمة المرور" 
+      if (!user || !emailEligible) {
+        return res.json({
+          message: "إذا كان البريد الإلكتروني مسجلاً، سيتم إرسال رابط إعادة تعيين كلمة المرور"
         });
       }
 
@@ -1124,7 +1152,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Reset Password - Set new password with token
-  app.post("/api/auth/reset-password", async (req, res) => {
+  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
     try {
       const { token, password } = req.body;
 
@@ -1483,6 +1511,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         roleLabel,
         permissions: permissionsArray,
         publisherAccount,
+        // للواجهة: حساب جوال بلا كلمة مرور يُطلب منه تعيينها في استكمال الملف.
+        hasPassword: Boolean(user.passwordHash),
       };
       memoryCache.set(authUserCacheKey, payload, 60 * 1000);
       res.json(payload);
@@ -4996,12 +5026,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           );
         staffUserIds = staffResults.map(s => s.userId).filter(Boolean) as string[];
         
+        // بحث بالجوال: تاريخيًا كان البريد الاصطناعي p<digits>@phone.sabq.org
+        // يجعل بحث ilike(email) يلتقط الأرقام عرضًا. مع إخفاء الاصطناعي
+        // وحسابات الجوال بلا بريد، نطابق أرقام الجوال صراحةً بأي صيغة إدخال
+        // (05… / 5… / +9665…) عبر تجريد غير الأرقام من الطرفين.
+        const searchDigits = searchTerm.replace(/[^0-9]/g, "");
+        const phoneSearchConditions =
+          searchDigits.length >= 4
+            ? [
+                sql`regexp_replace(coalesce(${users.phoneNumber}, ''), '[^0-9]', '', 'g') LIKE ${'%' + searchDigits + '%'}`,
+              ]
+            : [];
+
         // Combine user search with staff search
         const userSearchConditions = or(
           ilike(users.email, `%${searchTerm}%`),
           ilike(users.firstName, `%${searchTerm}%`),
           ilike(users.lastName, `%${searchTerm}%`),
           sql`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName})) LIKE LOWER(${'%' + searchTerm + '%'})`,
+          ...phoneSearchConditions,
           // Include users found via staff Arabic name search
           ...(staffUserIds.length > 0 ? [inArray(users.id, staffUserIds)] : [])
         );
@@ -5036,6 +5079,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           hasPressCard: users.hasPressCard,
           phoneNumber: users.phoneNumber,
           phoneVerified: users.phoneVerified,
+          // للواجهة: تمييز حسابات الجوال (بريد اصطناعي/مفقود) عن حسابات البريد.
+          authProvider: users.authProvider,
           country: users.country,
           city: users.city,
           gender: users.gender,
@@ -5221,9 +5266,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         const licenseSelectable = !licenseEnforcement || licenseOk;
         return {
           id: u.id,
-          // Prefer staff Arabic name, then full name, then email
-          name: u.staffNameAr || u.staffName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+          // Prefer staff Arabic name, then full name, then email, then phone
+          name: u.staffNameAr || u.staffName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || u.phoneNumber || "عضو جوال",
           email: u.email,
+          authProvider: u.authProvider,
           avatarUrl: u.staffProfileImage || u.profileImageUrl,
           firstName: u.firstName,
           lastName: u.lastName,
@@ -6230,6 +6276,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Process each staff user
       for (const staffUser of staffUsers) {
+        if (!staffUser.email) {
+          // حساب جوال بلا بريد — لا يمكن إرسال بيانات دخول له.
+          results.push({ userId: staffUser.id, email: "", success: false, error: "لا يوجد بريد إلكتروني للحساب" });
+          continue;
+        }
         try {
           // Generate temporary password
           const tempPassword = generateTempPassword(8);
@@ -28598,7 +28649,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
 
       const personalizedGreeting = {
-        userName: user.firstName || user.email.split('@')[0],
+        userName: user.firstName || user.email?.split('@')[0] || "Reader",
         articlesReadToday: uniqueArticlesRead,
         readingTimeMinutes: totalReadingTimeMinutes,
         topCategories,

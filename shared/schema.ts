@@ -584,7 +584,9 @@ export const sessions = pgTable(
 // Users table with email/password authentication
 export const users = pgTable("users", {
   id: varchar("id").primaryKey(), // Keep existing structure - no default
-  email: text("email").notNull().unique(),
+  // nullable منذ 2026-07-31: حسابات الجوال (موبايل v1) تُنشأ بلا بريد بدل البريد
+  // الاصطناعي p<digits>@phone.sabq.org القديم. الفرادة عبر users_email_lower_unique.
+  email: text("email").unique(),
   passwordHash: text("password_hash"), // bcrypt hashed password (optional for OAuth users)
   firstName: text("first_name"),
   lastName: text("last_name"),
@@ -722,6 +724,21 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   used: boolean("used").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// إثبات توثيق الجوال بين نجاح OTP وإكمال بيانات التسجيل (اسم/بريد/كلمة مرور).
+// قصير العمر وأحادي الاستخدام: usedAt يُقفل ذريًا عند إنشاء الحساب، فلا يُنشئ
+// نفس الإثبات أكثر من حساب مهما تكررت الطلبات أو تزامنت.
+export const phoneRegistrationTickets = pgTable("phone_registration_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phoneNumber: text("phone_number").notNull(), // E.164
+  tokenHash: text("token_hash").notNull().unique(), // sha256(hex) — لا يُخزن التوكن الخام
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  usedByUserId: varchar("used_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_phone_reg_tickets_phone").on(table.phoneNumber),
+]);
 
 // News categories (with Smart Categories support)
 export const categories = pgTable("categories", {
@@ -12022,7 +12039,7 @@ export type CorrespondentApplicationWithDetails = CorrespondentApplication & {
     id: string;
     firstName: string | null;
     lastName: string | null;
-    email: string;
+    email: string | null;
   } | null;
   // Role of an existing users row with the same email (null = no account).
   // 'reader' means the applicant already has a reader membership that will be
@@ -12112,7 +12129,7 @@ export type OpinionAuthorApplicationWithDetails = OpinionAuthorApplication & {
     id: string;
     firstName: string | null;
     lastName: string | null;
-    email: string;
+    email: string | null;
   } | null;
 };
 

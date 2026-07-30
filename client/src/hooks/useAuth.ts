@@ -1,10 +1,11 @@
 // Reference: javascript_log_in_with_replit blueprint
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { hasRealEmail } from "@shared/authEmail";
 
 export type User = {
   id: string;
-  email?: string;
+  email?: string | null;
   name?: string;
   role?: string; // Primary role (first role for backward compatibility)
   roles?: string[]; // All user roles from RBAC system
@@ -15,11 +16,29 @@ export type User = {
   authProvider?: string;
   isProfileComplete?: boolean;
   profileImageUrl?: string;
+  emailVerified?: boolean;
+  /** يحسبه /api/auth/user — حسابات الجوال القديمة قد تكون بلا كلمة مرور. */
+  hasPassword?: boolean;
 };
 
 /** هل يحتاج المستخدم إدخال اسم عرض (حسابات الجوال بلا firstName). */
 export function needsDisplayName(user: User | null | undefined): boolean {
   return Boolean(user?.id) && !(user?.firstName ?? "").trim();
+}
+
+/**
+ * هل يحتاج الحساب استكمالًا في /complete-name؟
+ * - اسم العرض مفقود (كل المزودين)، أو
+ * - حساب جوال ببريد اصطناعي تاريخي (@phone.sabq.org) أو بلا بريد، أو
+ * - حساب جوال بلا كلمة مرور.
+ * لا يشمل حسابات OAuth ذات بريد حقيقي — بريدها من مزودها وكلمة المرور ليست وسيلتها.
+ */
+export function needsAccountCompletion(user: User | null | undefined): boolean {
+  if (!user?.id) return false;
+  if (needsDisplayName(user)) return true;
+  if (user.authProvider !== "phone") return false;
+  const emailMissing = !hasRealEmail(user.email);
+  return emailMissing || user.hasPassword === false;
 }
 
 // "*" is a wildcard issued to superuser-equivalent roles (admin,
@@ -155,8 +174,9 @@ export function getHighestRole(user: User | null | undefined): string {
 export function getDefaultRedirectPath(user: User | null | undefined): string {
   if (!user) return '/';
 
-  // قبل أي وجهة: أكمل الاسم إن كان فارغًا (دخول الجوال).
-  if (needsDisplayName(user)) {
+  // قبل أي وجهة: استكمال الحساب (اسم مفقود، أو حساب جوال ببريد اصطناعي/مفقود
+  // أو بلا كلمة مرور — الحسابات القديمة من عهد البريد الوهمي).
+  if (needsAccountCompletion(user)) {
     return '/complete-name';
   }
 

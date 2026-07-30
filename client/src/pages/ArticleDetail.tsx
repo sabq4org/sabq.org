@@ -1018,7 +1018,7 @@ export default function ArticleDetail() {
     ? formatArticleTimestamp(article.publishedAt, { format: 'relative', locale: 'ar' })
     : null;
 
-  const getInitials = useCallback((firstName?: string | null, lastName?: string | null, email?: string) => {
+  const getInitials = useCallback((firstName?: string | null, lastName?: string | null, email?: string | null) => {
     if (firstName && lastName) {
       return `${firstName?.[0]}${lastName?.[0]}`.toUpperCase();
     }

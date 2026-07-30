@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { hasRealEmail } from "@shared/authEmail";
 import { EnglishDashboardLayout } from "@/components/en/EnglishDashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -321,6 +322,15 @@ export default function EnglishUsersPage() {
       header: "Email",
       cell: (info) => {
         const user = info.row.original;
+        // Legacy synthetic @phone.sabq.org addresses (and missing emails) are
+        // not real mailboxes — show a "no email" state and never a verified badge.
+        if (!hasRealEmail(info.getValue())) {
+          return (
+            <span className="text-xs text-muted-foreground" data-testid={`text-email-${user.id}`}>
+              No email added
+            </span>
+          );
+        }
         return (
           <div className="flex items-center gap-2">
             <span data-testid={`text-email-${user.id}`}>{info.getValue()}</span>

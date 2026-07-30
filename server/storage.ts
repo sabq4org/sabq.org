@@ -579,7 +579,7 @@ export interface IStorage {
     phoneVerified?: boolean;
   }, createdBy: string): Promise<{ user: User; temporaryPassword: string }>;
   /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
-  getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined>;
+  getUserByEmailBasic(email: string): Promise<{ id: string; email: string | null; firstName: string | null; lastName: string | null; status: string; role: string } | undefined>;
   getUserRoles(userId: string): Promise<Array<{ id: string; name: string; nameAr: string }>>;
   updateUserRoles(userId: string, roleIds: string[], updatedBy: string, reason?: string): Promise<void>;
   getAllRoles(): Promise<Array<{ id: string; name: string; nameAr: string; description: string | null; isSystem: boolean }>>;
@@ -875,7 +875,7 @@ export interface IStorage {
   getCommentWithArticle(commentId: string): Promise<{
     comment: Comment;
     article: { id: string; title: string; slug: string } | null;
-    user: { id: string; firstName?: string; lastName?: string; email: string } | null;
+    user: { id: string; firstName?: string; lastName?: string; email: string | null } | null;
   } | null>;
   
   // Reaction operations
@@ -1055,7 +1055,7 @@ export interface IStorage {
   // Online moderators operations
   getOnlineModerators(minutesThreshold?: number): Promise<{
     id: string;
-    email: string;
+    email: string | null;
     firstName: string | null;
     lastName: string | null;
     profileImageUrl: string | null;
@@ -3621,7 +3621,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
-  async getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined> {
+  async getUserByEmailBasic(email: string): Promise<{ id: string; email: string | null; firstName: string | null; lastName: string | null; status: string; role: string } | undefined> {
     const [u] = await db
       .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, status: users.status, role: users.role })
       .from(users)
@@ -5883,7 +5883,7 @@ export class DatabaseStorage implements IStorage {
   async getCommentWithArticle(commentId: string): Promise<{
     comment: Comment;
     article: { id: string; title: string; slug: string } | null;
-    user: { id: string; firstName?: string; lastName?: string; email: string } | null;
+    user: { id: string; firstName?: string; lastName?: string; email: string | null } | null;
   } | null> {
     const [result] = await db
       .select({
@@ -5929,7 +5929,7 @@ export class DatabaseStorage implements IStorage {
       id: string;
       firstName?: string;
       lastName?: string;
-      email: string;
+      email: string | null;
       profileImage?: string;
       createdAt: string;
     };
@@ -8875,7 +8875,7 @@ export class DatabaseStorage implements IStorage {
   // Online moderators operations
   async getOnlineModerators(minutesThreshold: number = 15): Promise<{
     id: string;
-    email: string;
+    email: string | null;
     firstName: string | null;
     lastName: string | null;
     profileImageUrl: string | null;
@@ -8939,7 +8939,7 @@ export class DatabaseStorage implements IStorage {
     // Combine and deduplicate by user ID, preferring RBAC role when available
     const moderatorMap = new Map<string, {
       id: string;
-      email: string;
+      email: string | null;
       firstName: string | null;
       lastName: string | null;
       profileImageUrl: string | null;
