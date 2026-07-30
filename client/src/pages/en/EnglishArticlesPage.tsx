@@ -88,7 +88,15 @@ type Category = {
   nameAr?: string;
 };
 
-function SortableRow({ article, children }: { article: Article; children: React.ReactNode }) {
+function SortableRow({
+  article,
+  children,
+  draggable = true,
+}: {
+  article: Article;
+  children: React.ReactNode;
+  draggable?: boolean;
+}) {
   const {
     attributes,
     listeners,
@@ -96,7 +104,7 @@ function SortableRow({ article, children }: { article: Article; children: React.
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: article.id });
+  } = useSortable({ id: article.id, disabled: !draggable });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -111,9 +119,11 @@ function SortableRow({ article, children }: { article: Article; children: React.
       className="border-b border-border hover:bg-muted/30"
       data-testid={`row-en-article-${article.id}`}
     >
-      <td className="py-3 px-2 text-center cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
-        <GripVertical className="h-4 w-4 mx-auto text-muted-foreground" data-testid={`drag-handle-en-${article.id}`} />
-      </td>
+      {draggable && (
+        <td className="py-3 px-2 text-center cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+          <GripVertical className="h-4 w-4 mx-auto text-muted-foreground" data-testid={`drag-handle-en-${article.id}`} />
+        </td>
+      )}
       {children}
     </tr>
   );
@@ -499,11 +509,14 @@ export default function EnglishArticlesPage() {
     setLocation(`/en/dashboard/articles/${article.id}/edit`);
   };
 
+  // Published list is chronological (publishedAt); drag-reorder must not bury new items.
+  const allowDragReorder = activeStatus !== "published";
+
   // Drag end handler
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (!over || active.id === over.id) {
+    if (!allowDragReorder || !over || active.id === over.id) {
       return;
     }
 
@@ -853,7 +866,9 @@ export default function EnglishArticlesPage() {
                 <table className="w-full">
                   <thead className="bg-muted/50 border-b border-border">
                     <tr>
-                      <th className="text-center py-3 px-2 w-10" data-testid="header-en-drag"></th>
+                      {allowDragReorder && (
+                        <th className="text-center py-3 px-2 w-10" data-testid="header-en-drag"></th>
+                      )}
                       <th className="text-center py-3 px-4 w-12">
                         <Checkbox
                           checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
@@ -876,7 +891,7 @@ export default function EnglishArticlesPage() {
                       strategy={verticalListSortingStrategy}
                     >
                       {localArticles.map((article) => (
-                        <SortableRow key={article.id} article={article}>
+                        <SortableRow key={article.id} article={article} draggable={allowDragReorder}>
                           <td className="py-3 px-4 text-center">
                             <Checkbox
                               checked={selectedArticles.has(article.id)}

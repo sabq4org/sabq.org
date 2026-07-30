@@ -14981,17 +14981,18 @@ Respond in valid JSON format only:
       const [countResult] = await countQuery;
       const total = Number(countResult?.count || 0);
 
-      // Match Arabic admin ordering so published/translated pieces surface by date,
-      // not only by drag-and-drop displayOrder + createdAt (which buried new translations).
+      // Published EN dashboard must be chronological (newest first) — same as public
+      // /api/en/articles. Leading with displayOrder buried July translations under
+      // older rows that had been drag-reordered (May/Feb with high displayOrder).
       let orderClauses;
       if (status === "archived") {
-        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.updatedAt), desc(enArticles.createdAt)];
+        orderClauses = [desc(enArticles.updatedAt), desc(enArticles.createdAt)];
       } else if (status === "draft") {
-        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.updatedAt), desc(enArticles.createdAt)];
+        orderClauses = [desc(enArticles.updatedAt), desc(enArticles.createdAt)];
       } else if (status === "scheduled") {
-        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.scheduledAt), desc(enArticles.createdAt)];
+        orderClauses = [desc(enArticles.scheduledAt), desc(enArticles.createdAt)];
       } else {
-        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.publishedAt), desc(enArticles.createdAt)];
+        orderClauses = [desc(enArticles.publishedAt), desc(enArticles.createdAt)];
       }
 
       let query = db
