@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-30 (لوحة مقالات EN: تاريخ النشر، فلتر عاجل/مترجم، مزامنة العاجل من العربية) | المالك: editorial
+> آخر مراجعة: 2026-07-30 (لوحة EN: ترتيب المنشورات بـ publishedAt الأحدث أولاً) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -104,7 +104,7 @@
 - **ملف المراسل العام:** `getReporterProfile` v3 — آخر 5 مقالات فقط + تجميع يومي SQL للسلسلة (لا سحب كل مقالات 90 يوماً) + كاش `CACHE_TTL.MEDIUM` + single-flight + CDN `s-maxage=300`. أُسقط AVG(reading_history) من المسار الحار.
 - **نظرة عامة لبوابة الناشر:** `getPortalOverview` خلف كاش دقيقة `publisher:portal:overview:{id}` مع إبطال عند الإرسال/النشر/الحذف.
 - **محرّر الأخبار الإنجليزية:** الحفظ عبر `/api/en/dashboard/articles` (+ PATCH) بصلاحيات RBAC (`articles.create` / `edit_*`) — مثل الأوردو. المسار القديم `/api/en/articles` كان يرفض بـ `allowedLanguages.includes('en')` (الافتراضي `['ar']` فقط) فيظهر «لا توجد لديك صلاحيات للمحتوى الإنجليزي» حتى للأدمن.
-- **لوحة مقالات EN (`/en/dashboard/articles`):** القائمة ترتّب مثل العربية (`displayOrder` ثم `publishedAt`/`updatedAt` حسب الحالة) — لا `createdAt` وحده. المقاييس تشمل `scheduled`. فلاتر اختيارية: `newsType=breaking|regular` و`translated=true|false` (المصدر في `seoMetadata.sourceArticleId`). الواجهة تعرض تاريخ النشر/الجدولة وشارة Translated. الترجمة من العربية (`POST .../translate-to-english`) تضبط `displayOrder = MAX+1` حتى تظهر أعلى القائمة. تبديل العاجل على المقال العربي يزامن `newsType` للترجمة الإنجليزية المرتبطة.
+- **لوحة مقالات EN (`/en/dashboard/articles`):** المنشورات تُرتَّب زمنياً `publishedAt DESC` (مثل `/api/en/articles` العامة) — **لا** تقدّم `displayOrder` وإلا تُدفن الترجمات الحديثة تحت مقالات قديمة أُعيد سحبها. المسودة/المجدول/الأرشيف بـ`updatedAt`/`scheduledAt`. المقاييس تشمل `scheduled`. فلاتر: `newsType=breaking|regular` و`translated=true|false`. الواجهة تعرض تاريخ النشر وشارة Translated. الترجمة تضبط `displayOrder = MAX+1` (للتوافق). تبديل العاجل على العربي يزامن الترجمة الإنجليزية.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
