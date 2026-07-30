@@ -127,7 +127,12 @@ import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAc
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import { bestEffortWithin } from "./utils/bestEffortDeadline";
-import { getOrBuildSitemapXml } from "./services/sitemapCacheService";
+import { getOrBuildSitemapXml, invalidateSitemapXmlCache } from "./services/sitemapCacheService";
+import {
+  pickEnArticleSlug,
+  resolveEnCategoryId,
+  syncBreakingToArabicSource,
+} from "./services/enArticleTranslationService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
@@ -9120,9 +9125,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           excerpt: articles.excerpt,
           imageUrl: articles.imageUrl,
           thumbnailUrl: articles.thumbnailUrl,
+          imageFocalPoint: articles.imageFocalPoint,
           categoryId: articles.categoryId,
+          reporterId: articles.reporterId,
           articleType: articles.articleType,
           newsType: articles.newsType,
+          isFeatured: articles.isFeatured,
+          englishSlug: articles.englishSlug,
           seo: articles.seo,
           status: articles.status,
         })
@@ -9138,27 +9147,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "يجب أن يكون المقال منشوراً قبل الترجمة" });
       }
 
-      // 3. Get category name for context
-      let categoryNameAr = "";
-      let enCategoryId: string | null = null;
-      if (article.categoryId) {
-        const [cat] = await db
-          .select({ nameAr: categories.nameAr, nameEn: categories.nameEn })
-          .from(categories)
-          .where(eq(categories.id, article.categoryId))
-          .limit(1);
-        if (cat) {
-          categoryNameAr = cat.nameAr;
-          const [enCat] = await db
-            .select({ id: enCategories.id })
-            .from(enCategories)
-            .where(sql`LOWER(${enCategories.name}) = LOWER(${cat.nameEn})`)
-            .limit(1);
-          if (enCat) {
-            enCategoryId = enCat.id;
-          }
-        }
-      }
+      // 3. Map AR category → en_categories (slug / englishSlug / nameEn)
+      const { enCategoryId, categoryNameAr } = await resolveEnCategoryId(article.categoryId);
 
       // 4. Translate using OpenAI with retry
       const { withRetry } = await import("./openai");
@@ -9208,19 +9198,22 @@ Respond in valid JSON format only:
         return JSON.parse(text);
       }, 3, "Translate");
 
-      // 5. Generate unique English slug
+      // 5. Prefer Arabic englishSlug so AR/EN share the same short code (hreflang-safe).
       const { generateEnglishSlug: genSlug } = await import("./utils/slugTransliterator");
-      let englishSlug = genSlug(translated.title);
+      let englishSlug = await pickEnArticleSlug({
+        preferredFromAr: article.englishSlug,
+        fromTitle: genSlug(translated.title),
+      });
 
-      // Handle slug collision
+      // Handle slug collision when falling back to title-derived slug
       const [slugExists] = await db
         .select({ id: enArticles.id })
         .from(enArticles)
-        .where(eq(enArticles.slug, englishSlug))
+        .where(or(eq(enArticles.slug, englishSlug), eq(enArticles.englishSlug, englishSlug)))
         .limit(1);
       if (slugExists) {
         const { nanoid } = await import("nanoid");
-        englishSlug = `${englishSlug}-${nanoid(5)}`;
+        englishSlug = `${genSlug(translated.title)}-${nanoid(5)}`;
       }
 
       // 6. Create the English article as published (always under "Sabq Newspaper" account)
@@ -9236,6 +9229,10 @@ Respond in valid JSON format only:
         .from(enArticles);
       const nextDisplayOrder = (maxOrderRow?.maxOrder || 0) + 1;
 
+      if (!enCategoryId && article.categoryId) {
+        console.warn(`[Translate] EN category missing for AR article ${articleId} — publishing without category`);
+      }
+
       const [newEnArticle] = await db
         .insert(enArticles)
         .values([{
@@ -9246,10 +9243,13 @@ Respond in valid JSON format only:
           content: translated.content,
           excerpt: translated.excerpt || null,
           imageUrl: article.imageUrl,
+          imageFocalPoint: article.imageFocalPoint || null,
           categoryId: enCategoryId,
           authorId: sabqAuthorId,
+          reporterId: article.reporterId || null,
           articleType: article.articleType,
           newsType: article.newsType,
+          isFeatured: article.isFeatured ?? false,
           status: "published",
           publishedAt: new Date(),
           displayOrder: nextDisplayOrder,
@@ -9279,23 +9279,24 @@ Respond in valid JSON format only:
       if (enSlug) {
         notifySearchEngines(enSlug, "en").catch(() => {});
       }
+      const arSlug = article.englishSlug || null;
+      if (arSlug) notifySearchEngines(arSlug, "ar").catch(() => {});
+      invalidatePublishedContent({ reason: "en-translate" });
+      invalidateSitemapXmlCache(["__sitemapEnArticles", "index"]).catch(() => {});
       try {
-        const [arRow] = await db
-          .select({ englishSlug: articles.englishSlug, slug: articles.slug })
-          .from(articles)
-          .where(eq(articles.id, articleId))
-          .limit(1);
-        const arSlug = arRow?.englishSlug || arRow?.slug;
-        if (arSlug) notifySearchEngines(arSlug, "ar").catch(() => {});
+        (app as any).__sitemapNewsCache = null;
       } catch {
         /* best-effort */
       }
-      invalidatePublishedContent({ reason: "en-translate" });
 
       res.json({
         message: "تمت ترجمة المقال ونشره في النسخة الإنجليزية بنجاح",
         enArticleId: newEnArticle.id,
         enArticleTitle: newEnArticle.title,
+        enCategoryId,
+        warning: !enCategoryId && article.categoryId
+          ? "Published without EN category — map categories or run backfill"
+          : undefined,
       });
     } catch (error: any) {
       res.status(500).json(safeErrorPayload(error, "فشلت عملية الترجمة", "translate-article"));
@@ -15470,6 +15471,13 @@ Respond in valid JSON format only:
         })
         .where(eq(enArticles.id, articleId))
         .returning();
+
+      // Keep Arabic source in sync when this EN row is a translation.
+      try {
+        await syncBreakingToArabicSource(updatedArticle, newNewsType);
+      } catch (syncErr) {
+        console.warn(`[Breaking News] Failed to sync AR source for EN ${articleId}:`, syncErr);
+      }
 
       // Log activity
       await logActivity({

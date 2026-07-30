@@ -949,7 +949,15 @@ export default function EnglishArticlesPage() {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-sm">{article.category?.nameEn || article.category?.name || article.category?.nameAr || "-"}</span>
+                            {article.category?.nameEn || article.category?.name || article.category?.nameAr ? (
+                              <span className="text-sm">
+                                {article.category?.nameEn || article.category?.name || article.category?.nameAr}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-amber-700 dark:text-amber-300" data-testid={`uncategorized-en-${article.id}`}>
+                                Uncategorized
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <BreakingSwitch 
