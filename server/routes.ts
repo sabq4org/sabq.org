@@ -24,6 +24,7 @@ import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
+import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
 import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
@@ -5406,20 +5407,33 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (parsed.data.verificationBadge !== undefined) updateData.verificationBadge = parsed.data.verificationBadge;
       
       // Press Card fields (Apple Wallet Digital Press Card)
+      //
+      // رقم البطاقة دائم كرقم الهوية (النظام المركزي في
+      // services/pressCardNumberService): لا يُعدَّل بعد إصداره، ولا
+      // يُمحى عند إطفاء التفعيل — الإطفاء يوقف الإصدار فقط، وإعادة
+      // التفعيل تعيد الرقم نفسه لصاحبه.
+      const pressIdCheck = evaluatePressIdNumberChange(
+        oldUser.pressIdNumber,
+        parsed.data.pressIdNumber,
+      );
+      if (!pressIdCheck.ok) {
+        return res.status(400).json({ message: pressIdCheck.message });
+      }
+      if (pressIdCheck.value !== undefined) updateData.pressIdNumber = pressIdCheck.value;
+
       if (parsed.data.hasPressCard !== undefined) {
         updateData.hasPressCard = parsed.data.hasPressCard;
-        
-        // If press card is disabled, clear all press card data
+
+        // If press card is disabled, clear the card presentation fields
+        // (the permanent press ID number is deliberately preserved)
         if (!parsed.data.hasPressCard) {
           updateData.jobTitle = null;
           updateData.department = null;
-          updateData.pressIdNumber = null;
           updateData.cardValidUntil = null;
         } else {
           // Only update press card fields if press card is enabled
           if (parsed.data.jobTitle !== undefined) updateData.jobTitle = parsed.data.jobTitle ?? null;
           if (parsed.data.department !== undefined) updateData.department = parsed.data.department ?? null;
-          if (parsed.data.pressIdNumber !== undefined) updateData.pressIdNumber = parsed.data.pressIdNumber ?? null;
           if (parsed.data.cardValidUntil !== undefined) {
             if (parsed.data.cardValidUntil) {
               const parsedDate = new Date(parsed.data.cardValidUntil);
@@ -5438,7 +5452,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         // Only allow updating individual fields if press card is currently enabled
         if (parsed.data.jobTitle !== undefined) updateData.jobTitle = parsed.data.jobTitle ?? null;
         if (parsed.data.department !== undefined) updateData.department = parsed.data.department ?? null;
-        if (parsed.data.pressIdNumber !== undefined) updateData.pressIdNumber = parsed.data.pressIdNumber ?? null;
         if (parsed.data.cardValidUntil !== undefined) {
           if (parsed.data.cardValidUntil) {
             const parsedDate = new Date(parsed.data.cardValidUntil);

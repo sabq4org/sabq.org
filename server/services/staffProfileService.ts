@@ -209,7 +209,7 @@ export async function addJobTitle(nameAr: string, nameEn?: string) {
 // الرقم الوظيفي SBQ-0001 — تسلسلي تحت قفل استشاري ضد التوازي
 // ────────────────────────────────────────────────────────────────────
 
-async function generateEmployeeNumber(tx: typeof db): Promise<string> {
+export async function generateEmployeeNumber(tx: typeof db): Promise<string> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('staff-employee-number'))`);
   const [row] = await tx
     .select({ max: sql<string | null>`MAX(${staffProfiles.employeeNumber})` })

@@ -113,6 +113,9 @@ export function StaffProfileForm({
   const [nationalIdInput, setNationalIdInput] = useState("");
   const [revealedId, setRevealedId] = useState<string | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  /** رقم بطاقة وُلِّد في هذه الجلسة — يقفل الحقل بلا إعادة جلب تُفقد التعديلات */
+  const [issuedPressId, setIssuedPressId] = useState<string | null>(null);
+  const [generatingPressId, setGeneratingPressId] = useState(false);
 
   const { data: dataRaw, isLoading } = useQuery({ queryKey: [apiBase] });
   const { data: lookupsRaw } = useQuery({ queryKey: [lookupsKey] });
@@ -236,6 +239,34 @@ export function StaffProfileForm({
     }
   };
 
+  /**
+   * توليد رقم البطاقة مركزياً — يُحفظ في الخادم فوراً (رقم دائم كرقم
+   * الهوية) ثم يظهر في الحقل. بلا إبطال للكاش كي لا تُفقد تعديلات الفورم.
+   */
+  const generatePressId = async () => {
+    setGeneratingPressId(true);
+    try {
+      const result = await apiRequest<{ pressIdNumber: string; created: boolean }>(
+        `/api/staff-profiles/${userId}/press-id-number`,
+        { method: "POST" },
+      );
+      set("pressIdNumber", result.pressIdNumber);
+      setIssuedPressId(result.pressIdNumber);
+      toast({
+        title: result.created ? "تم توليد رقم البطاقة" : "للمنسوب رقم صادر مسبقاً",
+        description: `${result.pressIdNumber} — رقم دائم لا يتغير`,
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "تعذر توليد الرقم",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingPressId(false);
+    }
+  };
+
   const addLookup = async (type: "departments" | "job-titles") => {
     const nameAr = window.prompt(type === "departments" ? "اسم الإدارة الجديدة:" : "المسمى الوظيفي الجديد:");
     if (!nameAr?.trim()) return;
@@ -250,6 +281,11 @@ export function StaffProfileForm({
   if (isLoading || !data) {
     return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
+
+  /** بعد الإصدار يُقفل الرقم — كرقم الهوية (والخادم يرفض التغيير أيضاً) */
+  const pressIdLocked = Boolean(
+    (String(data.profile?.pressIdNumber ?? "").trim() || issuedPressId || "").trim(),
+  );
 
   const reviewStatus = data.profile?.profileReviewStatus ?? "draft";
   const hasOfficialFullName = Boolean(String(data.profile?.officialFullNameAr ?? "").trim());
@@ -492,7 +528,31 @@ export function StaffProfileForm({
             هذه الحقول تغذي بطاقة Apple Wallet الصحفية مباشرة، وتُزامَن تلقائياً مع النظام القديم.
           </p>
           {field("pressIdNumber", "رقم البطاقة الصحفية",
-            <Input className={missingClass("pressIdNumber")} value={String(form.pressIdNumber ?? "")} onChange={(e) => set("pressIdNumber", e.target.value)} />)}
+            <div className="flex gap-2">
+              <Input
+                dir="ltr"
+                className={`font-mono ${pressIdLocked ? "bg-muted/60" : ""} ${missingClass("pressIdNumber")}`}
+                readOnly={pressIdLocked}
+                placeholder="اضغط «توليد»"
+                value={String(form.pressIdNumber ?? "")}
+                onChange={(e) => set("pressIdNumber", e.target.value)}
+                data-testid="input-staff-press-id"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={generatePressId}
+                disabled={pressIdLocked || generatingPressId}
+                data-testid="button-generate-staff-press-id"
+              >
+                {generatingPressId ? <Loader2 className="h-4 w-4 animate-spin" /> : pressIdLocked ? "مُصدر" : "توليد"}
+              </Button>
+            </div>,
+            {
+              hint: pressIdLocked
+                ? "رقم دائم للصحفي كرقم الهوية — لا يتغير"
+                : "يُولّده النظام المركزي من الرقم الوظيفي (SBQ-PR-0001) مرة واحدة",
+            })}
           {field("pressCardValidUntil", "صلاحية البطاقة",
             <DateField value={dateInput(form.pressCardValidUntil)} onChange={(v) => set("pressCardValidUntil", v)} fromYear={new Date().getFullYear()} toYear={new Date().getFullYear() + 6} />)}
           {field("mediaLicenseNumber", "رقم الترخيص المهني",
