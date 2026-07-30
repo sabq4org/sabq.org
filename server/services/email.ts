@@ -366,6 +366,11 @@ export async function resendVerificationEmail(userId: string): Promise<{ success
       return { success: false, error: 'Email already verified' };
     }
 
+    if (!user.email) {
+      // حسابات الجوال بلا بريد — لا شيء نتحقق منه.
+      return { success: false, error: 'No email on account' };
+    }
+
     // Send new verification email
     return await sendVerificationEmail(userId, user.email);
   } catch (error) {

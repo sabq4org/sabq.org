@@ -324,10 +324,16 @@ async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserR
   return user;
 }
 
-/// يبحث عن مستخدم بهذا الجوال (بأي صيغة) أو يُنشئه (نفس SSO سبق). البريد اصطناعي
-/// فريد مشتقّ من الرقم لأن عمود email هو notNull().unique().
-/// عند تعارض منسوب + قارئ لنفس الرقم: يُعتمد المنسوب وتُلغى عضوية القارئ.
-export async function findOrCreatePhoneUser(e164: string): Promise<PhoneUserResult> {
+export type PhoneLookupResult =
+  | { ok: true; user: typeof users.$inferSelect | null }
+  | { ok: false; status: number; message: string };
+
+/**
+ * يبحث عن حساب قائم بهذا الجوال (بأي صيغة) دون إنشاء أي شيء.
+ * - عند تعارض منسوب + قارئ لنفس الرقم: يُعتمد المنسوب وتُلغى عضوية القارئ.
+ * - `user: null` تعني: لا حساب لهذا الرقم — الويب يبدأ خطوة إكمال التسجيل.
+ */
+export async function findExistingPhoneUser(e164: string): Promise<PhoneLookupResult> {
   let matches = await findUsersByPhone(e164);
 
   if (matches.length === 0) {
@@ -335,66 +341,88 @@ export async function findOrCreatePhoneUser(e164: string): Promise<PhoneUserResu
     if (backfilled) matches = [backfilled];
   }
 
-  if (matches.length > 0) {
-    const annotated = await annotateStaff(matches);
-    const preferred = pickPreferredPhoneUser(annotated);
-    if (!preferred) {
-      return { ok: false, status: 500, message: "تعذّر تحديد الحساب" };
-    }
-
-    if (matches.length > 1) {
-      await retireDuplicateReaderPhoneAccounts(preferred, matches);
-    }
-
-    if (!canUserLogin(preferred)) {
-      return {
-        ok: false,
-        status: 403,
-        message: getUserStatusMessage(preferred) || "لا يمكنك تسجيل الدخول بسبب حالة حسابك",
-      };
-    }
-
-    const updates: Partial<typeof users.$inferInsert> = {};
-    if (!preferred.phoneVerified) updates.phoneVerified = true;
-    if (normalizePhone(preferred.phoneNumber) !== e164) updates.phoneNumber = e164;
-
-    if (Object.keys(updates).length > 0) {
-      const [updated] = await db
-        .update(users)
-        .set(updates)
-        .where(eq(users.id, preferred.id))
-        .returning();
-      return { ok: true, user: updated };
-    }
-    return { ok: true, user: preferred };
+  if (matches.length === 0) {
+    return { ok: true, user: null };
   }
 
-  // رقم جديد فعلاً → عضوية قارئ بالجوال.
-  const digits = e164.replace(/\D/g, "");
-  const syntheticEmail = `p${digits}@phone.sabq.org`;
+  const annotated = await annotateStaff(matches);
+  const preferred = pickPreferredPhoneUser(annotated);
+  if (!preferred) {
+    return { ok: false, status: 500, message: "تعذّر تحديد الحساب" };
+  }
+
+  if (matches.length > 1) {
+    await retireDuplicateReaderPhoneAccounts(preferred, matches);
+  }
+
+  if (!canUserLogin(preferred)) {
+    return {
+      ok: false,
+      status: 403,
+      message: getUserStatusMessage(preferred) || "لا يمكنك تسجيل الدخول بسبب حالة حسابك",
+    };
+  }
+
+  const updates: Partial<typeof users.$inferInsert> = {};
+  if (!preferred.phoneVerified) updates.phoneVerified = true;
+  if (normalizePhone(preferred.phoneNumber) !== e164) updates.phoneNumber = e164;
+
+  if (Object.keys(updates).length > 0) {
+    const [updated] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, preferred.id))
+      .returning();
+    return { ok: true, user: updated };
+  }
+  return { ok: true, user: preferred };
+}
+
+/// يبحث عن مستخدم بهذا الجوال أو يُنشئه — مسار الموبايل v1 فقط: النسخ المنتشرة من
+/// التطبيقات تتوقع token+user في نفس استجابة verify، فلا يمكن تأجيل الإنشاء.
+/// السجل المبكر يُنشأ بحالة onboarding صريحة: email فارغ (لا بريد اصطناعي — أُلغي
+/// نمط p<digits>@phone.sabq.org في 2026-07-31)، وبريد غير موثق، وملف غير مكتمل.
+/// الويب لا يستدعي هذا — يستخدم findExistingPhoneUser + تدفق إكمال التسجيل.
+export async function findOrCreatePhoneUser(e164: string): Promise<PhoneUserResult> {
+  const existing = await findExistingPhoneUser(e164);
+  if (!existing.ok) return existing;
+  if (existing.user) return { ok: true, user: existing.user };
+
+  // رقم جديد فعلاً → عضوية قارئ بالجوال في حالة onboarding.
+  // قفل استشاري + إعادة فحص داخل المعاملة: تاريخيًا كانت فرادة البريد الاصطناعي
+  // تمنع (عرضًا) طلبين متزامنين من إنشاء حسابين لنفس الرقم؛ مع email فارغ
+  // يجب منع السباق صراحةً.
   const { nanoid } = await import("nanoid");
-  const [created] = await db
-    .insert(users)
-    .values({
-      id: nanoid(),
-      email: syntheticEmail,
-      phoneNumber: e164,
-      role: "reader",
-      authProvider: "phone",
-      phoneVerified: true,
-      emailVerified: false,
-      status: "active",
-      isProfileComplete: false,
-    })
-    .returning();
+  const created = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"phone-reg:" + e164}))`);
+    const [raced] = await tx
+      .select()
+      .from(users)
+      .where(and(phoneMatchSql(users.phoneNumber, e164), ne(users.status, "deleted")))
+      .limit(1);
+    if (raced) return raced;
+
+    const [inserted] = await tx
+      .insert(users)
+      .values({
+        id: nanoid(),
+        email: null,
+        phoneNumber: e164,
+        role: "reader",
+        authProvider: "phone",
+        phoneVerified: true,
+        emailVerified: false,
+        status: "active",
+        isProfileComplete: false,
+      })
+      .returning();
+    return inserted;
+  });
   return { ok: true, user: created };
 }
 
-/// بريد اصطناعي لحسابات الدخول بالجوال — ليس بريد المستخدم الحقيقي.
-export function isSyntheticPhoneEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  return email.trim().toLowerCase().endsWith("@phone.sabq.org");
-}
+// البريد الاصطناعي التاريخي — القاعدة الآن في shared/authEmail (مشتركة مع الواجهات).
+export { isSyntheticPhoneEmail } from "@shared/authEmail";
 
 /**
  * يرفض تعيين جوال مستخدم مسبقاً (تسجيل / تحديث ملف / إنشاء مستخدم إداري).

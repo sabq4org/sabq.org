@@ -34,7 +34,7 @@ export interface ProvisionResult {
   ok: boolean;
   alreadyProvisioned?: boolean;
   angle?: Angle;
-  user?: { id: string; email: string };
+  user?: { id: string; email: string | null };
   isNewUser?: boolean;
   emailSent?: boolean;
   emailError?: string;

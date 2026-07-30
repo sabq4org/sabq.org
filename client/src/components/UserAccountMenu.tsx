@@ -32,7 +32,7 @@ type LoyaltySummary = {
 
 type MenuUser = {
   name?: string | null;
-  email?: string;
+  email?: string | null;
   role?: string;
   profileImageUrl?: string | null;
   permissions?: string[];

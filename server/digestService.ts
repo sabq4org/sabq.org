@@ -205,9 +205,9 @@ export async function generateDailyDigest(userId: string): Promise<DailyDigest |
       0
     );
 
-    const userName = user.firstName 
+    const userName = user.firstName
       ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}`
-      : user.email;
+      : user.email || "قارئ سبق";
 
     const digest: DailyDigest = {
       userId,

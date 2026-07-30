@@ -295,12 +295,16 @@ router.post(
       });
 
       // Send approval email notification (non-blocking)
-      sendCorrespondentApprovalEmail(
-        result.user.email,
-        result.application.arabicName || "",
-        result.application.englishName || "",
-        result.temporaryPassword,
-      ).catch((err) => console.error("Failed to send correspondent approval email:", err));
+      // حساب المراسل يُنشأ من بريد الطلب — الحارس هنا لإرضاء nullability فقط.
+      const approvalEmail = result.user.email || result.application.email;
+      if (approvalEmail) {
+        sendCorrespondentApprovalEmail(
+          approvalEmail,
+          result.application.arabicName || "",
+          result.application.englishName || "",
+          result.temporaryPassword,
+        ).catch((err) => console.error("Failed to send correspondent approval email:", err));
+      }
 
       res.json({
         message: result.existingAccountUpgraded

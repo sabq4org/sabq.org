@@ -23,6 +23,22 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+// إكمال تسجيل رقم جوال جديد بعد نجاح OTP — يطابق سياسة الخادم.
+const phoneRegisterSchema = z
+  .object({
+    firstName: z.string().trim().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").max(60),
+    lastName: z.string().trim().max(60).optional().or(z.literal("")),
+    email: z.string().trim().email("البريد الإلكتروني غير صحيح"),
+    password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل").max(128),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "كلمتا المرور غير متطابقتين",
+    path: ["confirmPassword"],
+  });
+
+type PhoneRegisterFormData = z.infer<typeof phoneRegisterSchema>;
+
 export default function Login() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -108,12 +124,20 @@ export default function Login() {
 
   // ===== دخول/تسجيل بالجوال (OTP) =====
   const [authMethod, setAuthMethod] = useState<"phone" | "email">("phone");
-  const [phoneStep, setPhoneStep] = useState<"phone" | "code">("phone");
+  const [phoneStep, setPhoneStep] = useState<"phone" | "code" | "register">("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [resend, setResend] = useState(0);
+  // إثبات توثيق الجوال (قصير العمر، أحادي الاستخدام) لرقم جديد بلا حساب.
+  const [registrationToken, setRegistrationToken] = useState<string | null>(null);
+  const [showRegPassword, setShowRegPassword] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const registerForm = useForm<PhoneRegisterFormData>({
+    resolver: zodResolver(phoneRegisterSchema),
+    defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
+  });
 
   const phoneValid = /^5\d{8}$/.test(phoneNumber);
 
@@ -150,11 +174,63 @@ export default function Login() {
     if (code.length !== 6) return;
     setPhoneLoading(true);
     try {
-      await apiRequest("/api/auth/phone/verify", { method: "POST", body: JSON.stringify({ phone: phoneNumber, code }) });
+      const resp = await apiRequest<{
+        requires2FA?: boolean;
+        registrationRequired?: boolean;
+        registrationToken?: string;
+      }>("/api/auth/phone/verify", { method: "POST", body: JSON.stringify({ phone: phoneNumber, code }) });
+
+      // حساب قائم محمي بـ2FA — نفس مسار الدخول بالبريد.
+      if (resp?.requires2FA) {
+        setPhoneLoading(false);
+        toast({ title: "التحقق بخطوتين", description: "أدخل رمز التحقق لإكمال الدخول" });
+        navigate("/2fa-verify");
+        return;
+      }
+
+      // رقم جديد: الجوال موثق ولا حساب بعد — ننتقل لنموذج إكمال التسجيل.
+      if (resp?.registrationRequired && resp.registrationToken) {
+        setRegistrationToken(resp.registrationToken);
+        setPhoneStep("register");
+        setPhoneLoading(false);
+        return;
+      }
+
       await completeLogin("phone");
     } catch (error: any) {
       toast({ title: "فشل التحقق", description: error.message || "الرمز غير صحيح أو منتهي", variant: "destructive" });
       setPhoneLoading(false);
+    }
+  };
+
+  // إنشاء الحساب النهائي بعد توثيق الجوال — لا حساب (ولا بريد وهمي) قبل هذه الخطوة.
+  const submitPhoneRegistration = async (data: PhoneRegisterFormData) => {
+    if (!registrationToken) return;
+    setPhoneLoading(true);
+    try {
+      await apiRequest("/api/auth/phone/complete-registration", {
+        method: "POST",
+        body: JSON.stringify({
+          registrationToken,
+          firstName: data.firstName,
+          lastName: data.lastName || undefined,
+          email: data.email,
+          password: data.password,
+          confirmPassword: data.confirmPassword,
+        }),
+      });
+      toast({ title: "تم إنشاء حسابك", description: "أرسلنا رابط تحقق إلى بريدك الإلكتروني" });
+      await completeLogin("phone");
+    } catch (error: any) {
+      setPhoneLoading(false);
+      const message: string = error?.message || "تعذّر إكمال التسجيل";
+      // انتهاء صلاحية الإثبات أو استهلاكه — يلزم إعادة التحقق من الرقم.
+      if (message.includes("انتهت صلاحية")) {
+        setRegistrationToken(null);
+        setPhoneStep("phone");
+        setOtp("");
+      }
+      toast({ title: "تعذّر إكمال التسجيل", description: message, variant: "destructive" });
     }
   };
 
@@ -182,6 +258,7 @@ export default function Login() {
   };
 
   const showingOtp = authMethod === "phone" && phoneStep === "code";
+  const showingRegister = authMethod === "phone" && phoneStep === "register";
 
   return (
     <AuthLayout
@@ -209,10 +286,12 @@ export default function Login() {
     >
       <div className="mb-6 text-center">
         <h1 className="text-xl font-bold text-foreground sm:text-2xl">
-          {showingOtp ? "رمز التحقق" : "تسجيل الدخول"}
+          {showingRegister ? "أكمل تسجيلك" : showingOtp ? "رمز التحقق" : "تسجيل الدخول"}
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {showingOtp
+          {showingRegister
+            ? "تم توثيق جوالك — نحتاج اسمك وبريدك وكلمة مرور لإنشاء حسابك."
+            : showingOtp
             ? "أدخل الرمز المكوّن من 6 أرقام"
             : authMethod === "phone"
               ? "رقم جوالك يكفي — سنرسل لك رمز تحقق."
@@ -221,7 +300,105 @@ export default function Login() {
       </div>
 
       {authMethod === "phone" ? (
-        phoneStep === "phone" ? (
+        phoneStep === "register" ? (
+          <Form {...registerForm}>
+            <form onSubmit={registerForm.handleSubmit(submitPhoneRegistration)} className="space-y-4">
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-center text-sm" dir="ltr">
+                ✓ +966 {phoneNumber}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={registerForm.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>الاسم الأول</FormLabel>
+                      <FormControl>
+                        <Input {...field} autoComplete="given-name" placeholder="أحمد" disabled={phoneLoading} data-testid="input-reg-firstName" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={registerForm.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>العائلة (اختياري)</FormLabel>
+                      <FormControl>
+                        <Input {...field} autoComplete="family-name" placeholder="العتيبي" disabled={phoneLoading} data-testid="input-reg-lastName" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={registerForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>البريد الإلكتروني</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="email" dir="ltr" autoComplete="email" placeholder="example@email.com" disabled={phoneLoading} data-testid="input-reg-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={registerForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>كلمة المرور</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          {...field}
+                          type={showRegPassword ? "text" : "password"}
+                          dir="ltr"
+                          autoComplete="new-password"
+                          placeholder="••••••••"
+                          disabled={phoneLoading}
+                          data-testid="input-reg-password"
+                          className="pl-11"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegPassword(!showRegPassword)}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label={showRegPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        >
+                          {showRegPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={registerForm.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>تأكيد كلمة المرور</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="password" dir="ltr" autoComplete="new-password" placeholder="••••••••" disabled={phoneLoading} data-testid="input-reg-confirmPassword" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" disabled={phoneLoading} className="min-h-11 w-full text-base font-medium" data-testid="button-complete-registration">
+                {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                إنشاء الحساب
+              </Button>
+            </form>
+          </Form>
+        ) : phoneStep === "phone" ? (
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-right text-sm font-medium">رقم الجوال</label>
@@ -369,7 +546,7 @@ export default function Login() {
         </Form>
       )}
 
-      {!showingOtp && (
+      {!showingOtp && !showingRegister && (
         <>
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">

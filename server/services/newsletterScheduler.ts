@@ -444,9 +444,9 @@ class NewsletterScheduler {
       // Send email notifications to admins (if any transactional provider is configured)
       if (process.env.MAILERSEND_API_KEY || process.env.SENDGRID_API_KEY) {
         const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'https://sabq.org';
-        const emailPromises = adminUsers.map(admin =>
+        const emailPromises = adminUsers.filter(admin => admin.email).map(admin =>
           sendEmailNotification({
-            to: admin.email,
+            to: admin.email!,
             subject: notificationTitle,
             text: notificationBody,
             html: `

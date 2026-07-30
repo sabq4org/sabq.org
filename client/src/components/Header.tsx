@@ -41,7 +41,7 @@ import { SearchDialog } from "./SearchDialog";
 import { getMobileToolsItems } from "@/nav/accountMenuItems";
 
 interface HeaderProps {
-  user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
+  user?: { name?: string | null; email?: string | null; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
   onMenuClick?: () => void;
   /** افتراضيًا الهيدر لاصق أعلى الصفحة. صفحات معيّنة (مثل لوحة المباريات) تعطّله
    *  ليُمرَّر طبيعيًا ويختفي عند النزول مُفسحًا المجال لشريط فلاتر لاصق وحده. */
@@ -91,7 +91,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     }
   };
 
-  const getInitials = (name?: string, email?: string) => {
+  const getInitials = (name?: string, email?: string | null) => {
     if (name) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }

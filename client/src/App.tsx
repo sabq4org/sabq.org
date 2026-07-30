@@ -14,7 +14,7 @@ import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "reac
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
-import { needsDisplayName, useAuth } from "@/hooks/useAuth";
+import { needsAccountCompletion, useAuth } from "@/hooks/useAuth";
 import {
   consumePostAuthReturn,
   peekPostAuthReturn,
@@ -61,7 +61,7 @@ function PostAuthResumeGuard() {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user) return;
-    if (needsDisplayName(user) || user.isProfileComplete === false) return;
+    if (needsAccountCompletion(user) || user.isProfileComplete === false) return;
     const pending = peekPostAuthReturn();
     if (!pending) return;
 
@@ -79,14 +79,15 @@ function PostAuthResumeGuard() {
   return null;
 }
 
-/** حسابات الجوال بلا اسم — توجيه إلزامي لشاشة إكمال الاسم (جلسات قديمة وجديدة). */
+/** حسابات الجوال الناقصة (اسم مفقود، بريد اصطناعي/مفقود، أو بلا كلمة مرور) —
+ *  توجيه إلزامي لشاشة استكمال الحساب (جلسات قديمة وجديدة). */
 function NameCompletionGuard() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user) return;
-    if (!needsDisplayName(user)) return;
+    if (!needsAccountCompletion(user)) return;
 
     const path = location.split("?")[0] || "/";
     const exempt =

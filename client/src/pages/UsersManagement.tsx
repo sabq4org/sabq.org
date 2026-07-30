@@ -68,6 +68,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { adminUpdateUserSchema } from "@shared/schema";
+import { hasRealEmail, isSyntheticPhoneEmail } from "@shared/authEmail";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddUserDialog } from "@/components/AddUserDialog";
 import { EditUserDialog } from "@/components/EditUserDialog";
@@ -140,8 +141,28 @@ function adminUserLabel(user: {
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
   if (name) return name;
   if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
-  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  if (isSyntheticPhoneEmail(user.email)) return "عضو جوال";
   return "بدون اسم";
+}
+
+/** خلية البريد: الاصطناعي التاريخي (@phone.sabq.org) والمفقود يظهران «لم يُضف بريد»،
+ *  وعلامة التوثيق لا تظهر إلا لبريد حقيقي مرّ بتحقق فعلي. */
+function EmailCell({ email, emailVerified }: { email?: string | null; emailVerified?: boolean }) {
+  if (!hasRealEmail(email)) {
+    return (
+      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+        لم يُضف بريد
+      </Badge>
+    );
+  }
+  return (
+    <div className="flex items-start gap-1.5">
+      <span className="text-sm break-all">{email}</span>
+      {emailVerified && (
+        <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-label="بريد موثق" />
+      )}
+    </div>
+  );
 }
 
 // Role type
@@ -732,12 +753,7 @@ export default function UsersManagement() {
                           </div>
                         </td>
                         <td className="py-3 px-4 align-top" data-testid={`text-email-${user.id}`}>
-                          <div className="flex items-start gap-1.5">
-                            <span className="text-sm break-all">{user.email}</span>
-                            {user.emailVerified && (
-                              <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-label="بريد موثق" />
-                            )}
-                          </div>
+                          <EmailCell email={user.email} emailVerified={user.emailVerified} />
                         </td>
                         <td className="py-3 px-4 hidden md:table-cell align-top" data-testid={`text-phone-${user.id}`}>
                           {user.phoneNumber ? (
@@ -949,7 +965,7 @@ export default function UsersManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف المستخدم "{deletingUser?.email}"؟ سيتم تعيين حالته إلى "محظور".
+              هل أنت متأكد من حذف المستخدم "{deletingUser ? adminUserLabel(deletingUser) : ""}"؟ سيتم تعيين حالته إلى "محظور".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -975,7 +991,7 @@ export default function UsersManagement() {
                 تحذير: هذا الإجراء لا يمكن التراجع عنه!
               </p>
               <p>
-                هل أنت متأكد من حذف المستخدم "{permanentDeletingUser?.email}" نهائياً؟
+                هل أنت متأكد من حذف المستخدم "{permanentDeletingUser ? adminUserLabel(permanentDeletingUser) : ""}" نهائياً؟
               </p>
               <p>
                 سيتم نقل جميع مقالات هذا المستخدم إلى حساب "صحيفة سبق" وحذف بياناته بشكل كامل.
@@ -1118,8 +1134,16 @@ export default function UsersManagement() {
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">البريد</span>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-medium" dir="ltr">{viewingDetails.email}</span>
-                        {viewingDetails.emailVerified && <BadgeCheck className="h-4 w-4 text-emerald-500" />}
+                        {hasRealEmail(viewingDetails.email) ? (
+                          <>
+                            <span className="font-medium" dir="ltr">{viewingDetails.email}</span>
+                            {viewingDetails.emailVerified && (
+                              <BadgeCheck className="h-4 w-4 text-emerald-500" aria-label="بريد موثق" />
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">لم يُضف بريد — الملف غير مكتمل</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">

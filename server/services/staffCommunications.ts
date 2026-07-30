@@ -61,13 +61,13 @@ function convertScheduledTimeToUTC(value: string | Date | null): Date | null {
   return new Date(strValue);
 }
 
-function getUserDisplayName(user: { firstName?: string | null; lastName?: string | null; email: string }): string {
+function getUserDisplayName(user: { firstName?: string | null; lastName?: string | null; email: string | null }): string {
   if (user.firstName && user.lastName) {
     return `${user.firstName} ${user.lastName}`;
   }
   if (user.firstName) return user.firstName;
   if (user.lastName) return user.lastName;
-  return user.email;
+  return user.email || "عضو سبق";
 }
 
 export interface GroupWithMembers extends StaffCommunicationGroup {

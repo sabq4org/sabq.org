@@ -83,7 +83,8 @@ interface PermissionOverride {
 }
 
 const editUserSchema = z.object({
-  email: z.string().email("البريد الإلكتروني غير صحيح"),
+  // حسابات الجوال قد تكون بلا بريد — الفارغ مسموح ولا يُرسل للخادم.
+  email: z.union([z.string().email("البريد الإلكتروني غير صحيح"), z.literal("")]),
   firstName: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل"),
   lastName: z.string().min(2, "اسم العائلة يجب أن يكون حرفين على الأقل"),
   firstNameEn: z.union([z.string().min(2, "English first name must be at least 2 characters"), z.literal("")]).optional(),
@@ -337,7 +338,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   useEffect(() => {
     if (user) {
       form.reset({
-        email: user.email,
+        email: user.email || "",
         firstName: user.firstName,
         lastName: user.lastName,
         firstNameEn: user.firstNameEn || "",
@@ -375,7 +376,8 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
       
       await apiRequest(`/api/admin/users/${userId}`, {
         method: "PATCH",
-        body: JSON.stringify({ ...userData, ...pressCardData, email }),
+        // بريد فارغ (حساب جوال بلا بريد) لا يُرسل — لا نمسح ولا نخترع بريدًا.
+        body: JSON.stringify({ ...userData, ...pressCardData, ...(email ? { email } : {}) }),
       });
 
       if (roleIds && roleIds.length > 0) {

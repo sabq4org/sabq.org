@@ -128,7 +128,7 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
     trackNavClick(item.id, item.path);
   };
 
-  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string) => {
+  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
     if (firstName && lastName) {
       return `${firstName?.[0]}${lastName?.[0]}`.toUpperCase();
     }
