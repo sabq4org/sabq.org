@@ -42,6 +42,7 @@ const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
 const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCupHomeSection"));
 const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
+const SportsPortalStrip = lazyDefault(() => import("@/components/sports/SportsPortalStrip"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
@@ -445,6 +446,15 @@ export default function Home() {
           {/* Hero Section */}
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
+
+        {/* شريط المدخل إلى البوابة الرياضية — الباب الوحيد إلى /sports من الرئيسية.
+            سطر واحد بارتفاع ثابت (فلا يزحزح ما تحته عند وصول البيانات)، ونصّه
+            يتغيّر بسلّم أهمية موصوف داخل المكوّن. */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={<div className="h-12 border-y border-border/60 bg-muted/40" />}>
+            <SportsPortalStrip />
+          </Suspense>
+        </ErrorBoundary>
 
         {/* كأس العالم 2026 على الرئيسية — مخفي 2026-07-20؛ إعادة التفعيل: WorldCupHomeSection تحت الهيرو */}
 
