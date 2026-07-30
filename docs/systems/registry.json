@@ -220,6 +220,8 @@
         "client/src/pages/dashboard/EditorAlertsSettings.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
+        "client/src/pages/en/EnglishArticlesPage.tsx",
+        "client/src/pages/en/EnglishArticleEditor.tsx",
         "client/src/pages/AnnouncementsList.tsx",
         "client/src/pages/AnnouncementEditor.tsx",
         "client/src/pages/AnnouncementDetail.tsx",

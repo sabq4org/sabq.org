@@ -9230,6 +9230,12 @@ Respond in valid JSON format only:
         .where(eq(users.email, "admin@sabq.org"))
         .limit(1);
       const sabqAuthorId = sabqNewspaperUser?.id || userId;
+      // Pin new translations at the top of the EN dashboard (displayOrder leads sort).
+      const [maxOrderRow] = await db
+        .select({ maxOrder: sql<number>`COALESCE(MAX(${enArticles.displayOrder}), 0)::int` })
+        .from(enArticles);
+      const nextDisplayOrder = (maxOrderRow?.maxOrder || 0) + 1;
+
       const [newEnArticle] = await db
         .insert(enArticles)
         .values([{
@@ -9246,6 +9252,7 @@ Respond in valid JSON format only:
           newsType: article.newsType,
           status: "published",
           publishedAt: new Date(),
+          displayOrder: nextDisplayOrder,
           hideFromHomepage: false,
           aiGenerated: true,
           aiSummary: translated.excerpt || null,
@@ -9293,6 +9300,19 @@ Respond in valid JSON format only:
       }
 
       const updatedArticle = await storage.toggleArticleBreaking(articleId, userId);
+
+      // Keep linked EN translation in sync (dashboard EN was stale when only Arabic was toggled).
+      try {
+        await db
+          .update(enArticles)
+          .set({
+            newsType: updatedArticle.newsType,
+            updatedAt: new Date(),
+          })
+          .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`);
+      } catch (syncErr) {
+        console.warn(`[Breaking News] Failed to sync EN translation for ${articleId}:`, syncErr);
+      }
 
       // Log activity
       await logActivity({
@@ -14877,12 +14897,14 @@ Respond in valid JSON format only:
     try {
       const [totalResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles);
       const [publishedResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "published"));
+      const [scheduledResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "scheduled"));
       const [draftResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "draft"));
       const [archivedResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "archived"));
 
       res.json({
         total: totalResult.count || 0,
         published: publishedResult.count || 0,
+        scheduled: scheduledResult.count || 0,
         draft: draftResult.count || 0,
         archived: archivedResult.count || 0,
       });
@@ -14897,7 +14919,7 @@ Respond in valid JSON format only:
   // Get all English articles with filtering (dashboard)
   app.get("/api/en/dashboard/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
-      const { search, status, articleType, categoryId, authorId, featured, page = "1", limit = "30" } = req.query;
+      const { search, status, articleType, categoryId, authorId, featured, newsType, translated, page = "1", limit = "30" } = req.query;
       const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
       const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
       const offset = (pageNum - 1) * limitNum;
@@ -14939,6 +14961,17 @@ Respond in valid JSON format only:
         whereConditions.push(eq(enArticles.isFeatured, featured === "true"));
       }
 
+      if (newsType && newsType !== "all") {
+        whereConditions.push(eq(enArticles.newsType, newsType as string));
+      }
+
+      // Translated from Arabic: seoMetadata.sourceArticleId is set by translate-to-english
+      if (translated === "true") {
+        whereConditions.push(sql`${enArticles.seoMetadata}->>'sourceArticleId' IS NOT NULL`);
+      } else if (translated === "false") {
+        whereConditions.push(sql`${enArticles.seoMetadata}->>'sourceArticleId' IS NULL`);
+      }
+
       const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
       let countQuery = db.select({ count: sql<number>`count(*)` }).from(enArticles).$dynamic();
@@ -14947,6 +14980,19 @@ Respond in valid JSON format only:
       }
       const [countResult] = await countQuery;
       const total = Number(countResult?.count || 0);
+
+      // Match Arabic admin ordering so published/translated pieces surface by date,
+      // not only by drag-and-drop displayOrder + createdAt (which buried new translations).
+      let orderClauses;
+      if (status === "archived") {
+        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.updatedAt), desc(enArticles.createdAt)];
+      } else if (status === "draft") {
+        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.updatedAt), desc(enArticles.createdAt)];
+      } else if (status === "scheduled") {
+        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.scheduledAt), desc(enArticles.createdAt)];
+      } else {
+        orderClauses = [desc(enArticles.displayOrder), desc(enArticles.publishedAt), desc(enArticles.createdAt)];
+      }
 
       let query = db
         .select({
@@ -14982,7 +15028,7 @@ Respond in valid JSON format only:
       }
 
       query = query
-        .orderBy(desc(enArticles.displayOrder), desc(enArticles.createdAt))
+        .orderBy(...orderClauses)
         .limit(limitNum)
         .offset(offset);
 
@@ -14993,6 +15039,11 @@ Respond in valid JSON format only:
         category: row.category,
         author: row.reporter || row.author,
         publisher: (row as any).publisher,
+        isTranslated: Boolean(
+          row.article?.seoMetadata &&
+          typeof row.article.seoMetadata === "object" &&
+          (row.article.seoMetadata as { sourceArticleId?: string }).sourceArticleId
+        ),
       }));
 
       res.json({
