@@ -211,6 +211,27 @@ function isInjectablePath(p) {
   return true;
 }
 
+// <html lang/dir> for the localized sections. Both HTML sources declare
+// lang="ar" dir="rtl" — the SPA shell (client/index.html) statically, and the
+// web-next root layout for ALL its routes (the per-locale override is still
+// "Phase 2" there) — so English pages reached crawlers declaring Arabic/RTL.
+// The client already flips document.documentElement at runtime
+// (LanguageContext.tsx), so stamping the served attributes here matches the
+// hydrated state exactly; Arabic paths return null and are never touched.
+// Exported for unit tests (extra exports are ignored by the Pages runtime).
+export function localeAttrsForPath(p) {
+  if (p === "/en" || p.startsWith("/en/")) return { lang: "en", dir: "ltr" };
+  if (p === "/ur" || p.startsWith("/ur/")) return { lang: "ur", dir: "rtl" };
+  return null;
+}
+class HtmlLangSetter {
+  constructor(attrs) { this.attrs = attrs; }
+  element(el) {
+    el.setAttribute("lang", this.attrs.lang);
+    el.setAttribute("dir", this.attrs.dir);
+  }
+}
+
 // Minimal 410 Gone HTML for archived/unpublished articles. Serving 410 (not a
 // 200 + noindex shell) tells Google the URL is permanently gone so it drops it
 // and stops re-crawling — clearing the "Excluded by noindex tag" report and
@@ -955,7 +976,13 @@ export async function onRequest(context) {
       // Only edge-cache a successful HTML render; Next 404/5xx pass through
       // no-store so a transient error is never cached as a 200.
       const ok = ssrRes.status === 200 && isHtml(ssrRes);
-      return deliverHtml(ssrRes, { cacheable: ok });
+      // web-next renders every route with the root layout's lang="ar" dir="rtl";
+      // correct the declared language for the /en|/ur surfaces (crawler-only path).
+      const ssrLocale = ok ? localeAttrsForPath(path) : null;
+      const localized = ssrLocale
+        ? new HTMLRewriter().on("html", new HtmlLangSetter(ssrLocale)).transform(ssrRes)
+        : ssrRes;
+      return deliverHtml(localized, { cacheable: ok });
     } catch (err) {
       console.error("[pages-fn] ssr proxy failed, falling back to SPA shell:", err);
       // fall through to the SPA shell / SEO injection path below
@@ -1019,6 +1046,12 @@ export async function onRequest(context) {
       .on("head", new HeadInjector(buildMetaBlock(meta)));
     if (meta.semanticHtml) {
       rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
+    }
+    // The static SPA shell declares lang="ar" dir="rtl"; fix it for /en|/ur so
+    // the served attributes match the meta locale and the hydrated state.
+    const shellLocale = localeAttrsForPath(path);
+    if (shellLocale) {
+      rewriter = rewriter.on("html", new HtmlLangSetter(shellLocale));
     }
     return deliverHtml(rewriter.transform(shell), { cacheable: injectedCacheable });
   } catch (err) {
