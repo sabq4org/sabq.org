@@ -80,6 +80,7 @@ import surveysRouter from "./surveys";
 import correspondentApplicationsRouter from "./correspondentApplications";
 import publisherPortalRouter from "./publisherPortal";
 import smartBlocksRouter from "./smartBlocks";
+import sahraaTvBlockRouter from "./sahraaTvBlock";
 import wcNumbersReportRouter from "./wcNumbersReport";
 import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
@@ -173,6 +174,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(surveysRouter);
   // Smart Blocks / Homepage Stage — قبل معالجات routes.ts القديمة لنفس المسارات
   app.use(smartBlocksRouter);
+  app.use("/api/sahraa-tv-block", sahraaTvBlockRouter);
   app.use(wcNumbersReportRouter);
   app.use(accountSecurityRouter);
   app.use(officialLettersRouter);
