@@ -25,10 +25,10 @@ interface SahraaConfig {
 
 function emptyConfig(): SahraaConfig {
   return {
-    isActive: false,
+    isActive: true,
     title: "قناة الصحراء",
-    description: "",
-    xPostUrl: "",
+    description: "أحدث مقطع فيديو من قناة الصحراء",
+    xPostUrl: "https://x.com/Sahraachannel/status/2082154114893361183/video/1",
     updatedAt: null,
   };
 }
@@ -165,7 +165,7 @@ export default function SahraaTvBlockSettings() {
                     className="text-left"
                     value={form.xPostUrl}
                     onChange={(e) => setForm({ ...form, xPostUrl: e.target.value })}
-                    placeholder="https://x.com/username/status/1234567890"
+                    placeholder="https://x.com/Sahraachannel/status/…/video/1"
                     data-testid="sahraa-url-input"
                   />
                   <p className="text-xs text-muted-foreground">

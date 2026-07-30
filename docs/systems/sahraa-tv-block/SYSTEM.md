@@ -32,8 +32,9 @@
 
 ## عقود مهمة / Gotchas
 
-1. **الظهور:** `isVisible` فقط عندما `isActive === true` ورابط منشور إكس صالح (`/status/{id}` على `x.com` أو `twitter.com`).
-2. **التضمين:** يُطبَّع الرابط إلى `https://twitter.com/...` لأن `platform.twitter.com/widgets.js` يعتمد نطاق الإكس القديم.
+1. **الظهور:** `isVisible` فقط عندما `isActive === true` ورابط منشور إكس صالح (`/status/{id}` أو `/status/{id}/video/1` على `x.com` أو `twitter.com`).
+2. **التضمين:** يُطبَّع الرابط إلى `https://twitter.com/.../status/{id}` (يُزال `/video/1`) لأن `widgets.js` يعتمد نطاق الإكس القديم ورابط المنشور لا رابط الفيديو المباشر.
+3. **الإطلاق:** إن لم تُحفظ إعدادات بعد، يُعرض المنشور الافتراضي لحساب `@Sahraachannel` (قابل للاستبدال من اللوحة).
 3. **لا جدول جديد:** القيمة JSON في `system_settings` — لا يلزم `db:push`.
 4. **ADR-001:** المنطق في الـ service؛ المسارات لا تستورد `db`.
 5. **الصلاحية:** الكتابة تتطلب `system.manage_settings` (أو أدمن عبر `requirePermission`).

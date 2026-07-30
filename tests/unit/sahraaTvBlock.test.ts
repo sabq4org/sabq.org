@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_SAHRAA_DESCRIPTION,
   DEFAULT_SAHRAA_TITLE,
+  DEFAULT_SAHRAA_X_POST_URL,
   isValidXPostUrl,
   mergeSahraaTvBlockConfig,
   normalizeXPostUrl,
@@ -13,6 +15,14 @@ describe("normalizeXPostUrl", () => {
     expect(normalizeXPostUrl("https://x.com/AlSahraa/status/1234567890123456789")).toBe(
       "https://twitter.com/AlSahraa/status/1234567890123456789",
     );
+  });
+
+  it("accepts /video/1 deep links from X", () => {
+    expect(
+      normalizeXPostUrl(
+        "https://x.com/Sahraachannel/status/2082154114893361183/video/1",
+      ),
+    ).toBe("https://twitter.com/Sahraachannel/status/2082154114893361183");
   });
 
   it("accepts twitter.com and strips query/hash", () => {
@@ -45,12 +55,12 @@ describe("isValidXPostUrl", () => {
 });
 
 describe("parseSahraaTvBlockConfig", () => {
-  it("applies safe defaults", () => {
+  it("applies launch defaults (Sahraa video visible)", () => {
     expect(parseSahraaTvBlockConfig(null)).toEqual({
-      isActive: false,
+      isActive: true,
       title: DEFAULT_SAHRAA_TITLE,
-      description: "",
-      xPostUrl: "",
+      description: DEFAULT_SAHRAA_DESCRIPTION,
+      xPostUrl: DEFAULT_SAHRAA_X_POST_URL,
       updatedAt: null,
     });
   });

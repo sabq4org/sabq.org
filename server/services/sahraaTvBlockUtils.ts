@@ -6,6 +6,13 @@ export const SAHRAA_TV_BLOCK_KEY = "sahraa_tv_block";
 
 export const DEFAULT_SAHRAA_TITLE = "قناة الصحراء";
 
+/** رابط افتراضي لأول نشر — يُستبدل يومياً من لوحة التحكم */
+export const DEFAULT_SAHRAA_X_POST_URL =
+  "https://x.com/Sahraachannel/status/2082154114893361183/video/1";
+
+export const DEFAULT_SAHRAA_DESCRIPTION =
+  "أحدث مقطع فيديو من قناة الصحراء";
+
 export interface SahraaTvBlockConfig {
   isActive: boolean;
   title: string;
@@ -42,12 +49,26 @@ export function normalizeXPostUrl(raw: unknown): string | null {
     const url = new URL(candidate);
     const host = url.hostname.replace(/^www\./i, "").toLowerCase();
     if (host !== "x.com" && host !== "twitter.com") return null;
-    const m = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d{5,25})\/?/i);
+    // يقبل /status/{id} و/status/{id}/video/1 وغيرها من لواحق إكس
+    const m = url.pathname.match(
+      /^\/([A-Za-z0-9_]{1,15})\/status\/(\d{5,25})(?:\/(?:video|photo)\/\d+)?\/?/i,
+    );
     if (!m) return null;
     return `https://twitter.com/${m[1]}/status/${m[2]}`;
   } catch {
     return null;
   }
+}
+
+/** إعدادات الإطلاق قبل أول حفظ من اللوحة */
+export function defaultSahraaTvBlockConfig(): SahraaTvBlockConfig {
+  return {
+    isActive: true,
+    title: DEFAULT_SAHRAA_TITLE,
+    description: DEFAULT_SAHRAA_DESCRIPTION,
+    xPostUrl: DEFAULT_SAHRAA_X_POST_URL,
+    updatedAt: null,
+  };
 }
 
 export function isValidXPostUrl(raw: unknown): boolean {
@@ -57,24 +78,32 @@ export function isValidXPostUrl(raw: unknown): boolean {
 }
 
 export function parseSahraaTvBlockConfig(value: unknown): SahraaTvBlockConfig {
-  const v = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  if (!value || typeof value !== "object") {
+    return defaultSahraaTvBlockConfig();
+  }
+  const v = value as Record<string, unknown>;
+  const defaults = defaultSahraaTvBlockConfig();
   const title =
     typeof v.title === "string" && v.title.trim()
       ? v.title.trim().slice(0, 80)
-      : DEFAULT_SAHRAA_TITLE;
+      : defaults.title;
   const description =
-    typeof v.description === "string" ? v.description.trim().slice(0, 500) : "";
-  const xPostUrl = typeof v.xPostUrl === "string" ? v.xPostUrl.trim() : "";
+    typeof v.description === "string"
+      ? v.description.trim().slice(0, 500)
+      : defaults.description;
+  const xPostUrl =
+    typeof v.xPostUrl === "string" ? v.xPostUrl.trim() : defaults.xPostUrl;
   const updatedAt =
     typeof v.updatedAt === "string" && Number.isFinite(Date.parse(v.updatedAt))
       ? v.updatedAt
       : null;
 
   return {
-    isActive: v.isActive === true,
+    // قبل أول حفظ: ظاهر. بعد الحفظ: يتبع القيمة المخزّنة (حتى false)
+    isActive: typeof v.isActive === "boolean" ? v.isActive : defaults.isActive,
     title,
     description,
-    xPostUrl,
+    xPostUrl: xPostUrl || defaults.xPostUrl,
     updatedAt,
   };
 }
