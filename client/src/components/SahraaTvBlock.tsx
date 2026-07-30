@@ -19,11 +19,6 @@ export type SahraaTvBlockResponse =
 export function SahraaTvBlock() {
   const { data } = useQuery<SahraaTvBlockResponse>({
     queryKey: ["/api/sahraa-tv-block"],
-    queryFn: async () => {
-      const res = await fetch("/api/sahraa-tv-block");
-      if (!res.ok) return { isVisible: false };
-      return res.json();
-    },
     staleTime: 2 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
   });
