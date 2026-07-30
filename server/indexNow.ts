@@ -42,9 +42,14 @@ if (!INDEXNOW_KEY) {
  * IndexNow wastes the signal — Bing/Yandex have to follow the hop and may
  * skip it. Always submit the final canonical URL.
  */
-export async function pingIndexNow(canonicalSlug: string): Promise<void> {
+export async function pingIndexNow(
+  canonicalSlug: string,
+  locale: 'ar' | 'en' | 'ur' = 'ar',
+): Promise<void> {
   if (!INDEXNOW_KEY) return;
-  const articleUrl = `${BASE_URL}/article/${encodeURIComponent(canonicalSlug)}`;
+  const prefix =
+    locale === 'en' ? '/en/article' : locale === 'ur' ? '/ur/article' : '/article';
+  const articleUrl = `${BASE_URL}${prefix}/${encodeURIComponent(canonicalSlug)}`;
   try {
     const res = await fetch('https://api.indexnow.org/indexnow', {
       method: 'POST',
@@ -83,7 +88,7 @@ export async function notifySearchEngines(
   canonicalSlug: string,
   locale: 'ar' | 'en' | 'ur' = 'ar',
 ): Promise<void> {
-  const tasks: Promise<unknown>[] = [pingIndexNow(canonicalSlug)];
+  const tasks: Promise<unknown>[] = [pingIndexNow(canonicalSlug, locale)];
 
   try {
     const { indexArticle, isGoogleIndexingConfigured } = await import(

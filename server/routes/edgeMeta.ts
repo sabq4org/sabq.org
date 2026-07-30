@@ -468,6 +468,10 @@ function articleMetaPayload(opts: {
   image: string;
   canonical: string;
   englishSlug?: string | null;
+  /** Verified Arabic canonical slug (englishSlug of AR row) for en/ur hreflang. */
+  siblingArSlug?: string | null;
+  /** Verified EN article slug for ar→en hreflang (from en_articles via sourceArticleId). */
+  siblingEnSlug?: string | null;
   slug: string;
   publishedAt?: Date | string | null;
   updatedAt?: Date | string | null;
@@ -495,31 +499,35 @@ function articleMetaPayload(opts: {
   );
   const keywords = (opts.keywords || []).filter(Boolean);
 
-  // hreflang chain — each locale points at its siblings + x-default on Arabic.
-  const arSlug = opts.englishSlug || opts.slug;
+  // hreflang chain — only emit sibling locales when the target URL exists.
+  // EN translations often get a DIFFERENT slug than the Arabic englishSlug
+  // (translate-to-english generates a new slug). Pointing ar↔en at the same
+  // short code produces 404 alternates (e.g. EN nnhfqhq → /article/nnhfqhq
+  // 404 while Arabic lives at /article/7fmewmq) and Google News/Search drops
+  // or delays the cluster. Prefer verified siblingArSlug / siblingEnSlug.
   const hreflang: { lang: string; href: string }[] = [];
   if (opts.lang === "ar") {
     hreflang.push(
       { lang: "ar", href: opts.canonical },
       { lang: "x-default", href: opts.canonical },
     );
-    if (opts.englishSlug) {
-      hreflang.push({ lang: "en", href: `${SITE_URL}/en/article/${opts.englishSlug}` });
+    if (opts.siblingEnSlug) {
+      hreflang.push({ lang: "en", href: `${SITE_URL}/en/article/${opts.siblingEnSlug}` });
     }
   } else if (opts.lang === "en") {
     hreflang.push({ lang: "en", href: opts.canonical });
-    if (arSlug) {
+    if (opts.siblingArSlug) {
       hreflang.push(
-        { lang: "ar", href: `${SITE_URL}/article/${arSlug}` },
-        { lang: "x-default", href: `${SITE_URL}/article/${arSlug}` },
+        { lang: "ar", href: `${SITE_URL}/article/${opts.siblingArSlug}` },
+        { lang: "x-default", href: `${SITE_URL}/article/${opts.siblingArSlug}` },
       );
     }
   } else {
     hreflang.push({ lang: "ur", href: opts.canonical });
-    if (arSlug) {
+    if (opts.siblingArSlug) {
       hreflang.push(
-        { lang: "ar", href: `${SITE_URL}/article/${arSlug}` },
-        { lang: "x-default", href: `${SITE_URL}/article/${arSlug}` },
+        { lang: "ar", href: `${SITE_URL}/article/${opts.siblingArSlug}` },
+        { lang: "x-default", href: `${SITE_URL}/article/${opts.siblingArSlug}` },
       );
     }
   }
@@ -631,7 +639,7 @@ async function fetchArArticle(slug: string) {
   return row || null;
 }
 
-function buildArArticlePayload(
+async function buildArArticlePayload(
   row: NonNullable<Awaited<ReturnType<typeof fetchArArticle>>>,
   slug: string,
   canonical: string,
@@ -668,6 +676,8 @@ function buildArArticlePayload(
       ])
     : undefined;
 
+  const siblingEnSlug = row.id ? await resolveEnSiblingSlug(row.id) : null;
+
   return articleMetaPayload({
     lang: "ar",
     title,
@@ -675,6 +685,7 @@ function buildArArticlePayload(
     image: abs(row.imageUrl),
     canonical,
     englishSlug: row.englishSlug,
+    siblingEnSlug,
     slug,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
@@ -715,6 +726,7 @@ async function fetchEnArticle(slug: string) {
       updatedAt: enArticles.updatedAt,
       status: enArticles.status,
       seo: enArticles.seo,
+      seoMetadata: enArticles.seoMetadata,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
     })
@@ -725,7 +737,52 @@ async function fetchEnArticle(slug: string) {
   return row || null;
 }
 
-function buildEnArticlePayload(
+/** EN translation slug linked via seoMetadata.sourceArticleId. */
+async function resolveEnSiblingSlug(arabicArticleId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ slug: enArticles.slug, englishSlug: enArticles.englishSlug })
+    .from(enArticles)
+    .where(
+      and(
+        eq(enArticles.status, "published"),
+        sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${arabicArticleId}`,
+      ),
+    )
+    .limit(1);
+  return row ? (row.englishSlug || row.slug) : null;
+}
+
+/** Arabic canonical slug for an EN/UR row (via sourceArticleId, else same-slug if live). */
+async function resolveArSiblingSlug(
+  seoMetadata: unknown,
+  fallbackSlug: string,
+): Promise<string | null> {
+  const sourceId =
+    seoMetadata && typeof seoMetadata === "object"
+      ? (seoMetadata as { sourceArticleId?: string }).sourceArticleId
+      : undefined;
+  if (sourceId) {
+    const [row] = await db
+      .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+      .from(articles)
+      .where(and(eq(articles.id, sourceId), eq(articles.status, "published")))
+      .limit(1);
+    if (row) return row.englishSlug || row.slug;
+  }
+  const [row] = await db
+    .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+    .from(articles)
+    .where(
+      and(
+        or(eq(articles.englishSlug, fallbackSlug), eq(articles.slug, fallbackSlug)),
+        eq(articles.status, "published"),
+      ),
+    )
+    .limit(1);
+  return row ? (row.englishSlug || row.slug) : null;
+}
+
+async function buildEnArticlePayload(
   row: NonNullable<Awaited<ReturnType<typeof fetchEnArticle>>>,
   slug: string,
 ) {
@@ -738,13 +795,16 @@ function buildEnArticlePayload(
   const author =
     [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") ||
     ARTICLE_BRAND.en.name;
+  const enCanonicalSlug = row.englishSlug || slug;
+  const siblingArSlug = await resolveArSiblingSlug(row.seoMetadata, enCanonicalSlug);
   return articleMetaPayload({
     lang: "en",
     title,
     description,
     image: abs(row.imageUrl),
-    canonical: `${SITE_URL}/en/article/${row.englishSlug || slug}`,
+    canonical: `${SITE_URL}/en/article/${enCanonicalSlug}`,
     englishSlug: row.englishSlug,
+    siblingArSlug,
     slug,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
@@ -2489,7 +2549,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
       const r = await fetchEnArticle(slug);
       if (r) {
         row = r;
-        meta = buildEnArticlePayload(r, slug);
+        meta = await buildEnArticlePayload(r, slug);
       }
     } else if (lang === "ur") {
       const r = await fetchUrArticle(slug);
@@ -2508,7 +2568,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
           .filter(Boolean)
           .join(" ");
         reporterHref = r.reporterId && reporterName ? `/reporter/${r.reporterId}` : null;
-        meta = buildArArticlePayload(
+        meta = await buildArArticlePayload(
           r,
           slug,
           `${SITE_URL}/article/${r.englishSlug || r.slug}`,

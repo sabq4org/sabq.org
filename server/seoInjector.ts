@@ -348,8 +348,22 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     { lang: 'ar', href: canonicalUrl },
     { lang: 'x-default', href: canonicalUrl },
   ];
-  if (a.englishSlug) {
-    hreflangLinks.push({ lang: 'en', href: `${baseUrl}/en/article/${a.englishSlug}` });
+  // Only link EN when a real translation exists (slug often differs from Arabic englishSlug).
+  const [enSibling] = await db
+    .select({ slug: enArticles.slug, englishSlug: enArticles.englishSlug })
+    .from(enArticles)
+    .where(
+      and(
+        eq(enArticles.status, "published"),
+        sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${a.id}`,
+      ),
+    )
+    .limit(1);
+  if (enSibling) {
+    hreflangLinks.push({
+      lang: 'en',
+      href: `${baseUrl}/en/article/${enSibling.englishSlug || enSibling.slug}`,
+    });
   }
 
   return {
@@ -388,6 +402,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
         publishedAt: enArticles.publishedAt,
         updatedAt: enArticles.updatedAt,
         seo: enArticles.seo,
+        seoMetadata: enArticles.seoMetadata,
         authorId: enArticles.authorId,
         reporterId: enArticles.reporterId,
         authorFirstName: users.firstName,
@@ -470,14 +485,26 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const safeExcerpt = escapeHtml(truncate(a.excerpt || a.aiSummary || '', 300));
   const semanticHtml = `<article style="position:absolute;left:-9999px;"><h1>${safeTitle}</h1>${publishedTime ? `<time datetime="${publishedTime}">${publishedTime}</time>` : ''}<p>${safeExcerpt}</p></article>`;
 
-  const arSlug = a.englishSlug || a.slug;
   const hreflangLinks: Array<{ lang: string; href: string }> = [
     { lang: 'en', href: canonicalUrl },
   ];
-  if (arSlug) {
+  const sourceArticleId =
+    a.seoMetadata && typeof a.seoMetadata === "object"
+      ? (a.seoMetadata as { sourceArticleId?: string }).sourceArticleId
+      : undefined;
+  let siblingArSlug: string | null = null;
+  if (sourceArticleId) {
+    const [arRow] = await db
+      .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+      .from(articles)
+      .where(and(eq(articles.id, sourceArticleId), eq(articles.status, "published")))
+      .limit(1);
+    if (arRow) siblingArSlug = arRow.englishSlug || arRow.slug;
+  }
+  if (siblingArSlug) {
     hreflangLinks.push(
-      { lang: 'ar', href: `${baseUrl}/article/${arSlug}` },
-      { lang: 'x-default', href: `${baseUrl}/article/${arSlug}` },
+      { lang: 'ar', href: `${baseUrl}/article/${siblingArSlug}` },
+      { lang: 'x-default', href: `${baseUrl}/article/${siblingArSlug}` },
     );
   }
 
