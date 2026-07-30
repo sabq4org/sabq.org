@@ -9274,6 +9274,24 @@ Respond in valid JSON format only:
 
       console.log(`[Translate] Article ${articleId} translated to English as ${newEnArticle.id} by user ${userId}`);
 
+      // Notify search engines for the EN URL + refresh AR hreflang cluster.
+      const enSlug = newEnArticle.englishSlug || newEnArticle.slug;
+      if (enSlug) {
+        notifySearchEngines(enSlug, "en").catch(() => {});
+      }
+      try {
+        const [arRow] = await db
+          .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+          .from(articles)
+          .where(eq(articles.id, articleId))
+          .limit(1);
+        const arSlug = arRow?.englishSlug || arRow?.slug;
+        if (arSlug) notifySearchEngines(arSlug, "ar").catch(() => {});
+      } catch {
+        /* best-effort */
+      }
+      invalidatePublishedContent({ reason: "en-translate" });
+
       res.json({
         message: "تمت ترجمة المقال ونشره في النسخة الإنجليزية بنجاح",
         enArticleId: newEnArticle.id,
