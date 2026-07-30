@@ -7,6 +7,7 @@ import { sanitizeArticleHtml } from "./utils/sanitizeHtml";
 import path from "path";
 import fs from "fs/promises";
 import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
+import { withOgImageCacheBust } from "./utils/ogImageUrl";
 
 /**
  * Social Media Crawler Middleware
@@ -159,20 +160,26 @@ async function prepareSocialImage(imageUrl: string): Promise<void> {
   }
 }
 
-function ensureAbsoluteUrl(url: string, baseUrl: string): string {
+function ensureAbsoluteUrl(
+  url: string,
+  baseUrl: string,
+  version?: Date | string | number | null,
+): string {
   if (!url) return `${baseUrl}/icon.png`;
   
+  let absolute: string;
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
+    absolute = url;
+  } else {
+    const parsed = parseObjectStorageUrl(url);
+    if (parsed) {
+      const cleanPath = parsed.storagePath.replace(/\.[^.]+$/, '');
+      absolute = `${baseUrl}/social-image/${cleanPath}.jpg`;
+    } else {
+      absolute = `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+    }
   }
-  
-  const parsed = parseObjectStorageUrl(url);
-  if (parsed) {
-    const cleanPath = parsed.storagePath.replace(/\.[^.]+$/, '');
-    return `${baseUrl}/social-image/${cleanPath}.jpg`;
-  }
-
-  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+  return withOgImageCacheBust(absolute, version);
 }
 
 /**
@@ -186,7 +193,11 @@ function generateArticleHTML(article: any, baseUrl: string): string {
   const seoDescription = seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'اقرأ المزيد';
   // Support both camelCase and snake_case for imageUrl - ensure absolute URL
   const rawImageUrl = article.imageUrl || article.image_url || '';
-  const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
+  const seoImage = ensureAbsoluteUrl(
+    rawImageUrl,
+    baseUrl,
+    article.updatedAt || article.updated_at || article.publishedAt || article.published_at,
+  );
   const articleUrl = `${baseUrl}/article/${article.slug}`;
   
   const safeSeoTitle = escapeHtml(seoTitle);
@@ -257,7 +268,11 @@ function generateOpinionArticleHTML(article: any, baseUrl: string): string {
   const seoDescription = seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'اقرأ مقال الرأي';
   // Support both camelCase and snake_case for imageUrl - ensure absolute URL
   const rawImageUrl = article.imageUrl || article.image_url || '';
-  const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
+  const seoImage = ensureAbsoluteUrl(
+    rawImageUrl,
+    baseUrl,
+    article.updatedAt || article.updated_at || article.publishedAt || article.published_at,
+  );
   const articleUrl = `${baseUrl}/opinion/${article.slug}`;
   
   const safeSeoTitle = escapeHtml(seoTitle);
@@ -770,7 +785,11 @@ function generateEnglishArticleHTML(article: any, baseUrl: string): string {
   const seoTitle = seoData.title || article.title || 'News from Sabq';
   const seoDescription = seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'Read more';
   const rawImageUrl = article.imageUrl || article.image_url || '';
-  const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
+  const seoImage = ensureAbsoluteUrl(
+    rawImageUrl,
+    baseUrl,
+    article.updatedAt || article.updated_at || article.publishedAt || article.published_at,
+  );
   const articleSlug = article.englishSlug || article.slug;
   const articleUrl = `${baseUrl}/en/article/${articleSlug}`;
   
@@ -842,7 +861,11 @@ function generateUrduArticleHTML(article: any, baseUrl: string): string {
   const seoTitle = seoData.title || article.title || 'صبق نیوز سے خبر';
   const seoDescription = seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'مزید پڑھیں';
   const rawImageUrl = article.imageUrl || article.image_url || '';
-  const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
+  const seoImage = ensureAbsoluteUrl(
+    rawImageUrl,
+    baseUrl,
+    article.updatedAt || article.updated_at || article.publishedAt || article.published_at,
+  );
   const articleSlug = article.englishSlug || article.slug;
   const articleUrl = `${baseUrl}/ur/article/${articleSlug}`;
   

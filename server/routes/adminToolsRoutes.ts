@@ -2,12 +2,18 @@ import { Router } from "express";
 import { requireAuth, requirePermission } from "../rbac";
 import {
   createLegacyRedirect,
+  findArticleForSocialPreview,
   findArticleIdBySlug,
   LegacyRedirectConflictError,
   updateArticleViewsBySlug,
   updateAvgReadTimeOverrideBySlug,
   updateCompletionRateOverrideBySlug,
 } from "../services/adminToolsService";
+import {
+  isSocialPreviewRefreshConfigured,
+  refreshArticleSocialPreviews,
+} from "../services/socialPreviewRefresh";
+import { invalidateArticleWrite } from "../services/contentInvalidation";
 
 const router = Router();
 
@@ -149,6 +155,70 @@ router.post(
     } catch (error) {
       console.error("Error updating completion rate:", error);
       res.status(500).json({ message: "فشل في تحديث نسبة الإكمال" });
+    }
+  },
+);
+
+/**
+ * Force-refresh WhatsApp/Facebook link previews for an article.
+ * Purges our CDN first, then asks Meta Graph to re-scrape the public URL(s).
+ */
+router.post(
+  "/api/admin/refresh-social-preview",
+  requireAuth,
+  requirePermission("articles.edit"),
+  async (req, res) => {
+    try {
+      const slug =
+        typeof req.body?.slug === "string"
+          ? req.body.slug.trim()
+          : typeof req.body?.url === "string"
+            ? String(req.body.url)
+                .replace(/^https?:\/\/[^/]+\/(?:en\/|ur\/)?article\//, "")
+                .replace(/[?#].*$/, "")
+                .trim()
+            : "";
+
+      if (!slug) {
+        return res.status(400).json({
+          message: "الرجاء إدخال slug الخبر أو رابطه",
+        });
+      }
+
+      const article = await findArticleForSocialPreview(slug);
+      if (!article) {
+        return res.status(404).json({ message: "الخبر غير موجود" });
+      }
+
+      // Ensure crawlers hit fresh HTML/meta before Meta scrapes.
+      invalidateArticleWrite(article, { reason: "social-preview-refresh" });
+
+      const summary = await refreshArticleSocialPreviews(article);
+
+      res.json({
+        success: summary.success,
+        configured: summary.configured || isSocialPreviewRefreshConfigured(),
+        message: summary.message,
+        article: {
+          id: article.id,
+          title: article.title,
+          slug: article.slug,
+          englishSlug: article.englishSlug,
+          status: article.status,
+          imageUrl: article.imageUrl,
+          locale: article.locale,
+        },
+        results: summary.results,
+        tips: {
+          whatsapp:
+            "واتساب يعتمد على زحف فيسبوك — بعد Scrape Again أعد لصق الرابط في محادثة جديدة",
+          twitter:
+            "تويتر/X لا يوفّر واجهة إعادة زحف عامة؛ جرّب مشاركة الرابط بعد دقائق أو استخدم بطاقة جديدة",
+        },
+      });
+    } catch (error) {
+      console.error("[refresh-social-preview] error:", error);
+      res.status(500).json({ message: "فشل في تحديث معاينة المشاركة" });
     }
   },
 );

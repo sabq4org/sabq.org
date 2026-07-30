@@ -254,3 +254,62 @@ export async function createLegacyRedirect(input: {
 
   return redirect;
 }
+
+export type SocialPreviewArticle = {
+  id: string;
+  title: string;
+  slug: string | null;
+  englishSlug: string | null;
+  status: string | null;
+  imageUrl: string | null;
+  locale: AdminArticleLocale;
+};
+
+/** Lookup used by POST /api/admin/refresh-social-preview. */
+export async function findArticleForSocialPreview(
+  slug: string,
+): Promise<SocialPreviewArticle | null> {
+  const [ar] = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      slug: articles.slug,
+      englishSlug: articles.englishSlug,
+      status: articles.status,
+      imageUrl: articles.imageUrl,
+    })
+    .from(articles)
+    .where(slugWhere(articles, slug))
+    .limit(1);
+  if (ar) return { ...ar, locale: "ar" };
+
+  const [en] = await db
+    .select({
+      id: enArticles.id,
+      title: enArticles.title,
+      slug: enArticles.slug,
+      englishSlug: enArticles.englishSlug,
+      status: enArticles.status,
+      imageUrl: enArticles.imageUrl,
+    })
+    .from(enArticles)
+    .where(slugWhere(enArticles, slug))
+    .limit(1);
+  if (en) return { ...en, locale: "en" };
+
+  const [ur] = await db
+    .select({
+      id: urArticles.id,
+      title: urArticles.title,
+      slug: urArticles.slug,
+      englishSlug: urArticles.englishSlug,
+      status: urArticles.status,
+      imageUrl: urArticles.imageUrl,
+    })
+    .from(urArticles)
+    .where(slugWhere(urArticles, slug))
+    .limit(1);
+  if (ur) return { ...ur, locale: "ur" };
+
+  return null;
+}

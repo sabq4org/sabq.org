@@ -223,6 +223,13 @@ const INTEGRATIONS: IntegrationDef[] = [
     requiredVars: ["INDEXNOW_KEY"],
   },
   {
+    key: "facebook_scrape",
+    name: "تحديث معاينة فيسبوك/واتساب",
+    nameEn: "Facebook/WhatsApp preview scrape",
+    category: "seo",
+    requiredVars: ["FACEBOOK_ACCESS_TOKEN"],
+  },
+  {
     key: "thesports",
     name: "ذا سبورتس (بيانات المباريات)",
     nameEn: "TheSports",

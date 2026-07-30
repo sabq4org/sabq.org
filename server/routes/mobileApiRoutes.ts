@@ -90,6 +90,7 @@ import { autoGenerateImage } from "../services/autoImageGenerationService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import { bufferArticleViewIncrement } from "../services/articleViewCounterService";
 import { invalidateArticleWrite } from "../services/contentInvalidation";
+import { maybeRefreshSocialPreviewOnImageChange } from "../services/socialPreviewRefresh";
 import { notifySearchEngines } from "../indexNow";
 import oauthMobileRouter from "./v1/oauthMobile";
 import { isWorldCupConfigured } from "../services/worldCupService";
@@ -8057,7 +8058,13 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
 
     const id = req.params.id;
     const [existing] = await db
-      .select({ id: articles.id, publishedAt: articles.publishedAt, seo: articles.seo })
+      .select({
+        id: articles.id,
+        publishedAt: articles.publishedAt,
+        seo: articles.seo,
+        imageUrl: articles.imageUrl,
+        status: articles.status,
+      })
       .from(articles)
       .where(eq(articles.id, id))
       .limit(1);
@@ -8129,6 +8136,18 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
     // so crawlers/readers see the change, matching the web PATCH flow.
     const forSeo = await fetchArticleForNotify(id);
     if (forSeo?.status === "published") triggerPublishSeo(forSeo, "mobile-edit");
+    if (typeof updates.imageUrl === "string") {
+      maybeRefreshSocialPreviewOnImageChange(
+        { imageUrl: existing.imageUrl, status: existing.status },
+        {
+          imageUrl: updates.imageUrl,
+          status: forSeo?.status || updates.status || existing.status,
+          slug: forSeo?.slug,
+          englishSlug: forSeo?.englishSlug,
+        },
+        { reason: "mobile-edit-image" },
+      );
+    }
 
     res.json({ success: true, item: await fetchAdminArticleItem(id), article: await fetchAdminArticleDetail(id) });
   } catch (error) {
