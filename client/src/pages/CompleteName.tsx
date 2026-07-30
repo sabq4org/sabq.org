@@ -118,7 +118,9 @@ export default function CompleteName() {
       if (needs.email) body.email = (data.email ?? "").trim();
       if (needs.password && data.password) body.password = data.password;
 
-      return apiRequest<{ emailSent?: boolean }>("/api/auth/complete-profile", {
+      // complete-account وليس complete-profile — الأخير مسار onboarding قديم
+      // (interests.ts) يعيد نجاحًا دون حفظ البريد وكلمة المرور.
+      return apiRequest<{ emailSent?: boolean }>("/api/auth/complete-account", {
         method: "POST",
         body: JSON.stringify(body),
       });

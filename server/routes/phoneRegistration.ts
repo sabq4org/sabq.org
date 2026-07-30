@@ -6,9 +6,11 @@
  *     هنا تُقدَّم بيانات التسجيل (اسم + بريد حقيقي + كلمة مرور) ويُنشأ الحساب
  *     ذريًا بلا أي بريد اصطناعي، ثم تُنشأ الجلسة ويُرسل تحقق البريد.
  *
- *   POST /api/auth/complete-profile
+ *   POST /api/auth/complete-account
  *     استكمال حساب جوال قديم (بريد اصطناعي/مفقود أو بلا كلمة مرور) لمستخدم مسجّل
  *     دخوله. البريد الجديد يبقى غير موثق حتى ينجح رابط التحقق.
+ *     (الاسم ليس complete-profile — ذاك مسار onboarding قديم في interests.ts
+ *     يسجَّل قبلنا في splitRoutesIndex وكان يبتلع الطلبات ويعيد نجاحًا بلا حفظ.)
  *
  * استعلامات Drizzle في services/phoneRegistrationService (ADR-001 — لا db هنا).
  */
@@ -179,7 +181,7 @@ const completeProfileSchema = z.object({
 });
 
 router.post(
-  "/api/auth/complete-profile",
+  "/api/auth/complete-account",
   isAuthenticated,
   registrationLimiter,
   async (req: any, res: Response) => {
