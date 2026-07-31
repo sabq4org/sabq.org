@@ -5,7 +5,12 @@
 import Parser from "rss-parser";
 import type { RadarSource } from "@shared/schema";
 import type { NormalizedRadarItem } from "./repo";
-import { filterFreshItems, parseFeedDate, stripPublisherSuffix } from "./parsing";
+import {
+  filterFreshItems,
+  parseFeedDate,
+  resolveEnvPlaceholders,
+  stripPublisherSuffix,
+} from "./parsing";
 import { filterItemsBySabqInterest, shouldApplyTopicFilter } from "./topicFilter";
 import { fetchXSource } from "./xFetcher";
 
@@ -34,7 +39,7 @@ function cleanText(value: unknown, maxLength: number): string {
 }
 
 async function fetchRss(source: RadarSource): Promise<NormalizedRadarItem[]> {
-  const feed = await rssParser.parseURL(source.url);
+  const feed = await rssParser.parseURL(resolveEnvPlaceholders(source.url, process.env));
   const gnewsLane = isGoogleNewsLane(source);
   const items: NormalizedRadarItem[] = [];
   for (const item of feed.items ?? []) {
@@ -100,7 +105,7 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(source.url, {
+    const response = await fetch(resolveEnvPlaceholders(source.url, process.env), {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
@@ -113,25 +118,46 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
 
     const items: NormalizedRadarItem[] = [];
     for (const raw of rawItems) {
+      // Event Registry يعلّم النسخ المكررة من نفس المادة عبر المصادر — لا نهدر تحليلًا عليها
+      if (raw.isDuplicate === true) continue;
       const title = cleanText(firstString(raw, ["title", "headline", "name"]), 300);
       const link = firstString(raw, ["link", "url", "web_url", "webUrl", "href"]);
       if (!title || !link) continue;
+      // Event Registry: الناشر كائن source بحقل title؛ GDELT: نطاق نصي في domain
+      const sourceObj = raw.source as { title?: unknown; uri?: unknown } | undefined;
+      const nestedPublisher =
+        sourceObj && typeof sourceObj === "object"
+          ? String(sourceObj.title ?? sourceObj.uri ?? "")
+          : "";
       items.push({
         guid: firstString(raw, ["guid", "id", "uuid", "uri"]) || link,
         link,
         title,
+        // body (النص الكامل لدى Event Registry) يعطي المحلل سياقًا أدق — يُقص لـ1200 حرف
         excerpt:
           cleanText(
-            firstString(raw, ["description", "summary", "abstract", "excerpt", "snippet", "lead"]),
+            firstString(raw, ["description", "summary", "abstract", "excerpt", "snippet", "lead", "body"]),
             1200
           ) || undefined,
-        // GDELT: domain هو الناشر (rnz.co.nz) وlanguage لغة المادة الفعلية لا لغة الممر
-        publisher: cleanText(firstString(raw, ["domain", "publisher", "source_name", "sourceName"]), 120) || undefined,
-        language: cleanText(firstString(raw, ["language", "sourcelanguage"]), 30).toLowerCase() || undefined,
+        publisher:
+          cleanText(
+            firstString(raw, ["domain", "publisher", "source_name", "sourceName"]) || nestedPublisher,
+            120
+          ) || undefined,
+        language: cleanText(firstString(raw, ["language", "sourcelanguage", "lang"]), 30).toLowerCase() || undefined,
         imageUrl:
           firstString(raw, ["image", "imageUrl", "image_url", "thumbnail", "urlToImage", "socialimage"]) || undefined,
         publishedAt: parseFeedDate(
-          firstString(raw, ["publishedAt", "published_at", "pubDate", "date", "published", "created_at", "seendate"])
+          firstString(raw, [
+            "publishedAt",
+            "published_at",
+            "pubDate",
+            "dateTime", // Event Registry — قبل date لأن date لديه بدقة اليوم فقط
+            "date",
+            "published",
+            "created_at",
+            "seendate",
+          ])
         ),
       });
     }
