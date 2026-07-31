@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useDmsTopAdsEnabled } from '@/hooks/useDmsTopAdsVisibility';
 
 interface DmsAdSlotProps {
   id: string;
@@ -162,11 +163,20 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
   );
 }
 
+// الليدربورد يُستخدم حصريًا كإعلان أعلى الصفحة (تحت الهيدر)، لذا البوابة
+// داخل المكوّن نفسه: مفتاح «إعلانات DMS أعلى الصفحات» في إعدادات النظام
+// يطفئه في كل الصفحات دفعة واحدة دون تعديل أي صفحة.
 export function DmsLeaderboardAd({ className }: { className?: string }) {
+  const topAdsEnabled = useDmsTopAdsEnabled();
+  if (!topAdsEnabled) return null;
   return <DmsAdSlot id="Leaderboard" type="leaderboard" className={`hidden md:block ${className}`} />;
 }
 
-export function DmsMpuAd({ id = 'MPU', className, lazyLoad = false }: { id?: string; className?: string; lazyLoad?: boolean }) {
+// MPU يظهر أعلى الصفحة (مقابل الليدربورد على الجوال) وداخل المحتوى أيضًا؛
+// topSlot يميّز النسخ العلوية فقط — هي وحدها التي يطفئها مفتاح الإعدادات.
+export function DmsMpuAd({ id = 'MPU', className, lazyLoad = false, topSlot = false }: { id?: string; className?: string; lazyLoad?: boolean; topSlot?: boolean }) {
+  const topAdsEnabled = useDmsTopAdsEnabled();
+  if (topSlot && !topAdsEnabled) return null;
   return <DmsAdSlot id={id} type="mpu" className={`md:hidden ${className}`} lazyLoad={lazyLoad} />;
 }
 

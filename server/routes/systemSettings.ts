@@ -100,6 +100,31 @@ router.post("/api/system/ifox-block-visibility", requireAuth, requirePermission(
   }
 });
 
+// Get DMS top-ads visibility (public - web + apps read it)
+router.get("/api/system/dms-top-ads", async (req, res) => {
+  try {
+    const setting = await storage.getSystemSetting("dms_top_ads_visibility");
+    res.json({ showTopAds: setting?.showTopAds ?? true });
+  } catch (error) {
+    console.error("Error fetching DMS top ads visibility:", error);
+    res.json({ showTopAds: true });
+  }
+});
+
+// Update DMS top-ads visibility (admin only)
+router.post("/api/system/dms-top-ads", requireAuth, requirePermission("system.manage_settings"), async (req: any, res) => {
+  try {
+    const { showTopAds } = req.body;
+
+    await storage.upsertSystemSetting("dms_top_ads_visibility", { showTopAds: !!showTopAds }, "system", true);
+
+    res.json({ success: true, showTopAds: !!showTopAds });
+  } catch (error) {
+    console.error("Error updating DMS top ads visibility:", error);
+    res.status(500).json({ message: "Failed to update DMS top ads visibility" });
+  }
+});
+
 // Tournament home-block settings (world-cup / gulf-cup / asian-cup) —
 // GET public (web + apps read it), POST admin-only. Partial merge so the
 // visibility toggle, the schedule window, and the manual-champion select

@@ -1171,7 +1171,7 @@ export default function ArticleDetail() {
     <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
       <Header user={user} />
 
-      {/* الإعلان البارز أعلى المقال — أُعيد إظهاره 2026-07-09 بطلب المالك. للإخفاء: بدّل SHOW_TOP_AD إلى false. */}
+      {/* الإعلان البارز أعلى المقال — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_AD بقي كقاطع طوارئ في الكود. */}
       {SHOW_TOP_AD && (
         /* DMS Leaderboard Ad - Desktop only */
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
