@@ -16,6 +16,10 @@ export const MEDIA_LICENSE_REQUIRED_MESSAGE =
 export const MEDIA_LICENSE_DASHBOARD_WARNING =
   "مهلة استكمال الترخيص المهني تنتهي بنهاية 31 يوليو. ابتداءً من 1 أغسطس لن تتمكنوا من النشر إذا لم يكن لديكم ترخيص ساري أو كان بحاجة لتحديث.";
 
+/** تنبيه عند رفع الترخيص وبانتظار موافقة مسؤول النظام. */
+export const MEDIA_LICENSE_PENDING_REVIEW_WARNING =
+  "ترخيصك المهني بانتظار موافقة مسؤول النظام بعد الاطلاع على الملف. لن تتمكن من إنشاء خبر أو مقال حتى تتم الموافقة.";
+
 export const MEDIA_LICENSE_REQUIRED_CODE = "MEDIA_LICENSE_REQUIRED";
 
 export function isMediaLicenseEnforcementActive(now: Date = new Date()): boolean {
