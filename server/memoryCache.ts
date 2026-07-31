@@ -513,6 +513,41 @@ export const CACHE_TTL = {
 } as const;
 
 // ============================================================================
+// حواجز single-flight ضد الوعود المسمومة (حادثة VARA 2026-07-31)
+// ============================================================================
+// وعد جلب علّق بلا اكتمال — لا نجاح ولا فشل (استعلام DB بلا مهلة أثناء تعثّر
+// عابر) — بقي في خريطة inflight إلى الأبد، فصار كل طلب جديد ينضم إليه:
+// تعليق أبدي لمفاتيح spl:today/spl:live:all/pro-league حتى إعادة النشر،
+// وكرونا SportsAlerts/Sports Intel عالقان («previous cycle still running»).
+// الحاجزان المتكاملان:
+//   1. سقف انتظار المستدعي (SWR_FETCH_DEADLINE_MS): الطلب يرفض بعده فيتحول
+//      إلى 502 سريع بدل احتجاز المقبس بلا نهاية — الجلب الأصلي لا يُلغى،
+//      فإن نجح متأخرًا ملأ الكاش للطلبات التالية.
+//   2. عمر أقصى للوعد الجاري (SWR_INFLIGHT_MAX_AGE_MS ≥ الأول): بعده يُعدّ
+//      الوعد مسمومًا ويُسقَط من الخريطة، فيبدأ الطالبُ التالي جلبًا جديدًا
+//      بدل الانضمام لوعد ميت — تعافٍ ذاتي بلا redeploy.
+function cacheEnvMs(name: string, fallback: number): number {
+  const value = Number.parseInt((process.env[name] || "").trim(), 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+const FETCH_WAIT_DEADLINE_MS = cacheEnvMs("SWR_FETCH_DEADLINE_MS", 20_000);
+const INFLIGHT_MAX_AGE_MS = cacheEnvMs("SWR_INFLIGHT_MAX_AGE_MS", 45_000);
+
+/** ينتظر الوعد حتى السقف ثم يرفض — دون إلغاء الجلب الأصلي (يظل يملأ الكاش). */
+function awaitWithDeadline<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`[Cache] fetch wait exceeded ${FETCH_WAIT_DEADLINE_MS}ms for ${label}`));
+    }, FETCH_WAIT_DEADLINE_MS);
+    timer.unref?.();
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+// ============================================================================
 // single-flight لـ withCache
 // ============================================================================
 // حادث 2026-07-28: عند بثّ خبر عاجل يُمسح الكاش أولًا ثم يصل ٣٨ ألف جهاز خلال
@@ -522,7 +557,7 @@ export const CACHE_TTL = {
 // (seoInjector، socialCrawler) يمرّون من هنا. نضعها في withCache بدل نقل
 // المفاتيح إلى swrCache: الأخير مثبَّت عند سقفه (5000) ويُخلي باستمرار، بينما
 // memoryCache حول 1500 من 5000 — فالنقل كان سيزيد الطفح لا ينقصه.
-const inflightCacheFetches = new Map<string, Promise<any>>();
+const inflightCacheFetches = new Map<string, { promise: Promise<any>; at: number }>();
 
 // مفاتيح أُبطلت أثناء جلب جارٍ: نتيجة ذلك الجلب قُرئت قبل الإبطال فلا يجوز
 // تخزينها بعده، وإلا بقي المحتوى القديم حيًّا طوال TTL رغم التعديل. الإبطال
@@ -554,9 +589,17 @@ export function withCache<T>(
     return Promise.resolve(cached);
   }
 
-  // جلب واحد فقط جارٍ لكل مفتاح؛ المتنافسون عليه ينتظرون نفس الوعد.
-  const inflight = inflightCacheFetches.get(cacheKey) as Promise<T> | undefined;
-  if (inflight) return inflight;
+  // جلب واحد فقط جارٍ لكل مفتاح؛ المتنافسون عليه ينتظرون نفس الوعد — ما دام
+  // حيًّا: وعد تجاوز عمره السقف دون أن يكتمل مسموم (جلبه علّق بلا مهلة)،
+  // فيُسقَط ليبدأ هذا الطالب جلبًا جديدًا بدل الانضمام لوعد ميت.
+  const inflight = inflightCacheFetches.get(cacheKey);
+  if (inflight) {
+    if (Date.now() - inflight.at <= INFLIGHT_MAX_AGE_MS) {
+      return awaitWithDeadline(inflight.promise as Promise<T>, cacheKey);
+    }
+    inflightCacheFetches.delete(cacheKey);
+    console.warn(`[Cache] dropped a stuck in-flight fetch (>${INFLIGHT_MAX_AGE_MS}ms) for ${cacheKey}`);
+  }
 
   const promise = fetcher().then((data) => {
     // إن أُبطل المفتاح أثناء الجلب فالنتيجة قديمة — تُسلَّم للمنتظرين ولا تُخزَّن.
@@ -565,18 +608,18 @@ export function withCache<T>(
     return data;
   });
 
-  inflightCacheFetches.set(cacheKey, promise);
+  inflightCacheFetches.set(cacheKey, { promise, at: Date.now() });
   // then(cleanup, cleanup) لا finally: الأخيرة تولّد وعدًا مرفوضًا غير معالَج
   // عند فشل الجلب. الفشل لا يلوّث الكاش — لا set في مسار الرفض.
   const cleanup = () => {
-    if (inflightCacheFetches.get(cacheKey) === promise) {
+    if (inflightCacheFetches.get(cacheKey)?.promise === promise) {
       inflightCacheFetches.delete(cacheKey);
     }
     poisonedCacheKeys.delete(cacheKey);
   };
   promise.then(cleanup, cleanup);
 
-  return promise;
+  return awaitWithDeadline(promise, cacheKey);
 }
 
 export function createCachedFetcher<TArgs extends any[], TResult>(
@@ -616,10 +659,13 @@ export class StaleWhileRevalidateCache {
   static readonly _instances: StaleWhileRevalidateCache[] = [];
 
   private cache: Map<string, SWRCacheEntry<any>> = new Map();
-  private refreshing: Set<string> = new Set(); // Track in-flight refreshes
-  // single-flight: وعد الجلب الجاري لكل مفتاح. المتنافسون على نفس المفتاح
-  // ينتظرون نفس الوعد بدل الاستقصاء ثم بدء جلب مكرر بعد 6 ثوانٍ.
-  private inflight: Map<string, Promise<any>> = new Map();
+  // علامة تحديث جارٍ (مفتاح → زمن البدء). بطابع زمني لأن تحديثًا خلفيًا علّق
+  // بلا اكتمال كان يُبقي العلم مرفوعًا للأبد فلا يبدأ أي تحديث لاحق أبدًا.
+  private refreshing: Map<string, number> = new Map();
+  // single-flight: وعد الجلب الجاري لكل مفتاح (+ زمن بدئه). المتنافسون على
+  // نفس المفتاح ينتظرون نفس الوعد بدل الاستقصاء ثم بدء جلب مكرر بعد 6 ثوانٍ.
+  // العمر يحدّ التسمم: وعد لم يكتمل بعد السقف يُسقَط (حادثة 2026-07-31).
+  private inflight: Map<string, { promise: Promise<any>; at: number }> = new Map();
   private readonly maxEntries: number;
   private readonly name: string;
   private lastEvictionLogAt = 0;
@@ -644,7 +690,7 @@ export class StaleWhileRevalidateCache {
     const age = Date.now() - entry.timestamp;
     const isFresh = age <= entry.ttl;
     const isStale = age <= entry.ttl + entry.staleWhileRevalidate;
-    const shouldRefresh = !isFresh && !this.refreshing.has(key);
+    const shouldRefresh = !isFresh && !this.isRefreshing(key);
 
     if (!isStale) {
       // Data is completely expired (beyond stale-while-revalidate window)
@@ -709,20 +755,39 @@ export class StaleWhileRevalidateCache {
   }
 
   markRefreshing(key: string): void {
-    this.refreshing.add(key);
+    this.refreshing.set(key, Date.now());
   }
 
   clearRefreshing(key: string): void {
     this.refreshing.delete(key);
   }
 
+  /** علامة معمّرة (تحديث علّق بلا اكتمال) تُعدّ ساقطة — فلا تمنع تحديثًا جديدًا. */
   isRefreshing(key: string): boolean {
-    return this.refreshing.has(key);
+    const at = this.refreshing.get(key);
+    if (at === undefined) return false;
+    if (Date.now() - at > INFLIGHT_MAX_AGE_MS) {
+      this.refreshing.delete(key);
+      return false;
+    }
+    return true;
   }
 
-  /** الوعد المشترك للجلب الجاري لهذا المفتاح — إن وُجد — وإلا null. */
+  /**
+   * الوعد المشترك للجلب الجاري لهذا المفتاح — إن وُجد وما زال حيًّا — وإلا null.
+   * وعد تجاوز عمره السقف دون اكتمال مسموم (حادثة 2026-07-31: جلب علّق بلا
+   * مهلة فظل كل طلب جديد ينضم إليه للأبد) — يُسقَط ليبدأ الطالب جلبًا جديدًا.
+   */
   getInflight<T>(key: string): Promise<T> | null {
-    return (this.inflight.get(key) as Promise<T> | undefined) ?? null;
+    const entry = this.inflight.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.at > INFLIGHT_MAX_AGE_MS) {
+      this.inflight.delete(key);
+      this.refreshing.delete(key);
+      console.warn(`[Cache] ${this.name}: dropped a stuck in-flight fetch (>${INFLIGHT_MAX_AGE_MS}ms) for ${key}`);
+      return null;
+    }
+    return entry.promise as Promise<T>;
   }
 
   /**
@@ -731,9 +796,9 @@ export class StaleWhileRevalidateCache {
    * غير معالج (unhandled rejection) عند فشل الجلب.
    */
   trackInflight<T>(key: string, promise: Promise<T>): Promise<T> {
-    this.inflight.set(key, promise);
+    this.inflight.set(key, { promise, at: Date.now() });
     const cleanup = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+      if (this.inflight.get(key)?.promise === promise) this.inflight.delete(key);
     };
     promise.then(cleanup, cleanup);
     return promise;
@@ -837,8 +902,8 @@ export async function withSWR<T>(
   // promise so a burst of pulls never stampedes the DB.
   if (forceFresh) {
     const inflight = swrCache.getInflight<T>(cacheKey);
-    if (inflight) return inflight;
-    return startFetch('Force-fresh');
+    if (inflight) return awaitWithDeadline(inflight, cacheKey);
+    return awaitWithDeadline(startFetch('Force-fresh'), cacheKey);
   }
 
   const cached = swrCache.get<T>(cacheKey);
@@ -865,7 +930,9 @@ export async function withSWR<T>(
   }
 
   // No cache - must fetch. نتشارك الوعد الجاري إن وُجد، وإلا نبدأ الجلب الوحيد.
+  // المستدعي مقيّد بسقف انتظار: يرفض بعده (502 سريع بدل احتجاز المقبس) بينما
+  // الجلب نفسه يستمر بالخلفية ويملأ الكاش إن نجح متأخرًا.
   const inflight = swrCache.getInflight<T>(cacheKey);
-  if (inflight) return inflight;
-  return startFetch('Initial');
+  if (inflight) return awaitWithDeadline(inflight, cacheKey);
+  return awaitWithDeadline(startFetch('Initial'), cacheKey);
 }

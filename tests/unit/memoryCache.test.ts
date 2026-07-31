@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MemoryCache, StaleWhileRevalidateCache, withSWR, swrCache } from "../../server/memoryCache";
+import { MemoryCache, StaleWhileRevalidateCache, withSWR, withCache, swrCache } from "../../server/memoryCache";
 
 // Audit M1.1: both caches were unbounded Maps — a flood of unique keys
 // inside one TTL window could OOM the pod. These tests pin the cap contract:
@@ -211,5 +211,87 @@ describe("withSWR — single-flight", () => {
     await expect(p1).resolves.toBe("forced");
     await expect(p2).resolves.toBe("forced");
     expect(calls).toBe(1);
+  });
+});
+
+// حادثة VARA 2026-07-31: جلب علّق بلا اكتمال (استعلام DB بلا مهلة) فبقي وعده
+// في خريطة inflight للأبد، وكل طلب جديد انضم إليه — تعليق أبدي لمفاتيح
+// spl:today/spl:live:all حتى إعادة النشر. هذه الاختبارات تثبّت الحاجزين:
+// سقف انتظار المستدعي (20 ثانية افتراضيًا) وإسقاط الوعد المسموم (45 ثانية).
+describe("withSWR — poisoned in-flight recovery", () => {
+  it("a caller never waits past the deadline on a hung fetch", async () => {
+    vi.useFakeTimers();
+    const key = sfKey();
+    const fetcher = () => new Promise<string>(() => {}); // لا يكتمل أبدًا
+    const p = withSWR(key, 60_000, 60_000, fetcher);
+    const rejection = expect(p).rejects.toThrow(/fetch wait exceeded/);
+    await vi.advanceTimersByTimeAsync(20_100);
+    await rejection;
+  });
+
+  it("a hung fetch poisons the key only until the max age — then a new fetch starts", async () => {
+    vi.useFakeTimers();
+    const key = sfKey();
+    let calls = 0;
+    const fetcher = () => {
+      calls++;
+      if (calls === 1) return new Promise<string>(() => {}); // الجلب الأول يعلّق
+      return Promise.resolve("recovered");
+    };
+    const p1 = withSWR(key, 60_000, 60_000, fetcher);
+    p1.catch(() => {});
+    // منضم أثناء حياة الوعد يتشاركه — لا جلب مكرر
+    const p2 = withSWR(key, 60_000, 60_000, fetcher);
+    p2.catch(() => {});
+    expect(calls).toBe(1);
+    // بعد تجاوز العمر الأقصى يُسقَط الوعد المسموم ويبدأ الطالب جلبًا جديدًا
+    await vi.advanceTimersByTimeAsync(46_000);
+    await expect(withSWR(key, 60_000, 60_000, fetcher)).resolves.toBe("recovered");
+    expect(calls).toBe(2);
+  });
+
+  it("a stuck background refresh stops blocking future refreshes after the max age", async () => {
+    vi.useFakeTimers();
+    const key = sfKey();
+    swrCache.set(key, "stale", 1, 600_000); // يصبح stale فورًا، وصالحًا طويلًا
+    await vi.advanceTimersByTimeAsync(5);
+    let calls = 0;
+    const fetcher = () => {
+      calls++;
+      if (calls === 1) return new Promise<string>(() => {}); // التحديث الأول يعلّق
+      return Promise.resolve("fresh");
+    };
+    await expect(withSWR(key, 1, 600_000, fetcher)).resolves.toBe("stale");
+    expect(calls).toBe(1); // انطلق تحديث خلفي واحد… وعلّق
+    await expect(withSWR(key, 1, 600_000, fetcher)).resolves.toBe("stale");
+    expect(calls).toBe(1); // العلم الحي يمنع تحديثًا مكررًا
+    await vi.advanceTimersByTimeAsync(46_000);
+    await expect(withSWR(key, 1, 600_000, fetcher)).resolves.toBe("stale");
+    expect(calls).toBe(2); // العلم المعمّر سقط — تحديث جديد انطلق فعلًا
+  });
+});
+
+describe("withCache — poisoned in-flight recovery", () => {
+  it("hung fetch: waiter rejects at the deadline and the key self-heals after max age", async () => {
+    vi.useFakeTimers();
+    const key = "test:withcache:poisoned";
+    let calls = 0;
+    const fetcher = () => {
+      calls++;
+      if (calls === 1) return new Promise<string>(() => {}); // الجلب الأول يعلّق
+      return Promise.resolve("recovered");
+    };
+    const p1 = withCache(key, 60_000, fetcher);
+    const rejection = expect(p1).rejects.toThrow(/fetch wait exceeded/);
+    await vi.advanceTimersByTimeAsync(20_100);
+    await rejection;
+    // قبل بلوغ العمر الأقصى: المنضم الجديد ما زال على الوعد الأول
+    const p2 = withCache(key, 60_000, fetcher);
+    p2.catch(() => {});
+    expect(calls).toBe(1);
+    // بعد العمر الأقصى: الوعد المسموم يُسقَط ويبدأ جلب جديد ينجح
+    await vi.advanceTimersByTimeAsync(26_000);
+    await expect(withCache(key, 60_000, fetcher)).resolves.toBe("recovered");
+    expect(calls).toBe(2);
   });
 });
