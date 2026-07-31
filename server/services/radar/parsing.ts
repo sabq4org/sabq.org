@@ -135,6 +135,19 @@ export function parseFeedDate(value: unknown): Date | undefined {
 }
 
 /**
+ * روابط الممرات المدفوعة تحمل مفاتيحها كعنصر نائب {{ENV:VAR}} — المفتاح الحقيقي
+ * يعيش في env فقط، لا في قاعدة البيانات ولا في حزم البذر.
+ * env مفقود = خطأ صريح يظهر في lastError للمصدر بدل جلب فاشل صامت.
+ */
+export function resolveEnvPlaceholders(url: string, env: Record<string, string | undefined>): string {
+  return url.replace(/\{\{ENV:([A-Z0-9_]+)\}\}/g, (_, name: string) => {
+    const value = env[name];
+    if (!value) throw new Error(`RADAR_ENV_MISSING:${name}`);
+    return value;
+  });
+}
+
+/**
  * عناوين Google News تأتي بصيغة «العنوان - الناشر» — نقص اللاحقة فقط عند
  * مطابقتها اسم الناشر حرفيًا (لا قصّ أعمى: العناوين قد تحوي شرطات مشروعة).
  */
