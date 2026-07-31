@@ -135,7 +135,7 @@
     },
     {
       "name": "NewsAPI.ai — السعودية (كيان، كل اللغات)",
-      "url": "https://eventregistry.org/api/v1/article/getArticles?action=getArticles&conceptUri=http%3A%2F%2Fen.wikipedia.org%2Fwiki%2FSaudi_Arabia&articlesSortBy=date&articlesCount=50&resultType=articles&apiKey={{ENV:NEWSAPI_AI_KEY}}",
+      "url": "https://eventregistry.org/api/v1/article/getArticles?action=getArticles&conceptUri=http%3A%2F%2Fen.wikipedia.org%2Fwiki%2FSaudi_Arabia&articlesSortBy=date&articlesCount=100&resultType=articles&apiKey={{ENV:NEWSAPI_AI_KEY}}",
       "type": "json",
       "language": "en",
       "tier": "A",
@@ -165,7 +165,7 @@
     }
   ],
   "notes": [
-    "ممر NewsAPI.ai (Event Registry) يبحث بكيان «السعودية» لا بالكلمة — يلتقط كل اللغات. مفتاحه عنصر نائب {{ENV:NEWSAPI_AI_KEY}} يُستبدل من env وقت الجلب؛ غيابه يظهر كخطأ صريح على المصدر. كل جلبة = توكن واحد؛ فترة 60 دقيقة ≈ 24 توكن/يوم (الباقة التجريبية 2000).",
+    "ممر NewsAPI.ai (Event Registry) يبحث بكيان «السعودية» لا بالكلمة — يلتقط كل اللغات. مفتاحه عنصر نائب {{ENV:NEWSAPI_AI_KEY}} يُستبدل من env وقت الجلب؛ غيابه يظهر كخطأ صريح على المصدر. محاسبة التوكنز: بحث المقالات الحديثة = توكن واحد حتى 100 مقال (لذا articlesCount=100)؛ فترة 60 دقيقة ≈ 24 توكن/يوم ضمن سقف المجاني (500/يوم، 2000 إجمالًا لا تتجدد). خطة 5K ($90/شهر = 5000 بحث) تسمح بالنزول لفترة 10-15 دقيقة.",
     "ممرات Google News بمنطقة saudi عمدًا: الاستعلام نفسه يحصر النتائج بالسعودية، وفلتر الكلمات (إنجليزي/عربي) كان سيُسقط العناوين اليابانية والروسية وغيرها.",
     "ممرا GDELT بمنطقة global عمدًا: GDELT يطابق نص المقال كاملًا لا العنوان، ففلتر الكلمات على العنوان يقص ضجيج الذكر العابر.",
     "التكرار بين الممرات يمنعه فلتر بصمة العنوان في insertItems خلال نافذة RADAR_DEDUP_WINDOW_HOURS (48 ساعة افتراضًا)."
