@@ -3,8 +3,10 @@
 /**
  * قفل إيقاف إجباري للرادار — يغلب RADAR_ENABLED وأي تشغيل يدوي/آلي.
  * غيّره إلى false فقط عند إعادة تفعيل الرصد عن قصد في الكود.
+ * أُعيد التفعيل 2026-07-31 بقرار المالك مع إطلاق ممرات «عين على السعودية»
+ * (كان مقفلًا منذ ~2026-07-19 ضمن حملة خفض الصرف).
  */
-export const RADAR_FORCE_DISABLED = true;
+export const RADAR_FORCE_DISABLED = false;
 
 export function isRadarForceDisabled(): boolean {
   return RADAR_FORCE_DISABLED;
