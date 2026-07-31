@@ -30,12 +30,14 @@ import {
   Bell,
   ToggleRight,
   Trophy,
+  PanelTop,
   Loader2
 } from "lucide-react";
 import {
   useTournamentBlockSettings,
   type TournamentBlockSlug,
 } from "@/hooks/useTournamentBlockSettings";
+import { useDmsTopAdsVisibility } from "@/hooks/useDmsTopAdsVisibility";
 
 interface CelebrationModeState {
   enabled: boolean;
@@ -282,6 +284,7 @@ function TournamentBlockCard({
 export default function SystemSettings() {
   const { toast } = useToast();
   const wcBlock = useTournamentBlockSettings("world-cup");
+  const dmsTopAds = useDmsTopAdsVisibility();
 
   const { data: announcement, isLoading } = useQuery<AnnouncementData>({
     queryKey: ["/api/system/announcement"],
@@ -524,6 +527,24 @@ export default function SystemSettings() {
               iconColor="text-cyan-600 dark:text-cyan-300"
               iconBg="bg-cyan-100/80 dark:bg-cyan-950/40"
               bgColor="border-cyan-200/60 bg-gradient-to-br from-cyan-50/70 via-card to-card dark:border-cyan-900/40 dark:from-cyan-950/20"
+            />
+          </div>
+        </div>
+
+        {/* Section: Commercial Ads (DMS) */}
+        <div className="space-y-4">
+          <SectionHeader title="الإعلانات التجارية (DMS)" color="bg-rose-500" icon={PanelTop} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <FeatureToggleCard
+              title="إعلانات أعلى الصفحات"
+              description="الإعلان البارز أسفل الهيدر (Leaderboard للديسكتوب وMPU للجوال) في الرئيسية والمقالات والأقسام والرأي وبقية الصفحات — الإطفاء يخفيه فورًا من كل الموقع، وإعلانات وسط المحتوى لا تتأثر"
+              enabled={dmsTopAds.showTopAds}
+              onToggle={(checked) => dmsTopAds.setShowTopAds(checked)}
+              isPending={dmsTopAds.isSaving}
+              icon={PanelTop}
+              iconColorEnabled="text-rose-600 dark:text-rose-300"
+              testId="switch-dms-top-ads"
+              bgColor="border-rose-200/60 bg-gradient-to-br from-rose-50/60 via-card to-card dark:border-rose-900/40 dark:from-rose-950/15"
             />
           </div>
         </div>

@@ -251,7 +251,7 @@ export default function NewsPage() {
 
         {/* DMS Ads - Leaderboard for desktop, MPU for mobile */}
         <DmsLeaderboardAd />
-        <DmsMpuAd />
+        <DmsMpuAd topSlot />
 
         <SabqPulseSection />
 

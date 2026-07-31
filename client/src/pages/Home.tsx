@@ -517,12 +517,12 @@ export default function Home() {
             </Suspense>
           </ErrorBoundary>
 
-          {/* الإعلان البارز أسفل الهيدر — أُعيد إظهاره 2026-07-09 بطلب المالك. للإخفاء: بدّل SHOW_TOP_ADS إلى false. */}
+          {/* الإعلان البارز أسفل الهيدر — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_ADS بقي كقاطع طوارئ في الكود. */}
           {SHOW_TOP_ADS && (
             <>
               {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
               <DmsLeaderboardAd />
-              <DmsMpuAd />
+              <DmsMpuAd topSlot />
 
               {/* Ad Banner Slot - Below Featured News */}
               <AdSlot slotId="header-banner" className="w-full" />
