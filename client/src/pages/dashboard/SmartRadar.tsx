@@ -79,6 +79,7 @@ interface RadarStatsResponse {
   exportedTotal: number;
   activeSources: number;
   lastFetchedAt: string | null;
+  newsapiLastFetchedAt: string | null;
   telegramConfigured: boolean;
 }
 
@@ -193,6 +194,7 @@ export default function SmartRadar() {
   const [activeTab, setActiveTab] = useState("inbox");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<"all" | "feed" | "x">("all");
+  const [timeFilter, setTimeFilter] = useState<"all" | "1" | "3" | "24">("all");
   const [limit, setLimit] = useState(30);
 
   const tabParams = TABS.find((t) => t.id === activeTab)?.params ?? {};
@@ -215,6 +217,7 @@ export default function SmartRadar() {
         ...tabParams,
         sourceId: sourceFilter === "all" ? undefined : sourceFilter,
         channel: channelFilter === "all" ? undefined : channelFilter,
+        sinceHours: timeFilter === "all" ? undefined : Number(timeFilter),
         limit,
       },
     ],
@@ -340,6 +343,13 @@ export default function SmartRadar() {
           />
         </div>
 
+        {/* ممر NewsAPI يجلب كل ساعة ترشيدًا للتوكنز — المؤشر يطمئن أنه حي دون فتح «المصادر» */}
+        {stats?.newsapiLastFetchedAt && (
+          <p className="text-xs text-muted-foreground">
+            NewsAPI.ai: آخر سحب {timeAgo(stats.newsapiLastFetchedAt)} · يجلب مرة كل ساعة
+          </p>
+        )}
+
         {/* ---------- التبويبات والفلاتر ---------- */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full overflow-x-auto sm:w-auto">
@@ -357,6 +367,20 @@ export default function SmartRadar() {
           </Tabs>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Select
+              value={timeFilter}
+              onValueChange={(value) => setTimeFilter(value as "all" | "1" | "3" | "24")}
+            >
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="الوقت" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الأوقات</SelectItem>
+                <SelectItem value="1">آخر ساعة</SelectItem>
+                <SelectItem value="3">آخر 3 ساعات</SelectItem>
+                <SelectItem value="24">آخر 24 ساعة</SelectItem>
+              </SelectContent>
+            </Select>
             <Select
               value={channelFilter}
               onValueChange={(value) => setChannelFilter(value as "all" | "feed" | "x")}

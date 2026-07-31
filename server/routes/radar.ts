@@ -58,6 +58,7 @@ const itemsQuerySchema = z.object({
   sourceId: z.string().optional(),
   channel: z.enum(["x", "feed"]).optional(),
   breaking: z.coerce.boolean().optional(),
+  sinceHours: z.coerce.number().int().min(1).max(168).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
