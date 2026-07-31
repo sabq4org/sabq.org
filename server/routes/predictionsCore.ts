@@ -8,6 +8,7 @@ import {
   getCompetitionBySlug,
   getContest,
   getContestSettlement,
+  getHomepagePromoFeed,
   getLeaderboard,
   getUserLedger,
   getUserPoints,
@@ -47,6 +48,21 @@ router.get("/api/predictions/competitions", async (req, res) => {
   if (!requireEnabled(res)) return;
   try {
     res.json({ competitions: await listActiveCompetitions(webUserId(req)) });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/** إعلانات نصية دوّارة تحت الأخبار البارزة — عامة، خفيفة، بلا جلسة. */
+router.get("/api/predictions/promo-feed", async (req, res) => {
+  if (!requireEnabled(res)) return;
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const payload = await getHomepagePromoFeed(
+      Number.isFinite(limit) ? limit : undefined,
+    );
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+    res.json(payload);
   } catch (error) {
     handleError(res, error);
   }

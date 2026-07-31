@@ -29,6 +29,7 @@ import {
   type SourcePlatform,
 } from "@shared/predictions";
 import { getStrategy } from "./registry";
+import { buildPredictionPromoFeed, type PromoFeedItem } from "./predictionPromoFeed";
 
 export function isPredictionCoreEnabled(): boolean {
   return process.env.PREDICTION_CORE_ENABLED === "true";
@@ -183,19 +184,24 @@ export async function listContests(filters: {
     contests = [...active, ...recent];
   }
 
+  const contestIds = contests.map((c) => c.id);
   const entriesByContest = new Map<string, PredictionEntry>();
-  if (filters.userId && contests.length > 0) {
+  if (filters.userId && contestIds.length > 0) {
     const myEntries = await db
       .select()
       .from(predictionEntries)
       .where(and(
         eq(predictionEntries.userId, filters.userId),
-        inArray(predictionEntries.contestId, contests.map((c) => c.id)),
+        inArray(predictionEntries.contestId, contestIds),
       ));
     for (const entry of myEntries) entriesByContest.set(entry.contestId, entry);
   }
 
-  return contests.map((c) => serializeContest(c, entriesByContest.get(c.id)));
+  const countByContest = await countActiveEntriesByContest(contestIds);
+
+  return contests.map((c) =>
+    serializeContest(c, entriesByContest.get(c.id), countByContest.get(c.id) ?? 0),
+  );
 }
 
 export async function getContest(contestId: string, userId?: string) {
@@ -228,10 +234,37 @@ export async function getContest(contestId: string, userId?: string) {
     .where(eq(predictionScoringProfiles.id, contest.scoringProfileId))
     .limit(1);
 
-  return { ...serializeContest(contest, myEntry), rule: profile ?? null };
+  const countByContest = await countActiveEntriesByContest([contestId]);
+  return {
+    ...serializeContest(contest, myEntry, countByContest.get(contestId) ?? 0),
+    rule: profile ?? null,
+  };
 }
 
-function serializeContest(contest: PredictionContest, myEntry?: PredictionEntry) {
+/** عدد التوقعات النشطة لكل مسابقة — دفعة واحدة لقوائم البطاقات والبروومو. */
+async function countActiveEntriesByContest(contestIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (contestIds.length === 0) return map;
+  const rows = await db
+    .select({
+      contestId: predictionEntries.contestId,
+      total: sql<number>`count(*)::int`,
+    })
+    .from(predictionEntries)
+    .where(and(
+      inArray(predictionEntries.contestId, contestIds),
+      eq(predictionEntries.status, "active"),
+    ))
+    .groupBy(predictionEntries.contestId);
+  for (const row of rows) map.set(row.contestId, Number(row.total) || 0);
+  return map;
+}
+
+function serializeContest(
+  contest: PredictionContest,
+  myEntry?: PredictionEntry,
+  entriesCount = 0,
+) {
   return {
     id: contest.id,
     competitionId: contest.competitionId,
@@ -244,6 +277,8 @@ function serializeContest(contest: PredictionContest, myEntry?: PredictionEntry)
     metadata: contest.metadata,
     // النتيجة تُعرض بعد التسوية فقط — لا تسريب قبل الإغلاق
     result: contest.status === "settled" ? contest.resultPayload : null,
+    /** عدد المشاركين النشطين في توقّع هذه المسابقة — لإثبات اجتماعي على البطاقة. */
+    entriesCount,
     myEntry: myEntry && myEntry.status === "active"
       ? {
           id: myEntry.id,
@@ -749,6 +784,60 @@ export async function createContest(input: {
     .onConflictDoNothing()
     .returning();
   return row ?? null; // null = المسابقة موجودة (المفتاح الخارجي الموحد §22)
+}
+
+/**
+ * شريط الإعلانات النصية على واجهة الصحيفة (تحت الأخبار البارزة):
+ * مباريات مفتوحة قريبة الإقفال + عدد المشاركين — بلا أسماء مستخدمين.
+ */
+export async function getHomepagePromoFeed(limit = 8): Promise<{ items: PromoFeedItem[] }> {
+  if (!isPredictionCoreEnabled()) return { items: [] };
+
+  const rows = await db
+    .select({
+      id: predictionContests.id,
+      locksAt: predictionContests.locksAt,
+      metadata: predictionContests.metadata,
+      competitionSlug: predictionCompetitions.slug,
+      competitionNameAr: predictionCompetitions.nameAr,
+    })
+    .from(predictionContests)
+    .innerJoin(
+      predictionCompetitions,
+      eq(predictionContests.competitionId, predictionCompetitions.id),
+    )
+    .where(and(
+      eq(predictionContests.status, "open"),
+      eq(predictionContests.contestType, "match_score"),
+      inArray(predictionCompetitions.status, ["active", "paused"]),
+    ))
+    .orderBy(asc(predictionContests.locksAt))
+    .limit(Math.min(Math.max(limit, 1), 12));
+
+  const countByContest = await countActiveEntriesByContest(rows.map((r) => r.id));
+
+  const items = buildPredictionPromoFeed(
+    rows.map((row) => {
+      const meta = (row.metadata ?? {}) as {
+        home?: { name?: string | null } | null;
+        away?: { name?: string | null } | null;
+        round?: string | null;
+      };
+      return {
+        id: row.id,
+        competitionSlug: row.competitionSlug,
+        competitionNameAr: row.competitionNameAr,
+        homeName: meta.home?.name,
+        awayName: meta.away?.name,
+        round: meta.round,
+        entriesCount: countByContest.get(row.id) ?? 0,
+        locksAt: row.locksAt,
+      };
+    }),
+    { limit },
+  );
+
+  return { items };
 }
 
 /**

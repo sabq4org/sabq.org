@@ -43,6 +43,7 @@ const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCu
 const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
 const SportsPortalStrip = lazyDefault(() => import("@/components/sports/SportsPortalStrip"));
+const PredictionPromoStrip = lazyDefault(() => import("@/components/predictions/PredictionPromoStrip"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NationalDay96Block = lazyNamed(() => import("@/components/seasonal/NationalDay96Block"), "NationalDay96Block");
@@ -448,6 +449,14 @@ export default function Home() {
           {/* Hero Section */}
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
+
+        {/* إعلانات نصية دوّارة تحت الأخبار البارزة — إثبات اجتماعي لتوقّعات روشن وغيرها.
+            يختفي تمامًا إن تعطّل المحرك أو لم تُرجع عناصر. */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={<div className="h-11 border-y border-border/40 sm:h-12" />}>
+            <PredictionPromoStrip />
+          </Suspense>
+        </ErrorBoundary>
 
         {/* شريط المدخل إلى البوابة الرياضية — الباب الوحيد إلى /sports من الرئيسية.
             سطر واحد بارتفاع ثابت (فلا يزحزح ما تحته عند وصول البيانات)، ونصّه
