@@ -4,7 +4,10 @@ import { useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
 import { resolveUserRole } from "@/lib/roleMapping";
 import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
-import { MEDIA_LICENSE_DASHBOARD_WARNING } from "@shared/mediaLicense";
+import {
+  MEDIA_LICENSE_DASHBOARD_WARNING,
+  MEDIA_LICENSE_PENDING_REVIEW_WARNING,
+} from "@shared/mediaLicense";
 
 export type MediaLicenseGateStatus = {
   submitted?: boolean;
@@ -25,7 +28,7 @@ function mediaLicenseEndpointForRole(role: string | null | undefined): string | 
 
 /**
  * بوابة الترخيص المهني لكتّاب الرأي والمراسلين:
- * تحذير + تعطيل إنشاء مقال/خبر لمن بلا ترخيص أو يحتاج تحديثاً.
+ * تحذير + تعطيل إنشاء مقال/خبر لمن بلا ترخيص ساري معتمد، أو منتهٍ، أو تحت المراجعة، أو يحتاج تصحيحاً.
  */
 export function useMediaLicenseGate() {
   const { user } = useAuth();
@@ -43,9 +46,10 @@ export function useMediaLicenseGate() {
   const unlicensed = enabled && isFetched && !data?.submitted && !data?.valid;
   const expired = enabled && isFetched && Boolean(data?.expired);
   const needsCorrection = enabled && isFetched && Boolean(data?.needsCorrection);
+  const pendingReview = enabled && isFetched && Boolean(data?.pendingReview);
 
-  /** بلا ترخيص أو منتهٍ أو يحتاج تصحيحاً/تحديثاً */
-  const needsLicenseAction = unlicensed || expired || needsCorrection;
+  /** بلا ترخيص أو منتهٍ أو تحت المراجعة أو يحتاج تصحيحاً/تحديثاً */
+  const needsLicenseAction = unlicensed || expired || needsCorrection || pendingReview;
 
   const mediaLicenseFormPath =
     role === "opinion_author" || role === "reporter"
@@ -79,11 +83,14 @@ export function useMediaLicenseGate() {
     unlicensed,
     expired,
     needsCorrection,
+    pendingReview,
     needsLicenseAction,
     showWarningBanner: needsLicenseAction,
     /** تعطيل أزرار «إنشاء / ابدأ الكتابة» لنفس جمهور التحذير */
     createBlocked: needsLicenseAction,
-    createBlockedReason: MEDIA_LICENSE_DASHBOARD_WARNING,
+    createBlockedReason: pendingReview
+      ? MEDIA_LICENSE_PENDING_REVIEW_WARNING
+      : MEDIA_LICENSE_DASHBOARD_WARNING,
     openMediaLicenseForm,
     isMediaLicensed: Boolean(data?.valid) && !data?.expiringSoon,
     showExpiringSoonBadge: enabled && isFetched && Boolean(data?.expiringSoon),

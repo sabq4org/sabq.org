@@ -303,12 +303,11 @@ export async function saveMediaLicense(
 
   const existing = await selectLicenseRow(userId);
   const previousStatus = resolveMediaLicenseReviewStatus(existing);
-  /** بعد طلب تصحيح أو أثناء انتظار المراجعة: الرفع الجديد يدخل «تحت المراجعة» */
-  const goesToPendingReview =
+  /** كل رفع (أول مرة / تجديد / تصحيح) يدخل «تحت المراجعة» — لا اعتماد تلقائي */
+  const nextStatus: MediaLicenseReviewStatus = "pending_review";
+  /** إبقاء ملاحظة التصحيح كسياق أثناء المراجعة؛ تُمسَح عند الموافقة أو رفع جديد من حالة معتمدة */
+  const keepAdminNote =
     previousStatus === "needs_correction" || previousStatus === "pending_review";
-  const nextStatus: MediaLicenseReviewStatus = goesToPendingReview
-    ? "pending_review"
-    : "approved";
 
   const submittedAt = new Date();
   await db
@@ -319,8 +318,7 @@ export async function saveMediaLicense(
       mediaLicenseSubmittedAt: submittedAt,
       mediaLicenseExpiresAt: data.expiresAt,
       mediaLicenseReviewStatus: nextStatus,
-      // إبقاء الملاحظة كسياق أثناء المراجعة؛ تُمسَح عند الموافقة
-      mediaLicenseAdminNote: goesToPendingReview
+      mediaLicenseAdminNote: keepAdminNote
         ? existing?.mediaLicenseAdminNote ?? null
         : null,
       mediaLicenseCorrectionRequestedAt: null,
@@ -333,7 +331,7 @@ export async function saveMediaLicense(
     mediaLicenseFileKey: data.licenseFileKey,
     mediaLicenseSubmittedAt: submittedAt,
     mediaLicenseExpiresAt: data.expiresAt,
-    mediaLicenseAdminNote: goesToPendingReview
+    mediaLicenseAdminNote: keepAdminNote
       ? existing?.mediaLicenseAdminNote ?? null
       : null,
     mediaLicenseCorrectionRequestedAt: null,
