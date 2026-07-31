@@ -128,6 +128,7 @@ export async function generateThumbnail(
   options: ThumbnailOptions = {}
 ): Promise<string> {
   const config = { ...DEFAULT_OPTIONS, ...options };
+  const outputFormat: NonNullable<ThumbnailOptions['format']> = config.format ?? 'jpeg';
   
   // Normalize URL (convert relative paths to absolute URLs)
   const normalizedUrl = normalizeImageUrl(imageUrl);
@@ -232,11 +233,11 @@ export async function generateThumbnail(
         const thumbnail = await sharp(buffer)
           .resize(scaledW, scaledH, { fit: 'fill' })
           .extract({ left: extractLeft, top: extractTop, width: targetW, height: targetH })
-          .toFormat(config.format as keyof sharp.FormatEnum, { quality: config.quality })
+          .toFormat(outputFormat, { quality: config.quality })
           .toBuffer();
         
         const timestamp = Date.now();
-        const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${config.format}`;
+        const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${outputFormat}`;
         const thumbnailUrl = await uploadThumbnailToStorage(thumbnail, filename);
         
         console.log(`[Thumbnail Service] Thumbnail generated with focal point: ${thumbnailUrl}`);
@@ -249,12 +250,12 @@ export async function generateThumbnail(
         fit: 'cover',
         position: sharpPosition
       })
-      .toFormat(config.format as keyof sharp.FormatEnum, { quality: config.quality })
+      .toFormat(outputFormat, { quality: config.quality })
       .toBuffer();
     
     // Generate unique filename for thumbnail
     const timestamp = Date.now();
-    const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${config.format}`;
+    const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${outputFormat}`;
     
     // Upload to storage (assuming GCS is configured)
     const thumbnailUrl = await uploadThumbnailToStorage(thumbnail, filename);

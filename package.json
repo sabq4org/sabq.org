@@ -28,11 +28,8 @@
     "@anthropic-ai/sdk": "^0.68.0",
     "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.1045.0",
-    "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.0",
-    "@capacitor/cli": "^7.4.4",
     "@capacitor/core": "^7.4.4",
-    "@capacitor/ios": "^7.4.4",
     "@capacitor/keyboard": "^7.0.3",
     "@capacitor/splash-screen": "^7.0.3",
     "@capacitor/status-bar": "^7.0.3",
@@ -165,7 +162,7 @@
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
     "rss-parser": "^3.13.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "swagger-ui-express": "^5.0.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
@@ -177,6 +174,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.0",
+    "@capacitor/android": "^7.6.8",
+    "@capacitor/cli": "^7.6.8",
+    "@capacitor/ios": "^7.6.8",
     "@playwright/test": "^1.60.0",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
@@ -231,6 +231,9 @@
     "@tootallnate/once": "^3.0.1",
     "swiper": "^12.1.4",
     "minimatch@<=3.1.2": "3.1.5",
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.17"
+    },
     "minimatch@>=9.0.0 <=9.0.5": "9.0.9",
     "flatted": "^3.4.2",
     "react-router@<=7.4.0": "7.15.0",
@@ -239,9 +242,10 @@
     "rollup": "^4.60.3",
     "lodash": "^4.18.1",
     "ajv@<=6.12.6": "6.15.0",
-    "brace-expansion@<=1.1.11": "1.1.14",
-    "brace-expansion@>=2.0.0 <=2.0.1": "2.1.0",
-    "js-yaml@<=4.1.0": "4.1.1",
+    "brace-expansion@>=2.0.0 <=2.1.2": "2.1.4",
+    "form-data@<2.5.6": "2.5.6",
+    "joi": "17.13.4",
+    "js-yaml@<=4.2.0": "4.3.0",
     "@eslint/plugin-kit": "^0.7.1"
   }
 }
