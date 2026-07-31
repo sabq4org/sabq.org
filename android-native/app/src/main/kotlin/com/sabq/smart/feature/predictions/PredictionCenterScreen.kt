@@ -310,16 +310,29 @@ private fun MatchCard(
             CenterBlock(contest)
             TeamSide(contest.metadata?.away, Modifier.weight(1f), trailing = true)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                listOfNotNull(
+        // يمين (RTL): الجولة/العدّاد + عدد المتوقّعين رقمًا فقط — بلا أسماء أشخاص.
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val subtitle = listOfNotNull(
                     contest.metadata?.round,
                     if (contest.status == "open") PredDates.countdownAr(contest.locksAt) else null,
-                ).joinToString(" · "),
-                style = SabqTheme.typography.metaSmall,
-                color = SabqTheme.colors.tertiaryInk,
-                modifier = Modifier.weight(1f),
-            )
+                ).joinToString(" · ")
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        subtitle,
+                        style = SabqTheme.typography.metaSmall,
+                        color = SabqTheme.colors.tertiaryInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    if (contest.entriesCount > 0) "${contest.entriesCount} متوقّع" else "كن أول المتوقّعين",
+                    style = SabqTheme.typography.metaSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SabqTheme.colors.secondaryInk,
+                )
+            }
             StatusChip(contest, onPredict = { viewModel.toggleEditing(contest.id) }, onSettlement = { viewModel.openSettlement(contest.id) })
         }
 
@@ -742,9 +755,9 @@ private fun buildSteps(award: PredMyAward): List<String> {
     if (pool?.base != null) {
         val total = pool.base + (pool.carriedIn ?: 0)
         steps += if ((pool.carriedIn ?: 0) > 0)
-            "بركة المباراة $total نقطة (${pool.base} أساس + ${pool.carriedIn} مُرحّلة)"
+            "جائزة المباراة $total نقطة (${pool.base} أساس + ${pool.carriedIn} مُرحّلة)"
         else
-            "بركة المباراة $total نقطة"
+            "جائزة المباراة $total نقطة"
     }
     if (pool?.tierShare != null && pool.tierPoints != null && pool.winners != null) {
         steps += "حصة فئة «${award.reasonLabelAr}» ${(pool.tierShare * 100).toInt()}٪ = ${pool.tierPoints * pool.winners} نقطة"

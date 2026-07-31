@@ -1774,6 +1774,8 @@ private data class PredContest(
     val predAway: Int?,
     val finalHome: Int?,
     val finalAway: Int?,
+    /** عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين). */
+    val entriesCount: Int = 0,
 ) {
     // بطاقات النتيجة لمسابقات نتيجة المباراة فقط؛ champion/top_scorer بطاقة عامة بلا عدادات.
     val isMatchScore: Boolean get() = contestType == "match_score"
@@ -1829,6 +1831,7 @@ private fun parsePredContest(e: JsonElement): PredContest? {
         predAway = entry?.int("predAway"),
         finalHome = result?.int("finalHome"),
         finalAway = result?.int("finalAway"),
+        entriesCount = o.int("entriesCount") ?: 0,
     )
 }
 
@@ -1905,11 +1908,11 @@ private fun predRuleSummary(rule: JsonObject?): String {
             val e = ((tiers?.predDouble("exact") ?: 0.0) * 100).roundToInt()
             val m = ((tiers?.predDouble("signedMargin") ?: 0.0) * 100).roundToInt()
             val o = ((tiers?.predDouble("outcome") ?: 0.0) * 100).roundToInt()
-            "بركة المباراة $pool نقطة: $e٪ للنتيجة الدقيقة، $m٪ للفارق الصحيح، $o٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
+            "جائزة المباراة $pool نقطة: $e٪ للنتيجة الدقيقة، $m٪ للفارق الصحيح، $o٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
         }
         "shared_pool" ->
-            if (params?.string("winCriterion") == "exact") "بركة $pool نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
-            else "بركة $pool نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
+            if (params?.string("winCriterion") == "exact") "جائزة $pool نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
+            else "جائزة $pool نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
         "skill_weighted" -> "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك"
         "fixed_points" -> "نقاط ثابتة حسب دقة التوقّع"
         else -> "تُحتسب النقاط بعد صافرة النهاية"
@@ -2223,13 +2226,23 @@ private fun PredContestRow(contest: PredContest, open: () -> Unit) {
             }
         }
         Spacer(Modifier.height(9.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // «الجولة · يُقفل بعد ٢س ١٤د» — عدّ تنازلي من locksAt بعد تحويل ISO للمحلي.
-            val subtitle = buildList {
-                if (contest.round.isNotBlank()) add(contest.round)
-                if (contest.status == "open") predCountdown(predParseMs(contest.locksAt))?.let(::add)
-            }.joinToString(" · ")
-            Text(subtitle, color = c.textFaint, fontSize = 10.5.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // يمين (RTL): الجولة/العدّاد + عدد المتوقّعين رقمًا فقط — بلا أسماء أشخاص.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                val subtitle = buildList {
+                    if (contest.round.isNotBlank()) add(contest.round)
+                    if (contest.status == "open") predCountdown(predParseMs(contest.locksAt))?.let(::add)
+                }.joinToString(" · ")
+                if (subtitle.isNotBlank()) {
+                    Text(subtitle, color = c.textFaint, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text(
+                    if (contest.entriesCount > 0) "${contest.entriesCount} متوقّع" else "كن أول المتوقّعين",
+                    color = c.textDim,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             PredStatusChip(contest)
         }
     }
@@ -2550,7 +2563,7 @@ private fun PredBreakdownContent(award: PredAward?) {
                 if (award.poolBase != null) {
                     val carried = award.poolCarriedIn ?: 0
                     add(
-                        "بركة المباراة ${award.poolBase + carried} نقطة" +
+                        "جائزة المباراة ${award.poolBase + carried} نقطة" +
                             if (carried > 0) " (${award.poolBase} أساس + $carried مُرحّلة)" else "",
                     )
                     if (award.tierShare != null && award.tierPoints != null) {

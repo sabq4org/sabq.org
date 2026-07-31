@@ -41,6 +41,8 @@ export type PredContest = {
   settledAt?: string | null;
   metadata?: PredContestMeta | null;
   result?: { finalHome?: number; finalAway?: number; winningPickIds?: string[] } | null;
+  /** عدد المشاركين النشطين في توقّع هذه المسابقة. */
+  entriesCount?: number;
   myEntry?: { id: string; payload?: PredEntryPayload | null } | null;
 };
 

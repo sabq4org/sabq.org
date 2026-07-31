@@ -377,7 +377,7 @@ private struct PredBreakdownSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if let pool = award.breakdown?.pool {
                         if let base = pool.base {
-                            step(1, Lf("بركة المباراة %d نقطة", base + (pool.carriedIn ?? 0))
+                            step(1, Lf("جائزة المباراة %d نقطة", base + (pool.carriedIn ?? 0))
                                  + ((pool.carriedIn ?? 0) > 0 ? Lf(" (%d أساس + %d مُرحّلة)", base, pool.carriedIn ?? 0) : ""))
                         }
                         if let share = pool.tierShare, let tierPoints = pool.tierPoints {

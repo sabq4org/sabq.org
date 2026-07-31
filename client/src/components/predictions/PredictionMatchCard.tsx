@@ -4,9 +4,10 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Lock, Minus, Plus, Shield } from "lucide-react";
+import { Lock, Minus, Plus, Shield, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatNumber } from "@/lib/format";
 import {
   kickoffTimeAr,
   lockCountdownAr,
@@ -105,11 +106,22 @@ export function PredictionMatchCard({
         <TeamSide name={away?.name} logo={away?.logo} trailing />
       </div>
 
-      {/* السطر السفلي: معلومات + الحالة */}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-muted-foreground">
-          {[contest.metadata?.round, countdown].filter(Boolean).join(" · ")}
-        </span>
+      {/* السطر السفلي: يمين = جولة/عدّاد + عدد المشاركين · يسار = حالة التوقّع */}
+      <div className="mt-3 flex items-end justify-between gap-2">
+        <div className="min-w-0 space-y-0.5 text-start">
+          <p className="text-[11px] text-muted-foreground">
+            {[contest.metadata?.round, countdown].filter(Boolean).join(" · ")}
+          </p>
+          <p
+            className="inline-flex items-center gap-1 text-[11px] font-semibold tabular-nums text-muted-foreground"
+            data-testid={`contest-entries-count-${contest.id}`}
+          >
+            <Users className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            {(contest.entriesCount ?? 0) > 0
+              ? `${formatNumber(contest.entriesCount ?? 0)} متوقّع`
+              : "كن أول المتوقّعين"}
+          </p>
+        </div>
         <StatusChip
           contest={contest}
           lockPassed={lockPassed}
