@@ -9,16 +9,21 @@ const QUERY_KEY = ["/api/system/dms-top-ads"];
 
 /**
  * قراءة فقط — تستهلكها مكوّنات إعلانات DMS في الواجهة العامة.
- * الافتراضي true أثناء التحميل حتى لا يتأخر ظهور الإعلان في الحالة
- * الاعتيادية (الإعلانات مفعّلة)؛ الإطفاء حالة نادرة يقبل فيها انزياح
- * لمرة واحدة عند أول تحميل قبل وصول الإعداد.
+ * ثلاث حالات وليست حالتين: undefined = الإعداد لم يصل بعد. التمييز جوهري:
+ * افتراض «مفعّل» أثناء التحميل كان يركّب حاوية #Leaderboard لمدة ~300ms،
+ * وسكربت DMS (السكين) يخطفها ويعيد غرسها خارج شجرة React قبل أن يزيلها
+ * التفكيك — فيبقى الإعلان رغم الإطفاء. المستهلك يحجب id الحاوية حتى
+ * تُحسم الحالة. فشل الجلب (شبكة/خادم) يُحسم إلى «مفعّل» حتى لا يُفقد
+ * العائد الإعلاني بسبب عطل عابر.
  */
-export function useDmsTopAdsEnabled(): boolean {
-  const { data } = useQuery<DmsTopAdsResponse | null>({
+export function useDmsTopAdsEnabled(): boolean | undefined {
+  const { data, isError } = useQuery<DmsTopAdsResponse | null>({
     queryKey: QUERY_KEY,
     queryFn: getQueryFn<DmsTopAdsResponse>({ on401: "returnNull", silent: true }),
     staleTime: 1000 * 60 * 5,
   });
+  if (isError) return true;
+  if (data === undefined) return undefined;
   return data?.showTopAds ?? true;
 }
 
