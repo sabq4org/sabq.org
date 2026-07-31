@@ -97,7 +97,7 @@ interface RadarItemRow {
   fetchedAt: string;
   status: "new" | "analyzed" | "ready" | "exported" | "dismissed";
   newsValue: number | null;
-  scoreBreakdown: { reason?: string } | null;
+  scoreBreakdown: { reason?: string; saudiRelevance?: number } | null;
   isBreaking: boolean;
   matchedKeywords: string[] | null;
   translatedTitle: string | null;
@@ -491,6 +491,16 @@ function RadarItemCard({
           {item.isBreaking && (
             <Badge variant="destructive" className="animate-pulse">
               <Zap className="ml-0.5 h-3 w-3" /> عاجل
+            </Badge>
+          )}
+          {/* شأن سعودي (تقييم المحلل ≥60) — تمييز بصري سريع لأولوية سبق الأولى */}
+          {(item.scoreBreakdown?.saudiRelevance ?? 0) >= 60 && (
+            <Badge
+              variant="outline"
+              className="border-green-600 text-green-700 dark:text-green-400"
+              title={`صلة سعودية ${item.scoreBreakdown?.saudiRelevance}%`}
+            >
+              🇸🇦 سعودي
             </Badge>
           )}
           {/* لمواد ممرات الاصطياد (Google News/GDELT) الناشر الحقيقي أهم من اسم الممر */}
