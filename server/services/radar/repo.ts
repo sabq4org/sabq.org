@@ -203,6 +203,8 @@ export interface RadarItemFilters {
   /** x = رصدات إكس فقط · feed = صحف/RSS/JSON فقط */
   channel?: "x" | "feed";
   breakingOnly?: boolean;
+  /** آخر N ساعة — على تاريخ النشر، ويسقط لوقت الرصد إن غاب */
+  sinceHours?: number;
   limit?: number;
   offset?: number;
 }
@@ -219,6 +221,11 @@ function itemConditions(filters: RadarItemFilters) {
   if (filters.minScore != null) conditions.push(gte(radarItems.newsValue, filters.minScore));
   if (filters.sourceId) conditions.push(eq(radarItems.sourceId, filters.sourceId));
   if (filters.breakingOnly) conditions.push(eq(radarItems.isBreaking, true));
+  if (filters.sinceHours) {
+    conditions.push(
+      dsql`coalesce(${radarItems.publishedAt}, ${radarItems.fetchedAt}) >= now() - make_interval(hours => ${filters.sinceHours})`
+    );
+  }
   if (filters.channel === "x") conditions.push(eq(radarSources.type, "x"));
   if (filters.channel === "feed") conditions.push(inArray(radarSources.type, ["rss", "json"]));
   return conditions.length ? and(...conditions) : undefined;
@@ -381,13 +388,15 @@ export interface RadarStats {
   exportedTotal: number;
   activeSources: number;
   lastFetchedAt: string | null;
+  /** آخر جلب لممر NewsAPI.ai (Event Registry) — يُجلب كل ساعة ترشيدًا للتوكنز */
+  newsapiLastFetchedAt: string | null;
 }
 
 export async function radarStats(): Promise<RadarStats> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [newToday, breakingActive, readyDrafts, exportedTotal, activeSources, lastFetch] =
+  const [newToday, breakingActive, readyDrafts, exportedTotal, activeSources, lastFetch, newsapiFetch] =
     await Promise.all([
       db.select({ value: count() }).from(radarItems).where(gte(radarItems.fetchedAt, startOfDay)),
       db
@@ -407,6 +416,12 @@ export async function radarStats(): Promise<RadarStats> {
         .from(radarSources)
         .orderBy(desc(radarSources.lastFetchedAt))
         .limit(1),
+      db
+        .select({ value: radarSources.lastFetchedAt })
+        .from(radarSources)
+        .where(dsql`${radarSources.url} like '%eventregistry.org%'`)
+        .orderBy(desc(radarSources.lastFetchedAt))
+        .limit(1),
     ]);
 
   return {
@@ -416,5 +431,8 @@ export async function radarStats(): Promise<RadarStats> {
     exportedTotal: exportedTotal[0]?.value ?? 0,
     activeSources: activeSources[0]?.value ?? 0,
     lastFetchedAt: lastFetch[0]?.value ? new Date(lastFetch[0].value).toISOString() : null,
+    newsapiLastFetchedAt: newsapiFetch[0]?.value
+      ? new Date(newsapiFetch[0].value).toISOString()
+      : null,
   };
 }
