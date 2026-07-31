@@ -88,6 +88,7 @@ interface RadarItemRow {
   sourceName: string | null;
   sourceType: "rss" | "json" | "x" | null;
   xValue: string | null;
+  publisher: string | null;
   link: string;
   originalTitle: string;
   originalExcerpt: string | null;
@@ -492,7 +493,10 @@ function RadarItemCard({
               <Zap className="ml-0.5 h-3 w-3" /> عاجل
             </Badge>
           )}
-          <Badge variant="secondary">{item.sourceName ?? "مصدر"}</Badge>
+          {/* لمواد ممرات الاصطياد (Google News/GDELT) الناشر الحقيقي أهم من اسم الممر */}
+          <Badge variant="secondary" title={item.publisher ? item.sourceName ?? undefined : undefined}>
+            {item.publisher ?? item.sourceName ?? "مصدر"}
+          </Badge>
           {item.sourceType === "x" ? (
             <Badge className="bg-sky-600 text-white hover:bg-sky-600">
               X{item.xValue ? ` · ${item.xValue}` : ""}

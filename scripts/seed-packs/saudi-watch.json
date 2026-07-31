@@ -1,0 +1,162 @@
+{
+  "packId": "saudi-watch",
+  "title": "عين على السعودية — ممرات اصطياد (بحث لا اشتراك): كل ما يُنشر عن السعودية عالميًا",
+  "version": 1,
+  "sources": [
+    {
+      "name": "Google News — السعودية (إنجليزي US)",
+      "url": "https://news.google.com/rss/search?q=%22Saudi%20Arabia%22%20OR%20Saudi%20OR%20Riyadh%20OR%20NEOM%20OR%20Aramco%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen",
+      "type": "rss",
+      "language": "en",
+      "tier": "A",
+      "region": "saudi",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.1
+    },
+    {
+      "name": "Google News — السعودية (إنجليزي GB)",
+      "url": "https://news.google.com/rss/search?q=%22Saudi%20Arabia%22%20OR%20Saudi%20OR%20Riyadh%20OR%20NEOM%20when%3A1d&hl=en-GB&gl=GB&ceid=GB%3Aen",
+      "type": "rss",
+      "language": "en",
+      "tier": "B",
+      "region": "saudi",
+      "fetchIntervalMinutes": 30,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (فرنسي)",
+      "url": "https://news.google.com/rss/search?q=%22Arabie%20saoudite%22%20OR%20Riyad%20when%3A1d&hl=fr&gl=FR&ceid=FR%3Afr",
+      "type": "rss",
+      "language": "fr",
+      "tier": "B",
+      "region": "saudi",
+      "fetchIntervalMinutes": 30,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (إسباني)",
+      "url": "https://news.google.com/rss/search?q=%22Arabia%20Saudita%22%20OR%20%22Arabia%20Saud%C3%AD%22%20when%3A1d&hl=es&gl=ES&ceid=ES%3Aes",
+      "type": "rss",
+      "language": "es",
+      "tier": "B",
+      "region": "saudi",
+      "fetchIntervalMinutes": 30,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (ألماني)",
+      "url": "https://news.google.com/rss/search?q=Saudi-Arabien%20when%3A1d&hl=de&gl=DE&ceid=DE%3Ade",
+      "type": "rss",
+      "language": "de",
+      "tier": "B",
+      "region": "saudi",
+      "fetchIntervalMinutes": 30,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (تركي)",
+      "url": "https://news.google.com/rss/search?q=%22Suudi%20Arabistan%22%20when%3A1d&hl=tr&gl=TR&ceid=TR%3Atr",
+      "type": "rss",
+      "language": "tr",
+      "tier": "B",
+      "region": "saudi",
+      "fetchIntervalMinutes": 30,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (روسي)",
+      "url": "https://news.google.com/rss/search?q=%22%D0%A1%D0%B0%D1%83%D0%B4%D0%BE%D0%B2%D1%81%D0%BA%D0%B0%D1%8F%20%D0%90%D1%80%D0%B0%D0%B2%D0%B8%D1%8F%22%20when%3A1d&hl=ru&gl=RU&ceid=RU%3Aru",
+      "type": "rss",
+      "language": "ru",
+      "tier": "B",
+      "region": "saudi",
+      "fetchIntervalMinutes": 30,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (أردو)",
+      "url": "https://news.google.com/rss/search?q=%22%D8%B3%D8%B9%D9%88%D8%AF%DB%8C%20%D8%B9%D8%B1%D8%A8%22%20when%3A1d&hl=ur&gl=PK&ceid=PK%3Aur",
+      "type": "rss",
+      "language": "ur",
+      "tier": "C",
+      "region": "saudi",
+      "fetchIntervalMinutes": 45,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (إندونيسي)",
+      "url": "https://news.google.com/rss/search?q=%22Arab%20Saudi%22%20when%3A1d&hl=id&gl=ID&ceid=ID%3Aid",
+      "type": "rss",
+      "language": "id",
+      "tier": "C",
+      "region": "saudi",
+      "fetchIntervalMinutes": 45,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (هندي)",
+      "url": "https://news.google.com/rss/search?q=%22%E0%A4%B8%E0%A4%8A%E0%A4%A6%E0%A5%80%20%E0%A4%85%E0%A4%B0%E0%A4%AC%22%20when%3A1d&hl=hi&gl=IN&ceid=IN%3Ahi",
+      "type": "rss",
+      "language": "hi",
+      "tier": "C",
+      "region": "saudi",
+      "fetchIntervalMinutes": 45,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (ياباني)",
+      "url": "https://news.google.com/rss/search?q=%E3%82%B5%E3%82%A6%E3%82%B8%E3%82%A2%E3%83%A9%E3%83%93%E3%82%A2%20when%3A1d&hl=ja&gl=JP&ceid=JP%3Aja",
+      "type": "rss",
+      "language": "ja",
+      "tier": "C",
+      "region": "saudi",
+      "fetchIntervalMinutes": 60,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (صيني)",
+      "url": "https://news.google.com/rss/search?q=%E6%B2%99%E7%89%B9%E9%98%BF%E6%8B%89%E4%BC%AF%20when%3A1d&hl=zh-CN&gl=CN&ceid=CN%3Azh-Hans",
+      "type": "rss",
+      "language": "zh",
+      "tier": "C",
+      "region": "saudi",
+      "fetchIntervalMinutes": 60,
+      "weight": 1
+    },
+    {
+      "name": "Google News — السعودية (عبري)",
+      "url": "https://news.google.com/rss/search?q=%22%D7%A2%D7%A8%D7%91%20%D7%94%D7%A1%D7%A2%D7%95%D7%93%D7%99%D7%AA%22%20when%3A1d&hl=he&gl=IL&ceid=IL%3Ahe",
+      "type": "rss",
+      "language": "he",
+      "tier": "C",
+      "region": "saudi",
+      "fetchIntervalMinutes": 60,
+      "weight": 1
+    },
+    {
+      "name": "GDELT — Saudi Arabia (كل اللغات)",
+      "url": "https://api.gdeltproject.org/api/v2/doc/doc?query=%22saudi%20arabia%22&mode=artlist&format=json&maxrecords=75&timespan=2h&sort=datedesc",
+      "type": "json",
+      "language": "en",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 15,
+      "weight": 1
+    },
+    {
+      "name": "GDELT — السعودية (عربي)",
+      "url": "https://api.gdeltproject.org/api/v2/doc/doc?query=%22%D8%A7%D9%84%D8%B3%D8%B9%D9%88%D8%AF%D9%8A%D8%A9%22&mode=artlist&format=json&maxrecords=75&timespan=3h&sort=datedesc",
+      "type": "json",
+      "language": "ar",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 20,
+      "weight": 1
+    }
+  ],
+  "notes": [
+    "ممرات Google News بمنطقة saudi عمدًا: الاستعلام نفسه يحصر النتائج بالسعودية، وفلتر الكلمات (إنجليزي/عربي) كان سيُسقط العناوين اليابانية والروسية وغيرها.",
+    "ممرا GDELT بمنطقة global عمدًا: GDELT يطابق نص المقال كاملًا لا العنوان، ففلتر الكلمات على العنوان يقص ضجيج الذكر العابر.",
+    "التكرار بين الممرات يمنعه فلتر بصمة العنوان في insertItems خلال نافذة RADAR_DEDUP_WINDOW_HOURS (48 ساعة افتراضًا)."
+  ]
+}
