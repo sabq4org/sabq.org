@@ -1196,6 +1196,10 @@ export const radarItems = pgTable("radar_items", {
   originalTitle: text("original_title").notNull(),
   originalExcerpt: text("original_excerpt"),
   originalLanguage: text("original_language"),
+  // ممرات الاصطياد (Google News/GDELT): المصدر صف واحد لكن الناشر الحقيقي يختلف لكل مادة
+  publisher: text("publisher"),
+  // بصمة عنوان مطبّعة (topicFingerprintFor) — منع تكرار القصة الواحدة عبر الممرات والمصادر
+  titleHash: text("title_hash"),
   imageUrl: text("image_url"),
   publishedAt: timestamp("published_at"),
   fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
@@ -1248,6 +1252,7 @@ export const radarItems = pgTable("radar_items", {
   index("idx_radar_items_status").on(table.status, table.fetchedAt.desc()),
   index("idx_radar_items_news_value").on(table.newsValue),
   index("idx_radar_items_story").on(table.storyId),
+  index("idx_radar_items_title_hash").on(table.titleHash, table.fetchedAt.desc()),
 ]);
 
 export const radarStorySnapshots = pgTable("radar_story_snapshots", {
