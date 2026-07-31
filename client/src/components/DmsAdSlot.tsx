@@ -6,9 +6,15 @@ interface DmsAdSlotProps {
   type: 'leaderboard' | 'mpu';
   className?: string;
   lazyLoad?: boolean;
+  /**
+   * false = احجز مساحة الفتحة لكن بلا id ولا trigger — تُستخدم أثناء انتظار
+   * إعداد «إعلانات أعلى الصفحات»: بدون id لا يستطيع سكربت DMS استهداف
+   * الحاوية أو خطفها، وبلا انزياح تخطيط لأن المساحة محجوزة من أول رسمة.
+   */
+  idActive?: boolean;
 }
 
-export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdSlotProps) {
+export function DmsAdSlot({ id, type, className = '', lazyLoad = false, idActive = true }: DmsAdSlotProps) {
   const [adState, setAdState] = useState<'loading' | 'filled' | 'empty'>('loading');
   const [shouldTriggerAds, setShouldTriggerAds] = useState(!lazyLoad);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,14 +41,29 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     return () => observer.disconnect();
   }, [lazyLoad]);
 
+  // لا trigger قبل تفعيل الـid: إطلاقه مبكرًا يستهلك دفعة GPT الوحيدة
+  // للصفحة بينما الحاوية بلا id فلا يُملأ شيء ولا تُعاد المحاولة.
   useEffect(() => {
-    if (!shouldTriggerAds || hasTriggeredRef.current) return;
+    if (!idActive || !shouldTriggerAds || hasTriggeredRef.current) return;
     hasTriggeredRef.current = true;
-    
+
     requestAnimationFrame(() => {
       triggerAds();
     });
-  }, [shouldTriggerAds]);
+  }, [shouldTriggerAds, idActive]);
+
+  // سكربت سكين DMS يقتلع هذه الحاوية من غلافنا ويعيد غرسها في جذر
+  // الصفحة (موثق 2026-07-31: #Leaderboard بقي معروضًا بعد التفكيك لأن
+  // React يزيل الغلاف فقط). عند التفكيك، إن كانت العقدة قد نُقلت خارج
+  // الغلاف فأزلها يدويًا — وإن بقيت داخله فاتركها لإزالة React الطبيعية.
+  useEffect(() => {
+    const el = containerRef.current;
+    return () => {
+      if (el && el.isConnected && !el.closest('[data-testid^="dms-ad-slot-wrapper"]')) {
+        el.remove();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -154,7 +175,7 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     >
       <div
         ref={containerRef}
-        id={id}
+        id={idActive ? id : undefined}
         style={innerStyle}
         data-testid={`dms-ad-slot-${id}`}
         data-ad-state={adState}
@@ -166,18 +187,38 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
 // الليدربورد يُستخدم حصريًا كإعلان أعلى الصفحة (تحت الهيدر)، لذا البوابة
 // داخل المكوّن نفسه: مفتاح «إعلانات DMS أعلى الصفحات» في إعدادات النظام
 // يطفئه في كل الصفحات دفعة واحدة دون تعديل أي صفحة.
+// الحالات الثلاث: undefined (الإعداد لم يصل بعد) = احجز المساحة بلا id حتى
+// لا يستطيع سكربت DMS استهداف الحاوية قبل الحسم؛ true = فتحة كاملة؛
+// false = لا شيء + حارس دوري.
 export function DmsLeaderboardAd({ className }: { className?: string }) {
   const topAdsEnabled = useDmsTopAdsEnabled();
-  if (!topAdsEnabled) return null;
-  return <DmsAdSlot id="Leaderboard" type="leaderboard" className={`hidden md:block ${className}`} />;
+
+  // حارس حالة الإطفاء: سكربت DMS ينشئ حاويات من طرفه (#Skinning و#OOP
+  // موثقتان في body) وقد يعيد إدراج #Leaderboard خارج شجرة React —
+  // أزل أي نسخة تظهر ما دام المفتاح مطفأً. الحارس لا يعمل إلا في حالة
+  // الإطفاء النادرة وكلفته لا تُذكر.
+  useEffect(() => {
+    if (topAdsEnabled !== false) return;
+    const reap = () => {
+      document.querySelectorAll('#Leaderboard').forEach((el) => el.remove());
+    };
+    reap();
+    const timer = setInterval(reap, 1000);
+    return () => clearInterval(timer);
+  }, [topAdsEnabled]);
+
+  if (topAdsEnabled === false) return null;
+  return <DmsAdSlot id="Leaderboard" type="leaderboard" className={`hidden md:block ${className}`} idActive={topAdsEnabled === true} />;
 }
 
 // MPU يظهر أعلى الصفحة (مقابل الليدربورد على الجوال) وداخل المحتوى أيضًا؛
 // topSlot يميّز النسخ العلوية فقط — هي وحدها التي يطفئها مفتاح الإعدادات.
+// لا حارس هنا: id «MPU» تتشاركه نسخ وسط المحتوى المسموح بها، وإزالته
+// عشوائيًا تقتلها — يكفي حجب الـid عن النسخ العلوية قبل حسم الإعداد.
 export function DmsMpuAd({ id = 'MPU', className, lazyLoad = false, topSlot = false }: { id?: string; className?: string; lazyLoad?: boolean; topSlot?: boolean }) {
   const topAdsEnabled = useDmsTopAdsEnabled();
-  if (topSlot && !topAdsEnabled) return null;
-  return <DmsAdSlot id={id} type="mpu" className={`md:hidden ${className}`} lazyLoad={lazyLoad} />;
+  if (topSlot && topAdsEnabled === false) return null;
+  return <DmsAdSlot id={id} type="mpu" className={`md:hidden ${className}`} lazyLoad={lazyLoad} idActive={!topSlot || topAdsEnabled === true} />;
 }
 
 export function LiteModeAdSlot({ index }: { index: number }) {
