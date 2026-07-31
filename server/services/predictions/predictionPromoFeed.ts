@@ -79,10 +79,10 @@ export function buildPredictionPromoFeed(
   const fallbackHref = `/predictions?competition=${encodeURIComponent(fallbackSlug)}`;
   const hype: PromoFeedItem[] = [
     {
-      id: "hype-pool",
+      id: "hype-prize",
       kind: "hype",
       href: fallbackHref,
-      text: `توقّع مباريات ${fallbackName} — النتيجة الدقيقة تشاركك بركة النقاط`,
+      text: `توقّع مباريات ${fallbackName} — النتيجة الدقيقة تشاركك جائزة النقاط`,
     },
     {
       id: "hype-wallet",
