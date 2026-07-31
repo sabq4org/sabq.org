@@ -86,6 +86,7 @@ import wcNumbersReportRouter from "./wcNumbersReport";
 import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
 import phoneRegistrationRouter from "./phoneRegistration";
+import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -183,4 +184,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(officialLettersRouter);
   // إكمال تسجيل عضوية الجوال + استكمال الحسابات القديمة (auth-rbac)
   app.use(phoneRegistrationRouter);
+  app.use(audioNewsletterCompatibilityRouter);
 }

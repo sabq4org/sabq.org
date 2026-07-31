@@ -385,7 +385,7 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية. الجلب متوقف إجبارياً عبر RADAR_FORCE_DISABLED.",
+      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية. أُعيد تفعيل الجلب بقرار المالك في 2026-07-31.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
@@ -413,7 +413,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-07-18"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "audio-newsletter",
@@ -421,19 +421,18 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "توليد وجدولة ونشر ملخصات أخبار صوتية (TTS).",
+      "summary": "النشرة البريدية المجدولة الباقية؛ منتج النشرات الصوتية أُوقف في 2026-07-25 مع مسارات توافقية للعملاء القدامى.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
         "docs/AUDIO_NEWSLETTER_SYSTEM.md"
       ],
       "pathGlobs": [
-        "server/services/audioNewsletterService.ts",
         "server/services/aiNewsletterService.ts",
         "server/services/aiNewsletterEnhancer.ts",
         "server/services/newsletterScheduler.ts",
         "server/services/ttsProviderRegistry.ts",
         "server/services/smartNewsletterTemplates.ts",
-        "server/routes/audioNewsletterRoutes.ts",
+        "server/routes/audioNewsletterCompatibility.ts",
         "server/routes/smartNewsletterRoutes.ts",
         "server/routes/newsletterAnalyticsRoutes.ts",
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
@@ -446,7 +445,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-07-25"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "media-library",

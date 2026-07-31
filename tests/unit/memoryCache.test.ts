@@ -105,6 +105,25 @@ describe("StaleWhileRevalidateCache — size cap", () => {
     expect(r.isStale).toBe(true);
     expect(r.shouldRefresh).toBe(true);
   });
+
+  it("keeps a hot old key and evicts the least-recently-used live key", () => {
+    vi.useFakeTimers();
+    const swr = new StaleWhileRevalidateCache(3);
+    swr.set("old-but-hot", 1, 60_000, 60_000);
+    vi.advanceTimersByTime(10);
+    swr.set("least-recent", 2, 60_000, 60_000);
+    vi.advanceTimersByTime(10);
+    swr.set("newer", 3, 60_000, 60_000);
+    vi.advanceTimersByTime(10);
+
+    expect(swr.get("old-but-hot").data).toBe(1);
+    vi.advanceTimersByTime(10);
+    swr.set("newest", 4, 60_000, 60_000);
+
+    expect(swr.get("old-but-hot").data).toBe(1);
+    expect(swr.get("least-recent").data).toBeNull();
+    expect(swr.get("newest").data).toBe(4);
+  });
 });
 
 // single-flight: المتنافسون على نفس المفتاح يتشاركون وعد الجلب الجاري بدل

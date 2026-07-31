@@ -651,6 +651,7 @@ export function createCachedFetcher<TArgs extends any[], TResult>(
 interface SWRCacheEntry<T> {
   data: T;
   timestamp: number;
+  lastAccessedAt: number;
   ttl: number;
   staleWhileRevalidate: number;
 }
@@ -687,7 +688,8 @@ export class StaleWhileRevalidateCache {
       return { data: null, isStale: false, shouldRefresh: true };
     }
 
-    const age = Date.now() - entry.timestamp;
+    const now = Date.now();
+    const age = now - entry.timestamp;
     const isFresh = age <= entry.ttl;
     const isStale = age <= entry.ttl + entry.staleWhileRevalidate;
     const shouldRefresh = !isFresh && !this.isRefreshing(key);
@@ -697,6 +699,10 @@ export class StaleWhileRevalidateCache {
       this.cache.delete(key);
       return { data: null, isStale: false, shouldRefresh: true };
     }
+
+    // Keep freshness tied to timestamp, but track recency separately so a hot
+    // long-lived key is not evicted merely because it was created early.
+    entry.lastAccessedAt = now;
 
     return { 
       data: entry.data as T, 
@@ -709,9 +715,11 @@ export class StaleWhileRevalidateCache {
     if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
       this.evictForSpace();
     }
+    const now = Date.now();
     this.cache.set(key, {
       data,
-      timestamp: Date.now(),
+      timestamp: now,
+      lastAccessedAt: now,
       ttl: ttlMs,
       staleWhileRevalidate: staleWhileRevalidateMs,
     });
@@ -737,7 +745,7 @@ export class StaleWhileRevalidateCache {
     const overshoot = this.cache.size - this.maxEntries + 1;
     const batch = Math.max(overshoot, Math.ceil(this.maxEntries * 0.02));
     const oldest = Array.from(this.cache.entries())
-      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt)
       .slice(0, batch);
     for (const [key] of oldest) {
       this.cache.delete(key);
@@ -748,7 +756,7 @@ export class StaleWhileRevalidateCache {
     if (now - this.lastEvictionLogAt > 60_000) {
       this.lastEvictionLogAt = now;
       console.warn(
-        `[Cache] swrCache hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
+        `[Cache] ${this.name} hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} least-recently-used entries. ` +
           `If this repeats, some caller is generating unbounded cache keys.`,
       );
     }
