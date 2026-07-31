@@ -57,6 +57,8 @@ data class PredContest(
     val settledAt: String? = null,
     val metadata: PredContestMeta? = null,
     val result: PredScoreResult? = null,
+    /** عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين). */
+    val entriesCount: Int = 0,
     val myEntry: PredMyEntry? = null,
 ) {
     val isMatchScore: Boolean get() = contestType == "match_score"
@@ -104,13 +106,13 @@ data class PredRule(
                 val exact = ((p.tiers?.exact ?: 0.0) * 100).toInt()
                 val margin = ((p.tiers?.signedMargin ?: 0.0) * 100).toInt()
                 val outcome = ((p.tiers?.outcome ?: 0.0) * 100).toInt()
-                "بركة المباراة ${p.basePool ?: 0} نقطة: $exact٪ للنتيجة الدقيقة، $margin٪ للفارق الصحيح، $outcome٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
+                "جائزة المباراة ${p.basePool ?: 0} نقطة: $exact٪ للنتيجة الدقيقة، $margin٪ للفارق الصحيح، $outcome٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
             }
             "shared_pool" ->
                 if (p.winCriterion == "exact")
-                    "بركة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
+                    "جائزة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
                 else
-                    "بركة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
+                    "جائزة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
             "skill_weighted" -> "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك"
             "fixed_points" -> "نقاط ثابتة حسب دقة التوقّع"
             else -> "تُحتسب النقاط بعد صافرة النهاية"
@@ -126,6 +128,7 @@ data class PredContestDetailResponse(
     val locksAt: String = "",
     val metadata: PredContestMeta? = null,
     val result: PredScoreResult? = null,
+    val entriesCount: Int = 0,
     val myEntry: PredMyEntry? = null,
     val rule: PredRule? = null,
 )

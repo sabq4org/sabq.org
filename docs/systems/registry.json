@@ -124,6 +124,11 @@
         "server/routes/rslPredictions.ts",
         "client/src/pages/PredictionCenter.tsx",
         "client/src/components/predictions/**",
+        "sports app ios/SabqSports/Services/PredictionCoreModels.swift",
+        "sports app ios/SabqSports/Screens/PredictionCenterView.swift",
+        "sports app ios/SabqSports/Screens/PredictionContestDetailView.swift",
+        "android-native/vara/src/main/kotlin/com/sabq/vara/ui/AccountScreens.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/predictions/**",
         "docs/PREDICTION_CORE.md"
       ],
       "aiFeatureKeys": [],

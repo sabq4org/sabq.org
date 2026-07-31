@@ -265,11 +265,18 @@ struct PredMatchRowView: View {
                 centerBlock
                 teamSide(contest.metadata?.away, alignTrailing: true)
             }
-            HStack {
-                Text(subtitleText)
-                    .font(SportsFonts.app(size: 10.5))
-                    .foregroundStyle(SpTheme.onDarkFaint)
-                Spacer()
+            // يمين (RTL): الجولة/العدّاد + عدد المتوقّعين رقمًا فقط — بلا أسماء أشخاص.
+            HStack(alignment: .bottom, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(subtitleText)
+                        .font(SportsFonts.app(size: 10.5))
+                        .foregroundStyle(SpTheme.onDarkFaint)
+                    Text(predictorsLabel)
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 0)
                 statusChip
             }
         }
@@ -279,6 +286,11 @@ struct PredMatchRowView: View {
                 .fill(SpTheme.cardFill)
                 .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
         )
+    }
+
+    private var predictorsLabel: String {
+        let count = contest.predictorsCount
+        return count > 0 ? Lf("%d متوقّع", count) : L("كن أول المتوقّعين")
     }
 
     private func teamSide(_ team: PredTeamMeta?, alignTrailing: Bool) -> some View {

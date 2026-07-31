@@ -75,10 +75,13 @@ nonisolated struct PredContest: Decodable, Hashable, Identifiable {
     let settledAt: String?
     let metadata: PredContestMeta?
     let result: PredScoreResult?
+    /// عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين).
+    let entriesCount: Int?
     let myEntry: PredMyEntry?
 
     var locksAtDate: Date? { PredDates.parse(locksAt) }
     var isMatchScore: Bool { contestType == "match_score" }
+    var predictorsCount: Int { entriesCount ?? 0 }
 }
 
 // MARK: - القاعدة (ملف الاحتساب الفعّال — لتوليد شريط القاعدة، لا نص ثابت)
@@ -109,12 +112,12 @@ nonisolated struct PredRule: Decodable, Hashable {
             let e = Int(((params.tiers?.exact ?? 0) * 100).rounded())
             let m = Int(((params.tiers?.signedMargin ?? 0) * 100).rounded())
             let o = Int(((params.tiers?.outcome ?? 0) * 100).rounded())
-            return Lf("بركة المباراة %d نقطة: %d٪ للنتيجة الدقيقة، %d٪ للفارق الصحيح، %d٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية", pool, e, m, o)
+            return Lf("جائزة المباراة %d نقطة: %d٪ للنتيجة الدقيقة، %d٪ للفارق الصحيح، %d٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية", pool, e, m, o)
         case "shared_pool":
             let pool = params.basePool ?? 0
             return params.winCriterion == "exact"
-                ? Lf("بركة %d نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة", pool)
-                : Lf("بركة %d نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة", pool)
+                ? Lf("جائزة %d نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة", pool)
+                : Lf("جائزة %d نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة", pool)
         case "skill_weighted":
             return L("نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك")
         case "fixed_points":
@@ -134,10 +137,12 @@ nonisolated struct PredContestDetailResponse: Decodable {
     let settledAt: String?
     let metadata: PredContestMeta?
     let result: PredScoreResult?
+    let entriesCount: Int?
     let myEntry: PredMyEntry?
     let rule: PredRule?
 
     var locksAtDate: Date? { PredDates.parse(locksAt) }
+    var predictorsCount: Int { entriesCount ?? 0 }
 }
 
 // MARK: - الإرسال
