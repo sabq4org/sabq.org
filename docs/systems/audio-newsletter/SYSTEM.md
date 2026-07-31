@@ -1,9 +1,9 @@
 # النشرات الصوتية (`audio-newsletter`)
 
-> آخر مراجعة: 2026-07-25 | المالك: content
+> آخر مراجعة: 2026-08-01 | المالك: content
 
 ## الغرض
-توليد وجدولة ونشر ملخصات أخبار صوتية عبر مزودي TTS.
+النشرة البريدية المجدولة الباقية بعد إيقاف منتج النشرات الصوتية وتوليد ملفاته في 2026-07-25.
 
 ## الحدود
 - **داخل النطاق:** خدمات النشرة الصوتية، الجدولة، التحليلات، سجل المزودين.
@@ -12,12 +12,12 @@
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `audioNewsletterService`, `newsletterScheduler`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterRoutes` |
-| Web | `NewsletterAnalytics` + صفحات النشرات |
+| Backend | `newsletterScheduler`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
+| Web | لا توجد واجهة نشرة صوتية بعد الإيقاف |
 | Docs | `docs/AUDIO_NEWSLETTER_SYSTEM.md` |
 
 ## عقود مهمة / Gotchas
-- مسارات `/api/audio-newsletters` تُسجَّل قبل handlers قديمة في `routes.ts` — لا تكسر ترتيب التسجيل.
+- منتج الصوت ومسارات الإنشاء والإدارة محذوفة عمداً منذ PR #1216. مسارا القائمة القديمان `/api/audio-newsletters` و`/api/audio-newsletters/public` يعيدان قائمة فارغة متوافقة لعملاء الويب المخزنين، وروابط الحلقات القديمة تعيد 410.
 - ElevenLabs/Google TTS يحتاجان مفاتيح بيئة؛ الغياب = تعطيل لا انهيار.
 - **نفاد رصيد ElevenLabs:** `isElevenLabsQuotaCoolingDown` يتخطّى المزوّد 15 دقيقة بعد 401/402/quota بدل إعادة المحاولة في كل طلب. `/api/articles/:slug/summary-audio` يكاش الصوت في الذاكرة (`summary-audio:v2:*`) ويُزيل `must-revalidate` حتى لا يُعاد التوليد في كل مشاهدة.
 - الجدولة والتسليم لا يعملان داخل عملية API؛ كلاهما في Railway Worker مستقل.

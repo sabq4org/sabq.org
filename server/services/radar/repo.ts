@@ -3,6 +3,7 @@
  */
 import { and, count, desc, eq, gte, inArray, isNull, lt, sql as dsql } from "drizzle-orm";
 import { db } from "../../db";
+import { RADAR_RATE_LIMIT_BACKOFF_MINUTES } from "./fetchPolicy";
 import { topicFingerprintFor } from "./textNormalize";
 import {
   categories,
@@ -93,7 +94,16 @@ export async function sourcesDueForFetch(): Promise<RadarSource[]> {
     .where(
       and(
         eq(radarSources.isActive, true),
-        dsql`(${radarSources.lastFetchedAt} IS NULL OR ${radarSources.lastFetchedAt} < now() - make_interval(mins => ${radarSources.fetchIntervalMinutes}))`
+        dsql`(
+          ${radarSources.lastFetchedAt} IS NULL
+          OR ${radarSources.lastFetchedAt} < now() - make_interval(
+            mins => CASE
+              WHEN ${radarSources.lastError} ILIKE '%429%'
+                THEN GREATEST(${radarSources.fetchIntervalMinutes}, ${RADAR_RATE_LIMIT_BACKOFF_MINUTES})
+              ELSE ${radarSources.fetchIntervalMinutes}
+            END
+          )
+        )`
       )
     );
 }

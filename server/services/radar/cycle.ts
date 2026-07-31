@@ -7,6 +7,7 @@
  * 5) تنظيف ساعيّ للمواد القديمة غير المُصدَّرة.
  */
 import type { RadarItem } from "@shared/schema";
+import pLimit from "p-limit";
 import { analyzeItems } from "./analyst";
 import { processAlerts } from "./alerts";
 import { clusterRadarItems, itemsNeedingClustering } from "./clusterer";
@@ -19,6 +20,7 @@ import {
 } from "./flags";
 import { refreshStoryMomentum } from "./momentum";
 import { refreshStoryRelevance } from "./relevance";
+import { isRadarRateLimitError, RADAR_FETCH_CONCURRENCY } from "./fetchPolicy";
 import {
   breakingItemsNeedingDraft,
   cleanupOldItems,
@@ -38,6 +40,7 @@ const AUTO_TRANSFORM_MIN_SCORE = Number(process.env.RADAR_AUTOTRANSFORM_MIN_SCOR
 const MAX_AUTO_TRANSFORM_PER_RUN = 2;
 const RETENTION_DAYS = Number(process.env.RADAR_RETENTION_DAYS || 14);
 const autoTransformEnabled = () => process.env.RADAR_AUTO_TRANSFORM !== "false";
+const sourceFetchLimit = pLimit(RADAR_FETCH_CONCURRENCY);
 
 export interface RadarCycleSummary {
   sourcesFetched: number;
@@ -59,10 +62,12 @@ export async function fetchSingleSource(sourceId: string): Promise<number> {
   const source = await getSource(sourceId);
   if (!source) throw new Error("RADAR_SOURCE_NOT_FOUND");
   try {
-    const normalized = await fetchSource(source);
-    const inserted = await insertItems(source, normalized);
-    await markSourceFetched(source.id, null);
-    return inserted.length;
+    return await sourceFetchLimit(async () => {
+      const normalized = await fetchSource(source);
+      const inserted = await insertItems(source, normalized);
+      await markSourceFetched(source.id, null);
+      return inserted.length;
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await markSourceFetched(source.id, message.substring(0, 500));
@@ -90,7 +95,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 1) الجلب — فشل مصدر واحد لا يوقف البقية
   const due = await sourcesDueForFetch();
   const fetchResults = await Promise.allSettled(
-    due.map(async (source) => {
+    due.map((source) => sourceFetchLimit(async () => {
       try {
         const normalized = await fetchSource(source);
         const inserted = await insertItems(source, normalized);
@@ -101,9 +106,10 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
         await markSourceFetched(source.id, message.substring(0, 500));
         throw error;
       }
-    })
+    }))
   );
-  for (const result of fetchResults) {
+  for (let index = 0; index < fetchResults.length; index++) {
+    const result = fetchResults[index];
     if (result.status === "fulfilled") {
       summary.sourcesFetched++;
       summary.newItems += result.value;
@@ -111,8 +117,13 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
       summary.errors++;
       // فشل جلب/تحليل مصدر RSS (مثل "Unable to parse XML") حالة متوقَّعة لمصادر
       // متقلّبة؛ نكتفي بالرسالة المختصرة بدل إغراق السجلّات بالـ stack كل دقيقة.
+      const rateLimited = isRadarRateLimitError(result.reason);
       const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      console.warn("[Radar] source fetch failed:", reason);
+      console.warn("[Radar] source fetch failed", {
+        sourceId: due[index]?.id,
+        type: due[index]?.type,
+        reason: rateLimited ? "rate_limited" : reason.substring(0, 160),
+      });
     }
   }
 

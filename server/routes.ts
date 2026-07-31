@@ -601,7 +601,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Login
   app.post("/api/login", authLimiter, (req, res, next) => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log("🔐 Login attempt for:", req.body?.email);
+      console.log("🔐 Login attempt received");
     }
     
     passport.authenticate("local", async (err: any, user: any, info: any) => {
@@ -890,7 +890,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const emailResult = await sendVerificationEmail(newUser.id, email.toLowerCase());
       
       if (!emailResult.success) {
-        console.warn("⚠️  Failed to send verification email:", emailResult.error);
+        console.warn("⚠️  Failed to send verification email");
       }
 
       // Auto-login after registration
@@ -900,7 +900,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           return res.status(500).json({ message: "تم إنشاء الحساب ولكن فشل تسجيل الدخول التلقائي" });
         }
         
-        console.log("✅ User registered and logged in:", newUser.email);
+        console.log("✅ User registered and logged in");
         res.status(201).json({ 
           message: emailResult.success 
             ? "تم إنشاء الحساب بنجاح. يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب" 
@@ -1134,10 +1134,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Send password reset email via MailerSend
       const emailResult = await sendPasswordResetEmail(email, compositeToken);
       if (!emailResult.success) {
-        console.warn("⚠️  Failed to send password reset email:", emailResult.error);
+        console.warn("⚠️  Failed to send password reset email");
         // Still return success to prevent email enumeration
       } else {
-        console.log(`✅ Password reset email sent to ${email}`);
+        console.log("✅ Password reset email accepted for delivery");
       }
 
       res.json({ 
@@ -1271,7 +1271,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // caller's current session so they aren't logged out mid-flow.
       await invalidateAllUserSessions(userId, { exceptWebSid: req.sessionID });
 
-      console.log("✅ Password changed successfully for user:", user.email);
+      console.log("✅ Password changed successfully");
       res.json({ message: "تم تغيير كلمة المرور بنجاح" });
     } catch (error) {
       console.error("Set password error:", error);
@@ -1586,7 +1586,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "رابط الصورة مطلوب" });
       }
 
-      console.log("[Profile Image] Upload URL received:", req.body.profileImageUrl);
+      console.log("[Profile Image] Upload URL received");
 
       // If the URL is already a fully-qualified external URL (Cloudflare
       // Images via imagedelivery.net, or any other CDN), we skip the
@@ -1606,7 +1606,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             visibility: "public",
           }
         );
-        console.log("[Profile Image] Object path after ACL:", objectPath);
+        console.log("[Profile Image] Object ACL updated");
       }
 
       // Update user profile with the new image path
@@ -1615,7 +1615,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
       memoryCache.delete(`auth-user:${userId}`);
 
-      console.log("[Profile Image] User updated with new image:", user.profileImageUrl);
+      console.log("[Profile Image] User image updated");
 
       res.json({ 
         success: true,
@@ -5242,14 +5242,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         };
       });
 
-      // Debug: Log banned/deleted users
-      const bannedInResponse = usersWithRoles.filter((u: any) => u.status === "banned" || u.status === "deleted");
-      if (bannedInResponse.length > 0) {
-        console.log("[ADMIN USERS API] Banned/deleted users in response:", bannedInResponse.map((u: any) => ({ id: u.id, email: u.email, status: u.status })));
-      } else {
-        console.log("[ADMIN USERS API] No banned users found. Sample statuses:", usersWithRoles.slice(0, 3).map((u: any) => ({ id: u.id, status: u.status })));
-      }
-
       // Return in both formats for compatibility. `total` + `page` +
       // `pageSize` + `hasMore` ride along when the request was paged
       // (`?page=N` was supplied). Legacy callers see only the original
@@ -5883,7 +5875,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const normalizedEmail = parsed.data.email.trim().toLowerCase();
       const existingUser = await storage.getUserByEmailBasic(normalizedEmail);
       if (existingUser) {
-        console.log("ℹ️ [CREATE USER] Email already registered", { email: normalizedEmail, existingUserId: existingUser.id });
+        console.log("ℹ️ [CREATE USER] Email already registered");
         return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", existingUser });
       }
 
@@ -6238,8 +6230,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   
   app.post("/api/admin/staff/send-credentials", requireAuth, requirePermission("users.manage"), async (req: any, res) => {
     try {
-      const adminUser = req.user;
-      console.log(`📧 [SEND CREDENTIALS] Admin ${adminUser.email} initiating staff credentials send`);
+      console.log("📧 [SEND CREDENTIALS] Staff credentials send initiated");
 
       // Find all staff users by role
       const staffUsers = await db
@@ -6382,15 +6373,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             await invalidateAllUserSessions(staffUser.id); // new credentials — evict any old/compromised session (audit #8)
 
             results.push({ userId: staffUser.id, email: staffUser.email, success: true });
-            console.log(`✅ [SEND CREDENTIALS] Sent credentials to ${staffUser.email}`);
+            console.log("✅ [SEND CREDENTIALS] Credentials accepted for delivery");
           } else {
             results.push({ userId: staffUser.id, email: staffUser.email, success: false, error: emailResult.error });
-            console.error(`❌ [SEND CREDENTIALS] Failed to send to ${staffUser.email}: ${emailResult.error}`);
+            console.error("❌ [SEND CREDENTIALS] Provider rejected credentials email");
           }
         } catch (userError) {
           const errorMsg = userError instanceof Error ? userError.message : 'Unknown error';
           results.push({ userId: staffUser.id, email: staffUser.email, success: false, error: errorMsg });
-          console.error(`❌ [SEND CREDENTIALS] Error processing ${staffUser.email}:`, userError);
+          console.error("❌ [SEND CREDENTIALS] Error processing credentials email", {
+            name: userError instanceof Error ? userError.name : "UnknownError",
+          });
         }
       }
 
@@ -6949,7 +6942,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { pattern } = req.body;
       if (pattern) {
         memoryCache.invalidatePattern(pattern);
-        console.log(`[Cache] Admin ${req.user.email} purged cache pattern: ${pattern}`);
+        console.log(`[Cache] Admin purged cache pattern: ${pattern}`);
       } else {
         memoryCache.invalidatePattern('^article:');
         memoryCache.invalidatePattern('^articles:');
@@ -6964,7 +6957,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         memoryCache.invalidatePattern('^breaking');
         memoryCache.delete('lite-feed');
         memoryCache.delete('breaking-ticker-active');
-        console.log(`[Cache] Admin ${req.user.email} purged ALL caches`);
+        console.log(`[Cache] Admin purged ALL caches`);
       }
       res.json({ success: true, message: "Cache purged successfully" });
     } catch (error) {
@@ -6984,7 +6977,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Auto-filter for reporters: they should only see their own articles
       const userPermissions = await getUserPermissions(req.user.id);
-      console.log("[ARTICLES DEBUG] User:", req.user.email, "| Role from session:", req.user.role, "| Permissions:", userPermissions.slice(0,5).join(", ") + "...");
       const canViewAllArticles = userPermissions.includes('articles.view_all') || 
         userPermissions.includes('articles.manage') ||
         ['admin', 'system_admin', 'editor', 'chief_editor', 'content_manager'].includes(req.user.role);
@@ -6992,7 +6984,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // If user cannot view all articles, ALWAYS filter to their own content
       // Ignore any authorId parameter to prevent privilege escalation
       const shouldFilterByUser = !canViewAllArticles;
-      console.log("[ARTICLES DEBUG] canViewAllArticles:", canViewAllArticles, "| shouldFilterByUser:", shouldFilterByUser);
       const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
       const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
       const offset = (pageNum - 1) * limitNum;
@@ -20812,9 +20803,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           html: emailHtml,
         }).then(result => {
           if (result.success) {
-            console.log(`[AngleSubmissions] Email sent to ${submission.email} for ${status}`);
+            console.log(`[AngleSubmissions] Email accepted for delivery (${status})`);
           } else {
-            console.error(`[AngleSubmissions] Failed to send email: ${result.error}`);
+            console.error("[AngleSubmissions] Email provider rejected delivery");
           }
         }).catch(err => {
           console.error("[AngleSubmissions] Email error:", err);

@@ -60,8 +60,7 @@ export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolea
 
     const client = await getTwilioClient();
     
-    console.log('📱 Sending SMS OTP to:', phoneNumber);
-    console.log('📱 Using Verify Service SID:', process.env.TWILIO_VERIFY_SID.substring(0, 10) + '...');
+    console.log('📱 Sending SMS OTP');
     
     // Use Twilio Verify API to send OTP.
     // Optional TWILIO_VERIFY_TEMPLATE_SID: approved custom template whose
@@ -82,11 +81,7 @@ export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolea
       .verifications
       .create(createParams);
 
-    console.log('✅ SMS OTP sent successfully:', { 
-      to: phoneNumber, 
-      status: verification.status,
-      sid: verification.sid 
-    });
+    console.log('✅ SMS OTP request completed:', { status: verification.status });
 
     return {
       success: verification.status === 'pending',
@@ -96,10 +91,8 @@ export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolea
     };
   } catch (error: any) {
     console.error('❌ Error sending SMS OTP:', {
-      message: error.message,
       code: error.code,
       status: error.status,
-      moreInfo: error.moreInfo
     });
     
     // Provide more specific error messages based on Twilio error codes
@@ -135,7 +128,7 @@ export async function verifySMSOTP(phoneNumber: string, code: string): Promise<{
 
     const client = await getTwilioClient();
     
-    console.log('🔍 Verifying SMS OTP for:', phoneNumber);
+    console.log('🔍 Verifying SMS OTP');
     
     const verificationCheck = await client.verify.v2
       .services(process.env.TWILIO_VERIFY_SID)
@@ -145,7 +138,7 @@ export async function verifySMSOTP(phoneNumber: string, code: string): Promise<{
         code: code
       });
 
-    console.log('✅ SMS OTP verification result:', { to: phoneNumber, status: verificationCheck.status });
+    console.log('✅ SMS OTP verification result:', { status: verificationCheck.status });
 
     return {
       valid: verificationCheck.status === 'approved',
@@ -154,7 +147,11 @@ export async function verifySMSOTP(phoneNumber: string, code: string): Promise<{
         : 'الرمز غير صحيح أو منتهي الصلاحية'
     };
   } catch (error: any) {
-    console.error('❌ Error verifying SMS OTP:', error.message || error);
+    console.error('❌ Error verifying SMS OTP:', {
+      code: error?.code,
+      status: error?.status,
+      name: error?.name || 'UnknownError',
+    });
     return {
       valid: false,
       message: 'الرمز غير صحيح أو منتهي الصلاحية'
