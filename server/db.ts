@@ -67,12 +67,24 @@ function initPool(databaseUrl: string): void {
   const poolMax = Number.isFinite(parsedPoolMax)
     ? Math.min(500, Math.max(1, parsedPoolMax))
     : 50;
+  // (حادثة 2026-07-31) استعلام بلا مهلة علّق للأبد فسمّم single-flight في
+  // withSWR وعلّقت مسارات الرياضة حتى إعادة النشر. query_timeout مهلة عميل
+  // بحتة (لا SET جلسيًا — آمنة مع Neon ‑pooler، راجع حادثة 07-25) تُفشل
+  // الاستعلام محليًا بعد السقف فيتحرر أي await ينتظره ويعود الاتصال للبركة.
+  // 60 ثانية سقف واسع: أبطأ الاستعلامات الشرعية دونه بكثير، وصيانة الإقلاع
+  // كلها معزولة بـtry/catch فتسقط بأمان لو تجاوزته. نظير البركة الاحتياطية
+  // للجلسات (query_timeout: 2500 في dbPoolConfig.ts).
+  const parsedQueryTimeout = Number.parseInt(process.env.DB_QUERY_TIMEOUT_MS || "", 10);
+  const queryTimeoutMs = Number.isFinite(parsedQueryTimeout) && parsedQueryTimeout > 0
+    ? parsedQueryTimeout
+    : 60_000;
   const poolConfig = {
     connectionString: databaseUrl,
     max: poolMax,
     min: 2,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
+    query_timeout: queryTimeoutMs,
     allowExitOnIdle: true,
     maxUses: 5000,
   };
