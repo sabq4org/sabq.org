@@ -2477,34 +2477,43 @@ async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<Sp
 
   // معلومات النادي + التشكيلة لا تعتمدان على البطولة، فنبدأهما فورًا بالتوازي مع
   // اكتشاف بطولة النادي — يقلّص زمن البرود بدمج النداءات بدل تسلسلها.
-  const basePromise = Promise.all([
-    getTeamInfo(teamId).catch(() => {
-      coreFetchFailed = true;
-      return null;
-    }),
-    getSquad(teamId).catch(() => {
-      coreFetchFailed = true;
-      return null;
-    }),
-  ]);
+  const infoPromise = getTeamInfo(teamId).catch(() => {
+    coreFetchFailed = true;
+    return null;
+  });
+  const squadPromise = getSquad(teamId).catch(() => {
+    coreFetchFailed = true;
+    return null;
+  });
 
   // روشن أولًا (أغلب أندية البوابة) — تجنّب فتح 4 جداول على طابور المعدّل دفعة واحدة.
   let comp: SaudiCompetition | null = null;
   let standing: SplStandingRow | null = null;
   const pro = leagueComps.find((c) => c.slug === "pro-league");
   const others = leagueComps.filter((c) => c.slug !== "pro-league");
+  const [info, proTable] = await Promise.all([
+    infoPromise,
+    pro
+      ? getStandings(pro).catch(() => {
+          coreFetchFailed = true;
+          return [] as SplStandingRow[];
+        })
+      : Promise.resolve([] as SplStandingRow[]),
+  ]);
   if (pro) {
-    const table = await getStandings(pro).catch(() => {
-      coreFetchFailed = true;
-      return [] as SplStandingRow[];
-    });
+    const table = proTable;
     const row = table.find((r) => r.team.id === teamId);
     if (row) {
       comp = pro;
       standing = row;
     }
   }
-  if (!comp && others.length > 0) {
+  // `/api/sports/team/:id` يُستخدم أيضًا لأندية عالمية. إذا أعاد endpoint
+  // الهوية بلدًا معروفًا غير السعودية فلا معنى لفحص بقية جداول البطولات
+  // السعودية؛ كان ذلك يضيف 3 نداءات ويصطدم بمهلة المسار 3ث لكل نادٍ عالمي.
+  const country = (info?.country ?? "").toLocaleLowerCase("en");
+  const knownNonSaudi = country.length > 0 && !country.includes("saudi") && !country.includes("سعود");
+  if (!comp && !knownNonSaudi && others.length > 0) {
     const tables = await Promise.all(
       others.map((c) =>
         getStandings(c)
@@ -2527,9 +2536,9 @@ async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<Sp
 
   // الإثراء يُجلب فقط حين يطلبه المستهلك (?with=stats)، حتى لا تُكلّف النقطة
   // الأساسية نداءات إضافية. المباريات (تعتمد على البطولة) + الإثراء يُجلبان
-  // بالتوازي مع بعضهما وبعد معرفة البطولة، ومع نتيجة basePromise الجارية.
-  const [[info, squad], fixturesAll, [stats, coach, topScorers]] = await Promise.all([
-    basePromise,
+  // بالتوازي مع بعضهما وبعد معرفة البطولة، ومع نتيجة squadPromise الجارية.
+  const [squad, fixturesAll, [stats, coach, topScorers]] = await Promise.all([
+    squadPromise,
     comp ? getFixtures(comp).catch(() => [] as SplFixture[]) : Promise.resolve([] as SplFixture[]),
     withExtras
       ? Promise.all([
