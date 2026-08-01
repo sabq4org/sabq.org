@@ -1,0 +1,75 @@
+{
+  "packId": "capsulah",
+  "title": "كبسولة — صحة وعلوم طبية (مصادر يومية حصرية)",
+  "version": 1,
+  "notes": "تسلسل الرصد اليومي المقترح: 1) STAT 2) FDA Newsroom 3) WHO Newsroom 4) EurekAlert 5) MedPage Today. الحزمة مُعفاة من فلتر اهتمام سبق (topicFilter) لأن المحتوى الطبي/العلمي هو الهدف لا الصلة السعودية الضيقة.",
+  "sources": [
+    {
+      "name": "STAT News",
+      "url": "https://www.statnews.com/feed/",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "health",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.4,
+      "notes": "أولوية يومية #1 — خلاصة عامة مُختبَرة 200"
+    },
+    {
+      "name": "FDA Newsroom — Press Releases",
+      "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "health",
+      "tier": "A",
+      "region": "us",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.35,
+      "notes": "أولوية يومية #2 — بيانات FDA الرسمية"
+    },
+    {
+      "name": "WHO Newsroom",
+      "url": "https://www.who.int/rss-feeds/news-english.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "health",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.3,
+      "notes": "أولوية يومية #3 — غرفة أخبار منظمة الصحة العالمية"
+    },
+    {
+      "name": "EurekAlert — Science Releases (via Google News)",
+      "url": "https://news.google.com/rss/search?q=site%3Aeurekalert.org%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "health",
+      "tier": "B",
+      "region": "global",
+      "fetchIntervalMinutes": 20,
+      "weight": 1.2,
+      "notes": "أولوية يومية #4 — خلاصة EurekAlert المباشرة خلف AWS WAF؛ ممر Google News يعمل كبديل تشغيلي"
+    },
+    {
+      "name": "MedPage Today — Headlines",
+      "url": "https://www.medpagetoday.com/rss/Headlines.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "health",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.15,
+      "notes": "أولوية يومية #5 — عناوين طبية يومية"
+    }
+  ],
+  "xOnlyAlternatives": [
+    {
+      "outlet": "EurekAlert",
+      "handle": "@EurekAlert",
+      "reason": "RSS المباشر محجوب بـ AWS WAF challenge؛ الممر الحالي Google News + رصدة X اختيارية"
+    }
+  ]
+}

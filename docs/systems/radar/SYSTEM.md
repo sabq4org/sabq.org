@@ -29,6 +29,7 @@
 - **صلة:** `saudi_relevance` خلف `RADAR_RELEVANCE_ENABLED` — قواميس `server/services/radar/data/*.json`.
 - **فجوات v2:** `RADAR_GAP_V2_ENABLED` في editorial matcher — وحدة القصة لا المادة؛ لا تُفعَّل قبل ثبات المرحلة أ.
 - فلتر اهتمام سبق على المصادر الأجنبية: `RADAR_TOPIC_FILTER_ENABLED` (افتراضي مفعّل).
+- **حزمة كبسولة (`capsulah`):** مصادر صحة/علوم يومية (STAT → FDA → WHO → EurekAlert → MedPage). تُبذر بـ `npx tsx scripts/seed-radar-pack.ts capsulah`. مُعفاة من فلتر اهتمام سبق (`packId === "capsulah"`) حتى لا تُقصّ المواد الطبية غير المرتبطة بالسعودية. EurekAlert عبر ممر Google News لأن الخلاصة المباشرة خلف AWS WAF.
 - التفعيل التشغيلي (عند رفع القفل): `RADAR_ENABLED=true` + مفاتيح X.
 - **حماية المزوّدين:** الجلب محدود افتراضياً إلى 4 مصادر متزامنة (`RADAR_FETCH_CONCURRENCY`، من 1 إلى 12). المصدر الذي يعيد HTTP 429 يدخل تبريداً افتراضياً 15 دقيقة (`RADAR_RATE_LIMIT_BACKOFF_MINUTES`، من 5 إلى 1440) بدل إعادة طلبه كل دقيقة.
 

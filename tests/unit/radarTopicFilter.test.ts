@@ -49,11 +49,13 @@ describe("matchesSabqInterest", () => {
 });
 
 describe("shouldApplyTopicFilter", () => {
-  it("يُفلتر المصادر الأمريكية/العالمية لا الخليجية", () => {
+  it("يُفلتر المصادر الأمريكية/العالمية لا الخليجية ولا كبسولة", () => {
     expect(shouldApplyTopicFilter(source({ region: "us" }))).toBe(true);
     expect(shouldApplyTopicFilter(source({ region: "global" }))).toBe(true);
     expect(shouldApplyTopicFilter(source({ region: "gulf" }))).toBe(false);
     expect(shouldApplyTopicFilter(source({ packId: "saudi-gulf" }))).toBe(false);
+    expect(shouldApplyTopicFilter(source({ packId: "capsulah", region: "us" }))).toBe(false);
+    expect(shouldApplyTopicFilter(source({ packId: "capsulah", region: "global" }))).toBe(false);
   });
 });
 

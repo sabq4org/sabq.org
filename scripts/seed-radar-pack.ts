@@ -4,6 +4,7 @@
  * التشغيل:
  *   npx tsx scripts/seed-radar-pack.ts us-nationals
  *   npx tsx scripts/seed-radar-pack.ts us-broadcast us-business global-background saudi-gulf
+ *   npx tsx scripts/seed-radar-pack.ts capsulah
  *   npx tsx scripts/seed-radar-pack.ts x-news-accounts
  *   npx tsx scripts/seed-radar-pack.ts --all
  *

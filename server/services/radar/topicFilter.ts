@@ -17,6 +17,8 @@ export function shouldApplyTopicFilter(source: RadarSource): boolean {
   const region = (source.region ?? "").toLowerCase();
   if (region === "gulf" || region === "saudi" || region === "local") return false;
   if (source.packId === "saudi-gulf") return false;
+  // كبسولة: محتوى صحة/علوم حصري — لا يُقصّ بفلتر اهتمام سبق (سعودية/مونديال/…)
+  if (source.packId === "capsulah") return false;
   // حسابات/RSS أمريكية أو عالمية أو بلا منطقة مع لغة إنجليزية
   if (region === "us" || region === "global" || region === "eu" || region === "world") return true;
   if (!region && (source.language === "en" || source.language === "es" || source.language === "fr")) {
