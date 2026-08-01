@@ -42,11 +42,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      # Reports high/critical advisories in production deps. Non-blocking for now
-      # (a backlog exists); Dependabot opens the fix PRs. Flip continue-on-error
-      # to false once the backlog is cleared to make this a hard gate.
+      # Block new high/critical advisories in production dependencies. Moderate
+      # findings remain tracked separately so they do not mask urgent regressions.
       - name: npm audit (production deps)
-        continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
   sast:
