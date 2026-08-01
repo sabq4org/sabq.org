@@ -25,6 +25,7 @@ import {
 } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
 import {
+  AudioFrame,
   AudioStream,
   RemoteTrack,
   RemoteTrackPublication,
@@ -46,6 +47,7 @@ if (
 }
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH = 40;
+const TRANSCRIPTION_FINAL_GRACE_MS = 5_000;
 const TRANSCRIPTION_DRAIN_TIMEOUT_MS = 20_000;
 
 interface Segment {
@@ -170,11 +172,31 @@ export default defineAgent({
       const audio = new AudioStream(track, { sampleRate: 16000, numChannels: 1 });
       const reader = audio.getReader();
       let inputEnded = false;
+      let streamClosed = false;
+      let forceCloseTimer: NodeJS.Timeout | undefined;
+
+      const forceClose = () => {
+        if (forceCloseTimer) clearTimeout(forceCloseTimer);
+        forceCloseTimer = undefined;
+        if (!streamClosed) {
+          streamClosed = true;
+          sttStream.close();
+        }
+      };
 
       const endInput = () => {
         if (inputEnded) return;
         inputEnded = true;
+        // OpenAI Realtime VAD needs trailing silence to commit the last utterance.
+        // flush() forwards any partial audio chunk; the grace timer then closes
+        // the WebSocket-backed stream, which otherwise remains open indefinitely.
+        const silenceSamples = 12_000; // 750ms at 16kHz
+        sttStream.pushFrame(
+          new AudioFrame(new Int16Array(silenceSamples), 16_000, 1, silenceSamples),
+        );
+        sttStream.flush();
         sttStream.endInput();
+        forceCloseTimer = setTimeout(forceClose, TRANSCRIPTION_FINAL_GRACE_MS);
       };
 
       const run = (async () => {
@@ -207,7 +229,7 @@ export default defineAgent({
           }
           await feed;
         } finally {
-          sttStream.close();
+          forceClose();
         }
       })().catch((e) =>
         console.error(`[Agent] stt for ${participant.identity} failed:`, (e as Error).message),
@@ -217,7 +239,7 @@ export default defineAgent({
           await reader.cancel("room disconnected").catch(() => {});
           endInput();
         },
-        forceClose: () => sttStream.close(),
+        forceClose,
       });
       run.finally(() => activeStreams.delete(run));
     };
