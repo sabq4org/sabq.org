@@ -49,7 +49,7 @@
 | الخدمة | المصدر | قاعدة البيانات/السلوك |
 |--------|--------|------------------------|
 | `sabq-staging-api` | جذر المستودع · `/railway.json` | شبكة Railway الداخلية فقط؛ PostgreSQL staging مستقل؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
-| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | `API_ORIGIN` يشير إلى API الداخلي؛ `STAGING_NO_INDEX=true` |
+| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | API داخلي؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
 | `Postgres` | Railway Postgres 18 + pgvector | volume مستقل، ولا يوجد `NEON_DATABASE_URL` |
 
 لا توجد خدمات `newsletter-worker` أو `meetings-agent` أو `sabq-mirror` في
@@ -77,12 +77,15 @@ railway ssh --project 49260270-79b7-40af-9e91-2599a6161f46 \
   node -e 'fetch(process.env.API_ORIGIN + "/health").then(async r => { \
     const j = await r.json(); console.log(r.status, j.status, j.database); \
     if (!r.ok || j.database !== "connected") process.exit(1); })'
+read -rsp "STAGING_ACCESS_TOKEN: " STAGING_ACCESS_TOKEN; echo
 curl -fsSI https://sabq-staging-web-next-staging.up.railway.app/ \
+  -u "sabq:${STAGING_ACCESS_TOKEN}" \
   | grep -iE 'HTTP/|x-robots-tag|cache-control'
 ```
 
 المتوقع: API يعيد `200` و`database=connected`، والويب يعيد `200` مع
 `X-Robots-Tag: noindex, nofollow, noarchive` و`Cache-Control: private, no-store`.
+بدون Basic Auth يجب أن يعيد الويب `401`، بينما يبقى `/health` عاماً لـ Railway.
 
 ### تطبيق المخطط على staging أولاً
 

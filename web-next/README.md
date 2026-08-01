@@ -43,6 +43,8 @@ See `.env.example`. Required in production:
 - `PUBLIC_SITE_URL` — canonical origin for `<canonical>` / OG (`https://sabq.org`).
 - `STAGING_NO_INDEX=true` — staging فقط؛ يضيف `X-Robots-Tag` و`robots` meta
   ويحوّل الكاش إلى `private, no-store`. اتركه غير مضبوط في الإنتاج.
+- `STAGING_ACCESS_TOKEN` — staging فقط؛ يفعّل Basic Auth باسم مستخدم `sabq`.
+  مسار `/health` مستثنى حتى يعمل Railway health check.
 
 ## Deploy (Railway)
 
