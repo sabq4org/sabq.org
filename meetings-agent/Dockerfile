@@ -10,7 +10,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 # devDependencies مطلوبة للبناء (tsc)
-RUN npm install
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src

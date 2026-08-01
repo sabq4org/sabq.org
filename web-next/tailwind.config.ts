@@ -1,4 +1,6 @@
 import type { Config } from "tailwindcss";
+import typography from "@tailwindcss/typography";
+import animate from "tailwindcss-animate";
 
 // Mirrors the root tailwind.config.ts theme so the Next SSR surfaces match the
 // existing web design. Keep color/radius tokens in sync with client/src/index.css.
@@ -65,5 +67,5 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
+  plugins: [animate, typography],
 } satisfies Config;
