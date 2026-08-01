@@ -26,12 +26,12 @@ const API_BASE = "https://v3.football.api-sports.io";
 const WINDOW_MS = 60_000;
 const DEFAULT_RPM = 250;
 /**
- * تباعد إلزامي بين نداءين متتاليين (~12/ثانية كحد أقصى): المزوّد يرفض الرشقات
+ * تباعد إلزامي بين نداءين متتاليين (~8/ثانية كحد أقصى): المزوّد يرفض الرشقات
  * اللحظية حتى تحت حدّ الدقيقة — النشر البارد كان يفتح عشرات النداءات في نفس
  * الميلي ثانية فيرُدّ rateLimit رغم أن مجموع الدقيقة سليم (متحقَّق من سجلات
  * 2026-07-04: 429 والعداد اليومي/الدقيقة بعيد عن السقف).
  */
-const MIN_GAP_MS = 80;
+const MIN_GAP_MS = 125;
 /**
  * تهدئة 429/حصة الاشتراك. الانتظار داخل الطلب أُلغي؛ خلال هذه المدة تفشل
  * النداءات الجديدة فورًا، فيخدم SWR البائت ولا تتكون طوابير خلف مزوّد رافض.
@@ -76,6 +76,23 @@ const OUTAGE_WINDOW_THRESHOLD = 12;
  */
 const DEFAULT_MAX_PENDING_WAITERS = 80;
 
+/**
+ * رفض backpressure متوقع، وليس عطلًا برمجيًا يحتاج stack trace. طبقات SWR
+ * تسجّل الخطأ عند كل مستوى؛ stack كامل لكل رفض حوّل cold-start واحدًا إلى
+ * أكثر من 500 سطر/ثانية في Railway. نحتفظ برسالة سطر واحد للتشخيص.
+ */
+class ApiFootballBackpressureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiFootballBackpressureError";
+    this.stack = `${this.name}: ${message}`;
+  }
+}
+
+function backpressureError(message: string): ApiFootballBackpressureError {
+  return new ApiFootballBackpressureError(message);
+}
+
 /** الحدّ الفعلي بالدقيقة كما رصدناه من ترويسات المزوّد (يتكيّف مع الخطة تلقائيًا). */
 let observedRpm: number | null = null;
 /** لا نداءات جديدة قبل هذا الوقت — يُرفع عندما يصرّح المزوّد بتجاوز الحدّ. */
@@ -110,7 +127,7 @@ function currentRpm(): number {
 async function acquireSlot(tag: string, path: string): Promise<void> {
   const now = Date.now();
   if (now < cooldownUntil) {
-    throw new Error(`[${tag}] API-Football rate-limited — cooling down, skipped ${path}`);
+    throw backpressureError(`[${tag}] API-Football rate-limited — cooling down, skipped ${path}`);
   }
   while (scheduled.length && scheduled[0] <= now - WINDOW_MS) scheduled.shift();
   const rpm = currentRpm();
@@ -125,7 +142,7 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
   const wait = at - now;
   const maxWait = envMs("APIFOOTBALL_MAX_QUEUE_WAIT_MS", DEFAULT_MAX_QUEUE_WAIT_MS);
   if (wait > maxWait) {
-    throw new Error(
+    throw backpressureError(
       `[${tag}] API-Football queue saturated (${wait}ms > ${maxWait}ms) for ${path}`,
     );
   }
@@ -143,7 +160,7 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
     }
     const maxPending = envMs("APIFOOTBALL_MAX_PENDING_WAITERS", DEFAULT_MAX_PENDING_WAITERS);
     if (pendingWaiters >= maxPending) {
-      throw new Error(
+      throw backpressureError(
         `[${tag}] API-Football wait room full (${pendingWaiters} pending) for ${path}`,
       );
     }
@@ -157,7 +174,7 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
     // قد يكون نداء آخر تلقّى 429 بينما كنا ننتظر دورنا. لا نرسل موجة الوعود
     // النائمة بعد أن أعلن المزود رفضه؛ نفشلها لتعود للكاش البائت فورًا.
     if (Date.now() < cooldownUntil) {
-      throw new Error(`[${tag}] API-Football rate-limited — cooling down, skipped ${path}`);
+      throw backpressureError(`[${tag}] API-Football rate-limited — cooling down, skipped ${path}`);
     }
     return;
   }
@@ -238,7 +255,7 @@ export async function apiFootballGet(
   if (!apiKey) throw new Error("APIFOOTBALL_KEY is not set");
 
   if (Date.now() < outageUntil) {
-    throw new Error(`[${tag}] API-Football unreachable — cooling down, skipped ${path}`);
+    throw backpressureError(`[${tag}] API-Football unreachable — cooling down, skipped ${path}`);
   }
 
   const url = new URL(`${API_BASE}/${path}`);
@@ -288,7 +305,7 @@ export async function apiFootballGet(
   if (!response.ok) {
     if (response.status === 429) {
       reportRateLimited(tag, path);
-      throw new Error(`[${tag}] API-Football rate-limited (HTTP 429) for ${path}`);
+      throw backpressureError(`[${tag}] API-Football rate-limited (HTTP 429) for ${path}`);
     }
     throw new Error(`[${tag}] API-Football HTTP ${response.status} for ${path}`);
   }
@@ -300,7 +317,7 @@ export async function apiFootballGet(
     // كلاهما غير قابل للحل بإعادة فورية داخل نفس طلب المستخدم.
     if (errors.rateLimit || errors.requests) {
       reportRateLimited(tag, path);
-      throw new Error(`[${tag}] API-Football rate-limited for ${path}`);
+      throw backpressureError(`[${tag}] API-Football rate-limited for ${path}`);
     }
     throw new Error(`[${tag}] API-Football error for ${path}: ${JSON.stringify(errors)}`);
   }
