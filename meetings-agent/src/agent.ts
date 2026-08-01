@@ -1,7 +1,8 @@
 // ----------------------------------------------------------------------------
 // «أمين المحضر» — عامل تفريغ اجتماعات سبق
 //
-// خدمة مستقلة (Railway) تسجَّل لدى LiveKit Cloud باسم sabq-minutes-agent
+// خدمة مستقلة (Railway) تسجَّل لدى LiveKit Cloud بالاسم المحدد في
+// LIVEKIT_AGENT_NAME (والافتراضي للإنتاج sabq-minutes-agent)
 // وتُستدعى حصراً عبر Agent Dispatch من خادم سبق عند بدء اجتماع مفعَّل
 // المحضر (metadata تحمل meetingId). تشترك في مسار صوت كل متحدث على حدة
 // — فهوية المتحدث معروفة من المسار بلا نماذج فصل — وتبث المقاطع النهائية
@@ -9,6 +10,7 @@
 //
 // المتغيرات المطلوبة:
 //   LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+//   LIVEKIT_AGENT_NAME        — اسم مستقل لكل بيئة
 //   OPENAI_API_KEY            — للتفريغ (gpt-4o-transcribe)
 //   SABQ_API_URL              — مثال: https://api.sabq.org
 //   MEETINGS_AGENT_SECRET     — نفس قيمة الخادم الرئيسي
@@ -31,7 +33,17 @@ import {
 } from "@livekit/rtc-node";
 import { fileURLToPath } from "node:url";
 
-const AGENT_NAME = "sabq-minutes-agent";
+const DEFAULT_AGENT_NAME = "sabq-minutes-agent";
+const AGENT_NAME = process.env.LIVEKIT_AGENT_NAME?.trim() || DEFAULT_AGENT_NAME;
+
+if (
+  process.env.RAILWAY_ENVIRONMENT_NAME === "staging" &&
+  AGENT_NAME === DEFAULT_AGENT_NAME
+) {
+  throw new Error(
+    "LIVEKIT_AGENT_NAME must use a non-production name in the Railway staging environment",
+  );
+}
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH = 40;
 
