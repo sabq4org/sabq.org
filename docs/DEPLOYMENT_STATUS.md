@@ -89,13 +89,24 @@ curl -fsSI https://sabq-staging-web-next-staging.up.railway.app/ \
 يُستخدم فقط مع متغيرات خدمة `Postgres` داخل بيئة Railway `staging`:
 
 ```bash
+# افتح TCP مؤقتاً وسجّل id الناتج
+railway tcp-proxy create --port 5432 \
+  --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres --json
+
 railway run --project 49260270-79b7-40af-9e91-2599a6161f46 \
   --environment staging --service Postgres --no-local \
   npm run db:push:staging
+
+# أغلق المنفذ العام فور نجاح Drizzle
+railway tcp-proxy delete <PROXY_ID> --yes \
+  --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres
 ```
 
 السكربت يرفض أي بيئة غير `staging`، ويرفض Neon، ويتحقق من مشروع Railway
-والخدمة، ثم يفعّل pgvector قبل Drizzle. راجع أيضاً
+والخدمة، ثم يفعّل pgvector قبل Drizzle. لا تترك TCP proxy فعالاً بعد العملية؛
+الوضع الطبيعي لقاعدة staging هو الشبكة الداخلية فقط. راجع أيضاً
 [`docs/setup/LOCAL_POSTGRES_AR.md`](setup/LOCAL_POSTGRES_AR.md).
 
 ---

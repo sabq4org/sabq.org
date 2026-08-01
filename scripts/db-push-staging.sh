@@ -47,6 +47,7 @@ TARGET_INFO="$({
   '
 } 2>/dev/null)" || {
   echo "REJECTED: target must be the Railway staging PostgreSQL service."
+  echo "Create a temporary Railway TCP proxy first, then delete it after the push."
   exit 1
 }
 
