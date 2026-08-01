@@ -1,3 +1,5 @@
+const stagingNoIndex = process.env.STAGING_NO_INDEX === "true";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -20,8 +22,18 @@ const nextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+            value: stagingNoIndex
+              ? "private, no-store"
+              : "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
           },
+          ...(stagingNoIndex
+            ? [
+                {
+                  key: "X-Robots-Tag",
+                  value: "noindex, nofollow, noarchive",
+                },
+              ]
+            : []),
         ],
       },
     ];

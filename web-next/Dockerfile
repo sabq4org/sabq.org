@@ -8,6 +8,8 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG STAGING_NO_INDEX=false
+ENV STAGING_NO_INDEX=$STAGING_NO_INDEX
 # API_ORIGIN/PUBLIC_SITE_URL are read at runtime; safe defaults during build.
 RUN npm run build
 
@@ -15,6 +17,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV STAGING_NO_INDEX=false
 # Bind to all interfaces so Railway's proxy can reach the container.
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3001

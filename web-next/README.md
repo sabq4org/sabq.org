@@ -41,6 +41,8 @@ See `.env.example`. Required in production:
 
 - `API_ORIGIN` — Railway API origin the SSR fetches from (e.g. `https://api.sabq.org`).
 - `PUBLIC_SITE_URL` — canonical origin for `<canonical>` / OG (`https://sabq.org`).
+- `STAGING_NO_INDEX=true` — staging فقط؛ يضيف `X-Robots-Tag` و`robots` meta
+  ويحوّل الكاش إلى `private, no-store`. اتركه غير مضبوط في الإنتاج.
 
 ## Deploy (Railway)
 
