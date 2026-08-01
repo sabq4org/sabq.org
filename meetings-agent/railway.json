@@ -2,7 +2,10 @@
   "$schema": "https://schema.up.railway.app/v1.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "dockerfilePath": "Dockerfile",
+    "watchPatterns": [
+      "/meetings-agent/**"
+    ]
   },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",

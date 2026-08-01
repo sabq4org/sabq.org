@@ -1,6 +1,6 @@
 # حالة النشر الحالية — sabq.org
 
-> **آخر تحديث:** 2026-07-22
+> **آخر تحديث:** 2026-08-01
 >
 > **ملاحظة تشغيلية:** انتقل الإنتاج الرسمي من **Replit** إلى **Cloudflare Pages** (الواجهة) + **Railway** (الـ API) في **منتصف مايو 2026** (~أسبوعين قبل هذا التاريخ). Replit لم يعد مسار النشر الحالي.
 
@@ -38,6 +38,33 @@
 | **Replit** | legacy — كان الإنتاج الأصلي (عملية واحدة: API + SPA). الكود ما زال يدعم هذا الوضع محلياً عبر `npm run dev` |
 | **Vercel** | مُستبدَل بـ Cloudflare Pages على `sabq.org` (كان وسيطاً قبل Pages) |
 | **`sabq.news`** | تجريبي سابق (Vercel + Railway) — ليس الإنتاج الرسمي |
+
+---
+
+## Railway Watch Paths — خدمات المستودع الواحد
+
+خدمات Railway المرتبطة بفرع `main` تستخدم `build.watchPatterns` داخل ملفات
+`railway*.json`. الأنماط تُحسب من جذر المستودع حتى عندما تضبط الخدمة
+`Root Directory`، وتمنع إنشاء deployment إذا لم يطابق أي ملف متغيّر.
+
+| الخدمة | Config File | ما يعيد نشرها |
+|--------|-------------|----------------|
+| `sabq.org` (API) | `/railway.json` | `server/**` و`shared/**`، اعتماديات npm، Docker، ملفات TypeScript/Drizzle، وأصول التشغيل المنسوخة للصورة (`public/**` و`certs/**` و`docs/systems/**`) |
+| `newsletter-worker` | `/railway.newsletter-worker.json` | نقطة دخول العامل واعتمادياتها المشتركة المباشرة/الانتقالية، `shared/**`، اعتماديات npm، وملفات Docker/Railway/TypeScript/Drizzle |
+| `meetings-agent` | `/meetings-agent/railway.json` | `meetings-agent/**` فقط؛ يشمل Dockerfile واعتمادياته المحلية |
+| `web-next` | `/web-next/railway.json` | `web-next/**` فقط؛ يشمل Dockerfile وملف Railway واعتماديات Next المحلية |
+
+### قواعد الصيانة
+
+- أي خدمة جديدة في monorepo يجب أن تضيف Watch Patterns قبل تفعيل النشر التلقائي.
+- عند إضافة import جديد إلى `server/newsletterWorker.ts` أو أحد اعتمادياته، أضف مساره
+  إلى `/railway.newsletter-worker.json` في نفس PR. تغيير الملف المستورِد نفسه سيطلق
+  أول نشر، لكن إدراج الاعتماد الجديد يمنع فقدان نشر تعديلاته اللاحقة.
+- تعديل `Dockerfile` الجذري يعيد نشر `sabq.org` و`newsletter-worker` لأنهما يستخدمانه معاً.
+- `sabq-mirror` غير مشمول هنا؛ يتبع فرع `feature/readonly-mirror-news-subdomain`
+  وتتم معالجة تقادمه في #1329.
+- تغيير توثيق أو تطبيق موبايل فقط لا يعيد تشغيل خدمات Railway الأربع ما لم يطابق
+  أحد أصول التشغيل المذكورة أعلاه.
 
 ---
 

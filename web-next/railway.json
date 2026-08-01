@@ -2,7 +2,10 @@
   "$schema": "https://schema.up.railway.app/v1.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "dockerfilePath": "Dockerfile",
+    "watchPatterns": [
+      "/web-next/**"
+    ]
   },
   "deploy": {
     "startCommand": "node server.js",

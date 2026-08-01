@@ -2,7 +2,21 @@
   "$schema": "https://schema.up.railway.app/v1.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "dockerfilePath": "Dockerfile",
+    "watchPatterns": [
+      "/server/**",
+      "/shared/**",
+      "/package.json",
+      "/package-lock.json",
+      "/Dockerfile",
+      "/.dockerignore",
+      "/railway.json",
+      "/tsconfig.json",
+      "/drizzle.config.ts",
+      "/public/**",
+      "/certs/**",
+      "/docs/systems/**"
+    ]
   },
   "deploy": {
     "startCommand": "node --max-old-space-size=3072 dist/index.js",
