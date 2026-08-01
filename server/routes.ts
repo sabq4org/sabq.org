@@ -566,20 +566,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Start WhatsApp message aggregator job (processes multi-part messages)
   startMessageAggregatorJob();
 
-  // Helper function to check if user has moderator role (legacy + RBAC).
-  // Keep in sync with requireModeratorAuth in server/routes/commentModeration.ts —
-  // must include SUPERUSER aliases (system_admin) or dashboard APIs 403 while the nav still shows.
-  const COMMENT_MODERATOR_ROLES = [
-    "admin",
-    "superadmin",
-    "system_admin",
-    "system.admin",
-    "super_admin",
-    "editor",
-    "chief_editor",
-    "moderator",
-    "comments_moderator",
-  ];
+  // Keep in sync with commentModeration.ts — include system_admin aliases.
+  const COMMENT_MODERATOR_ROLES = ["admin", "superadmin", "system_admin", "system.admin", "super_admin", "editor", "chief_editor", "moderator", "comments_moderator"];
   
   async function hasModeratorRole(userId: string, legacyRole: string): Promise<boolean> {
     // Check 1: Legacy role field
