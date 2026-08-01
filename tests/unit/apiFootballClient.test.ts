@@ -29,9 +29,9 @@ describe("apiFootballGet rate-limit backpressure", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { apiFootballGet } = await import("../../server/services/apiFootballClient");
 
-    await expect(apiFootballGet("Test", "players", { id: 1 })).rejects.toThrow(
-      "API-Football rate-limited",
-    );
+    const error = await apiFootballGet("Test", "players", { id: 1 }).catch((caught) => caught as Error);
+    expect(error.message).toContain("API-Football rate-limited");
+    expect(error.stack?.split("\n")).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
