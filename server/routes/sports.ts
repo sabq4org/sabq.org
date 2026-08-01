@@ -1379,20 +1379,43 @@ export function registerSportsRoutes(app: Express) {
       const withExtras = req.query.with === "stats";
       let timedOut = false;
       let failed = false;
-      const profile = await bestEffortWithin(getTeamProfile(id, { withExtras }), {
+      const fullAttempt = bestEffortWithin(getTeamProfile(id, { withExtras }), {
         fallback: null,
         // بعد SWR على الملف الكامل: 3ث كافية؛ أطول من ذلك = طابور مزوّد محتجز.
         timeoutMs: 3_000,
         onTimeout: () => {
           timedOut = true;
-          warnThrottled(`deadline:team-profile:${id}`, `[Sports] team profile deadline exceeded for ${id}`);
         },
         onError: () => {
           failed = true;
         },
-      });
+      }).then((profile) => ({ profile, enriched: true }));
+
+      // الإحصاءات/المدرب/الهدافون إثراء اختياري. على البرود نبدأ الملف الأساسي
+      // بالتوازي ونُرجعه فور اكتماله بدل حجب صفحة النادي كلها حتى تنتهي الإثراءات
+      // خلف طابور المزود. مفاتيح الأجزاء الداخلية SWR + single-flight، لذلك لا
+      // تتكرر نداءات الهوية/التشكيلة/الترتيب بين المحاولتين.
+      const result = withExtras
+        ? await Promise.race([
+            fullAttempt,
+            bestEffortWithin(getTeamProfile(id, { withExtras: false }), {
+              fallback: null,
+              timeoutMs: 3_000,
+              onTimeout: () => {
+                timedOut = true;
+              },
+              onError: () => {
+                failed = true;
+              },
+            }).then(async (profile) => profile
+              ? { profile, enriched: false }
+              : fullAttempt),
+          ])
+        : await fullAttempt;
+      const { profile } = result;
       if (!profile) {
         if (timedOut || failed) {
+          warnThrottled(`deadline:team-profile:${id}`, `[Sports] team profile deadline exceeded for ${id}`);
           res.set("Retry-After", "15");
           res.status(503).json({ message: "صفحة النادي تُحمَّل حاليًا" });
           return;
@@ -1400,7 +1423,14 @@ export function registerSportsRoutes(app: Express) {
         res.status(404).json({ message: "النادي غير موجود" });
         return;
       }
-      res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1800");
+      if (result.enriched) {
+        res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1800");
+      } else {
+        // لا يُخزّن CDN الاستجابة الجزئية مكان النسخة الكاملة؛ الطلب التالي يصيب
+        // كاش الإثراء الذي استمر بناؤه في الخلفية.
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", "2");
+      }
       res.json(profile);
     } catch (error) {
       console.error("[Sports] team profile failed:", error);
