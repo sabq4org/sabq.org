@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import DOMPurify from "isomorphic-dompurify";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -251,7 +251,9 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
       params.append("page", commentsPage.toString());
       params.append("limit", "15");
 
-      const response = await fetch(`/api/moderation/search/comments?${params.toString()}`);
+      const response = await fetch(apiUrl(`/api/moderation/search/comments?${params.toString()}`), {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to search comments");
       return response.json();
     },
@@ -277,7 +279,9 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
       params.append("page", articlesPage.toString());
       params.append("limit", "10");
 
-      const response = await fetch(`/api/moderation/search/articles?${params.toString()}`);
+      const response = await fetch(apiUrl(`/api/moderation/search/articles?${params.toString()}`), {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to search articles");
       return response.json();
     },
@@ -484,14 +488,17 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs text-muted-foreground">الحالة</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
+                          <Select
+                            value={field.value || "all"}
+                            onValueChange={(value) => field.onChange(value === "all" ? "" : value)}
+                          >
                             <FormControl>
                               <SelectTrigger data-testid="select-status">
                                 <SelectValue placeholder="جميع الحالات" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">جميع الحالات</SelectItem>
+                              <SelectItem value="all">جميع الحالات</SelectItem>
                               <SelectItem value="pending">قيد المراجعة</SelectItem>
                               <SelectItem value="approved">معتمد</SelectItem>
                               <SelectItem value="rejected">مرفوض</SelectItem>
@@ -510,14 +517,17 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs text-muted-foreground">تصنيف الذكاء الاصطناعي</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
+                          <Select
+                            value={field.value || "all"}
+                            onValueChange={(value) => field.onChange(value === "all" ? "" : value)}
+                          >
                             <FormControl>
                               <SelectTrigger data-testid="select-ai-classification">
                                 <SelectValue placeholder="جميع التصنيفات" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">جميع التصنيفات</SelectItem>
+                              <SelectItem value="all">جميع التصنيفات</SelectItem>
                               <SelectItem value="safe">آمن</SelectItem>
                               <SelectItem value="flagged">مشكوك فيه</SelectItem>
                               <SelectItem value="spam">سبام</SelectItem>
@@ -537,14 +547,17 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs text-muted-foreground">القسم</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
+                          <Select
+                            value={field.value || "all"}
+                            onValueChange={(value) => field.onChange(value === "all" ? "" : value)}
+                          >
                             <FormControl>
                               <SelectTrigger data-testid="select-category">
                                 <SelectValue placeholder="جميع الأقسام" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">جميع الأقسام</SelectItem>
+                              <SelectItem value="all">جميع الأقسام</SelectItem>
                               {categories?.map((cat) => (
                                 <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                               ))}

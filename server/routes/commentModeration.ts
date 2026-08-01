@@ -12,44 +12,68 @@ import { z } from "zod";
 import { db } from "../db";
 import { userRoles, roles, users, comments } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { userHasPermission } from "../rbac";
 
 const router = Router();
 
-// List of moderator roles that can access comment moderation features
-const MODERATOR_ROLES = ['admin', 'superadmin', 'editor', 'chief_editor', 'moderator', 'comments_moderator'];
+/**
+ * أدوار إشراف التعليقات — تشمل SUPERUSER_ROLE_NAMES (admin / system_admin / …)
+ * حتى لا تُرفض لوحة `/dashboard/ai-moderation` لحسابات مدير النظام التي
+ * ترى العنصر في الشريط الجانبي (صلاحية *) بينما القائمة القديمة كانت
+ * تُسقِط `system_admin` فترجع /api/moderation/* بـ 403 والواجهة تبدو فارغة.
+ */
+const MODERATOR_ROLES: readonly string[] = [
+  ...SUPERUSER_ROLE_NAMES,
+  "super_admin",
+  "editor",
+  "chief_editor",
+  "moderator",
+  "comments_moderator",
+];
 
 async function requireModeratorAuth(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
-  if (!user) {
+  if (!user?.id) {
     return res.status(401).json({ error: "يجب تسجيل الدخول للقيام بهذا الإجراء" });
   }
-  
-  // Check 1: Legacy role field in users table
+
+  // 1) صلاحية comments.view — مصدر الحقيقة مع الشريط الجانبي؛
+  //    userHasPermission يختصر SUPERUSER (بما فيه system_admin).
+  try {
+    if (await userHasPermission(user.id, PERMISSION_CODES.COMMENTS_VIEW)) {
+      return next();
+    }
+  } catch (error) {
+    console.error("[Moderation] Permission check error:", error);
+  }
+
+  // 2) دور نصّي قديم في users.role
   if (user.role && MODERATOR_ROLES.includes(user.role)) {
     return next();
   }
-  
-  // Check 2: RBAC user_roles table (for new role-based system)
+
+  // 3) أدوار RBAC في user_roles (محرر / مشرف تعليقات بلا comments.view صريح في الخريطة)
   try {
     const rbacRoles = await db
       .select({ roleName: roles.name })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, user.id));
-    
-    const userRoleNames = rbacRoles.map(r => r.roleName);
-    const hasModeratorRole = userRoleNames.some(roleName => MODERATOR_ROLES.includes(roleName));
-    
-    if (hasModeratorRole) {
-      console.log(`[Moderation] RBAC auth granted for user ${user.email} with roles: ${userRoleNames.join(', ')}`);
+
+    const userRoleNames = rbacRoles.map((r) => r.roleName);
+    if (userRoleNames.some((roleName) => MODERATOR_ROLES.includes(roleName))) {
+      console.log(`[Moderation] RBAC auth granted for user ${user.email} with roles: ${userRoleNames.join(", ")}`);
       return next();
     }
-    
-    console.log(`[Moderation] Access denied for user ${user.email}. Legacy role: ${user.role}, RBAC roles: ${userRoleNames.join(', ')}`);
+
+    console.log(
+      `[Moderation] Access denied for user ${user.email}. Legacy role: ${user.role}, RBAC roles: ${userRoleNames.join(", ")}`,
+    );
   } catch (error) {
     console.error("[Moderation] RBAC check error:", error);
   }
-  
+
   return res.status(403).json({ error: "ليس لديك صلاحية للوصول إلى هذه الميزة" });
 }
 

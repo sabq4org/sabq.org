@@ -281,7 +281,12 @@ export default function AIModerationDashboard() {
   const [memberStatusFilter, setMemberStatusFilter] = useState<string>("all");
   const [memberCommentPage, setMemberCommentPage] = useState(1);
 
-  const { data: stats, isLoading: statsLoading } = useQuery<ModerationStats>({
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsError,
+    refetch: refetchStats,
+  } = useQuery<ModerationStats>({
     queryKey: ["/api/moderation/stats"],
   });
 
@@ -289,29 +294,37 @@ export default function AIModerationDashboard() {
     queryKey: ["/api/moderation/sentiment-stats"],
   });
 
-  const { data: results, isLoading: resultsLoading, refetch } = useQuery<ModerationResult[]>({
+  const { data: resultsRaw, isLoading: resultsLoading, isError: resultsError, refetch } = useQuery<ModerationResult[]>({
     queryKey: ["/api/moderation/results", activeTab, scoreFilter],
     queryFn: async () => {
-      let url = "/api/moderation/results?";
+      const params = new URLSearchParams();
       if (activeTab !== "all") {
-        url += `classification=${activeTab}&`;
+        params.set("classification", activeTab);
       }
       if (scoreFilter !== "all") {
         const [min, max] = scoreFilter.split("-").map(Number);
-        url += `minScore=${min}&maxScore=${max}&`;
+        params.set("minScore", String(min));
+        params.set("maxScore", String(max));
       }
-      const response = await fetch(url);
+      const qs = params.toString();
+      const response = await fetch(apiUrl(`/api/moderation/results${qs ? `?${qs}` : ""}`), {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to fetch results");
-      return response.json();
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
+  const results = Array.isArray(resultsRaw) ? resultsRaw : [];
 
   // Member profile query
   const { data: memberProfile, isLoading: memberProfileLoading } = useQuery<MemberProfile>({
     queryKey: ["/api/moderation/member", selectedMemberId],
     queryFn: async () => {
       if (!selectedMemberId) throw new Error("No member selected");
-      const response = await fetch(apiUrl(`/api/moderation/member/${selectedMemberId}`));
+      const response = await fetch(apiUrl(`/api/moderation/member/${selectedMemberId}`), {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to fetch member profile");
       return response.json();
     },
@@ -323,11 +336,14 @@ export default function AIModerationDashboard() {
     queryKey: ["/api/moderation/member", selectedMemberId, "comments", memberStatusFilter, memberCommentPage],
     queryFn: async () => {
       if (!selectedMemberId) throw new Error("No member selected");
-      let url = `/api/moderation/member/${selectedMemberId}/comments?page=${memberCommentPage}`;
+      const params = new URLSearchParams({ page: String(memberCommentPage) });
       if (memberStatusFilter !== "all") {
-        url += `&status=${memberStatusFilter}`;
+        params.set("status", memberStatusFilter);
       }
-      const response = await fetch(url);
+      const response = await fetch(
+        apiUrl(`/api/moderation/member/${selectedMemberId}/comments?${params.toString()}`),
+        { credentials: "include" },
+      );
       if (!response.ok) throw new Error("Failed to fetch member comments");
       return response.json();
     },
@@ -568,10 +584,12 @@ export default function AIModerationDashboard() {
   };
 
   const getUserName = (user: ModerationResult["comment"]["user"]) => {
-    if (user.firstName && user.lastName) {
+    if (user?.firstName && user?.lastName) {
       return `${user.firstName} ${user.lastName}`;
     }
-    return user.email.split("@")[0];
+    if (user?.firstName) return user.firstName;
+    const email = user?.email || "";
+    return email.includes("@") ? email.split("@")[0] : email || "عضو";
   };
 
   const handleViewDetails = (result: ModerationResult) => {
@@ -581,6 +599,7 @@ export default function AIModerationDashboard() {
 
   // Handle opening member profile dialog
   const handleMemberProfileClick = (memberId: string) => {
+    if (!memberId) return;
     setSelectedMemberId(memberId);
     setMemberStatusFilter("all");
     setMemberCommentPage(1);
@@ -654,6 +673,11 @@ export default function AIModerationDashboard() {
     );
   }
 
+  const handleRefreshAll = () => {
+    void refetchStats();
+    void refetch();
+  };
+
   return (
     <DashboardLayout>
       <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
@@ -669,7 +693,7 @@ export default function AIModerationDashboard() {
               </Button>
             </Link>
             <Button
-              onClick={() => refetch()}
+              onClick={handleRefreshAll}
               variant="outline"
               size="icon"
               data-testid="button-refresh"
@@ -696,6 +720,26 @@ export default function AIModerationDashboard() {
             </Button>
           </>}
         />
+
+        {(statsError || resultsError) && (
+          <Card className="border-destructive/40 bg-destructive/5" data-testid="moderation-load-error">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+                <div>
+                  <p className="font-medium text-foreground">تعذّر تحميل بيانات الرقابة الذكية</p>
+                  <p className="text-sm text-muted-foreground">
+                    تحقق من صلاحية إشراف التعليقات ثم أعد المحاولة. إن استمرت المشكلة فغالباً رفض الخادم الطلب (403).
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" className="gap-2" onClick={handleRefreshAll} data-testid="button-retry-moderation">
+                <RefreshCw className="h-4 w-4" />
+                إعادة المحاولة
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="space-y-3">
           <SectionHeader title="إحصائيات التحليل" />
@@ -838,7 +882,7 @@ export default function AIModerationDashboard() {
           <Card className="hover-elevate active-elevate-2 transition-all">
             <ModerationAdvancedSearch
             onSelectComment={(commentId) => {
-              const foundResult = results?.find(r => r.commentId === commentId);
+              const foundResult = results.find((r) => r.commentId === commentId);
               if (foundResult) {
                 setSelectedComment(foundResult);
                 setDetailsOpen(true);
@@ -901,7 +945,18 @@ export default function AIModerationDashboard() {
                   <Skeleton key={i} className="h-32" />
                 ))}
               </div>
-            ) : !results || results.length === 0 ? (
+            ) : resultsError ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-destructive" />
+                  <p className="text-muted-foreground">تعذّر جلب نتائج التحليل</p>
+                  <Button variant="outline" className="mt-4 gap-2" onClick={() => void refetch()}>
+                    <RefreshCw className="h-4 w-4" />
+                    إعادة المحاولة
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : results.length === 0 ? (
               <Card>
                 <CardContent className="p-12 text-center">
                   <Brain className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -1117,11 +1172,11 @@ export default function AIModerationDashboard() {
                         />
                       </div>
 
-                      {selectedComment.detectedIssues.length > 0 && (
+                      {(selectedComment.detectedIssues?.length ?? 0) > 0 && (
                         <div className="space-y-2">
                           <span className="text-sm text-muted-foreground">المشاكل المكتشفة:</span>
                           <div className="flex flex-wrap gap-2">
-                            {selectedComment.detectedIssues.map((issue) => (
+                            {selectedComment.detectedIssues?.map((issue) => (
                               <Badge key={issue} variant="destructive">
                                 <AlertTriangle className="h-3 w-3 ml-1" />
                                 {issueLabels[issue] || issue}
