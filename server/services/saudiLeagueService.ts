@@ -2325,7 +2325,10 @@ function warmSquadPlayerCards(players: SplSquadPlayer[]): void {
   if (ids.length === 0) return;
   void (async () => {
     for (const id of ids) {
-      await getPlayerCard(id).catch(() => null);
+      const card = await getPlayerCard(id).catch(() => null);
+      // أول فشل يعني عادةً أن المزود داخل rate-limit/انتهاء حصة. الاستمرار
+      // على بقية التشكيلة كان يحوّل فتح نادٍ واحد إلى عشرات المحاولات الخلفية.
+      if (!card) break;
       await new Promise((r) => setTimeout(r, PLAYER_CARD_WARM_SPACING_MS));
     }
   })().catch(() => {});
@@ -2470,12 +2473,19 @@ export async function getTeamProfile(teamId: number, opts?: { withExtras?: boole
 
 async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<SplTeamProfile | null> {
   const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStandings);
+  let coreFetchFailed = false;
 
   // معلومات النادي + التشكيلة لا تعتمدان على البطولة، فنبدأهما فورًا بالتوازي مع
   // اكتشاف بطولة النادي — يقلّص زمن البرود بدمج النداءات بدل تسلسلها.
   const basePromise = Promise.all([
-    getTeamInfo(teamId).catch(() => null),
-    getSquad(teamId).catch(() => null),
+    getTeamInfo(teamId).catch(() => {
+      coreFetchFailed = true;
+      return null;
+    }),
+    getSquad(teamId).catch(() => {
+      coreFetchFailed = true;
+      return null;
+    }),
   ]);
 
   // روشن أولًا (أغلب أندية البوابة) — تجنّب فتح 4 جداول على طابور المعدّل دفعة واحدة.
@@ -2484,7 +2494,10 @@ async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<Sp
   const pro = leagueComps.find((c) => c.slug === "pro-league");
   const others = leagueComps.filter((c) => c.slug !== "pro-league");
   if (pro) {
-    const table = await getStandings(pro).catch(() => [] as SplStandingRow[]);
+    const table = await getStandings(pro).catch(() => {
+      coreFetchFailed = true;
+      return [] as SplStandingRow[];
+    });
     const row = table.find((r) => r.team.id === teamId);
     if (row) {
       comp = pro;
@@ -2495,7 +2508,10 @@ async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<Sp
     const tables = await Promise.all(
       others.map((c) =>
         getStandings(c)
-          .catch(() => [] as SplStandingRow[])
+          .catch(() => {
+            coreFetchFailed = true;
+            return [] as SplStandingRow[];
+          })
           .then((table) => ({ c, table })),
       ),
     );
@@ -2531,7 +2547,12 @@ async function buildTeamProfile(teamId: number, withExtras: boolean): Promise<Sp
   const team: SplTeamInfo | null = info ?? squad?.team ?? (standing
     ? { id: standing.team.id, name: standing.team.name, logo: standing.team.logo, country: null, founded: null, venue: null }
     : null);
-  if (!team || !team.id) return null;
+  if (!team || !team.id) {
+    // لا نخزّن null خمسة عشر دقيقة إذا كان السبب rate-limit/عطل المزود. null
+    // يُكاش فقط عندما اكتملت المصادر فعلًا ولم تجد معرّف النادي.
+    if (coreFetchFailed) throw new Error(`[SaudiLeague] team profile core unavailable for ${teamId}`);
+    return null;
+  }
 
   return {
     team,
@@ -2667,18 +2688,43 @@ export interface SplPlayerCard {
   currentTeam: SplTeam | null;
 }
 
+interface SplPlayerIdentitySource {
+  profileRows: any[];
+  careerRows: any[];
+}
+
+/**
+ * المصدر الخام المشترك لهوية اللاعب ومسيرته. بطاقة اللاعب وmarket/form كانت
+ * تطلب players/profiles + players/teams كلٌ على حدة عند فتح الصفحة البارد؛
+ * SWR single-flight هنا يجعل الأقسام الثلاثة تشترك في النداءين نفسيهما.
+ */
+async function getPlayerIdentitySource(playerId: number): Promise<SplPlayerIdentitySource> {
+  return withSWR(
+    `spl:player-identity:${playerId}`,
+    PLAYER_BRIDGE_TTL,
+    PLAYER_BRIDGE_TTL * 2,
+    async () => {
+      const [profileRows, careerRows] = await Promise.all([
+        apiGet("players/profiles", { player: playerId }),
+        apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
+      ]);
+      return { profileRows, careerRows };
+    },
+  );
+}
+
 export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | null> {
   // موسم دوري روشن الحالي كمرجع لأرقام الموسم الجاري
   const proLeague = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
   const season = await seasonFor(proLeague);
 
   return withSWR(`spl:player:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
-    const [profileRows, careerRows, trophyRows, statsRows] = await Promise.all([
-      apiGet("players/profiles", { player: playerId }),
-      apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
+    const [identity, trophyRows, statsRows] = await Promise.all([
+      getPlayerIdentitySource(playerId),
       apiGet("trophies", { player: playerId }).catch(() => [] as any[]),
       apiGet("players", { id: playerId, season }).catch(() => [] as any[]),
     ]);
+    const { profileRows, careerRows } = identity;
 
     const p = profileRows[0]?.player;
     if (!p?.id) return null;
@@ -2817,10 +2863,9 @@ interface SplPlayerBridge {
 
 async function getPlayerBridge(playerId: number): Promise<SplPlayerBridge | null> {
   return withSWR(`spl:player-bridge:${playerId}`, PLAYER_BRIDGE_TTL, PLAYER_BRIDGE_TTL * 2, async () => {
-    const [profileRows, careerRows] = await Promise.all([
-      apiGet("players/profiles", { player: playerId }).catch(() => [] as any[]),
-      apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
-    ]);
+    // لا نبتلع فشل المزود هنا: null صالح يُكاش، أما rate-limit فيجب أن يرفض
+    // حتى لا نسمّم كاش الجسر ساعة كاملة بغيابٍ كاذب.
+    const { profileRows, careerRows } = await getPlayerIdentitySource(playerId);
     const p = profileRows[0]?.player;
     if (!p?.id) return null;
 
@@ -2867,7 +2912,8 @@ function normName(s: string): string {
 export async function getPlayerMarketValue(playerId: number): Promise<SplPlayerMarket> {
   if (!isSaudiLeagueConfigured()) return EMPTY_MARKET;
   return withSWR(`spl:market:${playerId}`, MARKET_TTL, MARKET_TTL * 2, async () => {
-    const bridge = await getPlayerBridge(playerId).catch(() => null);
+    // فشل الجسر يرفض جلب SWR ولا يُخزّن available:false مدة 24 ساعة.
+    const bridge = await getPlayerBridge(playerId);
     const clubId = bridge?.clubId;
     if (!clubId || !bridge) return EMPTY_MARKET;
     const playerNameEn = bridge.nameEn;
@@ -2944,7 +2990,8 @@ export interface SplPlayerForm {
 export async function getPlayerForm(playerId: number): Promise<SplPlayerForm> {
   if (!isSaudiLeagueConfigured() || !isSportmonksConfigured()) return { available: false, matches: [] };
   return withSWR(`spl:form:${playerId}`, PLAYER_FORM_TTL, PLAYER_FORM_TTL * 2, async () => {
-    const bridge = await getPlayerBridge(playerId).catch(() => null);
+    // فشل الجسر يرفض جلب SWR ولا يُخزّن available:false مدة 6 ساعات.
+    const bridge = await getPlayerBridge(playerId);
     if (!bridge) return { available: false, matches: [] };
     const form = await smGetPlayerForm({
       firstname: bridge.firstname,

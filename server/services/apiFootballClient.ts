@@ -14,8 +14,10 @@
  *   1. APIFOOTBALL_RPM إن ضُبط (اقسمه على عدد النسخ إن توسّعت Railway أفقيًّا).
  *   2. وإلا الحدّ الفعلي المرصود من ترويسة x-ratelimit-limit بهامش أمان 10%.
  *   3. وإلا 250 افتراضيًا (تحت حدّ خطة Pro = 300/دقيقة).
- * وإن ردّ المزوّد بالحدّ رغم ذلك (اشتراك أصغر/مستهلك خارجي) نهدأ 15 ثانية
- * ونعيد المحاولة مرّة واحدة بعد حجز دورٍ جديد.
+ * وإن ردّ المزوّد بالحدّ رغم ذلك (اشتراك منتهٍ/أصغر أو مستهلك خارجي) نفتح
+ * تهدئة قصيرة ونفشل سريعًا. لا ننتظر التهدئة داخل الطلب نفسه: مهلات المسارات
+ * العامة 2.5–3.5ث، وإعادة المحاولة بعد 4ث كانت تضمن deadline وتترك العمل
+ * المتأخر يزاحم الطلبات التالية.
  */
 
 import { warnThrottled } from "../utils/throttledWarn";
@@ -30,8 +32,11 @@ const DEFAULT_RPM = 250;
  * 2026-07-04: 429 والعداد اليومي/الدقيقة بعيد عن السقف).
  */
 const MIN_GAP_MS = 80;
-/** تهدئة 429: كانت 15ث فتتسلسل الطوابير خلفها إلى دقائق (team/:id بلغ 83ث) */
-const RATE_LIMIT_COOLDOWN_MS = 4_000;
+/**
+ * تهدئة 429/حصة الاشتراك. الانتظار داخل الطلب أُلغي؛ خلال هذه المدة تفشل
+ * النداءات الجديدة فورًا، فيخدم SWR البائت ولا تتكون طوابير خلف مزوّد رافض.
+ */
+const RATE_LIMIT_COOLDOWN_MS = 15_000;
 /**
  * مهلة النداء الواحد. كانت 15ث، وحادثة 2026-07-24 أثبتت أن ذلك طويل جدًا:
  * حين توقّف المزوّد عن قبول الاتصالات ظلّ كل نداء يشغل دوره 15 ثانية قبل أن
@@ -104,9 +109,12 @@ function currentRpm(): number {
  */
 async function acquireSlot(tag: string, path: string): Promise<void> {
   const now = Date.now();
+  if (now < cooldownUntil) {
+    throw new Error(`[${tag}] API-Football rate-limited — cooling down, skipped ${path}`);
+  }
   while (scheduled.length && scheduled[0] <= now - WINDOW_MS) scheduled.shift();
   const rpm = currentRpm();
-  let at = Math.max(now, cooldownUntil);
+  let at = now;
   // لا رشقات لحظية: كل نداء يبعد عن سابقه MIN_GAP_MS على الأقل
   if (scheduled.length) {
     at = Math.max(at, scheduled[scheduled.length - 1] + MIN_GAP_MS);
@@ -145,6 +153,11 @@ async function acquireSlot(tag: string, path: string): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, wait));
     } finally {
       pendingWaiters -= 1;
+    }
+    // قد يكون نداء آخر تلقّى 429 بينما كنا ننتظر دورنا. لا نرسل موجة الوعود
+    // النائمة بعد أن أعلن المزود رفضه؛ نفشلها لتعود للكاش البائت فورًا.
+    if (Date.now() < cooldownUntil) {
+      throw new Error(`[${tag}] API-Football rate-limited — cooling down, skipped ${path}`);
     }
     return;
   }
@@ -192,8 +205,13 @@ function noteResponseHeaders(response: Response): void {
   }
 }
 
-function reportRateLimited(): void {
+function reportRateLimited(tag: string, path: string): void {
   cooldownUntil = Math.max(cooldownUntil, Date.now() + RATE_LIMIT_COOLDOWN_MS);
+  warnThrottled(
+    `af-limit:${tag}`,
+    `[APIFootball] provider rate limit for ${tag} ${path}; cooling down ${RATE_LIMIT_COOLDOWN_MS}ms`,
+    10_000,
+  );
 }
 
 export interface ApiFootballGetOptions {
@@ -205,8 +223,9 @@ export interface ApiFootballGetOptions {
 }
 
 /**
- * نداء GET موحّد للمزوّد: يمرّ عبر بوّابة المعدّل، يرصد الترويسات، ويعيد
- * المحاولة مرّة واحدة بعد تهدئة إذا ردّ المزوّد بتجاوز الحدّ.
+ * نداء GET موحّد للمزوّد: يمرّ عبر بوّابة المعدّل ويرصد الترويسات. إذا ردّ
+ * المزود بتجاوز الحدّ نفتح تهدئة ونفشل فورًا؛ SWR هو طبقة إعادة المحاولة
+ * الآمنة في طلب لاحق، بدل احتجاز الطلب الحالي خلف deadline معروف.
  * `tag` بادئة رسائل الخطأ للخدمة المستدعية (SaudiLeague/GulfCup/...).
  */
 export async function apiFootballGet(
@@ -225,69 +244,69 @@ export async function apiFootballGet(
   const url = new URL(`${API_BASE}/${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
-  for (let attempt = 0; ; attempt++) {
-    await acquireSlot(tag, path);
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        headers: {
-          "x-apisports-key": apiKey,
-          // هوية صريحة: المزوّد خلف Cloudflare (v3.football.api-sports.io →
-          // 172.66.164.245). طلب بلا User-Agent من عنوان مركز بيانات بمعدّل
-          // مرتفع يطابق ملف الحجب الآلي على الحافة، فتُقطع الاتصالات بينما
-          // صفحة حالة المزوّد خضراء 100% (لقطة 2026-07-25: 90 يومًا بلا عطل).
-          "User-Agent": "sabq.org/1.0 (+https://sabq.org)",
-          Accept: "application/json",
-        },
-        signal: AbortSignal.timeout(envMs("APIFOOTBALL_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS)),
-      });
-    } catch (error) {
-      // تعذّر الاتصال أو انتهت المهلة — لم يصل الطلب للمزوّد أصلًا.
-      //
-      // «fetch failed» رسالة undici العامة ولا تقول شيئًا. السبب الحقيقي في
-      // error.cause دائمًا: ECONNRESET (الحافة تقطعنا) أو EAI_AGAIN (فشل DNS
-      // في الحاوية) أو UND_ERR_CONNECT_TIMEOUT (لا يُفتح TCP أصلًا — استنزاف
-      // مقابس عندنا) أو ECONNREFUSED (حجب صريح). كان الكود يقرأ .message فقط
-      // ويرمي cause، ولهذا بقي سبب حوادث 2026-07-24/25 مجهولًا وبُنيت
-      // الحواجز (#1199، #1201) على فرضية «تعطّل المزوّد» التي تكذّبها لوحة
-      // حالته. هذه الحقول تحسم الأمر من أول سطر في السجل.
-      noteTransportFailure();
-      const err = error as any;
-      const cause = err?.cause;
-      const detail = cause
-        ? [cause.code, cause.errno, cause.syscall, cause.name, cause.message]
-            .filter(Boolean)
-            .join(" ")
-        : "";
-      throw new Error(
-        `[${tag}] API-Football transport failure for ${path}: ${err?.message ?? error}` +
-          (detail ? ` (cause: ${detail})` : " (cause: غير متاح)"),
-      );
-    }
-    noteTransportSuccess();
-    noteResponseHeaders(response);
-
-    if (!response.ok) {
-      if (response.status === 429 && attempt < 2) {
-        reportRateLimited();
-        continue;
-      }
-      throw new Error(`[${tag}] API-Football HTTP ${response.status} for ${path}`);
-    }
-
-    const data: any = await response.json();
-    const errors = data?.errors;
-    if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
-      if (errors.rateLimit && attempt < 2) {
-        reportRateLimited();
-        continue;
-      }
-      throw new Error(`[${tag}] API-Football error for ${path}: ${JSON.stringify(errors)}`);
-    }
-
-    const resp = data?.response;
-    if (Array.isArray(resp)) return resp;
-    if (opts.wrapObjectResponse && resp && typeof resp === "object") return [resp];
-    return [];
+  await acquireSlot(tag, path);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        "x-apisports-key": apiKey,
+        // هوية صريحة: المزوّد خلف Cloudflare (v3.football.api-sports.io →
+        // 172.66.164.245). طلب بلا User-Agent من عنوان مركز بيانات بمعدّل
+        // مرتفع يطابق ملف الحجب الآلي على الحافة، فتُقطع الاتصالات بينما
+        // صفحة حالة المزوّد خضراء 100% (لقطة 2026-07-25: 90 يومًا بلا عطل).
+        "User-Agent": "sabq.org/1.0 (+https://sabq.org)",
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(envMs("APIFOOTBALL_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS)),
+    });
+  } catch (error) {
+    // تعذّر الاتصال أو انتهت المهلة — لم يصل الطلب للمزوّد أصلًا.
+    //
+    // «fetch failed» رسالة undici العامة ولا تقول شيئًا. السبب الحقيقي في
+    // error.cause دائمًا: ECONNRESET (الحافة تقطعنا) أو EAI_AGAIN (فشل DNS
+    // في الحاوية) أو UND_ERR_CONNECT_TIMEOUT (لا يُفتح TCP أصلًا — استنزاف
+    // مقابس عندنا) أو ECONNREFUSED (حجب صريح). كان الكود يقرأ .message فقط
+    // ويرمي cause، ولهذا بقي سبب حوادث 2026-07-24/25 مجهولًا وبُنيت
+    // الحواجز (#1199، #1201) على فرضية «تعطّل المزوّد» التي تكذّبها لوحة
+    // حالته. هذه الحقول تحسم الأمر من أول سطر في السجل.
+    noteTransportFailure();
+    const err = error as any;
+    const cause = err?.cause;
+    const detail = cause
+      ? [cause.code, cause.errno, cause.syscall, cause.name, cause.message]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+    throw new Error(
+      `[${tag}] API-Football transport failure for ${path}: ${err?.message ?? error}` +
+        (detail ? ` (cause: ${detail})` : " (cause: غير متاح)"),
+    );
   }
+  noteTransportSuccess();
+  noteResponseHeaders(response);
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      reportRateLimited(tag, path);
+      throw new Error(`[${tag}] API-Football rate-limited (HTTP 429) for ${path}`);
+    }
+    throw new Error(`[${tag}] API-Football HTTP ${response.status} for ${path}`);
+  }
+
+  const data: any = await response.json();
+  const errors = data?.errors;
+  if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
+    // API-Sports يستعمل rateLimit لحد الدقيقة وrequests للحصة اليومية/الخطة.
+    // كلاهما غير قابل للحل بإعادة فورية داخل نفس طلب المستخدم.
+    if (errors.rateLimit || errors.requests) {
+      reportRateLimited(tag, path);
+      throw new Error(`[${tag}] API-Football rate-limited for ${path}`);
+    }
+    throw new Error(`[${tag}] API-Football error for ${path}: ${JSON.stringify(errors)}`);
+  }
+
+  const resp = data?.response;
+  if (Array.isArray(resp)) return resp;
+  if (opts.wrapObjectResponse && resp && typeof resp === "object") return [resp];
+  return [];
 }
