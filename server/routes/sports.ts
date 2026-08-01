@@ -1706,13 +1706,22 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const empty = { available: false, value: null, currency: "€", peak: null, history: [] };
+      let timedOut = false;
       const market = await bestEffortWithin(getPlayerMarketValue(id), {
         fallback: empty,
-        // كان يبلغ 17ث خلف بطاقة اللاعب الكاملة + TheSports؛ نخفي القسم ونكمل الجلب للكاش.
-        timeoutMs: 3_500,
-        onTimeout: () => warnThrottled(`deadline:player-market:${id}`, `[Sports] player market deadline exceeded for ${id}`),
+        // قسم اختياري: نرجع الصفحة سريعًا ونترك SWR يملأ الكاش. المهلة هنا
+        // ليست عطلًا ولا تُسجَّل deadline؛ الأهم ألا يُكاش fallback في CDN.
+        timeoutMs: 1_000,
+        onTimeout: () => {
+          timedOut = true;
+        },
       });
-      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      if (timedOut) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", "2");
+      } else {
+        res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      }
       res.json(market);
     } catch (error) {
       console.error("[Sports] player market failed:", error);
@@ -1732,12 +1741,20 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
+      let timedOut = false;
       const form = await bestEffortWithin(getPlayerForm(id), {
         fallback: { available: false, matches: [] },
         timeoutMs: 2_500,
-        onTimeout: () => warnThrottled(`deadline:player-form:${id}`, `[Sports] player form deadline exceeded for ${id}`),
+        onTimeout: () => {
+          timedOut = true;
+        },
       });
-      res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
+      if (timedOut) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", "2");
+      } else {
+        res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
+      }
       res.json(form);
     } catch (error) {
       console.error("[Sports] player form failed:", error);
