@@ -1378,6 +1378,7 @@ export function registerSportsRoutes(app: Express) {
     try {
       const withExtras = req.query.with === "stats";
       let timedOut = false;
+      let failed = false;
       const profile = await bestEffortWithin(getTeamProfile(id, { withExtras }), {
         fallback: null,
         // بعد SWR على الملف الكامل: 3ث كافية؛ أطول من ذلك = طابور مزوّد محتجز.
@@ -1386,9 +1387,13 @@ export function registerSportsRoutes(app: Express) {
           timedOut = true;
           warnThrottled(`deadline:team-profile:${id}`, `[Sports] team profile deadline exceeded for ${id}`);
         },
+        onError: () => {
+          failed = true;
+        },
       });
       if (!profile) {
-        if (timedOut) {
+        if (timedOut || failed) {
+          res.set("Retry-After", "15");
           res.status(503).json({ message: "صفحة النادي تُحمَّل حاليًا" });
           return;
         }
@@ -1634,6 +1639,7 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       let timedOut = false;
+      let failed = false;
       const wantExtras = req.query.with === "extras";
       // extras كانت تنتظر انتهاء البطاقة (~3ث) ثم تضيف ~2.5ث — ابدأها معًا.
       const playerPromise = bestEffortWithin(getPlayerCard(id), {
@@ -1642,6 +1648,9 @@ export function registerSportsRoutes(app: Express) {
         onTimeout: () => {
           timedOut = true;
           warnThrottled(`deadline:player-card:${id}`, `[Sports] player card deadline exceeded for ${id}`);
+        },
+        onError: () => {
+          failed = true;
         },
       });
       const extrasPromise = wantExtras
@@ -1663,7 +1672,8 @@ export function registerSportsRoutes(app: Express) {
 
       const [player, extras] = await Promise.all([playerPromise, extrasPromise]);
       if (!player) {
-        if (timedOut) {
+        if (timedOut || failed) {
+          res.set("Retry-After", "15");
           res.status(503).json({ message: "ملف اللاعب يُحمَّل حاليًا" });
           return;
         }
