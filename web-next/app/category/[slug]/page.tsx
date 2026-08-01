@@ -11,9 +11,10 @@ export const dynamicParams = true;
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const bundle = await getCategoryBundle(params.slug);
+  const { slug } = await params;
+  const bundle = await getCategoryBundle(slug);
   if (!bundle) {
     return { title: "غير موجود", robots: { index: false, follow: true } };
   }
@@ -39,9 +40,10 @@ export async function generateMetadata({
 export default async function CategoryPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const bundle = await getCategoryBundle(params.slug);
+  const { slug } = await params;
+  const bundle = await getCategoryBundle(slug);
   if (!bundle) notFound();
   const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
   const jsonLd = [
