@@ -21,7 +21,10 @@ export async function generateMetadata({
     title: { absolute: `${bundle.name} | سبق` },
     description: bundle.description,
     alternates: { canonical: bundle.canonical },
-    robots: { index: true, follow: true },
+    robots:
+      process.env.STAGING_NO_INDEX === "true"
+        ? { index: false, follow: false, nocache: true }
+        : { index: true, follow: true },
     openGraph: {
       type: "website",
       title: `${bundle.name} | سبق`,

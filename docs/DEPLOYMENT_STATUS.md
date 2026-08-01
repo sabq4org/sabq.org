@@ -54,7 +54,11 @@
 
 لا توجد خدمات `newsletter-worker` أو `meetings-agent` أو `sabq-mirror` في
 staging. لا تُنسخ قيم أسرار production؛ تُنشأ أسرار الجلسة/JWT خاصة بـ staging،
-وتُترك تكاملات الطرف الثالث غير مضبوطة.
+وتُترك تكاملات الطرف الثالث غير مضبوطة. الاستثناء الوحيد هو
+`OPENAI_API_KEY=staging-disabled-invalid-key`: قيمة حارسة غير صالحة وليست مفتاحاً،
+لأن استيراد عميل embeddings القديم يرفض الإقلاع عند غياب الاسم كلياً؛ وتظل كل
+مهام AI الخلفية معطّلة. كذلك يستخدم `PRIVATE_OBJECT_DIR` مجلداً مؤقتاً داخل
+حاوية staging بدلاً من أي مفاتيح R2 أو bucket إنتاجي.
 
 ### ترقية commit إلى staging
 
