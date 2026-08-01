@@ -692,7 +692,9 @@
         "server/routes/topicComments.ts",
         "server/ai/commentModeration.ts",
         "server/sentiment-analyzer.ts",
-        "client/src/pages/admin/SentimentInsights.tsx"
+        "client/src/pages/admin/AIModerationDashboard.tsx",
+        "client/src/pages/admin/SentimentInsights.tsx",
+        "client/src/components/ModerationAdvancedSearch.tsx"
       ],
       "aiFeatureKeys": [
         "comment-moderation",
@@ -702,7 +704,7 @@
       "owners": [
         "engagement"
       ],
-      "lastReviewed": "2026-07-27"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "deep-analysis",
