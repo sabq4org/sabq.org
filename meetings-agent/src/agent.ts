@@ -46,6 +46,7 @@ if (
 }
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH = 40;
+const TRANSCRIPTION_DRAIN_TIMEOUT_MS = 20_000;
 
 interface Segment {
   speakerIdentity: string;
@@ -139,7 +140,10 @@ export default defineAgent({
 
     const startedAt = Date.now();
     const uploader = new TranscriptUploader(meetingId);
-    const activeStreams = new Set<Promise<void>>();
+    const activeStreams = new Map<
+      Promise<void>,
+      { stop: () => Promise<void>; forceClose: () => void }
+    >();
     // مسار قد يصلنا مرتين (حدث الاشتراك + مسح المسارات القائمة) — تفريغ واحد فقط
     const seenTracks = new Set<string>();
 
@@ -161,34 +165,60 @@ export default defineAgent({
         }
       })();
 
-      const run = (async () => {
-        const sttImpl = new openai.STT({ model: "gpt-4o-transcribe", language: "ar" });
-        const sttStream = sttImpl.stream();
-        const audio = new AudioStream(track, { sampleRate: 16000, numChannels: 1 });
+      const sttImpl = new openai.STT({ model: "gpt-4o-transcribe", language: "ar" });
+      const sttStream = sttImpl.stream();
+      const audio = new AudioStream(track, { sampleRate: 16000, numChannels: 1 });
+      const reader = audio.getReader();
+      let inputEnded = false;
 
+      const endInput = () => {
+        if (inputEnded) return;
+        inputEnded = true;
+        sttStream.endInput();
+      };
+
+      const run = (async () => {
         const feed = (async () => {
-          for await (const frame of audio) sttStream.pushFrame(frame);
-          sttStream.endInput();
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              sttStream.pushFrame(value);
+            }
+          } finally {
+            endInput();
+            reader.releaseLock();
+          }
         })();
 
-        for await (const event of sttStream) {
-          if (event.type === stt.SpeechEventType.FINAL_TRANSCRIPT) {
-            const text = event.alternatives?.[0]?.text?.trim();
-            if (text) {
-              uploader.push({
-                speakerIdentity: participant.identity,
-                speakerName,
-                text,
-                startMs: Date.now() - startedAt,
-              });
+        try {
+          for await (const event of sttStream) {
+            if (event.type === stt.SpeechEventType.FINAL_TRANSCRIPT) {
+              const text = event.alternatives?.[0]?.text?.trim();
+              if (text) {
+                uploader.push({
+                  speakerIdentity: participant.identity,
+                  speakerName,
+                  text,
+                  startMs: Date.now() - startedAt,
+                });
+              }
             }
           }
+          await feed;
+        } finally {
+          sttStream.close();
         }
-        await feed;
       })().catch((e) =>
         console.error(`[Agent] stt for ${participant.identity} failed:`, (e as Error).message),
       );
-      activeStreams.add(run);
+      activeStreams.set(run, {
+        stop: async () => {
+          await reader.cancel("room disconnected").catch(() => {});
+          endInput();
+        },
+        forceClose: () => sttStream.close(),
+      });
       run.finally(() => activeStreams.delete(run));
     };
 
@@ -215,7 +245,19 @@ export default defineAgent({
     });
 
     console.log(`[Agent] room closed — flushing transcript for ${meetingId}`);
-    await Promise.allSettled([...activeStreams]);
+    const streamsAtDisconnect = [...activeStreams.entries()];
+    await Promise.allSettled(streamsAtDisconnect.map(([, control]) => control.stop()));
+    const drainResult = await Promise.race([
+      Promise.allSettled(streamsAtDisconnect.map(([done]) => done)).then(() => "drained" as const),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), TRANSCRIPTION_DRAIN_TIMEOUT_MS),
+      ),
+    ]);
+    if (drainResult === "timeout") {
+      console.warn("[Agent] transcription drain timed out — forcing stream close");
+      for (const [, control] of streamsAtDisconnect) control.forceClose();
+      await Promise.allSettled(streamsAtDisconnect.map(([done]) => done));
+    }
     await uploader.close();
     console.log(
       `[Agent] done — meeting ${meetingId}: ${uploader.uploaded} segments uploaded, ${seenTracks.size} audio tracks seen`,
