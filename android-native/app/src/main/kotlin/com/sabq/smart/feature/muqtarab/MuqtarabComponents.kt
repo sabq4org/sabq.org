@@ -423,6 +423,9 @@ private fun MuqBlock(block: BlockNode, accent: Color) {
         is BlockNode.VideoEmbed -> {
             MuqLinkCard(label = "مشاهدة الفيديو", url = block.sourceUrl ?: block.embedUrl, accent = accent)
         }
+        is BlockNode.WhatsAppCta -> {
+            MuqLinkCard(label = block.phrase, url = block.url, accent = Color(0xFF25D366))
+        }
         BlockNode.Divider -> {
             Box(
                 modifier = Modifier

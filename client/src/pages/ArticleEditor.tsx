@@ -141,6 +141,8 @@ import { HeroImageSuggestions } from "@/components/dashboard/HeroImageSuggestion
 import { HeroRightsDialog } from "@/components/dashboard/HeroRightsDialog";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { PollEditor, type PollData } from "@/components/PollEditor";
+import { WhatsAppCtaEditor, type WhatsAppCtaData } from "@/components/WhatsAppCtaEditor";
+import { normalizeWhatsAppPhone } from "@shared/whatsappCta";
 import { WeeklyPhotosEditor } from "@/components/WeeklyPhotosEditor";
 import {
   Dialog,
@@ -276,6 +278,7 @@ export default function ArticleEditor() {
   const [reviewedAt, setReviewedAt] = useState<string | null>(null);
   const [articleUpdatedAt, setArticleUpdatedAt] = useState<string | null>(null);
   const [pollData, setPollData] = useState<PollData | null>(null);
+  const [whatsappCta, setWhatsappCta] = useState<WhatsAppCtaData | null>(null);
   const [republish, setRepublish] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -779,6 +782,20 @@ export default function ArticleEditor() {
       // Load weekly photos data if present
       if ((article as any).weeklyPhotosData?.photos) {
         setWeeklyPhotosData((article as any).weeklyPhotosData);
+      }
+      {
+        const wa = (article as any).whatsappCta;
+        if (wa && typeof wa === "object" && wa.enabled && wa.phone) {
+          setWhatsappCta({
+            enabled: true,
+            phone: String(wa.phone),
+            phrase: String(wa.phrase || "تواصل معنا عبر واتساب"),
+            message: wa.message ? String(wa.message) : undefined,
+            placement: wa.placement === "inline" ? "inline" : "end",
+          });
+        } else {
+          setWhatsappCta(null);
+        }
       }
       // Load newsType - convert "featured" to "regular" since isFeatured is now separate
       const loadedNewsType = (article.newsType as any) || "regular";
@@ -1494,6 +1511,26 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.isAiGeneratedInfographicBanner = isAiGeneratedInfographicBanner;
       }
       
+      // زر واتساب: يُحفظ كـ jsonb أو null عند الإيقاف
+      if (whatsappCta?.enabled && whatsappCta.phone) {
+        const digits = normalizeWhatsAppPhone(whatsappCta.phone);
+        if (digits) {
+          articleData.whatsappCta = {
+            enabled: true,
+            phone: digits,
+            phrase: (whatsappCta.phrase || "تواصل معنا عبر واتساب").trim().slice(0, 120),
+            message: whatsappCta.message?.trim()
+              ? whatsappCta.message.trim().slice(0, 500)
+              : undefined,
+            placement: whatsappCta.placement === "inline" ? "inline" : "end",
+          };
+        } else {
+          articleData.whatsappCta = null;
+        }
+      } else {
+        articleData.whatsappCta = null;
+      }
+
       // Add fields specific to news articles (not for opinion)
       if (articleType !== "opinion") {
         articleData.subtitle = subtitle;
@@ -3859,6 +3896,29 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 articleContent={content}
                 articleTitle={title}
               />
+              </div>
+            )}
+
+            {/* زر واتساب — نهاية الخبر أو إدراج داخل النص */}
+            {!isOpinionAuthor && articleType !== "infographic" && (
+              <div className="order-[91] lg:order-none">
+                <WhatsAppCtaEditor
+                  value={whatsappCta}
+                  onChange={setWhatsappCta}
+                  disabled={isLockedByOther}
+                  onInsertInline={(cta) => {
+                    if (!editorInstance) return false;
+                    return editorInstance
+                      .chain()
+                      .focus()
+                      .setWhatsAppCta({
+                        phone: cta.phone,
+                        phrase: cta.phrase,
+                        message: cta.message,
+                      })
+                      .run();
+                  }}
+                />
               </div>
             )}
 

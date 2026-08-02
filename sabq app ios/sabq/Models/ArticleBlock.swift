@@ -21,6 +21,8 @@ enum ArticleBlock {
     case imageGallery(images: [GalleryImage])
     case twitterEmbed(tweetURL: URL)
     case videoEmbed(provider: VideoProvider, embedURL: URL, sourceURL: URL?)
+    /// زر تواصل واتساب من المحرر: `<div data-whatsapp-cta data-phone …>`
+    case whatsappCta(phone: String, phrase: String, url: URL)
     case divider
 }
 

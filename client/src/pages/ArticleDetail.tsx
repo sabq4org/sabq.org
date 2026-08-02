@@ -6,6 +6,8 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
+import { ArticleWhatsAppCta } from "@/components/ArticleWhatsAppCta";
+import type { WhatsAppCta } from "@shared/whatsappCta";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
 import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
 import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
@@ -31,7 +33,6 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
@@ -91,21 +92,11 @@ export default function ArticleDetail() {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
-  // Smart summary collapsible state (persisted in localStorage)
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("article:isSummaryExpanded") === "true";
-    } catch {
-      return false;
-    }
-  });
-
+  // الموجز مطوي افتراضياً (3 أسطر) عند فتح الخبر — مثل iOS/Android
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   useEffect(() => {
-    try {
-      window.localStorage.setItem("article:isSummaryExpanded", String(isSummaryExpanded));
-    } catch {}
-  }, [isSummaryExpanded]);
+    setIsSummaryExpanded(false);
+  }, [slug]);
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
@@ -166,7 +157,7 @@ export default function ArticleDetail() {
     },
   });
   const aiBullets = storedBullets.length > 0 ? storedBullets : (bulletsData?.bullets || []);
-  // الفقرة الموسّعة غالباً نفس نص النقاط (تقسيم جُمل) — لا نكررها تحت «اقرأ المزيد»
+  // الفقرة الموسّعة غالباً نفس نص النقاط (تقسيم جُمل) — لا نكررها تحت «عرض المزيد»
   const summaryDetailText = (article?.aiSummary || article?.excerpt || "").trim();
   const showSummaryDetail = useMemo(() => {
     if (!summaryDetailText) return false;
@@ -180,6 +171,12 @@ export default function ArticleDetail() {
     const longer = joined.length <= detail.length ? detail : joined;
     return !longer.includes(shorter) || longer.length > shorter.length * 1.35;
   }, [summaryDetailText, aiBullets]);
+
+  // طي إلى 3 أسطر عند الحاجة (نفس عتبة iOS/Android ≈ 120 حرفاً)
+  const summaryNeedsToggle = useMemo(() => {
+    const text = (aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText).trim();
+    return text.length > 120 || showSummaryDetail;
+  }, [aiBullets, summaryDetailText, showSummaryDetail]);
 
   // DMS Ad tracking for article page
   useAdTracking(article?.category?.nameAr || '', article?.id);
@@ -199,7 +196,13 @@ export default function ArticleDetail() {
     if (!article?.content) return "";
     const sanitized = DOMPurify.sanitize(article.content, {
       ADD_TAGS: ['iframe', 'blockquote', 'img'],
-      ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src', 'data-lang', 'data-theme', 'data-video-embed', 'data-url', 'data-embed-url', 'class', 'alt', 'loading', 'width', 'height', 'srcset', 'sizes', 'fetchpriority', 'decoding'],
+      ADD_ATTR: [
+        'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+        'data-lang', 'data-theme', 'data-video-embed', 'data-url', 'data-embed-url',
+        'data-whatsapp-cta', 'data-phone', 'data-phrase', 'data-message',
+        'class', 'alt', 'loading', 'width', 'height', 'srcset', 'sizes',
+        'fetchpriority', 'decoding', 'target', 'rel', 'aria-label', 'aria-hidden',
+      ],
       ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
     });
     return transformArticleHtml(sanitized);
@@ -1354,74 +1357,63 @@ export default function ArticleDetail() {
               );
             })()}
 
-            {/* Unified AI Summary - الموجز (bullets + expandable detail + listen) */}
+            {/* Unified AI Summary - الموجز (3 أسطر مطوية + توسيع + استماع) */}
             {(aiBullets.length > 0 || (shouldFetchBullets && isLoadingBullets) || article.aiSummary || article.excerpt) && (
-              <Collapsible open={isSummaryExpanded} onOpenChange={setIsSummaryExpanded}>
-                <div
-                  dir="rtl"
-                  className="bg-muted/30 border rounded-lg p-3 sm:p-4"
-                  data-testid="block-ai-summary"
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <Sparkles className="h-3 w-3 text-primary" />
+              <div
+                dir="rtl"
+                className="bg-muted/30 border rounded-lg p-3 sm:p-4"
+                data-testid="block-ai-summary"
+              >
+                <div className="flex items-start gap-2">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h3 className="text-sm font-bold" data-testid="text-ai-summary-title">
+                        الموجز
+                      </h3>
+                      <Button
+                        variant={isPlaying ? "default" : "ghost"}
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={handlePlayAudio}
+                        disabled={isLoadingAudio}
+                        data-testid="button-listen-summary"
+                        aria-label={isPlaying ? "إيقاف الاستماع" : "استماع للموجز"}
+                      >
+                        {isLoadingAudio ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : isPlaying ? (
+                          <VolumeX className="h-3 w-3" />
+                        ) : (
+                          <Volume2 className="h-3 w-3" />
+                        )}
+                      </Button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                        <h3 className="text-sm font-bold" data-testid="text-ai-summary-title">
-                          الموجز
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {showSummaryDetail && (
-                            <CollapsibleTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 gap-1 text-xs"
-                                data-testid="button-toggle-summary"
-                                aria-label={isSummaryExpanded ? "إخفاء التفاصيل" : "اقرأ المزيد من الموجز"}
-                              >
-                                {isSummaryExpanded ? "إخفاء" : "اقرأ المزيد"}
-                                <ChevronDown
-                                  className={`h-3 w-3 transition-transform duration-200 ${isSummaryExpanded ? 'rotate-180' : ''}`}
-                                />
-                              </Button>
-                            </CollapsibleTrigger>
-                          )}
-                          <Button
-                            variant={isPlaying ? "default" : "ghost"}
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={handlePlayAudio}
-                            disabled={isLoadingAudio}
-                            data-testid="button-listen-summary"
-                            aria-label={isPlaying ? "إيقاف الاستماع" : "استماع للموجز"}
-                          >
-                            {isLoadingAudio ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : isPlaying ? (
-                              <VolumeX className="h-3 w-3" />
-                            ) : (
-                              <Volume2 className="h-3 w-3" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
 
-                      {/* Default: 3 short bullets */}
-                      {(aiBullets.length > 0 || (shouldFetchBullets && isLoadingBullets)) && (
-                        <ul
-                          className="space-y-2 list-none m-0 p-0"
-                          data-testid="list-ai-summary-bullets"
-                        >
-                          {shouldFetchBullets && isLoadingBullets && aiBullets.length === 0 ? (
-                            <>
-                              <li><Skeleton className="h-3 w-11/12" /></li>
-                              <li><Skeleton className="h-3 w-10/12" /></li>
-                              <li><Skeleton className="h-3 w-9/12" /></li>
-                            </>
-                          ) : (
-                            aiBullets.slice(0, 3).map((bullet, i) => (
+                    {shouldFetchBullets && isLoadingBullets && aiBullets.length === 0 ? (
+                      <ul className="space-y-2 list-none m-0 p-0" data-testid="list-ai-summary-bullets">
+                        <li><Skeleton className="h-3 w-11/12" /></li>
+                        <li><Skeleton className="h-3 w-10/12" /></li>
+                        <li><Skeleton className="h-3 w-9/12" /></li>
+                      </ul>
+                    ) : !isSummaryExpanded && summaryNeedsToggle ? (
+                      /* مطوي: 3 أسطر فقط */
+                      <p
+                        className="line-clamp-3 text-xs sm:text-sm leading-relaxed text-foreground"
+                        data-testid="text-ai-summary-collapsed"
+                      >
+                        {aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText}
+                      </p>
+                    ) : (
+                      <>
+                        {aiBullets.length > 0 ? (
+                          <ul
+                            className="space-y-2 list-none m-0 p-0"
+                            data-testid="list-ai-summary-bullets"
+                          >
+                            {aiBullets.slice(0, 3).map((bullet, i) => (
                               <li
                                 key={i}
                                 className="flex items-start gap-2 text-xs sm:text-sm leading-relaxed text-foreground"
@@ -1433,26 +1425,48 @@ export default function ArticleDetail() {
                                 />
                                 <span>{bullet}</span>
                               </li>
-                            ))
-                          )}
-                        </ul>
-                      )}
+                            ))}
+                          </ul>
+                        ) : (
+                          <p
+                            className="text-xs sm:text-sm leading-relaxed text-foreground"
+                            data-testid="text-smart-summary"
+                          >
+                            {summaryDetailText}
+                          </p>
+                        )}
 
-                      {/* Expanded detailed paragraph — فقط إن اختلف عن النقاط */}
-                      {showSummaryDetail && (
-                        <CollapsibleContent>
+                        {/* فقرة إضافية عند التوسيع إن اختلفت عن النقاط */}
+                        {isSummaryExpanded && showSummaryDetail && aiBullets.length > 0 && (
                           <p
                             className="mt-3 pt-3 border-t text-xs sm:text-sm text-muted-foreground leading-relaxed"
                             data-testid="text-smart-summary"
                           >
                             {summaryDetailText}
                           </p>
-                        </CollapsibleContent>
-                      )}
-                    </div>
+                        )}
+                      </>
+                    )}
+
+                    {summaryNeedsToggle && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-0 mt-2 gap-1 text-xs text-primary hover:text-primary/80"
+                        onClick={() => setIsSummaryExpanded((v) => !v)}
+                        data-testid="button-toggle-summary"
+                        aria-expanded={isSummaryExpanded}
+                        aria-label={isSummaryExpanded ? "طي الموجز" : "عرض المزيد من الموجز"}
+                      >
+                        {isSummaryExpanded ? "طيّ" : "عرض المزيد"}
+                        <ChevronDown
+                          className={`h-3 w-3 transition-transform duration-200 ${isSummaryExpanded ? "rotate-180" : ""}`}
+                        />
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </Collapsible>
+              </div>
             )}
 
             {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
@@ -1489,6 +1503,11 @@ export default function ArticleDetail() {
                 />
               )}
             </div>
+
+            <ArticleWhatsAppCta
+              cta={(article as { whatsappCta?: WhatsAppCta | null }).whatsappCta}
+              contentHtml={article.content}
+            />
 
             {/* Weekly Photos Section */}
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (

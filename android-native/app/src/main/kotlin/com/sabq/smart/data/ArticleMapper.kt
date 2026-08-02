@@ -109,6 +109,14 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
                     else -> "$webOrigin/$url"
                 }
             },
+        whatsappCta = whatsappCta?.takeIf { it.enabled == true && !it.phone.isNullOrBlank() }?.let { cta ->
+            WhatsAppCta(
+                phone = cta.phone!!.filter { ch -> ch.isDigit() },
+                phrase = cta.phrase?.trim()?.takeIf { it.isNotEmpty() } ?: "تواصل عبر واتساب",
+                message = cta.message?.trim()?.takeIf { it.isNotEmpty() },
+                placement = if (cta.placement == "inline") "inline" else "end",
+            )
+        },
     )
 }
 

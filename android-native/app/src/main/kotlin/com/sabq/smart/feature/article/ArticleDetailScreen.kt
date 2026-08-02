@@ -443,6 +443,23 @@ private fun ArticleBody(
                     },
                 )
             }
+
+            // زر واتساب في نهاية الخبر (إن لم يُدرج داخل النص)
+            val endWa = article.whatsappCta
+            if (
+                endWa != null &&
+                endWa.isActiveEndPlacement &&
+                article.body?.contains("data-whatsapp-cta") != true
+            ) {
+                item {
+                    WhatsAppCtaCard(
+                        phrase = endWa.phrase,
+                        url = endWa.waUrl,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
+                }
+            }
+
             // Empty-body fallback.
             if (blocks.isEmpty() && article.body.isNullOrBlank()) {
                 item {
@@ -1454,12 +1471,73 @@ private fun BodyBlock(
                     }
                 }
             }
+            is BlockNode.WhatsAppCta -> {
+                WhatsAppCtaCard(phrase = block.phrase, url = block.url)
+            }
             is BlockNode.Divider -> {
                 HorizontalDivider(
                     color = SabqTheme.colors.outline.copy(alpha = 0.5f)
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun WhatsAppCtaCard(
+    phrase: String,
+    url: String,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val waGreen = Color(0xFF25D366)
+    val waDark = Color(0xFF128C7E)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(listOf(waGreen, waDark)))
+            .clickable {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url),
+                        )
+                    )
+                }
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.ChatBubbleOutline,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Text(
+            text = phrase,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.85f),
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 

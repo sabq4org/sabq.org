@@ -12,6 +12,7 @@ sealed interface BlockNode {
     data class ImageGallery(val images: List<GalleryImage>) : BlockNode
     data class TwitterEmbed(val tweetUrl: String) : BlockNode
     data class VideoEmbed(val provider: VideoProvider, val embedUrl: String, val sourceUrl: String?) : BlockNode
+    data class WhatsAppCta(val phone: String, val phrase: String, val url: String) : BlockNode
     object Divider : BlockNode
 }
 
@@ -207,6 +208,7 @@ object HtmlSimpleParser {
             val isGallery = tag.attr("data-image-gallery") != null || tag.classes.contains("photo-album")
             val isVideo = tag.attr("data-video-embed") != null || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
             val isTweet = tag.attr("data-twitter-embed") != null || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
+            val isWhatsApp = tag.attr("data-whatsapp-cta") != null || tag.classes.contains("whatsapp-cta-card")
 
             if (isGallery) {
                 return parseImageGallery(scanner, tag)
@@ -216,6 +218,9 @@ object HtmlSimpleParser {
             }
             if (isTweet) {
                 return parseTwitterEmbed(scanner, tag)
+            }
+            if (isWhatsApp) {
+                return parseWhatsAppCta(scanner, tag)
             }
             // Generic div: render children as paragraph.
             val inner = scanner.consumeContainer()
@@ -353,6 +358,26 @@ object HtmlSimpleParser {
         val inner = scanner.consumeContainer()
         val url = extractTweetURL(inner)
         return if (url != null) BlockNode.TwitterEmbed(url) else BlockNode.Blockquote(parseInlineRuns(inner))
+    }
+
+    private fun parseWhatsAppCta(scanner: HTMLScanner, tag: HTMLTag): BlockNode {
+        val inner = scanner.consumeContainer()
+        val phone = (tag.attr("data-phone") ?: "").filter { it.isDigit() }
+        val phraseAttr = tag.attr("data-phrase")?.trim().orEmpty()
+        val phraseFromText = stripTags(inner).trim()
+        val phrase = when {
+            phraseAttr.isNotEmpty() -> phraseAttr
+            phraseFromText.isNotEmpty() -> phraseFromText
+            else -> "تواصل عبر واتساب"
+        }
+        val href = Regex("""href="(https?://wa\.me/[^"]+)"""", RegexOption.IGNORE_CASE)
+            .find(inner)?.groupValues?.get(1)
+            ?: phone.takeIf { it.isNotEmpty() }?.let { "https://wa.me/$it" }
+        return if (href != null) {
+            BlockNode.WhatsAppCta(phone = phone, phrase = phrase, url = href)
+        } else {
+            BlockNode.Divider
+        }
     }
 
     private fun extractTweetURL(html: String): String? {

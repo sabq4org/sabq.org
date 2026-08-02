@@ -71,6 +71,7 @@ enum ArticleHtmlParser {
             let isGallery = tag.attr("data-image-gallery") != nil || tag.classes.contains("photo-album")
             let isVideo = tag.attr("data-video-embed") != nil || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
             let isTweet = tag.attr("data-twitter-embed") != nil || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
+            let isWhatsApp = tag.attr("data-whatsapp-cta") != nil || tag.classes.contains("whatsapp-cta-card")
 
             if isGallery {
                 return parseImageGallery(scanner: &scanner, tag: tag)
@@ -80,6 +81,9 @@ enum ArticleHtmlParser {
             }
             if isTweet {
                 return parseTwitterEmbed(scanner: &scanner, tag: tag)
+            }
+            if isWhatsApp {
+                return parseWhatsAppCta(scanner: &scanner, tag: tag)
             }
             // Generic div: render children as paragraph.
             let inner = scanner.consumeContainer()
@@ -229,6 +233,29 @@ enum ArticleHtmlParser {
         if let url = extractTweetURL(from: inner) { return .twitterEmbed(tweetURL: url) }
         let split = splitQuoteAttribution(parseInlineRuns(inner))
         return .blockquote(runs: split.quote, attribution: split.attribution)
+    }
+
+    private static func parseWhatsAppCta(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {
+        let inner = scanner.consumeContainer()
+        let phone = (tag.attr("data-phone") ?? "").filter(\.isNumber)
+        let phraseAttr = tag.attr("data-phrase")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let phraseFromText = stripTags(inner).trimmingCharacters(in: .whitespacesAndNewlines)
+        let phrase = !phraseAttr.isEmpty
+            ? phraseAttr
+            : (!phraseFromText.isEmpty ? phraseFromText : "تواصل عبر واتساب")
+
+        var href: URL?
+        let pattern = "href=\"(https?://wa\\.me/[^\"]+)\""
+        if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: inner, range: NSRange(inner.startIndex..., in: inner)),
+           let range = Range(match.range(at: 1), in: inner) {
+            href = URL(string: String(inner[range]))
+        }
+        if href == nil, !phone.isEmpty {
+            href = URL(string: "https://wa.me/\(phone)")
+        }
+        guard let url = href else { return .divider }
+        return .whatsappCta(phone: phone, phrase: phrase, url: url)
     }
 
     private static func extractTweetURL(from html: String) -> URL? {
