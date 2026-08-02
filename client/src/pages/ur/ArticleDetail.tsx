@@ -340,7 +340,7 @@ export default function UrduArticleDetail() {
                   </Button>
                 </div>
                 <p 
-                  className={`text-foreground/90 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-2' : ''}`} 
+                  className={`text-foreground/90 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-3' : ''}`} 
                   data-testid="text-smart-summary"
                 >
                   {article.aiSummary || article.excerpt}

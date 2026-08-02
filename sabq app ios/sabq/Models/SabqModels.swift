@@ -447,6 +447,8 @@ struct Article: Identifiable, Equatable, Hashable {
     /// Photo packs for weekly-photos articles. Nil for everything else.
     var weeklyPhotos: [APIWeeklyPhoto]? = nil
     var mediaAssets: [APIMediaAsset]? = nil
+    /// زر واتساب في نهاية المقال (من حقل whatsappCta). الإدراج داخل النص عبر HTML.
+    var whatsappCta: APIWhatsAppCta? = nil
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -532,7 +534,8 @@ struct Article: Identifiable, Equatable, Hashable {
             viewsCount: api.viewsCount ?? 0,
             articleType: api.articleType,
             weeklyPhotos: api.weeklyPhotos,
-            mediaAssets: api.mediaAssets
+            mediaAssets: api.mediaAssets,
+            whatsappCta: api.whatsappCta
         )
     }
 

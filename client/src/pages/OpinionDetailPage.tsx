@@ -9,6 +9,8 @@ import { RecommendationsWidget } from "@/components/RecommendationsWidget";
 import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
 import { RecentNewsSection } from "@/components/RecentNewsSection";
 import { ImageWithCaption } from "@/components/ImageWithCaption";
+import { ArticleWhatsAppCta } from "@/components/ArticleWhatsAppCta";
+import type { WhatsAppCta } from "@shared/whatsappCta";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -710,7 +712,7 @@ export default function OpinionDetailPage() {
                       </div>
                     </div>
                     <p 
-                      className={`text-foreground/80 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-2' : ''}`}
+                      className={`text-foreground/80 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-3' : ''}`}
                       data-testid="text-smart-summary"
                     >
                       {article.aiSummary || article.excerpt}
@@ -758,8 +760,18 @@ export default function OpinionDetailPage() {
               {/* Article Content */}
               <div 
                 className="prose prose-lg dark:prose-invert max-w-none leading-loose text-justify"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content, {
+                  ADD_ATTR: [
+                    'data-whatsapp-cta', 'data-phone', 'data-phrase', 'data-message',
+                    'class', 'target', 'rel', 'aria-label', 'aria-hidden',
+                  ],
+                }) }}
                 data-testid="text-article-content"
+              />
+
+              <ArticleWhatsAppCta
+                cta={(article as { whatsappCta?: WhatsAppCta | null }).whatsappCta}
+                contentHtml={article.content}
               />
 
               <Separator />

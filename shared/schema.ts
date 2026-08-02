@@ -2,6 +2,12 @@ import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, boolean, integer, bigint, jsonb, index, real, primaryKey, uniqueIndex, serial, date, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { whatsappCtaFieldSchema } from "./whatsappCta";
+export {
+  whatsappCtaSchema,
+  whatsappCtaFieldSchema,
+  type WhatsAppCta,
+} from "./whatsappCta";
 
 // ============================================
 // ZOD SCHEMAS FOR JSONB COLUMNS
@@ -1012,6 +1018,15 @@ export const articles = pgTable("articles", {
   isVideoTemplate: boolean("is_video_template").default(false), // Show video instead of hero image
   videoUrl: text("video_url"), // YouTube/Dailymotion URL or direct video path
   videoThumbnailUrl: text("video_thumbnail_url"), // Custom thumbnail for video
+
+  // زر تواصل واتساب تحريري (رقم + عبارة + موضع: نهاية المقال أو مضمّن في النص)
+  whatsappCta: jsonb("whatsapp_cta").$type<{
+    enabled: boolean;
+    phone: string;
+    phrase: string;
+    message?: string;
+    placement: "end" | "inline";
+  } | null>(),
   
   // Paid Content / Paywall fields
   isPaid: boolean("is_paid").default(false).notNull(), // Is this a paid article?
@@ -3721,6 +3736,7 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   seo: seoSchema,
   seoMetadata: seoMetadataSchema,
   sourceMetadata: sourceMetadataSchema,
+  whatsappCta: whatsappCtaFieldSchema,
 });
 
 // iFox Article Schemas - Accept categorySlug instead of categoryId
@@ -4358,6 +4374,7 @@ export const updateArticleSchema = z.object({
     sources: z.array(z.string()).optional(),
     lastUpdated: z.string().optional(),
   }).nullable().optional(),
+  whatsappCta: whatsappCtaFieldSchema,
   // Editorial review fields. Without these here, Zod's `.strict()`-like
   // strip behavior silently drops them from PATCH bodies — which means
   // archive/rejection/needs-revision reasons never make it to the DB or

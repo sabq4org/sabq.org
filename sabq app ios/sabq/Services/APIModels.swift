@@ -77,6 +77,31 @@ nonisolated struct APIWeeklyPhoto: Decodable, Identifiable, Hashable {
     }
 }
 
+nonisolated struct APIWhatsAppCta: Decodable, Hashable, Sendable {
+    let enabled: Bool?
+    let phone: String?
+    let phrase: String?
+    let message: String?
+    let placement: String?
+
+    var isActiveEndPlacement: Bool {
+        (enabled ?? false)
+            && (placement == nil || placement == "end")
+            && !(phone ?? "").filter(\.isNumber).isEmpty
+    }
+
+    var waURL: URL? {
+        let digits = (phone ?? "").filter(\.isNumber)
+        guard !digits.isEmpty else { return nil }
+        var components = URLComponents(string: "https://wa.me/\(digits)")
+        let text = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "text", value: text)]
+        }
+        return components?.url
+    }
+}
+
 nonisolated struct APIArticle: Decodable {
     let id: String
     let title: String
@@ -121,6 +146,8 @@ nonisolated struct APIArticle: Decodable {
     /// renders these as a numbered gallery inside the article body.
     let weeklyPhotos: [APIWeeklyPhoto]?
     let mediaAssets: [APIMediaAsset]?
+    /// زر واتساب تحريري (نهاية المقال). الإدراج داخل النص يأتي عبر HTML.
+    let whatsappCta: APIWhatsAppCta?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -250,6 +277,8 @@ nonisolated struct APIArticle: Decodable {
         }
 
         mediaAssets = try? c.decode([APIMediaAsset].self, forKey: FlexKey("mediaAssets"))
+        whatsappCta = (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsappCta")))
+            ?? (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsapp_cta")))
     }
 
     func withKeywords(_ newKeywords: [String]) -> APIArticle {

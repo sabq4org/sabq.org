@@ -55,6 +55,8 @@ data class Article(
      *  in the article body — iOS `weeklyPhotosGallery`. */
     val weeklyPhotos: List<WeeklyPhoto> = emptyList(),
     val albumImages: List<String> = emptyList(),
+    /** زر واتساب في نهاية المقال (من whatsappCta). الإدراج داخل النص عبر HTML. */
+    val whatsappCta: WhatsAppCta? = null,
 ) {
     /**
      * Stable identifier used by [BookmarksStore] (and any persistent
@@ -93,6 +95,28 @@ data class Article(
             "female", "f", "أنثى" -> "الكاتبة"
             "male", "m", "ذكر" -> "الكاتب"
             else -> "بقلم"
+        }
+}
+
+data class WhatsAppCta(
+    val phone: String,
+    val phrase: String,
+    val message: String? = null,
+    val placement: String = "end",
+) {
+    val isActiveEndPlacement: Boolean
+        get() = placement == "end" && phone.any { it.isDigit() }
+
+    val waUrl: String
+        get() {
+            val digits = phone.filter { it.isDigit() }
+            val base = "https://wa.me/$digits"
+            val text = message?.trim().orEmpty()
+            return if (text.isNotEmpty()) {
+                "$base?text=${java.net.URLEncoder.encode(text, Charsets.UTF_8.name())}"
+            } else {
+                base
+            }
         }
 }
 

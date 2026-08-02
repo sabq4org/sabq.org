@@ -11,6 +11,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { TwitterEmbed } from "./editor-extensions/TwitterEmbed";
 import { ImageGallery } from "./editor-extensions/ImageGallery";
 import { VideoEmbed } from "./editor-extensions/VideoEmbed";
+import { WhatsAppCta } from "./editor-extensions/WhatsAppCta";
 import { galleryStore } from "@/lib/galleryStore";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -177,6 +178,7 @@ export function RichTextEditor({
       TwitterEmbed,
       ImageGallery.configure({ uploadPurpose: imageUploadPurpose }),
       VideoEmbed,
+      WhatsAppCta,
       Placeholder.configure({
         placeholder,
       }),

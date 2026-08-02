@@ -174,6 +174,18 @@ data class ApiArticle(
 
     @JsonNames("albumImages", "album_images")
     val albumImages: List<String>? = null,
+
+    @JsonNames("whatsappCta", "whatsapp_cta")
+    val whatsappCta: ApiWhatsAppCta? = null,
+)
+
+@Serializable
+data class ApiWhatsAppCta(
+    val enabled: Boolean? = null,
+    val phone: String? = null,
+    val phrase: String? = null,
+    val message: String? = null,
+    val placement: String? = null,
 )
 
 @Serializable

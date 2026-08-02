@@ -61,9 +61,46 @@ struct ArticleContentView: View {
             tweetCard(url: url)
         case .videoEmbed(let provider, let embedURL, let sourceURL):
             videoCard(provider: provider, embedURL: embedURL, sourceURL: sourceURL)
+        case .whatsappCta(_, let phrase, let url):
+            whatsappCtaCard(phrase: phrase, url: url)
         case .divider:
             Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
         }
+    }
+
+    private func whatsappCtaCard(phrase: String, url: URL) -> some View {
+        Link(destination: url) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                Text(phrase)
+                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.145, green: 0.827, blue: 0.4), Color(red: 0.071, green: 0.549, blue: 0.494)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: Color(red: 0.071, green: 0.549, blue: 0.494).opacity(0.28), radius: 12, y: 6)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Run rendering
