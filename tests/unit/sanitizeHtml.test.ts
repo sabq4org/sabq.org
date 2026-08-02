@@ -30,6 +30,32 @@ describe("sanitizeArticleHtml", () => {
     expect(clean).not.toMatch(/style|onclick|onerror|javascript:|script|svg|data-track/i);
   });
 
+  it("preserves qa-block and sabq-table markup (class-based editor blocks)", async () => {
+    const { sanitizeArticleHtml } = await import("../../server/utils/sanitizeHtml");
+    const qaAndTable = [
+      '<div class="qa-block">',
+      '<div class="qa-q"><span class="qa-mark" aria-hidden="true">س</span><div class="qa-q-text">ما التخصصات المطلوبة؟</div></div>',
+      '<div class="qa-a"><p>الأمن السيبراني والذكاء الاصطناعي.</p></div>',
+      "</div>",
+      '<table class="sabq-table sabq-table--card"><tbody>',
+      "<tr><th><p>المسار</p></th><th><p>الدبلومات</p></th></tr>",
+      "<tr><td><p>التقني</p></td><td><p>الذكاء الاصطناعي، الأمن السيبراني</p></td></tr>",
+      "</tbody></table>",
+    ].join("");
+
+    const clean = sanitizeArticleHtml(qaAndTable);
+
+    // بنية سؤال/جواب كاملة مع الـclasses
+    expect(clean).toContain('class="qa-block"');
+    expect(clean).toContain('class="qa-mark"');
+    expect(clean).toContain('class="qa-q-text"');
+    expect(clean).toContain('class="qa-a"');
+    expect(clean).toContain("ما التخصصات المطلوبة؟");
+    // الجدول مع مظهر البطاقة
+    expect(clean).toContain('class="sabq-table sabq-table--card"');
+    expect(clean).toContain("<td><p>التقني</p></td>");
+  });
+
   it("coalesces multiple sanitizations into one Window reset per event-loop turn", async () => {
     const sanitize = vi.fn((html: string) => html);
     const clearWindow = vi.fn();

@@ -1,5 +1,5 @@
 /* eslint-disable no-console -- Existing editor diagnostics are outside this upload-routing change. */
-import { useEditor, EditorContent, Editor } from "@tiptap/react";
+import { useEditor, EditorContent, Editor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
@@ -12,6 +12,8 @@ import { TwitterEmbed } from "./editor-extensions/TwitterEmbed";
 import { ImageGallery } from "./editor-extensions/ImageGallery";
 import { VideoEmbed } from "./editor-extensions/VideoEmbed";
 import { WhatsAppCta } from "./editor-extensions/WhatsAppCta";
+import { qaExtensions } from "./editor-extensions/QaBlock";
+import { tableExtensions } from "./editor-extensions/SabqTable";
 import { galleryStore } from "@/lib/galleryStore";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -35,6 +37,7 @@ import {
   AlignCenter,
   AlignLeft,
   Code2,
+  Table as TableIcon,
   Palette,
   Smile,
   Twitter,
@@ -179,6 +182,8 @@ export function RichTextEditor({
       ImageGallery.configure({ uploadPurpose: imageUploadPurpose }),
       VideoEmbed,
       WhatsAppCta,
+      ...qaExtensions,
+      ...tableExtensions,
       Placeholder.configure({
         placeholder,
       }),
@@ -206,6 +211,16 @@ export function RichTextEditor({
       lastEmittedHtmlRef.current = html;
       onChange(html);
     },
+  });
+
+  // TipTap v3 لا يعيد الرسم مع كل transaction افتراضيًا — نراقب حالة الجدول
+  // عبر useEditorState حتى يظهر/يختفي شريط أدوات الجدول مع حركة المؤشر.
+  const tableState = useEditorState({
+    editor,
+    selector: (ctx) => ({
+      inTable: ctx.editor ? ctx.editor.isActive("table") : false,
+      cardStyle: ctx.editor ? ctx.editor.getAttributes("table").cardStyle === true : false,
+    }),
   });
 
   useEffect(() => {
@@ -627,6 +642,24 @@ export function RichTextEditor({
           <Quote className="h-4 w-4" />
         </ToolbarButton>
 
+        <ToolbarButton
+          onClick={() => editor.chain().focus().insertQaBlock().run()}
+          isActive={editor.isActive("qaBlock")}
+          title="سؤال وجواب"
+        >
+          <span className="text-[11px] font-bold leading-none">س/ج</span>
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() =>
+            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+          }
+          isActive={tableState?.inTable ?? false}
+          title="جدول"
+        >
+          <TableIcon className="h-4 w-4" />
+        </ToolbarButton>
+
         <Separator orientation="vertical" className="h-6 mx-1" />
 
         <ToolbarButton
@@ -771,6 +804,45 @@ export function RichTextEditor({
           <Redo className="h-4 w-4" />
         </ToolbarButton>
       </div>
+
+      {/* أدوات الجدول — تظهر فقط والمؤشر داخل جدول */}
+      {tableState?.inTable && (
+        <div
+          className="flex flex-wrap items-center gap-1 p-1.5 border-b bg-muted/50"
+          data-testid="table-controls"
+        >
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+            onClick={() => editor.chain().focus().addRowAfter().run()} data-testid="button-table-add-row">
+            صف +
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+            onClick={() => editor.chain().focus().addColumnAfter().run()} data-testid="button-table-add-column">
+            عمود +
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+            onClick={() => editor.chain().focus().deleteRow().run()} data-testid="button-table-delete-row">
+            حذف الصف
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+            onClick={() => editor.chain().focus().deleteColumn().run()} data-testid="button-table-delete-column">
+            حذف العمود
+          </Button>
+          <Separator orientation="vertical" className="h-5 mx-1" />
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+            onClick={() => editor.chain().focus().toggleHeaderRow().run()} data-testid="button-table-header-row">
+            صف عناوين
+          </Button>
+          <Button type="button" variant={tableState.cardStyle ? "default" : "ghost"} size="sm" className="h-7 px-2 text-xs"
+            onClick={() => editor.chain().focus().toggleTableCardStyle().run()} data-testid="button-table-card-style">
+            مظهر بطاقة
+          </Button>
+          <Separator orientation="vertical" className="h-5 mx-1" />
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive"
+            onClick={() => editor.chain().focus().deleteTable().run()} data-testid="button-table-delete">
+            حذف الجدول
+          </Button>
+        </div>
+      )}
 
       {/* Editor */}
       <EditorContent editor={editor} className="rich-text-editor__surface" />
