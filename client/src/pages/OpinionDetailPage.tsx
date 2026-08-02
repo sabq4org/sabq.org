@@ -9,8 +9,6 @@ import { RecommendationsWidget } from "@/components/RecommendationsWidget";
 import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
 import { RecentNewsSection } from "@/components/RecentNewsSection";
 import { ImageWithCaption } from "@/components/ImageWithCaption";
-import { ArticleWhatsAppCta } from "@/components/ArticleWhatsAppCta";
-import type { WhatsAppCta } from "@shared/whatsappCta";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -767,11 +765,6 @@ export default function OpinionDetailPage() {
                   ],
                 }) }}
                 data-testid="text-article-content"
-              />
-
-              <ArticleWhatsAppCta
-                cta={(article as { whatsappCta?: WhatsAppCta | null }).whatsappCta}
-                contentHtml={article.content}
               />
 
               <Separator />

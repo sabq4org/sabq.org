@@ -5,16 +5,36 @@ export interface WhatsAppCtaOptions {
   HTMLAttributes: Record<string, unknown>;
 }
 
+export type WhatsAppCtaInsertOptions = {
+  phone: string;
+  phrase: string;
+  message?: string;
+};
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     whatsappCta: {
-      setWhatsAppCta: (options: {
-        phone: string;
-        phrase: string;
-        message?: string;
-      }) => ReturnType;
+      /** إدراج عند موضع المؤشر */
+      setWhatsAppCta: (options: WhatsAppCtaInsertOptions) => ReturnType;
+      /** يحذف أي زر واتساب سابق ويضعه في نهاية النص داخل المحرر */
+      setWhatsAppCtaAtEnd: (options: WhatsAppCtaInsertOptions) => ReturnType;
+      /** يحذف كل كتل واتساب من المحتوى */
+      clearWhatsAppCta: () => ReturnType;
     };
   }
+}
+
+function buildAttrs(options: WhatsAppCtaInsertOptions) {
+  const digits = normalizeWhatsAppPhone(options.phone);
+  if (!digits) return null;
+  const phrase = (options.phrase || "تواصل عبر واتساب").trim().slice(0, 120);
+  if (!phrase) return null;
+  const message = options.message?.trim().slice(0, 500) || undefined;
+  return {
+    phone: digits,
+    phrase,
+    message: message ?? null,
+  };
 }
 
 export const WhatsAppCta = Node.create<WhatsAppCtaOptions>({
@@ -94,20 +114,54 @@ export const WhatsAppCta = Node.create<WhatsAppCtaOptions>({
       setWhatsAppCta:
         (options) =>
         ({ commands }) => {
-          const digits = normalizeWhatsAppPhone(options.phone);
-          if (!digits) return false;
-          const phrase = (options.phrase || "تواصل عبر واتساب").trim().slice(0, 120);
-          if (!phrase) return false;
-          const message = options.message?.trim().slice(0, 500) || undefined;
-
+          const attrs = buildAttrs(options);
+          if (!attrs) return false;
           return commands.insertContent({
             type: this.name,
-            attrs: {
-              phone: digits,
-              phrase,
-              message: message ?? null,
-            },
+            attrs,
           });
+        },
+
+      setWhatsAppCtaAtEnd:
+        (options) =>
+        ({ state, tr, dispatch }) => {
+          const attrs = buildAttrs(options);
+          if (!attrs) return false;
+          const type = state.schema.nodes[this.name];
+          if (!type) return false;
+
+          const ranges: Array<{ from: number; to: number }> = [];
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === this.name) {
+              ranges.push({ from: pos, to: pos + node.nodeSize });
+            }
+          });
+          for (let i = ranges.length - 1; i >= 0; i--) {
+            tr.delete(ranges[i].from, ranges[i].to);
+          }
+
+          const node = type.create(attrs);
+          const end = tr.doc.content.size;
+          tr.insert(end, node);
+          if (dispatch) dispatch(tr.scrollIntoView());
+          return true;
+        },
+
+      clearWhatsAppCta:
+        () =>
+        ({ state, tr, dispatch }) => {
+          const ranges: Array<{ from: number; to: number }> = [];
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === this.name) {
+              ranges.push({ from: pos, to: pos + node.nodeSize });
+            }
+          });
+          if (ranges.length === 0) return true;
+          for (let i = ranges.length - 1; i >= 0; i--) {
+            tr.delete(ranges[i].from, ranges[i].to);
+          }
+          if (dispatch) dispatch(tr);
+          return true;
         },
     };
   },

@@ -6,8 +6,6 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
-import { ArticleWhatsAppCta } from "@/components/ArticleWhatsAppCta";
-import type { WhatsAppCta } from "@shared/whatsappCta";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
 import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
 import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
@@ -1503,11 +1501,6 @@ export default function ArticleDetail() {
                 />
               )}
             </div>
-
-            <ArticleWhatsAppCta
-              cta={(article as { whatsappCta?: WhatsAppCta | null }).whatsappCta}
-              contentHtml={article.content}
-            />
 
             {/* Weekly Photos Section */}
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (

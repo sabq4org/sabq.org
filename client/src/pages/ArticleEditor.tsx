@@ -1511,10 +1511,22 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.isAiGeneratedInfographicBanner = isAiGeneratedInfographicBanner;
       }
       
-      // زر واتساب: يُحفظ كـ jsonb أو null عند الإيقاف
+      // زر واتساب: يُحفظ في jsonb + يجب أن يكون مضمّناً داخل content HTML
       if (whatsappCta?.enabled && whatsappCta.phone) {
         const digits = normalizeWhatsAppPhone(whatsappCta.phone);
         if (digits) {
+          const placement = whatsappCta.placement === "inline" ? "inline" : "end";
+          // إن اختار «نهاية النص» نزامن الكتلة داخل المحرر قبل قراءة HTML
+          if (placement === "end" && editorInstance) {
+            editorInstance.commands.setWhatsAppCtaAtEnd({
+              phone: digits,
+              phrase: (whatsappCta.phrase || "تواصل معنا عبر واتساب").trim().slice(0, 120),
+              message: whatsappCta.message?.trim() || undefined,
+            });
+            const html = editorInstance.getHTML();
+            articleData.content = html;
+            setContent(html);
+          }
           articleData.whatsappCta = {
             enabled: true,
             phone: digits,
@@ -1522,12 +1534,18 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             message: whatsappCta.message?.trim()
               ? whatsappCta.message.trim().slice(0, 500)
               : undefined,
-            placement: whatsappCta.placement === "inline" ? "inline" : "end",
+            placement,
           };
         } else {
           articleData.whatsappCta = null;
         }
       } else {
+        if (editorInstance) {
+          editorInstance.commands.clearWhatsAppCta();
+          const html = editorInstance.getHTML();
+          articleData.content = html;
+          setContent(html);
+        }
         articleData.whatsappCta = null;
       }
 
@@ -3899,15 +3917,28 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </div>
             )}
 
-            {/* زر واتساب — نهاية الخبر أو إدراج داخل النص */}
+            {/* زر واتساب — يُدرج داخل نص الخبر (نهاية النص أو عند المؤشر) */}
             {!isOpinionAuthor && articleType !== "infographic" && (
               <div className="order-[91] lg:order-none">
                 <WhatsAppCtaEditor
                   value={whatsappCta}
-                  onChange={setWhatsappCta}
+                  onChange={(next) => {
+                    setWhatsappCta(next);
+                    // إيقاف الخاصية → احذف الكتلة من داخل النص
+                    if (!next?.enabled && editorInstance) {
+                      editorInstance.chain().focus().clearWhatsAppCta().run();
+                    }
+                  }}
                   disabled={isLockedByOther}
-                  onInsertInline={(cta) => {
+                  onPlaceInContent={(cta, where) => {
                     if (!editorInstance) return false;
+                    if (where === "end") {
+                      return editorInstance.commands.setWhatsAppCtaAtEnd({
+                        phone: cta.phone,
+                        phrase: cta.phrase,
+                        message: cta.message,
+                      });
+                    }
                     return editorInstance
                       .chain()
                       .focus()
