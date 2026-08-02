@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.home
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 sealed interface HomeFeedUiState {
     data object Loading : HomeFeedUiState
     data class Error(val message: String) : HomeFeedUiState
+    @Immutable
     data class Loaded(
         val sections: List<Section>,
         val featured: List<Article>,

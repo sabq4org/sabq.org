@@ -65,10 +65,11 @@ final class RoshnHomeStore {
 
 // MARK: - شريط دوري روشن في الواجهة الرئيسية
 //
-// بطاقة بهوية «صباح الملعب»: سماوي هادئ + زمرد مُطفأ على ضباب أبيض في الوضع
-// الفاتح، ونسخة ليلية متكيفة تلقائيًا عبر RoshnTheme (2026-07-28). أربع حالات:
-// عدّاد انطلاق الموسم / يوم الجولة / المباراة القادمة أو الحية / بطاقة البطل.
-// تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden) — نفس مفتاح الويب حرفيًا.
+// بطاقة بهوية «أخضر الملعب» (2026-08-02): زمردي صلب بنص أبيض — نفس لون هيرو
+// المركز — بثلاثة عناصر فقط: شعار الدوري، سطرا الهوية، وشارة حالة واحدة
+// (عدّاد/نتيجة حية/بطل). قرار المالك بعد البطاقة البيضاء المزدحمة.
+// أربع حالات: عدّاد انطلاق الموسم / يوم الجولة / المباراة القادمة أو الحية /
+// بطاقة البطل. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden).
 
 struct RoshnHomeStrip: View {
     private let store = RoshnHomeStore.shared
@@ -141,253 +142,129 @@ struct RoshnHomeStrip: View {
         }
     }
 
-    // MARK: بطاقة ما قبل الموسم — عدّاد الانطلاقة + مباراة الافتتاح
+    // MARK: البطاقة الموحّدة — زمردي صلب بثلاثة عناصر فقط
+    //
+    // قرار المالك 2026-08-02: البانر السابق كان مزدحمًا (شعارا فريقين + عدّاد
+    // + عمود هوية) وباهت اللون. الشكل الجديد: هوية الدوري يمينًا، شارة حالة
+    // واحدة يسارًا، وسهم — على زمردي الهوية الصلب نفسه (لون هيرو المركز).
 
     private func preSeasonCard(_ h: RsHero, opener: RsFixture) -> some View {
-        HStack(spacing: 10) {
-            identity(subtitle: "الموسم الجديد \(RsFormat.seasonLabel(h.outlook.nextSeason ?? h.outlook.season))")
-                .frame(width: 130, alignment: .leading)
-
-            Spacer(minLength: 4)
-
-            VStack(spacing: 3) {
-                HStack(spacing: 7) {
-                    logo(opener.home.logo)
-                    // fixedSize يمنع انعصار النص حرفًا-حرفًا عموديًا بين الشعارين
-                    // (كان يتمدد لـ15 سطرًا فيضخّم ارتفاع البطاقة كلها).
-                    Text("مباراة الافتتاح")
-                        .font(SabqFonts.app(size: 10, weight: .medium))
-                        .foregroundStyle(RoshnTheme.inkSoft)
-                        .lineLimit(1)
-                        .fixedSize()
-                    logo(opener.away.logo)
-                }
-                if let ts = h.outlook.firstKickoffTs ?? (opener.timestamp > 0 ? opener.timestamp : nil) {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text("ينطلق بعد \(WCFormat.countdown(to: ts))")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
-                            .foregroundStyle(RoshnTheme.sky)
-                            .lineLimit(1).fixedSize()
-                    }
-                }
+        banner(subtitle: "الموسم الجديد \(RsFormat.isolatedLatin(RsFormat.seasonLabel(h.outlook.nextSeason ?? h.outlook.season)))") {
+            if let ts = h.outlook.firstKickoffTs ?? (opener.timestamp > 0 ? opener.timestamp : nil) {
+                countdownChip(prefix: "ينطلق بعد", timestamp: ts)
             }
-
-            Spacer(minLength: 2)
-
-            chevron
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(lightCard(glow: RoshnTheme.sky))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
     }
-
-    // MARK: بطاقة المباراة القادمة/الحية
 
     private func matchCard(_ f: RsFixture) -> some View {
-        HStack(spacing: 10) {
-            identity(subtitle: f.status.live ? "مباشر الآن" : "تغطية حية بتوقيت الرياض")
-                .frame(width: 130, alignment: .leading)
-
-            Spacer(minLength: 4)
-
-            HStack(spacing: 7) {
-                logo(f.home.logo)
-                centerColumn(f)
-                logo(f.away.logo)
+        banner(subtitle: f.status.live
+            ? "\(f.home.name) × \(f.away.name)"
+            : "\(f.home.name) × \(f.away.name) · \(RsFormat.time(f))"
+        ) {
+            if f.status.live {
+                liveScoreChip(f)
+            } else {
+                countdownChip(prefix: "تنطلق بعد", timestamp: f.timestamp)
             }
-
-            Spacer(minLength: 2)
-
-            chevron
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(lightCard(glow: f.status.live ? RoshnTheme.liveRed : RoshnTheme.pitch))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
     }
-
-    // MARK: بطاقة يوم الجولة (عدّاد مشترك)
 
     private func matchdayCard(_ md: RsMatchday) -> some View {
-        HStack(spacing: 10) {
-            identity(subtitle: "تغطية بتوقيت الرياض")
-                .frame(width: 130, alignment: .leading)
-
-            Spacer(minLength: 4)
-
-            VStack(spacing: 3) {
-                Text(md.round ?? "جولة الدوري")
-                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(RoshnTheme.ink)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                Text("\(md.count) \(md.count == 2 ? "مباراتان" : "مباريات") · \(RsFormat.day(iso: md.date))")
-                    .font(SabqFonts.app(size: 9)).foregroundStyle(RoshnTheme.inkSoft)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                if md.liveCount > 0 {
-                    HStack(spacing: 4) {
-                        Circle().fill(RoshnTheme.liveRed).frame(width: 6, height: 6)
-                        Text(md.liveCount == 1 ? "مباراة تجري الآن" : "\(md.liveCount) مباريات تجري الآن")
-                            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(RoshnTheme.liveRed)
-                    }
-                } else if let ts = md.nextKickoffTs {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text("تنطلق بعد \(WCFormat.countdown(to: ts))")
-                            .font(SabqFonts.app(size: 11)).foregroundStyle(RoshnTheme.sky)
-                            .lineLimit(1).fixedSize()
+        banner(subtitle: "\(md.round ?? "جولة الدوري") · \(md.count) \(md.count == 2 ? "مباراتان" : "مباريات")") {
+            if md.liveCount > 0 {
+                chip(background: RoshnTheme.liveRed) {
+                    HStack(spacing: 5) {
+                        Circle().fill(.white).frame(width: 5, height: 5)
+                        Text(md.liveCount == 1 ? "مباشر" : "\(md.liveCount) مباشر")
                     }
                 }
+            } else if let ts = md.nextKickoffTs {
+                countdownChip(prefix: "تنطلق بعد", timestamp: ts)
             }
-
-            Spacer(minLength: 2)
-
-            chevron
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(lightCard(glow: RoshnTheme.pitch))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 10, x: 0, y: 4)
     }
-
-    // MARK: بطاقة البطل (عطلة ما بين الموسمين)
 
     private func championCard(_ c: RsChampion) -> some View {
-        HStack(spacing: 10) {
-            identity(subtitle: "اكتمل الموسم", subtitleColor: RoshnTheme.gold)
-                .frame(width: 130, alignment: .leading)
-
-            Spacer(minLength: 4)
-
-            HStack(spacing: 8) {
-                ZStack(alignment: .bottomLeading) {
-                    WCRemoteImage(url: c.logo)
-                        .padding(4).frame(width: 40, height: 40)
-                        .background(Circle().fill(.white))
-                        .overlay(Circle().stroke(RoshnTheme.gold.opacity(0.8), lineWidth: 1.5))
-                    Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(RoshnTheme.gold)
-                        .offset(x: -4, y: 3)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("🏆 بطل دوري روشن")
-                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(RoshnTheme.gold)
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(c.name)
-                        .font(SabqFonts.app(size: 17, weight: .semibold)).foregroundStyle(RoshnTheme.ink)
-                        .lineLimit(1).minimumScaleFactor(0.75)
+        banner(subtitle: "اكتمل الموسم") {
+            chip(background: RoshnTheme.gold) {
+                HStack(spacing: 6) {
+                    Text("🏆")
+                    Text(c.name).lineLimit(1)
                 }
             }
-
-            Spacer(minLength: 2)
-
-            chevron
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(lightCard(glow: RoshnTheme.gold))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.gold.opacity(0.35), lineWidth: 1))
-        .shadow(color: RoshnTheme.gold.opacity(0.10), radius: 10, x: 0, y: 4)
     }
 
-    // MARK: عناصر مشتركة
+    // MARK: هيكل البطاقة والعناصر
 
-    private func identity(subtitle: String, subtitleColor: Color = RoshnTheme.inkSoft) -> some View {
-        HStack(spacing: 10) {
-            // شارة الدوري: كرة على تدرّج هادئ — بلا نيون أخضر/سماوي.
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(RoshnTheme.badgeGradient)
-                    .frame(width: 38, height: 38)
-                Image(systemName: "soccerball")
-                    .font(SabqFonts.app(size: 18, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.95))
-            }
-            .shadow(color: RoshnTheme.sky.opacity(0.14), radius: 4, y: 2)
+    private func banner(subtitle: String, @ViewBuilder trailing: () -> some View) -> some View {
+        HStack(spacing: 11) {
+            Image("RoshnLeagueLogo")
+                .resizable()
+                .scaledToFit()
+                .padding(4)
+                .frame(width: 40, height: 40)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(.white))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
-                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(RoshnTheme.ink)
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .font(SabqFonts.app(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 9)).foregroundStyle(subtitleColor)
-                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .font(SabqFonts.app(size: 10))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1).minimumScaleFactor(0.8)
             }
-            .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            trailing()
+
+            Image(systemName: "chevron.left")
+                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(.white.opacity(0.18)))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 13)
+        .background(RoshnTheme.sky)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: RoshnTheme.cardShadow, radius: 8, x: 0, y: 3)
+    }
+
+    private func chip(background: Color, @ViewBuilder content: () -> some View) -> some View {
+        content()
+            .font(SabqFonts.app(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Capsule().fill(background))
+    }
+
+    private func countdownChip(prefix: String, timestamp: Int) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            chip(background: .white.opacity(0.16)) {
+                Text("\(prefix) \(WCFormat.countdown(to: timestamp))")
+                    .monospacedDigit()
+                    .lineLimit(1).fixedSize()
+            }
         }
     }
 
-    /// أرضية «صباح الملعب» بتوهّج لوني خافت في الزاوية — تتكيف ليليًا عبر stripGradient.
-    private func lightCard(glow: Color) -> some View {
-        RoshnTheme.stripGradient.overlay(alignment: .topLeading) {
-            Circle()
-                .fill(glow.opacity(0.07))
-                .frame(width: 150, height: 150)
-                .blur(radius: 50)
-                .offset(x: -30, y: -50)
-        }
-    }
-
-    private var chevron: some View {
-        Image(systemName: "chevron.left")
-            .font(SabqFonts.app(size: 12, weight: .medium))
-            .foregroundStyle(RoshnTheme.sky)
-    }
-
-    private func logo(_ url: String) -> some View {
-        WCRemoteImage(url: url)
-            .padding(3).frame(width: 32, height: 32)
-            .background(Circle().fill(.white))
-            .overlay(Circle().stroke(RoshnTheme.line, lineWidth: 1))
-    }
-
-    private func centerColumn(_ f: RsFixture) -> some View {
-        Group {
-            if f.started {
-                VStack(spacing: 2) {
-                    Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                        .font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(RoshnTheme.ink)
+    private func liveScoreChip(_ f: RsFixture) -> some View {
+        chip(background: RoshnTheme.liveRed) {
+            HStack(spacing: 6) {
+                Circle().fill(.white).frame(width: 5, height: 5)
+                Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
+                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+                if let elapsed = f.status.elapsed, elapsed > 0 {
+                    Text("\(elapsed)\((f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : "")'")
+                        .monospacedDigit()
                         .environment(\.layoutDirection, .leftToRight)
-                    liveStatus(f)
                 }
-                .frame(minWidth: 82)
-            } else {
-                VStack(spacing: 2) {
-                    Text(RsFormat.time(f))
-                        .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(RoshnTheme.ink)
-                        .lineLimit(1).fixedSize()
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
-                            .font(SabqFonts.app(size: 10)).foregroundStyle(RoshnTheme.sky)
-                            .lineLimit(1).fixedSize()
-                    }
-                }
-                .frame(minWidth: 82)
             }
         }
-    }
-
-    private func liveStatus(_ f: RsFixture) -> some View {
-        let period = f.status.label.isEmpty ? "مباشر" : f.status.label
-        let minute: String? = {
-            guard let elapsed = f.status.elapsed, elapsed > 0 else { return nil }
-            let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
-            return "\(elapsed)\(extra)'"
-        }()
-        return HStack(spacing: 5) {
-            Text(period).lineLimit(1).minimumScaleFactor(0.72)
-            if let minute {
-                Circle().fill(.white.opacity(0.85)).frame(width: 3.5, height: 3.5)
-                Text(minute).monospacedDigit().environment(\.layoutDirection, .leftToRight)
-            }
-        }
-        .font(SabqFonts.app(size: 10, weight: .medium))
-        .foregroundStyle(.white)
-        .padding(.horizontal, 9).padding(.vertical, 5)
-        .frame(minWidth: 78, maxWidth: 94)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(RoshnTheme.liveRed))
     }
 }

@@ -826,6 +826,7 @@ export function createCustomNotificationPayload(
     sound?: string;
     campaignId?: string;
     articleId?: string;
+    articleSlug?: string;
     type?: string;
     category?: string;
     priority?: "passive" | "active" | "time-sensitive" | "critical";
@@ -848,6 +849,7 @@ export function createCustomNotificationPayload(
     imageUrl: options.imageUrl,
     campaignId: options.campaignId,
     articleId: options.articleId,
+    articleSlug: options.articleSlug,
     type: options.type || "custom",
   };
 }

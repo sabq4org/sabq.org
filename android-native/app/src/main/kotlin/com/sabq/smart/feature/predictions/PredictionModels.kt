@@ -145,10 +145,12 @@ data class PredEntrySaveResponse(val entry: PredEntrySaved = PredEntrySaved())
 @Serializable
 data class PredLedgerItem(
     val id: String = "",
+    val contestId: String? = null,
     val points: Int = 0,
     val reasonCode: String = "",
     val reasonLabelAr: String = "",
     val createdAt: String = "",
+    val breakdown: PredAwardBreakdown? = null,
 )
 
 @Serializable

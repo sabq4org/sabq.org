@@ -32,6 +32,8 @@ class PendingPushDeepLink @Inject constructor() {
         val deepLinkPath: String? = null,
         /** توكن دعوة استطلاع من sabq://survey/<token> أو https://sabq.org/survey/<token> */
         val surveyToken: String? = null,
+        /** معرف مسودة من sabq://draft/<id> — إشعار needs_revision يفتح المحرر مباشرة */
+        val draftArticleId: String? = null,
     )
 
     private val _target = MutableStateFlow<Target?>(null)
@@ -43,18 +45,26 @@ class PendingPushDeepLink @Inject constructor() {
         kind: String?,
         deepLinkPath: String? = null,
         surveyToken: String? = null,
+        draftArticleId: String? = null,
     ) {
         val slug = articleSlug?.takeIf { it.isNotBlank() }
         val id = notificationId?.takeIf { it.isNotBlank() }
-        val path = deepLinkPath?.takeIf { it.startsWith("/asian-cup") }
+        // قائمة بيضاء للمسارات المدعومة — فرع التوجيه في SabqApp هو المرجع.
+        val path = deepLinkPath?.takeIf {
+            it.startsWith("/asian-cup") || it == "/roshn" ||
+                it.startsWith("/roshn/") || it.startsWith("/sports/team/") ||
+                it == "/kings-cup" || it.startsWith("/kings-cup/")
+        }
         val survey = surveyToken?.takeIf { it.isNotBlank() }
-        if (slug == null && id == null && path == null && survey == null) return
+        val draft = draftArticleId?.takeIf { it.isNotBlank() }
+        if (slug == null && id == null && path == null && survey == null && draft == null) return
         _target.value = Target(
             articleSlug = slug,
             notificationId = id,
             kind = kind?.takeIf { it.isNotBlank() },
             deepLinkPath = path,
             surveyToken = survey,
+            draftArticleId = draft,
         )
     }
 

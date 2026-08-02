@@ -140,7 +140,7 @@ struct BookmarksView: View {
     // MARK: - Articles List
 
     private var articlesListSection: some View {
-        SurfaceCard {
+        SurfaceCard(lazy: true) {
             ForEach(Array(bookmarkedArticles.enumerated()), id: \.element.id) { index, article in
                 if index > 0 {
                     Divider()

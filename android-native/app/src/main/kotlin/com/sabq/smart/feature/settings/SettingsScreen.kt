@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Business
@@ -131,10 +134,21 @@ fun SettingsScreen(
     onSubmitNewsClick: () -> Unit = {},
     onPickInterestsClick: () -> Unit = {},
     onDashboardClick: () -> Unit = {},
+    onSabqPlusClick: () -> Unit = {},
+    onPressCardClick: () -> Unit = {},
+    onOpenRevisionsClick: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
+    val settingsContext = androidx.compose.ui.platform.LocalContext.current
+    val revisionsStore = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            settingsContext.applicationContext,
+            com.sabq.smart.feature.revisions.RevisionsStoreEntryPoint::class.java,
+        ).revisionsStore()
+    }
+    val revisionsState by revisionsStore.state.collectAsStateWithLifecycle()
     val clearState by viewModel.clearLocalDataState.collectAsStateWithLifecycle()
     var showClearConfirm by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
@@ -191,10 +205,35 @@ fun SettingsScreen(
             LoyaltyEntryRow(onClick = onLoyaltyClick)
         }
 
-        // 4) Press card entry — DEFERRED (editorial direction 2026-05-19)
+        // 3.5) مقالات تنتظر التعديل — تظهر فقط عند وجود مسودات مُعادة للكاتب
+        currentUser?.let { u ->
+            if ((u.isWriter || u.isAdminLike) && revisionsState.count > 0) {
+                RevisionsBadgeCard(
+                    count = revisionsState.count,
+                    onClick = onOpenRevisionsClick,
+                )
+            }
+        }
+
+        // 4.1) البطاقة الصحفية — أي مسجّل دخول؛ الخادم يحسم التصريح
+        // (أُلغي تأجيل 2026-05-19 بقرار المالك في مرحلة سد الفجوات 2026-08-02)
+        if (currentUser != null) {
+            PressCardEntryRow(onClick = onPressCardClick)
+        }
+
+        // 4.5) سبق بلس — معاينة داخلية لمسؤول المنصة فقط (بوابة مزدوجة مع 404 الخادم)
+        if (currentUser?.isPlatformAdmin == true) {
+            SabqPlusEntryRow(onClick = onSabqPlusClick)
+        }
 
         // 5) Display
         DisplaySection(viewModel = viewModel, settings = settings)
+
+        // 5.5) تجربة التصفح (وضع Lite)
+        com.sabq.smart.feature.lite.BrowsingExperienceSection(
+            settings = settings,
+            onSelect = viewModel::setBrowsingMode,
+        )
 
         // 6) Subscription
         SubscriptionSection(onNewsletterClick = onNewsletterClick)
@@ -1093,6 +1132,198 @@ private fun LoyaltyEntryRow(onClick: () -> Unit) {
             )
             Text(
                 text = "تابع مستواك واستبدل نقاطك",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// مدخل البطاقة الصحفية — نفس بنية LoyaltyEntryRow؛ التصريح يحسمه الخادم
+@Composable
+private fun PressCardEntryRow(onClick: () -> Unit) {
+    val pressBlue = Color(red = 0.11f, green = 0.64f, blue = 0.94f)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
+            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(pressBlue.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Badge,
+                contentDescription = null,
+                tint = pressBlue,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "بطاقتي الصحفية",
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "أصدر بطاقتك الرسمية من سبق",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// مدخل «سبق بلس» — معاينة داخلية، بوابته isPlatformAdmin
+@Composable
+private fun SabqPlusEntryRow(onClick: () -> Unit) {
+    val plusNavy = Color(red = 0.09f, green = 0.58f, blue = 0.91f)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
+            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(plusNavy.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Stars,
+                contentDescription = null,
+                tint = plusNavy,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "سبق بلس (معاينة)",
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "معاينة داخلية — نقاطك بالريال وقسائم الشركاء",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// بطاقة «مقالات تنتظر التعديل» — شارة عددية كهرمانية، تظهر عند count > 0
+@Composable
+private fun RevisionsBadgeCard(count: Int, onClick: () -> Unit) {
+    val amber = Color(0xFFF29E33)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(amber.copy(alpha = 0.05f), shape)
+            .border(BorderStroke(0.5.dp, amber.copy(alpha = 0.20f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(amber.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.EditNote,
+                contentDescription = null,
+                tint = amber,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "مقالات تنتظر التعديل",
+                    style = SabqTheme.typography.compactCardTitle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = SabqTheme.colors.ink,
+                    ),
+                )
+                Text(
+                    text = "$count",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(amber)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            Text(
+                text = "أعد إرسالها بعد معالجة ملاحظات المراجع",
                 style = SabqTheme.typography.metaSmall.copy(
                     fontSize = 12.sp,
                     color = SabqTheme.colors.secondaryInk,

@@ -13,7 +13,8 @@ struct RoshnTeamView: View {
     @State private var profile: RsTeamProfile?
     @State private var loading = true
     @State private var loadError: String?
-    @State private var selectedFixture: RsFixture?
+    /// معرّف غير اختياري + Binding حي — نفس علاج الورقة البيضاء في RoshnView.
+    @State private var selectedFixtureId = 0
     @State private var showMatchCenter = false
 
     private let positionOrder = ["Goalkeeper", "Defender", "Midfielder", "Attacker"]
@@ -59,11 +60,9 @@ struct RoshnTeamView: View {
         .task { await load() }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showMatchCenter) {
-            if let fixture = selectedFixture {
-                RoshnMatchCenter(fixtureId: fixture.id)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
+            RoshnMatchCenterSheet(fixtureId: $selectedFixtureId)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -71,9 +70,9 @@ struct RoshnTeamView: View {
 
     private var hero: some View {
         ZStack {
-            RoshnTheme.heroGradient
+            RoshnTheme.hero
             Circle()
-                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
+                .stroke(.white.opacity(0.14), lineWidth: 1)
                 .frame(width: 170, height: 170)
                 .offset(x: -135, y: 45)
 
@@ -82,8 +81,7 @@ struct RoshnTeamView: View {
                     .padding(9)
                     .frame(width: 84, height: 84)
                     .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white))
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
-                    .shadow(color: RoshnTheme.sky.opacity(0.12), radius: 10, y: 5)
+                    .shadow(color: RoshnTheme.navyDeep.opacity(0.18), radius: 8, y: 4)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(profile?.team.name ?? previewName)
@@ -102,10 +100,9 @@ struct RoshnTeamView: View {
                     if let standing = profile?.standing {
                         Text("المركز \(RsFormat.latin(standing.rank)) · \(RsFormat.latin(standing.points)) نقطة")
                             .font(SabqFonts.app(size: 12.5, weight: .semibold))
-                            .foregroundStyle(RoshnTheme.sky)
+                            .foregroundStyle(.white)
                             .padding(.horizontal, 10).padding(.vertical, 6)
                             .background(Capsule().fill(RoshnTheme.heroChip))
-                            .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
                     }
                 }
                 Spacer(minLength: 0)
@@ -113,8 +110,7 @@ struct RoshnTeamView: View {
             .padding(18)
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(RoshnTheme.heroStroke, lineWidth: 1))
-        .shadow(color: RoshnTheme.sky.opacity(0.10), radius: 14, y: 7)
+        .shadow(color: RoshnTheme.cardShadow, radius: 12, y: 6)
     }
 
     // MARK: حقائق سريعة
@@ -262,7 +258,7 @@ struct RoshnTeamView: View {
                     .foregroundStyle(title == "مباشر الآن" ? RoshnTheme.liveRed : RoshnTheme.inkSoft)
                 ForEach(fixtures) { fixture in
                     RoshnMatchRow(fixture: fixture) {
-                        selectedFixture = fixture
+                        selectedFixtureId = fixture.id
                         showMatchCenter = true
                     }
                 }
@@ -382,13 +378,13 @@ struct RoshnTeamView: View {
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(RoshnTheme.card)
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+            .shadow(color: RoshnTheme.cardShadow, radius: 6, y: 3)
     }
 
+    /// بلاطة داخلية بلون القماشة — تتمايز عن البطاقة البيضاء بلا حدود.
     private var tileBackground: some View {
         RoundedRectangle(cornerRadius: 13, style: .continuous)
             .fill(RoshnTheme.canvas)
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(RoshnTheme.line.opacity(0.8), lineWidth: 1))
     }
 
     private var loadingState: some View {
@@ -397,7 +393,7 @@ struct RoshnTeamView: View {
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
                     .fill(RoshnTheme.card)
                     .frame(height: 82)
-                    .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+                    .shadow(color: RoshnTheme.cardShadow, radius: 5, y: 2)
             }
         }
     }
