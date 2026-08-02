@@ -1,4 +1,5 @@
-import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
+import { Table, TableCell, TableHeader, TableRow, TableView } from "@tiptap/extension-table";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -42,8 +43,24 @@ export const SabqTable = Table.extend({
   },
 });
 
+/**
+ * TableView الأصلي يطبّق السمات مرة واحدة عند الإنشاء فقط، وupdate()
+ * تحدّث الأعمدة دون السمات — فتبديل «مظهر بطاقة» كان يُحفظ صحيحًا
+ * لكن معاينة المحرر تبقى على المظهر القديم حتى إعادة فتح المقال.
+ */
+class SabqTableView extends TableView {
+  update(node: ProseMirrorNode): boolean {
+    const handled = super.update(node);
+    if (handled) {
+      this.table.className =
+        node.attrs.cardStyle === true ? "sabq-table sabq-table--card" : "sabq-table";
+    }
+    return handled;
+  }
+}
+
 export const tableExtensions = [
-  SabqTable.configure({ resizable: false }),
+  SabqTable.configure({ resizable: false, View: SabqTableView }),
   TableRow,
   TableHeader,
   TableCell,
