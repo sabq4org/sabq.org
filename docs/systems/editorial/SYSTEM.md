@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-08-02 (زر واتساب تحريري في المقال) | المالك: editorial
+> آخر مراجعة: 2026-08-02 (زر واتساب داخل نص المقال فقط) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -28,7 +28,7 @@
 - **فجوات v2** (`RADAR_GAP_V2_ENABLED`): وحدة الفجوة = `radar_stories` لا المادة المنفردة؛ تتطلب صلة ≥ `RADAR_GAP_MIN_RELEVANCE` وزخم ≥ `RADAR_GAP_MIN_MOMENTUM` (أو تعدد مصادر). أعمدة additive: `story_id`, `relevance_score`, `momentum_score`, `gap_reason`. لا تُفعَّل قبل ثبات تجميع القصص أسبوعاً. المستبعد يدوياً لا يُمس؛ التنظيف النظامي يستخدم `dismissReason=auto-irrelevant`.
 - **عرض الداشبورد (2026-07-19):** قسم «فجوات التغطية الآن» في `NewsroomPulseDashboard` مخفي عن كل الأدوار. المكوّن `CoverageGapsSection` ومسارات `/api/admin/coverage-gaps*` تبقى في الكود لإعادة التفعيل لاحقاً.
 - **الموجز في صفحة المقال:** حقل المحرر `excerpt` عند الحفظ يزامن `aiSummary` ويمسح `aiBullets`. تفريغ الملخص يخفي الصندوق (لا إعادة توليد من نص المقال). الواجهة لا تكرر الفقرة تحت النقاط إن كانا نفس النص. عند فتح تفاصيل الخبر يكون الموجز مطوياً على **3 أسطر** مع زر «عرض المزيد»/«طيّ» (مثل iOS/Android؛ عتبة الظهور ≈ 120 حرفاً). لا يُحفظ حالة التوسيع في localStorage — كل مقال يبدأ مطوياً.
-- **زر واتساب في المقال:** عمود `articles.whatsapp_cta` (jsonb): `{ enabled, phone, phrase, message?, placement: "end"|"inline" }`. لوحة في `ArticleEditor`؛ `placement=end` → مكوّن `ArticleWhatsAppCta` بعد الجسم؛ `inline` → عقدة TipTap `div[data-whatsapp-cta]` داخل `content` (رابط `https://wa.me/{digits}`). المنطق المشترك: `shared/whatsappCta.ts`. iOS/Android يقرآن الكتلة من HTML ويعرضان بطاقة النهاية من الحقل.
+- **زر واتساب في المقال:** عمود `articles.whatsapp_cta` (jsonb) للإعدادات فقط. الظهور دائماً **داخل** `content` عبر عقدة TipTap `div[data-whatsapp-cta]` (رابط `https://wa.me/{digits}`) — نهاية النص أو عند المؤشر. لا بطاقة منفصلة خارج جسم المقال. عند الحفظ مع `placement=end` تُزامن الكتلة لنهاية HTML. المنطق: `shared/whatsappCta.ts`. iOS/Android يعرضان الكتلة من HTML فقط.
 - **أسلوب الصور المولّدة:** مفتاح `auto_image_generation_settings` يحتوي `newsStyle` (أخبار/تحليل) و`articleStyle` (رأي/عمود). `defaultStyle` يبقى متزامناً مع `newsStyle` للتوافق. الاختيار عبر `resolveStyleForArticleType` في `autoImageGenerationService`. كتّاب الرأي لا يرون ألبوم الصور ولا المرفقات في `ArticleEditor`.
 - **KPI كتّاب الرأي** (`OpinionWritersPage`): تُحسب من قائمة `/api/admin/opinion-writers` في الواجهة — منها «اختاروا يوم النشر» (`schedule.active`) و«بلا نشاط أكثر من شهرين» (لا `lastArticle` أو أقدم من ٦٠ يوماً). `listOpinionWriters` يستخدم `toIsoOrNull` حتى لا يُسقط الطلب كاملاً بـ `Invalid time value` من صف تاريخ فاسد.
 - **ناشر / وكالة في محرّر الخبر:** إن وُجد حساب `publishers` للمستخدم (`resolvePublisherForUser` → `publisherAccount` في `/api/auth/user`)، قائمة المراسلين في `ReporterSelect` تقتصر على «صحيفة سبق» (`SABQ_NEWSPAPER_ACCOUNT_ID`) وتُثبَّت عند الإنشاء/التحديث مع `publisherId` و`isPublisherNews`. لا يعتمد على دور `publisher` وحده — مالك الوكالة قد يكون دوره `reporter`.

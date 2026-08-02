@@ -72,3 +72,118 @@ body {
   color: hsl(var(--foreground));
   font-family: "IBM Plex Sans Arabic", Inter, system-ui, sans-serif;
 }
+
+/* ===== بلوك «سؤال وجواب» + جداول المقالات =====
+ * نسخة مطابقة للقواعد في client/src/index.css (قسم qa-block / sabq-table).
+ * تعتمد على classes فقط لأن stripUnsafeHtml يحذف style وdata-attributes.
+ * حدّث الملفين معًا عند أي تغيير. */
+.prose .qa-block {
+  margin: 1.75em 0;
+}
+.prose .qa-block .qa-q {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  margin: 0 0 0.7em;
+}
+.prose .qa-block .qa-mark {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.3rem;
+  user-select: none;
+}
+.prose .qa-block .qa-q-text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 1.05em;
+  line-height: 1.85;
+  color: hsl(var(--primary));
+  padding-top: 0.15rem;
+}
+.prose .qa-block .qa-a {
+  position: relative;
+  padding-inline-start: 2.8rem;
+}
+.prose .qa-block .qa-a::before {
+  content: "";
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  inset-inline-start: 0.95rem;
+  width: 2.5px;
+  border-radius: 2px;
+  background: hsl(var(--border));
+}
+.prose .qa-block .qa-a p {
+  margin-top: 0;
+  margin-bottom: 0.9em;
+}
+.prose .qa-block .qa-a p:last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 640px) {
+  .prose .qa-block .qa-a {
+    padding-inline-start: 0;
+  }
+  .prose .qa-block .qa-a::before {
+    display: none;
+  }
+}
+
+.prose table.sabq-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5em 0;
+  font-size: 0.95em;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+.prose table.sabq-table th {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-weight: 700;
+  text-align: start;
+  padding: 0.7rem 1rem;
+  border-bottom: 2px solid hsl(var(--primary));
+  font-size: 0.92em;
+}
+.prose table.sabq-table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: top;
+  line-height: 1.9;
+}
+.prose table.sabq-table tr:last-child td {
+  border-bottom: none;
+}
+.prose table.sabq-table th p,
+.prose table.sabq-table td p {
+  margin: 0;
+}
+.prose table.sabq-table--card {
+  border-radius: 0.75rem;
+}
+.prose table.sabq-table--card th {
+  background: transparent;
+  color: hsl(var(--primary));
+  font-size: 0.85em;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.85rem 1rem 0.6rem;
+}
+.prose table.sabq-table--card td:first-child {
+  font-weight: 700;
+  color: hsl(var(--primary));
+  width: 9.5rem;
+}

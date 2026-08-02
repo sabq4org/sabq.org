@@ -488,22 +488,6 @@ private fun ArticleBody(
                 )
             }
 
-            // زر واتساب في نهاية الخبر (إن لم يُدرج داخل النص)
-            val endWa = article.whatsappCta
-            if (
-                endWa != null &&
-                endWa.isActiveEndPlacement &&
-                article.body?.contains("data-whatsapp-cta") != true
-            ) {
-                item {
-                    WhatsAppCtaCard(
-                        phrase = endWa.phrase,
-                        url = endWa.waUrl,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                    )
-                }
-            }
-
             // نص المقال ما زال يُجلب — الترويسة والصورة معروضتان من بطاقة
             // القائمة، فيكفي مؤشر صغير مكان النص (لا شاشة فارغة).
             if (hydrating && blocks.isEmpty()) {

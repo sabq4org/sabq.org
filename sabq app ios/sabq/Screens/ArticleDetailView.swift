@@ -183,17 +183,6 @@ struct ArticleDetailView: View {
                         articleBody
                         mediaAssetsGallery
 
-                        if let cta = displayArticle.whatsappCta,
-                           cta.isActiveEndPlacement,
-                           let url = cta.waURL,
-                           !displayArticle.bodyHTML.contains("data-whatsapp-cta") {
-                            endWhatsAppCta(
-                                phrase: (cta.phrase?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "تواصل عبر واتساب",
-                                url: url
-                            )
-                            .padding(.top, 8)
-                        }
-
                         // Weekly-photos pack — only renders when the
                         // backend tagged this article as a photo
                         // collection. Shows up right after the intro
@@ -1191,41 +1180,6 @@ struct ArticleDetailView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
         )
-    }
-
-    private func endWhatsAppCta(phrase: String, url: URL) -> some View {
-        Link(destination: url) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.2))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                Text(phrase)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                LinearGradient(
-                    colors: [Color(red: 0.145, green: 0.827, blue: 0.4), Color(red: 0.071, green: 0.549, blue: 0.494)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: Color(red: 0.071, green: 0.549, blue: 0.494).opacity(0.28), radius: 12, y: 6)
-        }
-        .buttonStyle(.plain)
     }
 
     private var articleBody: some View {
