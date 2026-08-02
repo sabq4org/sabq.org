@@ -444,22 +444,6 @@ private fun ArticleBody(
                 )
             }
 
-            // زر واتساب في نهاية الخبر (إن لم يُدرج داخل النص)
-            val endWa = article.whatsappCta
-            if (
-                endWa != null &&
-                endWa.isActiveEndPlacement &&
-                article.body?.contains("data-whatsapp-cta") != true
-            ) {
-                item {
-                    WhatsAppCtaCard(
-                        phrase = endWa.phrase,
-                        url = endWa.waUrl,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                    )
-                }
-            }
-
             // Empty-body fallback.
             if (blocks.isEmpty() && article.body.isNullOrBlank()) {
                 item {

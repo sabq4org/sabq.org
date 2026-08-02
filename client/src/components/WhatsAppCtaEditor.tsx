@@ -21,7 +21,8 @@ export type WhatsAppCtaData = WhatsAppCta;
 interface WhatsAppCtaEditorProps {
   value: WhatsAppCtaData | null;
   onChange: (value: WhatsAppCtaData | null) => void;
-  onInsertInline?: (cta: WhatsAppCtaData) => boolean;
+  /** يضع الزر داخل نص المحرر: نهاية النص أو عند المؤشر */
+  onPlaceInContent?: (cta: WhatsAppCtaData, where: "end" | "cursor") => boolean;
   disabled?: boolean;
 }
 
@@ -30,7 +31,7 @@ const DEFAULT_PHRASE = "تواصل معنا عبر واتساب";
 export function WhatsAppCtaEditor({
   value,
   onChange,
-  onInsertInline,
+  onPlaceInContent,
   disabled = false,
 }: WhatsAppCtaEditorProps) {
   const { toast } = useToast();
@@ -79,10 +80,22 @@ export function WhatsAppCtaEditor({
       ? buildWhatsAppUrl(phone, message || undefined)
       : null;
 
-  const handleInsert = () => {
-    if (!onInsertInline) return;
+  const buildCta = (): WhatsAppCtaData | null => {
     const digits = normalizeWhatsAppPhone(phone);
-    if (!digits) {
+    if (!digits) return null;
+    return {
+      enabled: true,
+      phone: digits,
+      phrase: (phrase || DEFAULT_PHRASE).trim().slice(0, 120),
+      message: message.trim() ? message.trim().slice(0, 500) : undefined,
+      placement,
+    };
+  };
+
+  const handlePlace = () => {
+    if (!onPlaceInContent) return;
+    const cta = buildCta();
+    if (!cta) {
       toast({
         title: "رقم غير صالح",
         description: "أدخل رقم واتساب صحيح (مثال: 0501234567)",
@@ -90,26 +103,22 @@ export function WhatsAppCtaEditor({
       });
       return;
     }
-    const cta: WhatsAppCtaData = {
-      enabled: true,
-      phone: digits,
-      phrase: (phrase || DEFAULT_PHRASE).trim().slice(0, 120),
-      message: message.trim() ? message.trim().slice(0, 500) : undefined,
-      placement: "inline",
-    };
     setEnabled(true);
-    setPlacement("inline");
     onChange(cta);
-    const ok = onInsertInline(cta);
+    const where = placement === "inline" ? "cursor" : "end";
+    const ok = onPlaceInContent(cta, where);
     if (ok) {
       toast({
-        title: "تم الإدراج",
-        description: "وُضع زر واتساب عند موضع المؤشر في النص",
+        title: "تم وضعه داخل النص",
+        description:
+          where === "end"
+            ? "الزر في نهاية نص الخبر (داخل المحتوى)"
+            : "الزر عند موضع المؤشر داخل النص",
       });
     } else {
       toast({
         title: "تعذّر الإدراج",
-        description: "ضع المؤشر داخل المحرر ثم حاول مجدداً",
+        description: "تأكد أن محرر النص جاهز ثم حاول مجدداً",
         variant: "destructive",
       });
     }
@@ -135,6 +144,10 @@ export function WhatsAppCtaEditor({
       </CardHeader>
       {enabled && (
         <CardContent className="space-y-4 pt-0">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            يظهر الزر <strong>داخل نص الخبر</strong> وليس كبطاقة منفصلة بعده. اختر الموضع ثم اضغط «ضع في النص».
+          </p>
+
           <div className="space-y-2">
             <Label htmlFor="wa-phone">رقم الواتساب</Label>
             <Input
@@ -188,13 +201,10 @@ export function WhatsAppCtaEditor({
               disabled={disabled}
               data-testid="input-whatsapp-message"
             />
-            <p className="text-xs text-muted-foreground">
-              تُفتح جاهزة في محادثة واتساب عند الضغط على الزر
-            </p>
           </div>
 
           <div className="space-y-2">
-            <Label>موضع الظهور</Label>
+            <Label>موضع داخل النص</Label>
             <RadioGroup
               value={placement}
               onValueChange={(v) => {
@@ -208,27 +218,27 @@ export function WhatsAppCtaEditor({
               <label className="flex items-center gap-2 rounded-md border p-3 cursor-pointer hover:bg-muted/40">
                 <RadioGroupItem value="end" id="wa-place-end" data-testid="radio-whatsapp-end" />
                 <AlignEndVertical className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">نهاية الخبر</span>
+                <span className="text-sm">نهاية نص الخبر</span>
               </label>
               <label className="flex items-center gap-2 rounded-md border p-3 cursor-pointer hover:bg-muted/40">
                 <RadioGroupItem value="inline" id="wa-place-inline" data-testid="radio-whatsapp-inline" />
                 <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">داخل النص (عند المؤشر)</span>
+                <span className="text-sm">عند موضع المؤشر</span>
               </label>
             </RadioGroup>
           </div>
 
-          {placement === "inline" && onInsertInline && (
+          {onPlaceInContent && (
             <Button
               type="button"
               variant="outline"
               className="w-full border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10"
-              onClick={handleInsert}
+              onClick={handlePlace}
               disabled={disabled}
               data-testid="button-insert-whatsapp-cta"
             >
               <SiWhatsapp className="h-4 w-4 ml-2" />
-              إدراج الزر عند موضع المؤشر
+              {placement === "inline" ? "ضع عند المؤشر داخل النص" : "ضع في نهاية النص"}
             </Button>
           )}
 
