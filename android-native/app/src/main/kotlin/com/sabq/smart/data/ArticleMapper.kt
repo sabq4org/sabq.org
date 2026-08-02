@@ -81,6 +81,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         title = resolvedTitle,
         excerpt = resolvedExcerpt,
         category = resolvedCategory,
+        categoryLabel = (category?.name ?: categoryName ?: resolvedCategory.title).trim(),
         imageUrl = absoluteImageUrl,
         focalPoint = focal,
         readingTime = formatReadingMinutes(readingMinutes) ?: estimateReadingTime(resolvedExcerpt),

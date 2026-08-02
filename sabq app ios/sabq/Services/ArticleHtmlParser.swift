@@ -15,7 +15,10 @@ import SwiftUI
 //
 // All attribute values are HTML-entity-decoded before use — the production
 // payload double-encodes data-images as `[{&quot;src&quot;:…}]`.
-enum ArticleHtmlParser {
+// nonisolated: يُستدعى من Task.detached لتحليل المقال خارج الـMainActor
+// (المشروع يعزل كل شيء على MainActor افتراضيًا عبر
+// SWIFT_DEFAULT_ACTOR_ISOLATION) — المحلل نقي بلا حالة مشتركة.
+nonisolated enum ArticleHtmlParser {
 
     static func parse(_ html: String) -> [ArticleBlock] {
         let normalized = normaliseWhitespace(html)
@@ -564,7 +567,7 @@ private nonisolated enum HTMLRegexCache {
 
 // MARK: - Minimal HTML scanner
 
-private struct HTMLTag {
+private nonisolated struct HTMLTag {
     let name: String
     let isClosing: Bool
     let attributesRaw: String
@@ -587,7 +590,7 @@ private struct HTMLTag {
     }
 }
 
-private struct HTMLScanner {
+private nonisolated struct HTMLScanner {
     let input: String
     var index: String.Index
 

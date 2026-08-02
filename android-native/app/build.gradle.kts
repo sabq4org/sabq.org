@@ -203,10 +203,11 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
 
+    // Home-screen widget (Glance)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
     // Storage
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
 
     // Push (FCM)

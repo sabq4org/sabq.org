@@ -163,7 +163,7 @@ struct OpinionsView: View {
                 tint: SabqTheme.primaryEnd
             )
 
-            SurfaceCard {
+            SurfaceCard(lazy: true) {
                 ForEach(Array(latest.enumerated()), id: \.element.id) { index, opinion in
                     if index > 0 {
                         Divider().foregroundStyle(SabqTheme.outline)

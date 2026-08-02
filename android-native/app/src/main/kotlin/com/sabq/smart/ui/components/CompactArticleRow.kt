@@ -62,7 +62,7 @@ fun CompactArticleRow(
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatusChip(
-                    title = article.category.title,
+                    title = article.categoryLabel.ifBlank { article.category.title },
                     tint = article.category.tint(),
                     compact = true,
                 )
