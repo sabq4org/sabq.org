@@ -29,6 +29,8 @@ final class RoshnHubStore {
     var rounds: [RsRound] = []
     var currentRoundKey: String?
     var selectedRoundKey: String?
+    /// true بعد اختيار يدوي — قبلها يتبع `current` من الخادم بعد انتهاء الجولة.
+    var userPickedRound = false
     var roundFixtures: [RsFixture] = []
     var loadingSchedule = false
     var loadingRound = false
@@ -106,7 +108,8 @@ final class RoshnHubStore {
             let res = try await APIClient.shared.fetchRoshnRounds(ignoreCache: force)
             rounds = res.rounds
             currentRoundKey = res.current
-            if selectedRoundKey == nil || !res.rounds.contains(where: { $0.key == selectedRoundKey }) {
+            let invalid = selectedRoundKey.map { key in !res.rounds.contains(where: { $0.key == key }) } ?? true
+            if !userPickedRound || selectedRoundKey == nil || invalid {
                 selectedRoundKey = res.current ?? res.rounds.first?.key
             }
             didLoadSchedule = true
@@ -121,6 +124,7 @@ final class RoshnHubStore {
 
     func selectRound(_ key: String) async {
         guard key != selectedRoundKey, !loadingRound else { return }
+        userPickedRound = true
         selectedRoundKey = key
         await loadRoundFixtures(key)
     }

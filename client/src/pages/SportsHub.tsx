@@ -1052,15 +1052,21 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
 // المختارة. يبدأ من الجولة الحالية تلقائيًا، ويسقط لآخر جولة عند انتهاء الموسم.
 function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: number) => void }) {
   const { data: roundsData } = useQuery<{ rounds: { key: string; label: string }[]; current: string | null }>({
-    queryKey: [`/api/sports/${compSlug}/rounds`], staleTime: 30 * 60_000,
+    queryKey: [`/api/sports/${compSlug}/rounds`],
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
   const rounds = Array.isArray(roundsData?.rounds) ? roundsData!.rounds : [];
+  // null = اتبع current من الخادم بعد انتهاء الجولة؛ النقرة تثبّت الاختيار يدويًا.
   const [selected, setSelected] = useState<string | null>(null);
   const active = selected ?? roundsData?.current ?? rounds[rounds.length - 1]?.key ?? null;
 
   const { data: fxData, isLoading } = useQuery<{ fixtures: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/round`, { name: active }],
-    enabled: !!active, staleTime: 60_000,
+    enabled: !!active,
+    staleTime: 15_000,
+    refetchInterval: (q) =>
+      (q.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
   });
   const fixtures = Array.isArray(fxData?.fixtures) ? fxData!.fixtures : [];
 

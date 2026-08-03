@@ -280,7 +280,7 @@ function PreSeasonCard({ hero, onOpenMatch }: { hero: RslHeroData; onOpenMatch: 
         {hero.predictionsEnabled && (
           <div className="flex justify-center">
             <Button asChild className="bg-sky-300 text-sky-950 hover:bg-sky-200 font-bold rounded-full px-6">
-              <a href="/predictions?competition=rsl-2026">توقّع وانافس على نقاط الموسم</a>
+              <a href="/predictions?competition=rsl-2026">توقّع ونافس على نقاط الموسم</a>
             </Button>
           </div>
         )}

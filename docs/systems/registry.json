@@ -278,7 +278,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-02"
+      "lastReviewed": "2026-08-03"
     },
     {
       "id": "ifox",
@@ -480,7 +480,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح).",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح). مؤشر الجولة يتقدّم بعد اكتمال مبارياتها.",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -554,7 +554,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-01"
+      "lastReviewed": "2026-08-03"
     },
     {
       "id": "push-notifications",

@@ -94,9 +94,11 @@ function RoundsBrowser({ onOpenMatch }: { onOpenMatch: (id: number) => void }) {
     current: string | null;
   }>({
     queryKey: [`/api/sports/${RSL_SLUG}/rounds`],
-    staleTime: 30 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
   const rounds = Array.isArray(roundsData?.rounds) ? roundsData.rounds : [];
+  // null = اتبع current من الخادم (يتقدّم بعد انتهاء الجولة). أي نقرة تُثبّت الاختيار.
   const [selected, setSelected] = useState<string | null>(null);
   const active = selected ?? roundsData?.current ?? rounds[rounds.length - 1]?.key ?? null;
   const stripRef = useRef<HTMLDivElement>(null);
@@ -104,7 +106,10 @@ function RoundsBrowser({ onOpenMatch }: { onOpenMatch: (id: number) => void }) {
   const { data: fxData, isLoading: fxLoading } = useQuery<{ fixtures: RslFixture[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/round`, { name: active }],
     enabled: !!active,
-    staleTime: 60_000,
+    staleTime: 15_000,
+    // أثناء مباراة جارية في الجولة: حدّث النتيجة كل 15ث (طبقة TheSports على الخادم).
+    refetchInterval: (q) =>
+      (q.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
   });
   const fixtures = Array.isArray(fxData?.fixtures) ? fxData.fixtures : [];
 
