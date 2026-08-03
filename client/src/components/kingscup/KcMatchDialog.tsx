@@ -238,7 +238,7 @@ export function KcMatchDialog({
     refetchInterval: (query) => {
       const f = query.state.data?.fixture;
       if (!f) return false;
-      if (f.status.live) return 15_000;
+      if (f.status.live) return 8_000;
       if (f.status.finished) return false;
       const msToKickoff = f.timestamp * 1000 - Date.now();
       return msToKickoff <= 30 * 60_000 && msToKickoff > -2 * 3_600_000 ? 25_000 : false;

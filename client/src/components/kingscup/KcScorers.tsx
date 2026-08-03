@@ -16,6 +16,8 @@ interface KcScorersProps {
   isLoading: boolean;
   /** انطلقت البطولة (مباراة حية أو منتهية) — المزود يعتمد الإحصاءات بعد المباريات بفاصل */
   tournamentStarted: boolean;
+  /** مباراة جارية → استطلاع السباقات كل دقيقتين */
+  hasLiveMatch?: boolean;
   onOpenPlayer: (playerId: number) => void;
 }
 
@@ -129,10 +131,22 @@ function EmptyRace({ message }: { message: string }) {
   );
 }
 
-function AssistsList({ emptyMessage, onOpenPlayer }: { emptyMessage: string; onOpenPlayer: (id: number) => void }) {
+function AssistsList({
+  emptyMessage,
+  onOpenPlayer,
+  hasLiveMatch = false,
+}: {
+  emptyMessage: string;
+  onOpenPlayer: (id: number) => void;
+  hasLiveMatch?: boolean;
+}) {
+  const raceStale = hasLiveMatch ? 2 * 60_000 : 10 * 60_000;
+  const racePoll = hasLiveMatch ? 2 * 60_000 : false;
   const { data, isLoading } = useQuery<{ leaders: KcLeader[] }>({
     queryKey: ["/api/kings-cup/assists"],
-    staleTime: 10 * 60_000,
+    staleTime: raceStale,
+    refetchInterval: racePoll,
+    refetchIntervalInBackground: false,
   });
   const leaders = Array.isArray(data?.leaders) ? data.leaders : [];
 
@@ -169,10 +183,22 @@ function AssistsList({ emptyMessage, onOpenPlayer }: { emptyMessage: string; onO
   );
 }
 
-function CardsList({ emptyMessage, onOpenPlayer }: { emptyMessage: string; onOpenPlayer: (id: number) => void }) {
+function CardsList({
+  emptyMessage,
+  onOpenPlayer,
+  hasLiveMatch = false,
+}: {
+  emptyMessage: string;
+  onOpenPlayer: (id: number) => void;
+  hasLiveMatch?: boolean;
+}) {
+  const raceStale = hasLiveMatch ? 2 * 60_000 : 10 * 60_000;
+  const racePoll = hasLiveMatch ? 2 * 60_000 : false;
   const { data, isLoading } = useQuery<{ yellow: KcLeader[]; red: KcLeader[] }>({
     queryKey: ["/api/kings-cup/cards"],
-    staleTime: 10 * 60_000,
+    staleTime: raceStale,
+    refetchInterval: racePoll,
+    refetchIntervalInBackground: false,
   });
   const leaders = Array.isArray(data?.yellow) ? data.yellow : [];
 
@@ -215,7 +241,13 @@ function CardsList({ emptyMessage, onOpenPlayer }: { emptyMessage: string; onOpe
   );
 }
 
-export function KcScorers({ scorers, isLoading, tournamentStarted, onOpenPlayer }: KcScorersProps) {
+export function KcScorers({
+  scorers,
+  isLoading,
+  tournamentStarted,
+  hasLiveMatch = false,
+  onOpenPlayer,
+}: KcScorersProps) {
   const all = scorers ?? [];
   // المنصة تحتاج ثلاثة هدافين مكتملين — أقل من ذلك يعرض قائمة صفوف عادية
   const showPodium = all.length >= 3;
@@ -306,6 +338,7 @@ export function KcScorers({ scorers, isLoading, tournamentStarted, onOpenPlayer 
           <TabsContent value="assists">
             <AssistsList
               onOpenPlayer={onOpenPlayer}
+              hasLiveMatch={hasLiveMatch}
               emptyMessage={tournamentStarted ? pendingStats : "سباق صنّاع الأهداف ينطلق مع أول صافرة"}
             />
           </TabsContent>
@@ -313,6 +346,7 @@ export function KcScorers({ scorers, isLoading, tournamentStarted, onOpenPlayer 
           <TabsContent value="cards">
             <CardsList
               onOpenPlayer={onOpenPlayer}
+              hasLiveMatch={hasLiveMatch}
               emptyMessage={tournamentStarted ? "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" : "لا بطاقات بعد — وعسى ألا تكثر"}
             />
           </TabsContent>

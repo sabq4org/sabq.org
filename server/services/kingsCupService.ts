@@ -349,7 +349,10 @@ export interface KcOverview {
 }
 
 export async function getKcOverview(): Promise<Omit<KcOverview, "blockHidden">> {
-  const [fixtures, live] = await Promise.all([getKcFixtures(), getKcLiveFixtures()]);
+  const [fixturesRaw, live] = await Promise.all([getKcFixtures(), getKcLiveFixtures()]);
+  // دمج live فوق الجدول (نفس نمط هيرو روشن) حتى لا تتخلّف نتيجة اليوم عن المباشر.
+  const liveById = new Map(live.map((f) => [f.id, f]));
+  const fixtures = fixturesRaw.map((f) => liveById.get(f.id) ?? f);
 
   const riyadhToday = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const today = fixtures.filter((f) => (f.date ?? "").slice(0, 10) === riyadhToday);

@@ -27,6 +27,7 @@ import {
   authorKindMeta,
   type TicketAuthorKind,
 } from "@/components/opinion-tickets/authorKindMeta";
+import { SendColleagueMessageDialog } from "@/components/opinion-tickets/SendColleagueMessageDialog";
 import { apiUrl } from "@/lib/queryClient";
 
 interface AdminTicketRow {
@@ -184,6 +185,7 @@ export default function OpinionTicketsAdmin() {
           title="استفسارات المساهمين"
           description="صندوق موحّد للمراسلين وكتّاب الرأي والزوايا — مع تمييز واضح لكل دور"
           titleTestId="text-page-title"
+          actions={<SendColleagueMessageDialog />}
         />
 
         {/* حالة الصندوق */}

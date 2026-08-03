@@ -3,15 +3,16 @@
  * جدول واحد `opinion_tickets` — لا نموذج منفصل للمراسل.
  *
  *   GET    /api/opinion-tickets                       list tickets (contributor: own; admin: all)
- *   POST   /api/opinion-tickets                       contributor creates new ticket
+ *   POST   /api/opinion-tickets                       contributor inbound OR admin outbound (writerId)
  *   GET    /api/opinion-tickets/unread-count
+ *   GET    /api/opinion-tickets/writers/list           admin — كل المنسوبين المساهمين
  *   GET    /api/opinion-tickets/:id
  *   POST   /api/opinion-tickets/:id/messages
  *   PATCH  /api/opinion-tickets/:id/status            admin only
  *
  * Access:
  *   - Contributors (opinion_author, angle_writer, reporter): own tickets only.
- *   - Admins (SUPERUSER_ROLE_NAMES, or editor): all tickets.
+ *   - Admins (SUPERUSER_ROLE_NAMES, or editor): all tickets + إرسال رسالة صادرة لزميل.
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
@@ -239,13 +240,14 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
 
 /**
  * POST /api/opinion-tickets
- * Writers create a new ticket with title + initial message body.
+ * - مساهم: تذكرة واردة (writerId = نفسه).
+ * - أدمن: تذكرة صادرة باختيار `writerId` (مراسل / كاتب رأي / زاوية).
  */
 router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isContributor } = await getViewerRoles(req);
-    if (!isContributor) {
-      return res.status(403).json({ message: "هذه الميزة متاحة للمراسلين وكتّاب الرأي والزوايا فقط" });
+    const { isAdmin: admin, isContributor } = await getViewerRoles(req);
+    if (!admin && !isContributor) {
+      return res.status(403).json({ message: "هذه الميزة متاحة للمراسلين وكتّاب الرأي والزوايا وإدارة التحرير فقط" });
     }
     const parsed = insertOpinionTicketSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -253,22 +255,48 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
     }
 
     const now = new Date();
+    let targetWriterId = req.user.id as string;
+    let senderRole: "writer" | "admin" = "writer";
+    let status: "open" | "answered" = "open";
+    let lastReadByWriterAt: Date | null = now;
+    let lastReadByAdminAt: Date | null = null;
+
+    if (admin && parsed.data.writerId) {
+      const kinds = await authorKindsForUserIds([parsed.data.writerId]);
+      const kind = kinds.get(parsed.data.writerId) ?? "other";
+      if (kind === "other") {
+        return res.status(400).json({
+          message: "اختر زميلاً من منسوبي سبق: مراسل أو كاتب رأي أو كاتب زاوية",
+        });
+      }
+      targetWriterId = parsed.data.writerId;
+      senderRole = "admin";
+      // صادرة من الإدارة: تُحسب مجابة حتى يرد المساهم، وغير مقروءة لديه.
+      status = "answered";
+      lastReadByWriterAt = null;
+      lastReadByAdminAt = now;
+    } else if (admin && !isContributor) {
+      return res.status(400).json({ message: "اختر الزميل المستلم للرسالة" });
+    } else if (!isContributor) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     const [ticket] = await db
       .insert(opinionTickets)
       .values({
-        writerId: req.user.id,
+        writerId: targetWriterId,
         title: parsed.data.title,
-        status: "open",
+        status,
         lastMessageAt: now,
-        // writer has just sent the first message, so consider it read by them
-        lastReadByWriterAt: now,
+        lastReadByWriterAt,
+        lastReadByAdminAt,
       })
       .returning();
 
     await db.insert(opinionTicketMessages).values({
       ticketId: ticket.id,
       senderId: req.user.id,
-      senderRole: "writer",
+      senderRole,
       message: parsed.data.message,
     });
 
@@ -281,7 +309,8 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
 
 /**
  * GET /api/opinion-tickets/writers/list
- * Admin only — قبل :id حتى لا يُلتقط المسار كمعرّف تذكرة.
+ * Admin only — كل المنسوبين المساهمين (مراسل / كاتب رأي / زاوية)، لا من لديهم تذاكر فقط.
+ * اختياري: ?q= للبحث بالاسم أو البريد. قبل :id حتى لا يُلتقط كمعرّف تذكرة.
  */
 router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, res: Response) => {
   try {
@@ -289,27 +318,58 @@ router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, re
     if (!admin) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const rows = await db
-      .selectDistinct({
+
+    const contributorRoles = [...CONTRIBUTOR_ROLE_NAMES];
+    const byLegacy = await db
+      .select({
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
         email: users.email,
       })
-      .from(opinionTickets)
-      .leftJoin(users, eq(users.id, opinionTickets.writerId));
+      .from(users)
+      .where(and(inArray(users.role, contributorRoles), eq(users.status, "active")));
 
-    const ids = rows.map((r) => r.id).filter((id): id is string => !!id);
+    const byRbac = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
+      .from(users)
+      .innerJoin(userRoles, eq(userRoles.userId, users.id))
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(and(inArray(roles.name, contributorRoles), eq(users.status, "active")));
+
+    const byId = new Map<string, { id: string; firstName: string | null; lastName: string | null; email: string | null }>();
+    for (const row of [...byLegacy, ...byRbac]) {
+      if (row.id) byId.set(row.id, row);
+    }
+
+    const ids = [...byId.keys()];
     const kinds = await authorKindsForUserIds(ids);
+    const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
 
-    const writers = rows
-      .filter((r) => r.id != null)
-      .map((r) => ({
-        id: r.id as string,
+    let writers = ids.map((id) => {
+      const r = byId.get(id)!;
+      return {
+        id,
         name: fullName(r.firstName, r.lastName),
         email: r.email,
-        authorKind: kinds.get(r.id as string) ?? "other",
-      }));
+        authorKind: kinds.get(id) ?? ("other" as TicketAuthorKind),
+      };
+    });
+
+    writers = writers.filter((w) => w.authorKind !== "other");
+    if (q) {
+      writers = writers.filter((w) => {
+        const hay = `${w.name ?? ""} ${w.email ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    writers.sort((a, b) => (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? "", "ar"));
+
     return res.json({ writers });
   } catch (err) {
     console.error("[opinion-tickets] writers error", err);

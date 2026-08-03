@@ -1130,7 +1130,11 @@ export interface SplScorer {
   matches: number;
 }
 
-/** كاش لوحات السباق: أثناء مباراة جارية مفتاح منفصل + TTL قصير (دقيقتان). */
+/**
+ * كاش لوحات السباق: أثناء مباراة جارية مفتاح منفصل + TTL قصير (دقيقتان).
+ * أرشيف موسم سابق فقط يبقى LONG ثابتًا — تمرير `seasonOverride` للموسم الجاري
+ * (مثل KC_SEASON لكأس الملك) لا يعطّل التسخين أثناء البث.
+ */
 async function raceBoardCache(
   comp: SaudiCompetition,
   seasonOverride: number | undefined,
@@ -1138,7 +1142,11 @@ async function raceBoardCache(
 ): Promise<{ cacheKey: string; ttl: number }> {
   const season = seasonOverride ?? (await seasonFor(comp));
   if (seasonOverride != null) {
-    return { cacheKey: `${baseKey}:${comp.id}:${season}`, ttl: CACHE_TTL.LONG };
+    const current = await seasonFor(comp).catch(() => null);
+    const isArchive = current != null && seasonOverride !== current;
+    if (isArchive) {
+      return { cacheKey: `${baseKey}:${comp.id}:${season}`, ttl: CACHE_TTL.LONG };
+    }
   }
   const hot = (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
   return {
