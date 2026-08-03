@@ -395,9 +395,13 @@ export function registerWorldCupRoutes(app: Express) {
       // نبني الجدول من المباريات نفسها (مصدر واحد متّسق): مباريات مُركّبة بأحدث
       // نتيجة من TheSports — المنتهية تُحتسب نهائيًّا فور الصافرة (لا فجوة انتظار)
       // والجارية تُطبَّق مبدئيًّا فيتحرّك الجدول مع كل هدف.
+      // ‏`await getFixtures()` داخل بناء المصفوفة كان يرمي قبل اكتمال
+      // Promise.all عند فشل الجلب، فيبقى وعد getStandings() يتيمًا بلا
+      // مستمع — وحين يرفض بدوره (تبريد API-Football يُفشل الاثنين معًا)
+      // يصير unhandled rejection (حادثة NODE-EXPRESS-F في Sentry).
       const [baseGroups, fixtures] = await Promise.all([
         getStandings(),
-        overlayLiveList(await getFixtures()),
+        getFixtures().then(overlayLiveList),
       ]);
       const groups = buildGroupStandings(baseGroups, fixtures);
       // ترتيب لحظي مفعّل (صفّ live) → كاش قصير ليتطازج الجدول أثناء المباراة.
