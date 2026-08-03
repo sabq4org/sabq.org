@@ -180,6 +180,8 @@ fun ArticleDetailScreen(
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+    val liteManager = com.sabq.smart.feature.lite.rememberLiteModeManager()
+    val isLiteActive by liteManager.isLiteActive.collectAsStateWithLifecycle()
 
     Box(
         modifier = Modifier
@@ -188,9 +190,50 @@ fun ArticleDetailScreen(
     ) {
         when (val s = uiState) {
             ArticleDetailUiState.Loading -> LoadingState()
-            is ArticleDetailUiState.Error -> ErrorState(message = s.message, onRetry = viewModel::retry)
-            is ArticleDetailUiState.Loaded -> ArticleBody(
+            is ArticleDetailUiState.Error -> {
+                // جلب احتياطي لمقالات الرأي: بعض روابط الرأي لا تُخدم عبر
+                // api/articles/{slug} وتنجح فقط على api/opinion/{slug}.
+                // نجرّبه مرة واحدة قبل تثبيت شاشة الخطأ.
+                val fallbackViewModel: com.sabq.smart.feature.opinions.OpinionFallbackViewModel =
+                    hiltViewModel()
+                val fallback by fallbackViewModel.state.collectAsStateWithLifecycle()
+                LaunchedEffect(slug) { fallbackViewModel.tryLoad(slug) }
+                when (val f = fallback) {
+                    is com.sabq.smart.feature.opinions.OpinionFallbackState.Loaded -> ArticleBody(
+                        article = f.article,
+                        related = emptyList(),
+                        mediaAssets = emptyList(),
+                        fontSize = settings.articleFontSize,
+                        lineSpacing = settings.articleLineSpacing,
+                        useSerif = settings.articleUseReaderFont,
+                        settingsViewModel = settingsViewModel,
+                        commentsViewModel = commentsViewModel,
+                        authViewModel = authViewModel,
+                        onLoginRequested = onLoginRequested,
+                        onBack = onBack,
+                        onTagClick = onTagClick,
+                        onAuthorClick = onAuthorClick,
+                        onRelatedClick = onRelatedClick,
+                    )
+                    com.sabq.smart.feature.opinions.OpinionFallbackState.Idle,
+                    com.sabq.smart.feature.opinions.OpinionFallbackState.Loading,
+                    -> LoadingState()
+                    com.sabq.smart.feature.opinions.OpinionFallbackState.Failed ->
+                        ErrorState(message = s.message, onRetry = viewModel::retry)
+                }
+            }
+            is ArticleDetailUiState.Loaded -> if (isLiteActive) {
+                // وضع Lite: نص المقال وصورته فقط (مرآة iOS ArticleLiteView)
+                com.sabq.smart.feature.lite.ArticleLiteContent(
+                    article = s.article,
+                    fontSize = settings.articleFontSize,
+                    lineSpacing = settings.articleLineSpacing,
+                    useSerif = settings.articleUseReaderFont,
+                    onBack = onBack,
+                )
+            } else ArticleBody(
                 article = s.article,
+                hydrating = s.hydrating,
                 related = s.related,
                 mediaAssets = s.mediaAssets,
                 fontSize = settings.articleFontSize,
@@ -212,6 +255,7 @@ fun ArticleDetailScreen(
 @Composable
 private fun ArticleBody(
     article: Article,
+    hydrating: Boolean = false,
     related: List<Article>,
     mediaAssets: List<com.sabq.smart.data.MediaAsset>,
     fontSize: Float,
@@ -268,7 +312,7 @@ private fun ArticleBody(
             com.sabq.smart.data.analytics.SabqAnalytics.articleView(
                 id = article.id,
                 title = article.title,
-                category = article.category.title,
+                category = article.categoryLabel.ifBlank { article.category.title },
             )
         }
         onDispose {
@@ -444,8 +488,25 @@ private fun ArticleBody(
                 )
             }
 
+            // نص المقال ما زال يُجلب — الترويسة والصورة معروضتان من بطاقة
+            // القائمة، فيكفي مؤشر صغير مكان النص (لا شاشة فارغة).
+            if (hydrating && blocks.isEmpty()) {
+                item(key = "body-hydrating", contentType = "hydrating") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(26.dp),
+                            strokeWidth = 2.5.dp,
+                            color = SabqTheme.colors.primaryStart,
+                        )
+                    }
+                }
+            }
+
             // Empty-body fallback.
-            if (blocks.isEmpty() && article.body.isNullOrBlank()) {
+            if (!hydrating && blocks.isEmpty() && article.body.isNullOrBlank()) {
                 item {
                     Text(
                         text = "النص الكامل للمقال غير متوفر حالياً.",
@@ -528,15 +589,29 @@ private fun ArticleBody(
             }
 
             // 10. Related articles (max 5) — iOS adds 24dp extra top padding.
-            if (!isFocusMode && related.isNotEmpty()) {
+            // صفحة الرأي تخفيها وتعرض «مقالات أخرى» بدلاً منها (أدناه).
+            if (!isFocusMode && !article.isOpinion && related.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(6.dp))
                     RelatedSection(related = related, onClick = onRelatedClick)
                 }
             }
 
+            // 10.5 — «مقالات أخرى» لصفحات الرأي: حتى 4 مقالات رأي أخرى
+            // تحل محل ذات-الصلة والتعليقات (مطابقة iOS OpinionDetail).
+            if (!isFocusMode && article.isOpinion) {
+                item {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    com.sabq.smart.feature.opinions.OtherOpinionsSection(
+                        current = article,
+                        onOpinionClick = onRelatedClick,
+                    )
+                }
+            }
+
             // 11. Comments — iOS adds 24dp extra top padding.
-            if (!isFocusMode) {
+            // مخفية في صفحة الرأي (لا تعليقات على مقالات الرأي — كسلوك iOS).
+            if (!isFocusMode && !article.isOpinion) {
                 item {
                     CommentsSection(
                         state = commentsState,
@@ -678,6 +753,30 @@ private fun HeroImage(article: Article, onTap: () -> Unit) {
                     )
                 },
             )
+        } else if (article.isOpinion) {
+            // بديل الرأي: اقتباس على تدرج العلامة — لا أيقونة الصحيفة
+            // (مطابقة iOS OpinionDetail لهيرو المقالات بلا صورة).
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                SabqTheme.colors.primaryEnd.copy(alpha = 0.18f),
+                                SabqTheme.colors.primaryStart.copy(alpha = 0.05f),
+                            ),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FormatQuote,
+                    contentDescription = null,
+                    tint = SabqTheme.colors.primaryEnd.copy(alpha = 0.35f),
+                    modifier = Modifier.size(72.dp),
+                )
+            }
         } else {
             // Category-tinted fallback hero — fixed height because we
             // have no image to derive an aspect ratio from.
@@ -742,7 +841,7 @@ private fun LabelsRow(
         if (article.isOpinion) {
             OpinionMarkerPill()
         } else {
-            StatusChip(title = article.category.title, tint = article.category.tint())
+            StatusChip(title = article.categoryLabel.ifBlank { article.category.title }, tint = article.category.tint())
             if (article.isBreaking) BreakingPill()
         }
 

@@ -257,7 +257,7 @@ private fun TrendingRow(index: Int, article: Article, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = article.category.title,
+                    text = article.categoryLabel.ifBlank { article.category.title },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = SabqTheme.colors.primaryEnd,

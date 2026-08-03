@@ -526,6 +526,10 @@ struct CachedAsyncImage<Placeholder: View>: View {
 struct FocalCachedAsyncImage<Placeholder: View>: View {
     let url: URL?
     let focalPoint: ImageFocalPoint?
+    /// سقف بكسلات التحميل/الفك — كان 2400 مثبّتًا فكانت مصغّرات 84pt تجلب
+    /// ~30 ضعف حاجتها (تدقيق الأداء 2026-08-02). الافتراضي 1400 يغطي
+    /// هيرو بعرض الشاشة على أكبر الأجهزة؛ مرّر 260 للمصغرات.
+    var maxPixelSize: CGFloat = 1400
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
@@ -537,10 +541,12 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     init(
         url: URL?,
         focalPoint: ImageFocalPoint?,
+        maxPixelSize: CGFloat = 1400,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.url = url
         self.focalPoint = focalPoint
+        self.maxPixelSize = maxPixelSize
         self.placeholder = placeholder
     }
 
@@ -605,7 +611,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             shown = false
             return
         }
-        if let cached = ImageCache.cached(requestedURL, minPixelSize: 2400) {
+        if let cached = ImageCache.cached(requestedURL, minPixelSize: maxPixelSize) {
             // صورة مخبّأة: ضعها بموضعها النهائي فورًا بلا أنيميشن هندسة، ثم
             // لاشِ الشفافية فقط — فلا تنزلق ولا يظهر فراغ على الشاشات العريضة.
             image = cached
@@ -619,7 +625,8 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         // these, articles with 10+ inline images stalled half-loaded
         // because URLSession.shared caps at 4 concurrent + .task(id:)
         // does not auto-retry on transient failures.
-        let fetchURL = ImageCDN.sized(requestedURL, width: 2400)
+        let size = maxPixelSize
+        let fetchURL = ImageCDN.sized(requestedURL, width: Int(size))
         var loaded: UIImage? = nil
         for attempt in 0..<2 {
             if Task.isCancelled { return }
@@ -627,7 +634,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
                 guard let (data, _) = try? await ImageCache.imageSession.data(from: fetchURL) else {
                     return nil
                 }
-                return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
+                return ImageCache.decodedImage(data: data, maxPixelSize: size)
             }.value
             if loaded != nil { break }
             if attempt == 0 && !Task.isCancelled {
@@ -636,7 +643,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         }
 
         if let loaded {
-            ImageCache.store(loaded, for: requestedURL, budget: 2400)
+            ImageCache.store(loaded, for: requestedURL, budget: size)
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
@@ -1127,9 +1134,12 @@ nonisolated enum SabqTheme {
 struct SurfaceCard<Content: View>: View {
     private let content: Content
     var accent: Color?
+    /// كسولة للقوائم الطويلة — انظر تعليق body.
+    var lazy: Bool = false
 
-    init(accent: Color? = nil, @ViewBuilder content: () -> Content) {
+    init(accent: Color? = nil, lazy: Bool = false, @ViewBuilder content: () -> Content) {
         self.accent = accent
+        self.lazy = lazy
         self.content = content()
     }
 
@@ -1138,8 +1148,14 @@ struct SurfaceCard<Content: View>: View {
         let strokeWidth: CGFloat = 0.5
         let topShadow = SabqTheme.shadow
 
-        return VStack(alignment: .leading, spacing: 18) {
-            content
+        // `lazy: true` للقوائم الطويلة داخل ScrollView — النسخة العادية كانت
+        // تُركّب 50 صفًا وصورها دفعة واحدة أثناء حركة الدفع (تدقيق 2026-08-02).
+        return Group {
+            if lazy {
+                LazyVStack(alignment: .leading, spacing: 18) { content }
+            } else {
+                VStack(alignment: .leading, spacing: 18) { content }
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1630,7 +1646,7 @@ struct CompactArticleRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
                     thumbnailPlaceholder(size: 84)
                 }
                 .frame(width: 84, height: 84)

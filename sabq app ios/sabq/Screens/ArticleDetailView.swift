@@ -1199,12 +1199,21 @@ struct ArticleDetailView: View {
                 // tweet/video). Honours the Aa controls live. Parse result
                 // is memoised in `cachedBlocks` so the heavy regex/scanner
                 // work only runs on the first render of a new article.
-                let blocks: [ArticleBlock] = {
-                    if cachedBlocks.html == html { return cachedBlocks.items }
-                    let parsed = ArticleHtmlParser.parse(html)
-                    DispatchQueue.main.async { cachedBlocks = (html, parsed) }
-                    return parsed
-                }()
+                // التحليل لم يعد يجري داخل body على MainActor (كان يجمّد حركة
+                // الدفع في المقالات الطويلة — تدقيق 2026-08-02): task(id:) أدناه
+                // يحلّل خارج الخيط الرئيسي ويملأ cachedBlocks، وbody يقرأ فقط.
+                let blocks: [ArticleBlock] = cachedBlocks.html == html ? cachedBlocks.items : []
+                if blocks.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                        .task(id: html) {
+                            let parsed = await Task.detached(priority: .userInitiated) {
+                                ArticleHtmlParser.parse(html)
+                            }.value
+                            if !Task.isCancelled { cachedBlocks = (html, parsed) }
+                        }
+                }
                 ArticleContentView(
                     blocks: blocks,
                     fontSize: fontSize,

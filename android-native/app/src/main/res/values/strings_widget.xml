@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نصوص ودجت «آخر الأخبار» — ملف مستقل كي لا يتصادم مع strings.xml. -->
+<resources>
+    <string name="sabq_news_widget_label">آخر أخبار سبق</string>
+    <string name="sabq_news_widget_description">آخر أخبار سبق</string>
+</resources>

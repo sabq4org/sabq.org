@@ -78,11 +78,22 @@ class MainActivity : ComponentActivity() {
 
     private fun capturePushExtras(intent: Intent?) {
         if (intent == null) return
+        // ثلاث شبكات أمان لالتقاط slug الخبر (إصلاح «النقرة لا تفتح الخبر»
+        // 2026-08-02): مفتاح الخدمة المُعنون، ثم المفاتيح الخام التي يضعها
+        // النظام مباشرة عند نقرة إشعار notification-message والتطبيق في
+        // الخلفية (onMessageReceived لا يُستدعى هناك)، ثم اشتقاقه من مسار
+        // /article/ في URI أو deeplink الخام.
         val slug = intent.getStringExtra(SabqMessagingService.EXTRA_ARTICLE_SLUG)
+            ?: intent.getStringExtra("article_slug")
             ?: intent.data?.getQueryParameter("slug")
+            ?: articleSlugFromPath(intent.data?.path)
+            ?: articleSlugFromPath(intent.getStringExtra("deeplink"))
         val notifId = intent.getStringExtra(SabqMessagingService.EXTRA_NOTIFICATION_ID)
+            ?: intent.getStringExtra("notification_id")
             ?: intent.data?.getQueryParameter("id")
         val kind = intent.getStringExtra(SabqMessagingService.EXTRA_KIND)
+            ?: intent.getStringExtra("kind")
+            ?: intent.getStringExtra("type")
             ?: intent.data?.getQueryParameter("kind")
         pendingPush.set(
             articleSlug = slug,
@@ -90,7 +101,24 @@ class MainActivity : ComponentActivity() {
             kind = kind,
             deepLinkPath = intent.data?.path,
             surveyToken = surveyTokenFrom(intent.data),
+            draftArticleId = draftIdFrom(intent.data),
         )
+    }
+
+    /** sabq://draft/<id> — إشعار needs_revision يفتح محرر المسودة مباشرة. */
+    private fun draftIdFrom(uri: Uri?): String? {
+        if (uri == null) return null
+        if (uri.scheme == "sabq" && uri.host == "draft") {
+            return uri.pathSegments.firstOrNull()
+        }
+        return null
+    }
+
+    /** «/article/{slug}» من مسار أو deeplink بأي صيغة، وإلا null. */
+    private fun articleSlugFromPath(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val match = Regex("(?:^|/)article/([^/?#]+)").find(raw) ?: return null
+        return Uri.decode(match.groupValues[1]).takeIf { it.isNotBlank() }
     }
 
     /**

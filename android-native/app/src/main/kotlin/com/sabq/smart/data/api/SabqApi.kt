@@ -708,6 +708,43 @@ interface SabqApi {
     @GET("api/v1/asian-cup/predictions/leaderboard")
     suspend fun getAsianCupPredictionsLeaderboard(): com.sabq.smart.feature.asiancup.AcPredictionLeaderboardResponse
 
+    // -- دوري روشن السعودي (Roshn Saudi League) ---------------------------
+    // نفس نقاط iOS العامة (Services/RoshnModels.swift): روابط مطلقة تضرب
+    // api.sabq.org مباشرة — كاش SWR على الخادم يخدم آلاف الزوار من طلب واحد.
+    @GET("https://api.sabq.org/api/rsl/hero")
+    suspend fun getRoshnHero(): com.sabq.smart.feature.roshn.RsHero
+
+    @GET("https://api.sabq.org/api/sports/pro-league/matches")
+    suspend fun getRoshnMatches(): com.sabq.smart.feature.roshn.RsMatchBuckets
+
+    @GET("https://api.sabq.org/api/sports/pro-league/rounds")
+    suspend fun getRoshnRounds(): com.sabq.smart.feature.roshn.RsRoundsResponse
+
+    /** مباريات جولة واحدة — `name` هو المفتاح التقني من /rounds لا التسمية العربية. */
+    @GET("https://api.sabq.org/api/sports/pro-league/round")
+    suspend fun getRoshnRoundFixtures(@Query("name") name: String): com.sabq.smart.feature.roshn.RsRoundFixturesResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/standings")
+    suspend fun getRoshnStandings(): com.sabq.smart.feature.roshn.RsStandingsResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/scorers")
+    suspend fun getRoshnScorers(@Query("season") season: Int? = null): com.sabq.smart.feature.roshn.RsScorersResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/assists")
+    suspend fun getRoshnAssists(@Query("season") season: Int? = null): com.sabq.smart.feature.roshn.RsAssistsResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/cards")
+    suspend fun getRoshnCards(@Query("season") season: Int? = null): com.sabq.smart.feature.roshn.RsCards
+
+    @GET("https://api.sabq.org/api/sports/match/{id}")
+    suspend fun getRoshnMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.roshn.RsMatchDetail
+
+    @GET("https://api.sabq.org/api/sports/match/{id}/players")
+    suspend fun getRoshnMatchRatings(@Path("id") fixtureId: Int): com.sabq.smart.feature.roshn.RsMatchRatings
+
+    @GET("https://api.sabq.org/api/sports/team/{id}?with=stats")
+    suspend fun getRoshnTeamProfile(@Path("id") teamId: Int): com.sabq.smart.feature.roshn.RsTeamProfile
+
     // -- خليجي 27 (Gulf Cup 27 — جدة 2026) --------------------------------
     @GET("https://api.sabq.org/api/gulf-cup/overview")
     suspend fun getGulfCupOverview(): com.sabq.smart.feature.gulfcup.GcOverview

@@ -331,7 +331,7 @@ struct SearchView: View {
                     subtitle: "جرّب البحث بكلمات مختلفة"
                 )
             } else {
-                SurfaceCard {
+                SurfaceCard(lazy: true) {
                     ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
                         if index > 0 {
                             Divider()

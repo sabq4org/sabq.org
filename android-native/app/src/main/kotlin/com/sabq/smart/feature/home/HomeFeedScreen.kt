@@ -26,6 +26,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -63,7 +65,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -117,6 +125,8 @@ fun HomeFeedScreen(
     onWorldCupClick: () -> Unit = {},
     onGulfCupClick: () -> Unit = {},
     onAsianCupClick: () -> Unit = {},
+    onKingsCupClick: () -> Unit = {},
+    onRoshnClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
@@ -130,6 +140,9 @@ fun HomeFeedScreen(
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val unreadCount by bellViewModel.unreadCount.collectAsStateWithLifecycle()
+    val liteManager = com.sabq.smart.feature.lite.rememberLiteModeManager()
+    val isLiteActive by liteManager.isLiteActive.collectAsStateWithLifecycle()
+    val liteBanner by liteManager.banner.collectAsStateWithLifecycle()
     val isDarkMode = if (settings.followsSystemDark)
         androidx.compose.foundation.isSystemInDarkTheme()
     else settings.isDarkMode
@@ -149,7 +162,16 @@ fun HomeFeedScreen(
         when (val s = uiState) {
             HomeFeedUiState.Loading -> LoadingState()
             is HomeFeedUiState.Error -> ErrorState(message = s.message, onRetry = viewModel::refresh)
-            is HomeFeedUiState.Loaded -> LoadedFeed(
+            is HomeFeedUiState.Loaded -> if (isLiteActive) {
+                // وضع Lite: قائمة أخبار مجردة بدل الشجرة الكاملة (مرآة iOS HomeLiteView)
+                com.sabq.smart.feature.lite.HomeLiteScreen(
+                    state = s,
+                    onArticleClick = onArticleClick,
+                    onBookmark = viewModel::toggleBookmark,
+                    onLoadMore = viewModel::loadMore,
+                    onRefresh = viewModel::refresh,
+                )
+            } else LoadedFeed(
                 state = s,
                 isDarkMode = isDarkMode,
                 showNotificationsBell = isLoggedIn,
@@ -166,6 +188,8 @@ fun HomeFeedScreen(
                 onWorldCupClick = onWorldCupClick,
                 onGulfCupClick = onGulfCupClick,
                 onAsianCupClick = onAsianCupClick,
+                onKingsCupClick = onKingsCupClick,
+                onRoshnClick = onRoshnClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
@@ -186,6 +210,13 @@ fun HomeFeedScreen(
                 onRefresh = viewModel::refresh,
             )
         }
+        com.sabq.smart.feature.lite.LiteBanner(
+            banner = liteBanner,
+            onClearActivation = liteManager::clearActivationBanner,
+            onAcceptRecovery = liteManager::acceptRecovery,
+            onDismissRecovery = liteManager::dismissRecovery,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 }
 
@@ -208,6 +239,8 @@ private fun LoadedFeed(
     onWorldCupClick: () -> Unit,
     onGulfCupClick: () -> Unit,
     onAsianCupClick: () -> Unit,
+    onKingsCupClick: () -> Unit,
+    onRoshnClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
@@ -258,9 +291,13 @@ private fun LoadedFeed(
             top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
             bottom = SabqTheme.dimens.tabBarSafeArea,
         ),
-        verticalArrangement = Arrangement.spacedBy(SabqTheme.dimens.sectionGap),
+        // كان spacedBy(sectionGap) يفصل كل عناصر القائمة بمن فيها صفوف
+        // «آخر الأخبار» الكسولة ففقدت شكل الكتلة الواحدة (ملاحظة المالك
+        // 2026-08-02). الآن التباعد صفر والفجوات بين الأقسام صريحة عبر
+        // sectionItem، والصفوف متلاصقة بفواصل داخلية كما iOS.
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        item {
+        sectionItem {
             HomeHeaderBar(
                 isDarkMode = isDarkMode,
                 showNotificationsBell = showNotificationsBell,
@@ -274,13 +311,13 @@ private fun LoadedFeed(
 
         // Time-aware Arabic greeting block — ports iOS
         // `HomeFeedView.greetingBlock` (lines 878-1001).
-        item { GreetingBlock(onClick = onGreetingClick) }
+        sectionItem { GreetingBlock(onClick = onGreetingClick) }
 
         // عاجل — الشريط الوحيد المسموح فوق الهيرو (iOS HomeFeedView.swift:
         // 157-164): شريط لوحة التحكم الدوّار أولًا، وعند غيابه نسقط
         // للبطاقة المفردة القديمة (خبر بنوع "breaking").
         if (state.breakingTicker.isNotEmpty()) {
-            item {
+            sectionItem {
                 BreakingTickerBar(
                     headlines = state.breakingTicker,
                     onHeadlineClick = { headline ->
@@ -309,7 +346,7 @@ private fun LoadedFeed(
             }
         } else {
             state.breaking?.let { breaking ->
-                item {
+                sectionItem {
                     BreakingNewsPill(
                         article = breaking,
                         onClick = { onArticleClick(breaking) },
@@ -321,7 +358,7 @@ private fun LoadedFeed(
         // Featured carousel — الهيرو مباشرة بعد العاجل وقبل أشرطة
         // البطولات (iOS HomeFeedView.swift:166-175).
         if (state.featured.isNotEmpty()) {
-            item {
+            sectionItem {
                 FeaturedCarousel(
                     articles = state.featured,
                     bookmarkedIds = state.bookmarkedIds,
@@ -333,14 +370,26 @@ private fun LoadedFeed(
 
         // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
         // (خليجي 27 غير معروض في الرئيسية مطابقةً لتطبيق iOS.)
-        item {
+        sectionItem {
             com.sabq.smart.feature.worldcup.WorldCupHomeStrip(onClick = onWorldCupClick)
         }
 
         // شريط كأس آسيا — مقيّد بالخادم: يختفي عند blockHidden أو قبل
         // وصول overview (انظر AsianCupHomeStrip).
-        item {
+        sectionItem {
             com.sabq.smart.feature.asiancup.AsianCupHomeStrip(onClick = onAsianCupClick)
+        }
+
+        // شريط كأس الملك — بعد كأس آسيا وقبل روشن (ترتيب iOS): يختفي كليًا
+        // عند blockHidden أو غياب البطل والمباراة القادمة معًا.
+        sectionItem {
+            com.sabq.smart.feature.kingscup.KingsCupHomeStrip(onClick = onKingsCupClick)
+        }
+
+        // شريط دوري روشن — نفس ترتيب iOS (بعد كأس آسيا): يختفي كليًا عند
+        // blockHidden أو غياب البيانات (انظر RoshnHomeStrip).
+        sectionItem {
+            com.sabq.smart.feature.roshn.RoshnHomeStrip(onClick = onRoshnClick)
         }
 
         // "رحلتك المعرفية اليوم" — auth-gated personal-journey block.
@@ -349,7 +398,7 @@ private fun LoadedFeed(
         // backend's /api/v1/insights/today 401s without a member
         // session.
         if (currentUser != null) {
-            item {
+            sectionItem {
                 PersonalJourneyBlock(
                     insights = state.journeyInsights,
                     currentUser = currentUser,
@@ -371,29 +420,88 @@ private fun LoadedFeed(
 
         // Latest list — header + list inside SurfaceCard + explicit
         // "تحميل المزيد" button (ports iOS HomeFeedView.swift:834-883).
-        item { LatestNewsHeader() }
-        item {
-            SurfaceCard {
-                state.articles.forEachIndexed { index, article ->
-                    // Stable slot identity so appends ("تحميل المزيد") and
-                    // pull-to-refresh recompose only changed rows instead of
-                    // re-keying by position. Keeps the SurfaceCard one-card
-                    // visual (iOS parity) while cutting recomposition churn.
-                    key(article.id) {
-                        if (index > 0) {
-                            HorizontalDivider(
-                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                                thickness = 0.5.dp,
+        item(key = "latest-header", contentType = "header") {
+            Box(Modifier.padding(bottom = 10.dp)) { LatestNewsHeader() }
+        }
+        // كسولة حقيقية: كانت القائمة كلها داخل item{} واحد فتُركّب وتُرسم
+        // كل الصفوف وصورها دفعة واحدة وتتضخم مع «تحميل المزيد» (تدقيق
+        // الأداء 2026-08-02). الآن كل صف عنصر lazy مستقل بمفتاح ثابت،
+        // وشكل «البطاقة الواحدة» يُحاكى بتقويس الطرفين الأول والأخير —
+        // مقايضة مقصودة: يسقط ظل/إطار SurfaceCard الخارجي عن هذه الكتلة.
+        itemsIndexed(
+            items = state.articles,
+            key = { _, article -> "latest-${article.id}" },
+            contentType = { _, _ -> "latest-row" },
+        ) { index, article ->
+            // كتلة واحدة متصلة (طلب المالك 2026-08-02): تباعد القائمة صفر،
+            // فالصفوف تتلاصق — الأول بتقويس علوي والأخير بتقويس سفلي
+            // وفاصل رفيع داخلي، مع بقاء كل صف عنصر lazy مستقلًا. الشريحة
+            // تستعيد كسوة SurfaceCard كاملة (خلفية + إطار + حشوة) — نسخة
+            // أولى أسقطت الإطار والحشوة فبدت الكتلة عارية على خلفية الصفحة.
+            val isFirst = index == 0
+            val isLast = index == state.articles.lastIndex
+            val radius = SabqTheme.dimens.cardRadius
+            val pad = SabqTheme.dimens.cardPadding
+            val shape = when {
+                isFirst && isLast -> RoundedCornerShape(radius)
+                isFirst -> RoundedCornerShape(topStart = radius, topEnd = radius)
+                isLast -> RoundedCornerShape(bottomStart = radius, bottomEnd = radius)
+                else -> RectangleShape
+            }
+            val frameColor = SabqTheme.colors.outline
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(SabqTheme.colors.surface)
+                    // إطار SurfaceCard (0.5dp) مرسوم يدويًا لكل شريحة مع
+                    // إسقاط الحافة المشتركة بين الشرائح كي لا تظهر خطوط
+                    // أفقية داخل الكتلة. العرض المرئي داخل القص ≈ 0.5dp.
+                    .drawBehind {
+                        val stroke = 1.dp.toPx()
+                        val outline = shape.createOutline(size, layoutDirection, this)
+                        when {
+                            isFirst && isLast -> drawOutline(
+                                outline, frameColor, style = Stroke(stroke),
                             )
+                            isFirst -> clipRect(bottom = size.height - stroke) {
+                                drawOutline(outline, frameColor, style = Stroke(stroke))
+                            }
+                            isLast -> clipRect(top = stroke) {
+                                drawOutline(outline, frameColor, style = Stroke(stroke))
+                            }
+                            else -> {
+                                drawLine(
+                                    frameColor, Offset(0f, 0f),
+                                    Offset(0f, size.height), stroke,
+                                )
+                                drawLine(
+                                    frameColor, Offset(size.width, 0f),
+                                    Offset(size.width, size.height), stroke,
+                                )
+                            }
                         }
-                        CompactArticleRow(
-                            article = article,
-                            isBookmarked = article.bookmarkKey in state.bookmarkedIds,
-                            onBookmark = { onBookmark(article.bookmarkKey) },
-                            onClick = { onArticleClick(article) },
-                        )
-                    }
+                    },
+            ) {
+                if (!isFirst) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = pad),
+                        color = SabqTheme.colors.outline.copy(alpha = 0.3f),
+                        thickness = 0.5.dp,
+                    )
                 }
+                CompactArticleRow(
+                    article = article,
+                    isBookmarked = article.bookmarkKey in state.bookmarkedIds,
+                    onBookmark = { onBookmark(article.bookmarkKey) },
+                    onClick = { onArticleClick(article) },
+                    modifier = Modifier.padding(
+                        start = pad,
+                        end = pad,
+                        top = if (isFirst) pad else 10.dp,
+                        bottom = if (isLast) pad else 10.dp,
+                    ),
+                )
             }
         }
 
@@ -401,14 +509,17 @@ private fun LoadedFeed(
         // auto-paginate-on-scroll behavior so the feed has a clear stop
         // point matching iOS (HomeFeedView.swift:863-879).
         if (state.hasMore && state.selectedSlug == null) {
-            item {
-                LoadMoreButton(
-                    isLoading = state.isLoadingMore,
-                    onClick = onEndReached,
-                )
+            sectionItem {
+                // فجوة علوية يدوية: تباعد القائمة صفر والكتلة فوقه ملتصقة.
+                Box(Modifier.padding(top = SabqTheme.dimens.sectionGap)) {
+                    LoadMoreButton(
+                        isLoading = state.isLoadingMore,
+                        onClick = onEndReached,
+                    )
+                }
             }
         } else if (!state.hasMore && state.articles.isNotEmpty()) {
-            item {
+            sectionItem {
                 Text(
                     text = "وصلت إلى نهاية الأخبار",
                     style = SabqTheme.typography.meta,
@@ -425,7 +536,7 @@ private fun LoadedFeed(
         // Opinions preview — horizontal rail of up to 5 cards +
         // "الكل" link to the full Opinions list.
         if (state.opinions.isNotEmpty()) {
-            item {
+            sectionItem {
                 OpinionsPreviewRail(
                     opinions = state.opinions,
                     onArticleClick = onArticleClick,
@@ -437,7 +548,7 @@ private fun LoadedFeed(
         // مُقترب — featured analytical topics strip + "الكل" link.
         // Hidden entirely when the backend returns no featured topics.
         if (state.muqtarabTopics.isNotEmpty()) {
-            item {
+            sectionItem {
                 com.sabq.smart.feature.muqtarab.MuqtarabHomeStrip(
                     topics = state.muqtarabTopics,
                     onAllClick = onMuqtarabAllClick,
@@ -449,7 +560,7 @@ private fun LoadedFeed(
         // «المزيد اليوم» — إفصاح مطوي افتراضيًا يضم الكتل الثانوية
         // (iOS moreTodaySection, HomeFeedView.swift:690-746). كل كتلة
         // تحتفظ بشرط ظهورها الأصلي.
-        item {
+        sectionItem {
             MoreTodayToggle(
                 expanded = showMoreToday,
                 onToggle = { showMoreToday = !showMoreToday },
@@ -459,14 +570,14 @@ private fun LoadedFeed(
             // Stories rail — circular bubbles. Each bubble opens the
             // dedicated StoryDetailScreen via the parent's onStoryClick.
             if (state.stories.isNotEmpty()) {
-                item { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
+                sectionItem { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
             }
 
             // "صدى الحج" — seasonal block, hidden when out of season /
             // disabled / no articles (the repo returns null in those
             // cases, matching iOS `HajjBlockView` parity).
             state.hajjBlock?.let { hajj ->
-                item {
+                sectionItem {
                     HajjBlockSection(
                         block = hajj,
                         onArticleClick = onHajjArticleClick,
@@ -476,19 +587,19 @@ private fun LoadedFeed(
 
             // Today's calendar events.
             if (state.calendar.isNotEmpty()) {
-                item { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
+                sectionItem { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
             }
 
             // Audio newsletter card. Tap navigates to the dedicated
             // "النشرات الصوتية" list. iOS opens the same destination
             // from ContentView.swift:78 via the navigation stack.
             state.audioNewsletter?.let { newsletter ->
-                item { AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick) }
+                sectionItem { AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick) }
             }
 
             // Trending preview — top-3 list inside a SurfaceCard.
             if (state.trending.isNotEmpty()) {
-                item {
+                sectionItem {
                     TrendingPreviewBlock(
                         trending = state.trending,
                         onArticleClick = onArticleClick,
@@ -603,7 +714,7 @@ private fun SectionChips(
     onSelect: (String?) -> Unit,
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
+        sectionItem {
             CategoryChip(
                 title = "الكل",
                 isSelected = selectedSlug == null,
@@ -1785,3 +1896,16 @@ private fun LoadMoreButton(isLoading: Boolean, onClick: () -> Unit) {
 
 @Suppress("unused")
 private val _markers = listOf<Any>(Color.Transparent)
+
+
+/** عنصر قسم بفجوة سفلية موحّدة — بديل spacedBy العام الذي كان يفصل
+ *  صفوف «آخر الأخبار» الكسولة عن بعضها. */
+private fun androidx.compose.foundation.lazy.LazyListScope.sectionItem(
+    key: Any? = null,
+    contentType: Any? = null,
+    content: @androidx.compose.runtime.Composable () -> Unit,
+) {
+    item(key = key, contentType = contentType) {
+        Box(Modifier.padding(bottom = SabqTheme.dimens.sectionGap)) { content() }
+    }
+}

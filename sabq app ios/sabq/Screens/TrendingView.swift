@@ -129,7 +129,7 @@ struct TrendingView: View {
     }
 
     private var articlesSection: some View {
-        SurfaceCard {
+        SurfaceCard(lazy: true) {
             ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
                 if index > 0 {
                     Divider().foregroundStyle(SabqTheme.outline)

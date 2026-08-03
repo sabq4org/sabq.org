@@ -22,6 +22,8 @@ sealed interface ArticleDetailUiState {
         val article: Article,
         val related: List<Article> = emptyList(),
         val mediaAssets: List<MediaAsset> = emptyList(),
+        /** المحتوى المعروض من بطاقة القائمة والنص الكامل ما زال يُجلب. */
+        val hydrating: Boolean = false,
     ) : ArticleDetailUiState
 }
 
@@ -48,7 +50,14 @@ class ArticleDetailViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _state.value = ArticleDetailUiState.Loading
+            // فتح فوري من بطاقة القائمة إن توفرت — الشاشة الفارغة كانت أسوأ
+            // مسار إحساسًا بالبطء (تدقيق الأداء 2026-08-02).
+            val seed = com.sabq.smart.data.ArticleHandoff.take(slug)
+            _state.value = if (seed != null) {
+                ArticleDetailUiState.Loaded(article = seed, hydrating = true)
+            } else {
+                ArticleDetailUiState.Loading
+            }
             runCatching { repo.getArticleBySlug(slug) }
                 .onSuccess { article ->
                     _state.value = ArticleDetailUiState.Loaded(article = article)
@@ -56,9 +65,15 @@ class ArticleDetailViewModel @Inject constructor(
                     loadMediaAssets(article.id)
                 }
                 .onFailure { e ->
-                    _state.value = ArticleDetailUiState.Error(
-                        e.localizedMessage ?: "تعذّر تحميل المقال",
-                    )
+                    val current = _state.value
+                    if (current is ArticleDetailUiState.Loaded) {
+                        // البذرة معروضة — نبقيها بدل استبدالها بشاشة خطأ.
+                        _state.value = current.copy(hydrating = false)
+                    } else {
+                        _state.value = ArticleDetailUiState.Error(
+                            e.localizedMessage ?: "تعذّر تحميل المقال",
+                        )
+                    }
                 }
         }
     }

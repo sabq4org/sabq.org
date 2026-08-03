@@ -1097,7 +1097,7 @@ struct HomeFeedView: View {
                             let allArticles = articlesStore.filteredArticles
                             let upcoming = allArticles.dropFirst(index + 1).prefix(5)
                             let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-                            if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 1200) }
+                            if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 260) }
                         }
                     }
                 }
