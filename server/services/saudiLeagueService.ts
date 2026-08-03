@@ -233,16 +233,22 @@ export function listCompetitions() {
 
 /** الموسم الحالي من المزود (current=true) مخزَّن 6 ساعات؛ يصمد أمام انتقال المواسم تلقائيًا */
 async function seasonFor(comp: SaudiCompetition): Promise<number> {
-  return withSWR(`spl:season:${comp.id}`, SEASON_TTL, SEASON_TTL * 2, async () => {
-    try {
+  try {
+    // لا نلتقط الخطأ داخل الـ fetcher (نفس نمط getCompetitionMeta وللسبب نفسه):
+    // التقاطه داخليًا كان يخزّن fallbackSeason — موسمًا كاملًا خلف الحالي بعد
+    // الانتقال — لمدة 6-12 ساعة عند أي فشل/تحديد معدّل عابر لحظة الانطلاقة،
+    // فيعلّق قسم الدوري كاملًا على الموسم الماضي.
+    return await withSWR(`spl:season:${comp.id}`, SEASON_TTL, SEASON_TTL * 2, async () => {
       const rows = await apiGet("leagues", { id: comp.id, current: "true" });
       const seasons: any[] = rows[0]?.seasons ?? [];
       const year = seasons.find((s: any) => s.current)?.year ?? seasons[seasons.length - 1]?.year;
-      return typeof year === "number" ? year : comp.fallbackSeason;
-    } catch {
-      return comp.fallbackSeason;
-    }
-  });
+      if (typeof year !== "number") throw new Error(`[SaudiLeague] no current season for league ${comp.id}`);
+      return year;
+    });
+  } catch {
+    // fallback غير مُخزَّن — الطلب التالي يعيد المحاولة (شفاء ذاتي).
+    return comp.fallbackSeason;
+  }
 }
 
 /** الموسم الحالي للبطولة (المُحلّ من المزوّد) — للمستهلكين خارج هذا الملف */
@@ -3583,13 +3589,13 @@ export function startCompetitionsMetaWarmer(): void {
 
 const OUTLOOK_TTL = 30 * 60 * 1000;
 
-/** مباريات موسم محدّد (غير الحالي) — يُستخدم لاستكشاف جدول الموسم القادم قبل أن يصبح current. */
+/**
+ * مباريات موسم محدّد (غير الحالي) — لاستكشاف جدول الموسم القادم قبل أن يصبح current.
+ * تفويض مباشر لـ getFixtures: كانت تكتب على مفتاح الكاش نفسه بـ TTL خمسة أضعاف،
+ * فأيّهما سبق ثبّت صلاحيته — وكان ذلك يبطّئ تحديث مباريات الموسم الجاري بصمت.
+ */
 async function getFixturesForSeason(comp: SaudiCompetition, season: number): Promise<SplFixture[]> {
-  return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL * 5, FIXTURES_TTL * 10, async () => {
-    const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
-    const tr = await fixtureTranslators(rows);
-    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
-  });
+  return getFixtures(comp, season);
 }
 
 export interface SplSeasonOutlook {
@@ -3659,8 +3665,11 @@ export async function getSeasonOutlook(comp: SaudiCompetition): Promise<SplSeaso
       };
     };
 
-    // 1) جارٍ.
-    if (meta.status === "ongoing" || hasLive || (meta.status !== "upcoming" && futureCurrent.length > 0)) {
+    // 1) جارٍ. «upcoming» مع نتائج منتهية بالموسم الحالي = تأخّر تاريخ البداية
+    // عند المزوّد عن الانطلاقة الفعلية (شائع) — وجود نتيجة حسمٌ كافٍ أن الموسم بدأ،
+    // وإلا بقيت الواجهة تعرض أرشيف الموسم الماضي رغم أن الجولة الأولى لُعبت.
+    const startedDespiteUpcoming = meta.status === "upcoming" && fixtures.some((f) => f.status.finished);
+    if (meta.status === "ongoing" || hasLive || startedDespiteUpcoming || (meta.status !== "upcoming" && futureCurrent.length > 0)) {
       return { ...base, phase: "in-season", nextSeason: null, nextSeasonStart: null, firstKickoff: null, daysUntilKickoff: null, openers: [] };
     }
 

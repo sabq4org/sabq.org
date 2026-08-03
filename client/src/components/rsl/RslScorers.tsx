@@ -23,10 +23,6 @@ interface RslScorersProps {
   previousSeason: number | null;
 }
 
-/** لاحقة الأرشيف لنقاط السباقات — الموسم الماضي قبل انطلاق الجديد. */
-function seasonSuffix(useArchive: boolean, previousSeason: number | null): string {
-  return useArchive && previousSeason != null ? `?season=${previousSeason}` : "";
-}
 
 function PodiumCard({ scorer }: { scorer: RslScorer & { place: number } }) {
   const isFirst = scorer.place === 0;
@@ -119,12 +115,24 @@ function ListSkeleton() {
 }
 
 export function RslScorers({ inSeason, previousSeason }: RslScorersProps) {
-  const suffix = seasonSuffix(!inSeason, previousSeason);
-  const archiveLabel = !inSeason && previousSeason != null;
-
-  const { data: scorersData, isLoading: scorersLoading } = useQuery<{ scorers: RslScorer[] }>({
-    queryKey: [`/api/sports/${RSL_SLUG}/scorers${suffix}`],
+  // الموسم الحالي أولًا دائمًا — نفس حارس جدول الترتيب: لا نعرض الأرشيف إلا إذا
+  // كانت لوحات الموسم الجديد فارغة فعلًا. الاعتماد على «قبل الموسم» وحدها كان
+  // يعلّق السباقات على الموسم الماضي إذا تأخّر تاريخ البداية عند المزوّد عن
+  // الانطلاقة الفعلية (الترتيب يتصفّر والهدّافون لا).
+  const { data: currentData, isLoading: currentLoading } = useQuery<{ scorers: RslScorer[] }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/scorers`],
     staleTime: 10 * 60_000,
+  });
+  const currentScorers = Array.isArray(currentData?.scorers) ? currentData.scorers : [];
+  const wantArchive =
+    !inSeason && previousSeason != null && !currentLoading && currentScorers.length === 0;
+  const suffix = wantArchive ? `?season=${previousSeason}` : "";
+  const archiveLabel = wantArchive;
+
+  const { data: archiveScorersData, isLoading: archiveScorersLoading } = useQuery<{ scorers: RslScorer[] }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/scorers${suffix}`],
+    enabled: wantArchive,
+    staleTime: 60 * 60_000,
   });
   const { data: assistsData, isLoading: assistsLoading } = useQuery<{ assists: RslLeader[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/assists${suffix}`],
@@ -135,7 +143,9 @@ export function RslScorers({ inSeason, previousSeason }: RslScorersProps) {
     staleTime: 10 * 60_000,
   });
 
-  const scorers = Array.isArray(scorersData?.scorers) ? scorersData.scorers : [];
+  const scorersLoading = currentLoading || (wantArchive && archiveScorersLoading);
+  const archiveScorers = Array.isArray(archiveScorersData?.scorers) ? archiveScorersData.scorers : [];
+  const scorers = wantArchive ? archiveScorers : currentScorers;
   const assists = Array.isArray(assistsData?.assists) ? assistsData.assists : [];
   const cards = Array.isArray(cardsData?.yellow) ? cardsData.yellow : [];
 
