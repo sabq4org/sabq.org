@@ -10,9 +10,10 @@ export const dynamicParams = true;
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const bundle = await getArticleSeoBundle(params.slug, "ur");
+  const { slug } = await params;
+  const bundle = await getArticleSeoBundle(slug, "ur");
   if (!bundle) {
     return { title: "غير موجود", robots: { index: false, follow: true } };
   }
@@ -22,9 +23,10 @@ export async function generateMetadata({
 export default async function UrduArticlePage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const bundle = await getArticleSeoBundle(params.slug, "ur");
+  const { slug } = await params;
+  const bundle = await getArticleSeoBundle(slug, "ur");
   if (!bundle) notFound();
   return <ArticleView bundle={bundle} lang="ur" />;
 }

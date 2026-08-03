@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-01",
   "systems": [
     {
       "id": "account-center",
@@ -675,7 +675,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-30"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "comments",

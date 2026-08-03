@@ -47,6 +47,24 @@ jobs:
       - name: npm audit (production deps)
         run: npm audit --omit=dev --audit-level=high
 
+  subproject-dependencies:
+    name: Dependency audit (${{ matrix.directory }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [web-next, meetings-agent]
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: npm audit (production deps)
+        run: npm audit --omit=dev --audit-level=high
+
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest

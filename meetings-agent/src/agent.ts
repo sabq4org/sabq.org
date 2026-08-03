@@ -1,7 +1,8 @@
 // ----------------------------------------------------------------------------
 // «أمين المحضر» — عامل تفريغ اجتماعات سبق
 //
-// خدمة مستقلة (Railway) تسجَّل لدى LiveKit Cloud باسم sabq-minutes-agent
+// خدمة مستقلة (Railway) تسجَّل لدى LiveKit Cloud بالاسم المحدد في
+// LIVEKIT_AGENT_NAME (والافتراضي للإنتاج sabq-minutes-agent)
 // وتُستدعى حصراً عبر Agent Dispatch من خادم سبق عند بدء اجتماع مفعَّل
 // المحضر (metadata تحمل meetingId). تشترك في مسار صوت كل متحدث على حدة
 // — فهوية المتحدث معروفة من المسار بلا نماذج فصل — وتبث المقاطع النهائية
@@ -9,6 +10,7 @@
 //
 // المتغيرات المطلوبة:
 //   LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+//   LIVEKIT_AGENT_NAME        — اسم مستقل لكل بيئة
 //   OPENAI_API_KEY            — للتفريغ (gpt-4o-transcribe)
 //   SABQ_API_URL              — مثال: https://api.sabq.org
 //   MEETINGS_AGENT_SECRET     — نفس قيمة الخادم الرئيسي
@@ -23,6 +25,7 @@ import {
 } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
 import {
+  AudioFrame,
   AudioStream,
   RemoteTrack,
   RemoteTrackPublication,
@@ -31,9 +34,21 @@ import {
 } from "@livekit/rtc-node";
 import { fileURLToPath } from "node:url";
 
-const AGENT_NAME = "sabq-minutes-agent";
+const DEFAULT_AGENT_NAME = "sabq-minutes-agent";
+const AGENT_NAME = process.env.LIVEKIT_AGENT_NAME?.trim() || DEFAULT_AGENT_NAME;
+
+if (
+  process.env.RAILWAY_ENVIRONMENT_NAME === "staging" &&
+  AGENT_NAME === DEFAULT_AGENT_NAME
+) {
+  throw new Error(
+    "LIVEKIT_AGENT_NAME must use a non-production name in the Railway staging environment",
+  );
+}
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_BATCH = 40;
+const TRANSCRIPTION_FINAL_GRACE_MS = 5_000;
+const TRANSCRIPTION_DRAIN_TIMEOUT_MS = 20_000;
 
 interface Segment {
   speakerIdentity: string;
@@ -127,7 +142,10 @@ export default defineAgent({
 
     const startedAt = Date.now();
     const uploader = new TranscriptUploader(meetingId);
-    const activeStreams = new Set<Promise<void>>();
+    const activeStreams = new Map<
+      Promise<void>,
+      { stop: () => Promise<void>; forceClose: () => void }
+    >();
     // مسار قد يصلنا مرتين (حدث الاشتراك + مسح المسارات القائمة) — تفريغ واحد فقط
     const seenTracks = new Set<string>();
 
@@ -149,34 +167,80 @@ export default defineAgent({
         }
       })();
 
-      const run = (async () => {
-        const sttImpl = new openai.STT({ model: "gpt-4o-transcribe", language: "ar" });
-        const sttStream = sttImpl.stream();
-        const audio = new AudioStream(track, { sampleRate: 16000, numChannels: 1 });
+      const sttImpl = new openai.STT({ model: "gpt-4o-transcribe", language: "ar" });
+      const sttStream = sttImpl.stream();
+      const audio = new AudioStream(track, { sampleRate: 16000, numChannels: 1 });
+      const reader = audio.getReader();
+      let inputEnded = false;
+      let streamClosed = false;
+      let forceCloseTimer: NodeJS.Timeout | undefined;
 
+      const forceClose = () => {
+        if (forceCloseTimer) clearTimeout(forceCloseTimer);
+        forceCloseTimer = undefined;
+        if (!streamClosed) {
+          streamClosed = true;
+          sttStream.close();
+        }
+      };
+
+      const endInput = () => {
+        if (inputEnded) return;
+        inputEnded = true;
+        // OpenAI Realtime VAD needs trailing silence to commit the last utterance.
+        // flush() forwards any partial audio chunk; the grace timer then closes
+        // the WebSocket-backed stream, which otherwise remains open indefinitely.
+        const silenceSamples = 12_000; // 750ms at 16kHz
+        sttStream.pushFrame(
+          new AudioFrame(new Int16Array(silenceSamples), 16_000, 1, silenceSamples),
+        );
+        sttStream.flush();
+        sttStream.endInput();
+        forceCloseTimer = setTimeout(forceClose, TRANSCRIPTION_FINAL_GRACE_MS);
+      };
+
+      const run = (async () => {
         const feed = (async () => {
-          for await (const frame of audio) sttStream.pushFrame(frame);
-          sttStream.endInput();
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              sttStream.pushFrame(value);
+            }
+          } finally {
+            endInput();
+            reader.releaseLock();
+          }
         })();
 
-        for await (const event of sttStream) {
-          if (event.type === stt.SpeechEventType.FINAL_TRANSCRIPT) {
-            const text = event.alternatives?.[0]?.text?.trim();
-            if (text) {
-              uploader.push({
-                speakerIdentity: participant.identity,
-                speakerName,
-                text,
-                startMs: Date.now() - startedAt,
-              });
+        try {
+          for await (const event of sttStream) {
+            if (event.type === stt.SpeechEventType.FINAL_TRANSCRIPT) {
+              const text = event.alternatives?.[0]?.text?.trim();
+              if (text) {
+                uploader.push({
+                  speakerIdentity: participant.identity,
+                  speakerName,
+                  text,
+                  startMs: Date.now() - startedAt,
+                });
+              }
             }
           }
+          await feed;
+        } finally {
+          forceClose();
         }
-        await feed;
       })().catch((e) =>
         console.error(`[Agent] stt for ${participant.identity} failed:`, (e as Error).message),
       );
-      activeStreams.add(run);
+      activeStreams.set(run, {
+        stop: async () => {
+          await reader.cancel("room disconnected").catch(() => {});
+          endInput();
+        },
+        forceClose,
+      });
       run.finally(() => activeStreams.delete(run));
     };
 
@@ -203,7 +267,19 @@ export default defineAgent({
     });
 
     console.log(`[Agent] room closed — flushing transcript for ${meetingId}`);
-    await Promise.allSettled([...activeStreams]);
+    const streamsAtDisconnect = [...activeStreams.entries()];
+    await Promise.allSettled(streamsAtDisconnect.map(([, control]) => control.stop()));
+    const drainResult = await Promise.race([
+      Promise.allSettled(streamsAtDisconnect.map(([done]) => done)).then(() => "drained" as const),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), TRANSCRIPTION_DRAIN_TIMEOUT_MS),
+      ),
+    ]);
+    if (drainResult === "timeout") {
+      console.warn("[Agent] transcription drain timed out — forcing stream close");
+      for (const [, control] of streamsAtDisconnect) control.forceClose();
+      await Promise.allSettled(streamsAtDisconnect.map(([done]) => done));
+    }
     await uploader.close();
     console.log(
       `[Agent] done — meeting ${meetingId}: ${uploader.uploaded} segments uploaded, ${seenTracks.size} audio tracks seen`,
