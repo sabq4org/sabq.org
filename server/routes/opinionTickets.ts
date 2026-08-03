@@ -173,11 +173,37 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
 
     const kinds = await authorKindsForUserIds(rows.map((r) => r.writerId));
 
+    // اتجاه التذكرة = مرسل أول رسالة: admin → صادرة منا، writer → واردة من المساهم.
+    const initiatorByTicket = new Map<string, "admin" | "writer">();
+    if (rows.length > 0) {
+      const firstMsgs = await db
+        .select({
+          ticketId: opinionTicketMessages.ticketId,
+          senderRole: opinionTicketMessages.senderRole,
+          createdAt: opinionTicketMessages.createdAt,
+        })
+        .from(opinionTicketMessages)
+        .where(
+          inArray(
+            opinionTicketMessages.ticketId,
+            rows.map((r) => r.id),
+          ),
+        )
+        .orderBy(asc(opinionTicketMessages.createdAt));
+      for (const m of firstMsgs) {
+        if (initiatorByTicket.has(m.ticketId)) continue;
+        if (m.senderRole === "admin" || m.senderRole === "writer") {
+          initiatorByTicket.set(m.ticketId, m.senderRole);
+        }
+      }
+    }
+
     const tickets = rows
       .map((row) => {
         const lastRead = admin ? row.lastReadByAdminAt : row.lastReadByWriterAt;
         const hasUnread = !lastRead || (row.lastMessageAt && row.lastMessageAt > lastRead);
         const authorKind = kinds.get(row.writerId) ?? "other";
+        const initiator = initiatorByTicket.get(row.id) ?? "writer";
         return {
           id: row.id,
           writerId: row.writerId,
@@ -186,6 +212,8 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
           authorKind,
           title: row.title,
           status: row.status,
+          /** واردة من المساهم | صادرة من الإدارة */
+          direction: initiator === "admin" ? ("outbound" as const) : ("inbound" as const),
           lastMessageAt: row.lastMessageAt,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
