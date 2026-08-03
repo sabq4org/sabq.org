@@ -92,6 +92,17 @@ if (import.meta.env.PROD) {
       // الديناميكي (Failed to fetch dynamically imported module /
       // Importing a module script failed) بلا لاحقة "(host)" فلا تطابق.
       /(?:Failed to fetch|Load failed|NetworkError)[^(]*\(cdn\.sabq\.org\)/,
+      // إلغاء داخلي في TanStack Query: حين يُفكَّك آخر مكوّن يراقب استعلامًا
+      // جاريًا يستدعي removeObserver → cancel({revert}) فيجهض الجلب عبر
+      // AbortController، ورفض retryer الداخلي يصعد كـunhandled rejection من
+      // vendor-core — سلوك مقصود في المكتبة لا خطأ عندنا. صفر مستخدم متأثر
+      // في 157 حدثًا خلال أسبوعين (JAVASCRIPT-REACT-2W و2V).
+      "signal is aborted without reason",
+      // سفاري المعرّب يرمي TypeError برسالة «مُلغى» (مكافئ Load failed)
+      // حين يُجهض fetch بمغادرة الصفحة أثناء الجلب — ضجيج شبكة لا خطأ كود
+      // (JAVASCRIPT-REACT-2T). مطابقة تامة حتى لا تُسقط رسالة عربية حقيقية
+      // تحتوي الكلمة.
+      /^مُلغى$/,
     ],
     // الحسم بموضع الرمي: أعلى إطار ذي ملف يجب أن يكون من أصولنا، وإلا أُسقط
     // الحدث قبل الإرسال فلا يستهلك من الحصة أصلًا. والأحداث بلا مكدس التي
