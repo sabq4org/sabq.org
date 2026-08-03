@@ -1,6 +1,6 @@
 # الخطابات الرسمية (`official-letters`)
 
-> آخر مراجعة: 2026-07-27 | المالك: platform
+> آخر مراجعة: 2026-08-03 | المالك: platform
 
 ## الغرض
 إصدار شهادات رسمية من صحيفة سبق للمنسوبين (كتّاب رأي، مراسلون، موظفون): شهادة
@@ -13,9 +13,9 @@
 ## الحدود
 - **داخل النطاق:** قوالب الخطابات، توليد PDF، الترقيم المرجعي، سجل الإصدار،
   طلبات المنسوبين، صفحة التحقق العامة، وبوابة الإصدار بعد **اعتماد ملف المنسوب**.
-- **خارج النطاق:** دورة مراجعة الترخيص المهني (`editorial`)، تذاكر الاستفسارات
-  (تُستهلك كنقطة دخول فقط). استكمال/اعتماد ملف المنسوب يُدار عبر `staff-profiles`
-  (ذاتي + HR) — انظر `editorial/SYSTEM.md`.
+- **خارج النطاق:** دورة مراجعة الترخيص المهني (`editorial`)، تذاكر استفسارات
+  المساهمين (لا إصدار شهادة من خيط التذكرة). استكمال/اعتماد ملف المنسوب يُدار عبر
+  `staff-profiles` (ذاتي + HR) — انظر `editorial/SYSTEM.md`.
 
 ## نقاط الدخول
 | الطبقة | المسار |
@@ -26,8 +26,9 @@
 | Web (إدارة خطابات) | `OfficialLetters.tsx` → `/dashboard/official-letters` |
 | Web (إدارة ملف) | `StaffProfilesDirectory` → `/dashboard/staff-profiles` (يفتح طابور «قيد المراجعة» افتراضياً) + اعتماد من `StaffProfilePage` |
 | Web (منسوب) | صفحة **ملفي وخدماتي** `/dashboard/my-services` (`MyServicesPage`) — تضم `MyOfficialLettersCard`؛ النظرة العامة تعرض رابطاً مضغوطاً فقط (`MyServicesHomeLink`) |
-| Web (تذكرة) | `client/src/components/officialLetters/IssueLetterFromTicketDialog.tsx` داخل `TicketThread` |
 | Web (عام) | `client/src/pages/VerifyLetter.tsx` → `/verify/:code` |
+
+**قرار المالك 2026-08-03:** لا زر «إصدار شهادة تعريف» داخل خيط استفسارات المساهمين — الإصدار من `/dashboard/official-letters` فقط.
 
 ## العقود
 | Endpoint | الصلاحية |

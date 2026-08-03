@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   Inbox,
   MessageSquare,
   Mic,
@@ -30,6 +32,8 @@ import {
 import { SendColleagueMessageDialog } from "@/components/opinion-tickets/SendColleagueMessageDialog";
 import { apiUrl } from "@/lib/queryClient";
 
+type TicketDirection = "inbound" | "outbound";
+
 interface AdminTicketRow {
   id: string;
   writerId: string;
@@ -38,6 +42,8 @@ interface AdminTicketRow {
   authorKind?: TicketAuthorKind;
   title: string;
   status: OpinionTicketStatus;
+  /** واردة من المساهم | صادرة من الإدارة (أول رسالة) */
+  direction?: TicketDirection;
   lastMessageAt: string;
   createdAt: string;
   hasUnread: boolean;
@@ -57,6 +63,7 @@ interface WritersResponse {
 }
 
 type KindFilter = "all" | TicketAuthorKind;
+type DirectionFilter = "all" | TicketDirection;
 
 function formatDate(date: string) {
   try {
@@ -82,6 +89,7 @@ export default function OpinionTicketsAdmin() {
   const [statusFilter, setStatusFilter] = useState<OpinionTicketStatus | "all">("all");
   const [writerFilter, setWriterFilter] = useState<string>("all");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("all");
   const [search, setSearch] = useState("");
 
   const queryParams = useMemo(() => {
@@ -118,6 +126,8 @@ export default function OpinionTicketsAdmin() {
     let answered = 0;
     let closed = 0;
     let unread = 0;
+    let inbound = 0;
+    let outbound = 0;
     const byKind: Record<TicketAuthorKind, number> = {
       reporter: 0,
       opinion_author: 0,
@@ -129,6 +139,8 @@ export default function OpinionTicketsAdmin() {
       else if (t.status === "answered") answered += 1;
       else if (t.status === "closed") closed += 1;
       if (t.hasUnread) unread += 1;
+      if ((t.direction ?? "inbound") === "outbound") outbound += 1;
+      else inbound += 1;
       byKind[resolveKind(t.authorKind)] += 1;
     }
     return {
@@ -137,6 +149,8 @@ export default function OpinionTicketsAdmin() {
       answered,
       closed,
       unread,
+      inbound,
+      outbound,
       byKind,
     };
   }, [tickets]);
@@ -145,6 +159,8 @@ export default function OpinionTicketsAdmin() {
     const q = search.trim().toLowerCase();
     return tickets.filter((t) => {
       if (kindFilter !== "all" && resolveKind(t.authorKind) !== kindFilter) return false;
+      const dir = t.direction ?? "inbound";
+      if (directionFilter !== "all" && dir !== directionFilter) return false;
       if (!q) return true;
       return (
         t.title.toLowerCase().includes(q) ||
@@ -152,7 +168,7 @@ export default function OpinionTicketsAdmin() {
         (t.writerEmail || "").toLowerCase().includes(q)
       );
     });
-  }, [tickets, search, kindFilter]);
+  }, [tickets, search, kindFilter, directionFilter]);
 
   const writersForSelect = useMemo(() => {
     if (kindFilter === "all") return writers;
@@ -183,7 +199,7 @@ export default function OpinionTicketsAdmin() {
         <DashboardPageHeader
           icon={MessageSquare}
           title="استفسارات المساهمين"
-          description="صندوق موحّد للمراسلين وكتّاب الرأي والزوايا — مع تمييز واضح لكل دور"
+          description="واردة من المساهمين، أو صادرة منا عبر «أرسل رسالة لزميل» — شهادات التعريف من الخطابات الرسمية فقط"
           titleTestId="text-page-title"
           actions={<SendColleagueMessageDialog />}
         />
@@ -198,6 +214,47 @@ export default function OpinionTicketsAdmin() {
               </p>
             </div>
           ))}
+        </div>
+
+        {/* واردة / صادرة */}
+        <div className="flex flex-wrap gap-1.5 rounded-xl border bg-card p-1">
+          {(
+            [
+              { id: "all" as const, label: "كل الاتجاهات", count: stats.total, icon: Inbox },
+              {
+                id: "inbound" as const,
+                label: "واردة",
+                count: stats.inbound,
+                icon: ArrowDownLeft,
+              },
+              {
+                id: "outbound" as const,
+                label: "صادرة منا",
+                count: stats.outbound,
+                icon: ArrowUpRight,
+              },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setDirectionFilter(tab.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors tabular-nums",
+                  directionFilter === tab.id
+                    ? "bg-muted text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                data-testid={`filter-direction-${tab.id}`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {tab.label}
+                <span className="opacity-70">({isLoading ? "—" : tab.count})</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* توزيع الأدوار — جوهر التغيير بعد دخول المراسلين */}
@@ -409,6 +466,22 @@ export default function OpinionTicketsAdmin() {
                             aria-label="جديد"
                           />
                         )}
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                            (t.direction ?? "inbound") === "outbound"
+                              ? "bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-100"
+                              : "bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-100",
+                          )}
+                          data-testid={`badge-direction-${t.id}`}
+                        >
+                          {(t.direction ?? "inbound") === "outbound" ? (
+                            <ArrowUpRight className="h-3 w-3" />
+                          ) : (
+                            <ArrowDownLeft className="h-3 w-3" />
+                          )}
+                          {(t.direction ?? "inbound") === "outbound" ? "صادرة" : "واردة"}
+                        </span>
                         <span
                           className={cn(
                             "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
