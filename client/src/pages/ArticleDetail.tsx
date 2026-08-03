@@ -1516,8 +1516,9 @@ export default function ArticleDetail() {
             {(() => {
               // First check mediaAssets from article_media_assets table
               // Note: API returns { ...assetFields, mediaFile: { ...mediaFileFields } }
+              // تجاهل الصفوف بلا URL (يتيمة) — كانت تفتح قسم «الصور المرفقة» فارغاً.
               const mediaAdditionalImages = mediaAssets
-                ?.filter((asset: any) => asset.displayOrder !== 0)
+                ?.filter((asset: any) => asset.displayOrder !== 0 && (asset.mediaFile?.url || asset.url))
                 .sort((a: any, b: any) => a.displayOrder - b.displayOrder) || [];
               
               // Then check albumImages from article field (legacy/editor uploads)

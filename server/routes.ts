@@ -14791,7 +14791,8 @@ Respond in valid JSON format only:
   app.delete("/api/media-assets/:id",
     requireAuth,
     // Was requireRole("editor","admin") — see PATCH note (legacy role-text trap).
-    requireAnyPermission("articles.edit_any", "media.delete"),
+    // edit_own + authorizeArticleWriteByMediaAsset: صاحب المقال يحذف مرفقه اليتيم.
+    requireAnyPermission("articles.edit_any", "articles.edit_own", "media.delete"),
     async (req: any, res) => {
     try {
         const { id } = req.params;

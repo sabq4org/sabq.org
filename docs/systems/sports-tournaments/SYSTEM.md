@@ -1,6 +1,6 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-08-02 (هوية روشن «أخضر الملعب» + روشن في أندرويد الأصلي 1:1) | المالك: sports
+> آخر مراجعة: 2026-08-03 (لحظية روشن: هيرو/ترتيب/جولات + سباقات أثناء البث) | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
@@ -129,6 +129,23 @@
 - `compareByMatchPhase` في `server/routes/sports.ts` يطبَّق على `/round` و`bucketFixtures`.
 - لا تثبّت بطولة (مثل كأس العالم) فوق مجموعة فيها مباريات مباشرة — `liveCount` أولًا.
 - **صفحة البطولة (`SportsCompetition` / MatchesPane):** إن وُجدت أدوار (`/rounds`) يُعرض متصفّح الدور وحده — لا تُكرَّر نفس المباريات أسفله في أقسام مباشر/اليوم/قادمة/نتائج.
+
+## مؤشر الجولة الحالية (`GET /api/sports/:comp/rounds` → `current`)
+- قائمة الجولات تُكاش طويلًا (`spl:rounds:v2:*`)؛ حقل **`current` يُحسب في كل طلب** عبر `pickActiveRoundKey` من مباريات الموسم: أول جولة لم تكتمل كل مبارياتها (أو أول جولة بلا جدول بعد اكتمال ما قبلها). لا تعتمد على `fixtures/rounds?current=true` وحدها — المزود يبطئ التقدّم بعد الصافرة.
+- كاش HTTP للمسار قصير (`max-age=60, s-maxage=120`) حتى لا يعلق المؤشر على CDN.
+- عملاء الويب (`RslMatches` / `SportsHub` / `SportsCompetition`): `selected === null` يتبع `current`؛ النقرة اليدوية تثبّت الجولة.
+
+## لحظية روشن (`/roshn` + `pro-league`)
+| السطح | المصدر اللحظي | إيقاع العميل |
+|--------|----------------|---------------|
+| `/api/rsl/hero` | `getLiveFixtures` + `overlayLiveFixturesForComp` (TheSports) | 15ث عند live |
+| `/api/sports/pro-league/matches` | نفس الطبقة | 15ث عند live |
+| `/api/sports/pro-league/standings` | `applyProvisionalTable` على live **بعد** overlay TheSports | 15ث عند صف `live` |
+| `/api/sports/pro-league/round` | overlay على مباريات الجولة + كاش قصير عند hot | 15ث إن وُجدت مباراة live |
+| مركز المباراة `/api/sports/match/:id` | `overlayLiveMatchDetail` (نتيجة+أحداث+إحصاء) | 8ث live |
+| هدّافون / صناعة / بطاقات | كاش `:live` بـ SHORT (2د) أثناء وجود مباراة جارية | استطلاع 2د على `/roshn` |
+
+**Gotcha:** لوحات السباق الموسمية تتبع مزود `players/top*` (ليست دمج أحداث المباراة ككأس آسيا). الكروت/الأهداف **داخل** مركز المباراة لحظية عبر TheSports.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف

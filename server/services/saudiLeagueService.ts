@@ -72,6 +72,7 @@ import {
   localizeSplTransferType,
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
+import { pickActiveRoundKey } from "./pickActiveRound";
 
 const TIMEZONE = "Asia/Riyadh";
 
@@ -443,25 +444,40 @@ export interface SplRound {
 }
 
 /**
- * قائمة جولات البطولة + الجولة الحالية (من fixtures/rounds). تُرجع رؤوسًا خامًّا
- * (للاستعلام) + تسمية معرّبة (للعرض). فارغة لمن لا جولات له (خارج الموسم/كؤوس).
+ * قائمة جولات البطولة + الجولة الحالية للعرض.
+ * قائمة الجولات تُكاش طويلًا؛ `current` يُحسب في كل طلب من مباريات الموسم
+ * ويتقدّم تلقائيًا بعد اكتمال كل مباريات الجولة (لا يعتمد على مزود بطيء).
  */
 export async function getCompetitionRounds(
   comp: SaudiCompetition,
   seasonOverride?: number,
 ): Promise<{ rounds: SplRound[]; current: string | null }> {
   const season = seasonOverride ?? await seasonFor(comp);
-  return withSWR(`spl:rounds:${comp.id}:${season}`, ROUNDS_TTL, ROUNDS_TTL * 2, async () => {
-    const [all, cur] = await Promise.all([
-      apiGet("fixtures/rounds", { league: comp.id, season }),
-      apiGet("fixtures/rounds", { league: comp.id, season, current: "true" }).catch(() => [] as any[]),
-    ]);
-    const rounds: SplRound[] = (Array.isArray(all) ? all : [])
-      .filter((r: any) => typeof r === "string" && r.trim())
-      .map((r: string) => ({ key: r, label: localizeSplRound(r) }));
-    const current = Array.isArray(cur) && typeof cur[0] === "string" ? cur[0] : null;
-    return { rounds, current };
-  });
+  // v2: فصل apiCurrent عن current المحسوب حتى لا يُجمَّد التقدّم داخل كاش 30د.
+  const listed = await withSWR(
+    `spl:rounds:v2:${comp.id}:${season}`,
+    ROUNDS_TTL,
+    ROUNDS_TTL * 2,
+    async () => {
+      const [all, cur] = await Promise.all([
+        apiGet("fixtures/rounds", { league: comp.id, season }),
+        apiGet("fixtures/rounds", { league: comp.id, season, current: "true" }).catch(() => [] as any[]),
+      ]);
+      const rounds: SplRound[] = (Array.isArray(all) ? all : [])
+        .filter((r: any) => typeof r === "string" && r.trim())
+        .map((r: string) => ({ key: r, label: localizeSplRound(r) }));
+      const apiCurrent = Array.isArray(cur) && typeof cur[0] === "string" ? cur[0] : null;
+      return { rounds, apiCurrent };
+    },
+  );
+  let fixtures: SplFixture[] = [];
+  try {
+    fixtures = await getFixtures(comp, season);
+  } catch {
+    // غياب الجدول → نكتفي بإشارة المزود.
+  }
+  const current = pickActiveRoundKey(listed.rounds, listed.apiCurrent, fixtures);
+  return { rounds: listed.rounds, current };
 }
 
 /** مباريات جولة محدّدة (round الخام كما يعود من getCompetitionRounds). */
@@ -1114,11 +1130,28 @@ export interface SplScorer {
   matches: number;
 }
 
+/** كاش لوحات السباق: أثناء مباراة جارية مفتاح منفصل + TTL قصير (دقيقتان). */
+async function raceBoardCache(
+  comp: SaudiCompetition,
+  seasonOverride: number | undefined,
+  baseKey: string,
+): Promise<{ cacheKey: string; ttl: number }> {
+  const season = seasonOverride ?? (await seasonFor(comp));
+  if (seasonOverride != null) {
+    return { cacheKey: `${baseKey}:${comp.id}:${season}`, ttl: CACHE_TTL.LONG };
+  }
+  const hot = (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
+  return {
+    cacheKey: `${baseKey}:${comp.id}:${season}${hot ? ":live" : ""}`,
+    ttl: hot ? CACHE_TTL.SHORT : CACHE_TTL.LONG,
+  };
+}
+
 export async function getTopScorers(comp: SaudiCompetition, seasonOverride?: number): Promise<SplScorer[]> {
   if (!comp.hasScorers) return [];
   const season = seasonOverride ?? await seasonFor(comp);
-  const cacheKey = `spl:scorers:${comp.id}:${season}`;
-  return withSWR(cacheKey, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:scorers");
+  return withSWR(cacheKey, ttl, ttl * 2, async () => {
     const rows = await apiGet("players/topscorers", { league: comp.id, season });
     const nameList = rows.map((r: any) => r.player?.name);
     // لا نحبس على ترجمة AI داخل الطلب — كانت تضيف ثواني فوق طابور API-Football
@@ -1146,7 +1179,7 @@ export async function getTopScorers(comp: SaudiCompetition, seasonOverride?: num
     if (incomplete) {
       void resolveNames(nameList)
         .then((tr2) => {
-          swrCache.set(storeKey, mapRows(tr2), CACHE_TTL.LONG, CACHE_TTL.LONG * 2);
+          swrCache.set(storeKey, mapRows(tr2), ttl, ttl * 2);
         })
         .catch(() => {});
     }
@@ -3037,7 +3070,6 @@ export async function getPlayerForm(playerId: number): Promise<SplPlayerForm> {
 
 // ---------- الموجة 1: إثراء النادي والبطولة ----------
 
-const ASSISTS_TTL = CACHE_TTL.LONG; // صنّاع الأهداف يتحرك ببطء كالهدّافين
 const TEAM_STATS_TTL = 30 * 60 * 1000; // إحصاءات النادي شبه ثابتة بين الجولات
 const COACH_TTL = 6 * 60 * 60 * 1000; // المدرب لا يتغيّر إلا بين المواسم غالبًا
 const TEAM_SCORERS_TTL = CACHE_TTL.LONG; // هدّافو النادي يحتاج تجديدًا بطيئًا
@@ -3067,8 +3099,8 @@ export interface SplAssister {
 export async function getTopAssists(comp: SaudiCompetition, seasonOverride?: number): Promise<SplAssister[]> {
   if (!comp.hasScorers) return [];
   const season = seasonOverride ?? await seasonFor(comp);
-  const cacheKey = `spl:assists:${comp.id}:${season}`;
-  return withSWR(cacheKey, ASSISTS_TTL, ASSISTS_TTL * 2, async () => {
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:assists");
+  return withSWR(cacheKey, ttl, ttl * 2, async () => {
     const rows = await apiGet("players/topassists", { league: comp.id, season });
     const nameList = rows.map((r: any) => r.player?.name);
     const tr = await resolveNames(nameList, { skipAi: true });
@@ -3092,7 +3124,7 @@ export async function getTopAssists(comp: SaudiCompetition, seasonOverride?: num
     if (incomplete) {
       void resolveNames(nameList)
         .then((tr2) => {
-          swrCache.set(storeKey, mapRows(tr2), ASSISTS_TTL, ASSISTS_TTL * 2);
+          swrCache.set(storeKey, mapRows(tr2), ttl, ttl * 2);
         })
         .catch(() => {});
     }
@@ -3461,7 +3493,6 @@ const HISTORY_TTL = CACHE_TTL.LONG;
 const TRANSFERS_TTL = 60 * 60 * 1000; // الانتقالات تتحرّك في النوافذ فقط
 const INJURIES_TTL = 60 * 60 * 1000;
 const PREDICTION_TTL = 15 * 60 * 1000; // التوقعات تُحدَّث قبل المباراة
-const CARDS_TTL = CACHE_TTL.LONG;
 const COMP_META_TTL = SEASON_TTL;
 
 // ---------- البند 9: ترويسة البطولة (شعار + موسم) ----------
@@ -4188,8 +4219,8 @@ export interface SplCardLeader {
 async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red", seasonOverride?: number): Promise<SplCardLeader[]> {
   const season = seasonOverride ?? await seasonFor(comp);
   const path = kind === "yellow" ? "players/topyellowcards" : "players/topredcards";
-  const cacheKey = `spl:${path}:${comp.id}:${season}`;
-  return withSWR(cacheKey, CARDS_TTL, CARDS_TTL * 2, async () => {
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, `spl:${path}`);
+  return withSWR(cacheKey, ttl, ttl * 2, async () => {
     const rows = await apiGet(path, { league: comp.id, season });
     const nameList = rows.map((r: any) => r.player?.name);
     const tr = await resolveNames(nameList, { skipAi: true });
@@ -4214,7 +4245,7 @@ async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red", se
     if (incomplete) {
       void resolveNames(nameList)
         .then((tr2) => {
-          swrCache.set(storeKey, mapRows(tr2), CARDS_TTL, CARDS_TTL * 2);
+          swrCache.set(storeKey, mapRows(tr2), ttl, ttl * 2);
         })
         .catch(() => {});
     }

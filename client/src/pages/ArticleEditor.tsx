@@ -169,6 +169,10 @@ import type { Editor } from "@tiptap/react";
 import type { MediaFile } from "@shared/schema";
 import { SortableAttachmentItem } from "@/components/article-editor/SortableAttachmentItem";
 import { ImageCaptionForm } from "@/components/article-editor/ImageCaptionForm";
+import {
+  listEditableAttachments,
+  mediaAssetUrl,
+} from "@/components/article-editor/mediaAssetHelpers";
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
@@ -618,6 +622,8 @@ export default function ArticleEditor() {
     enabled: !isNewArticle && !!article?.id,
   });
   const mediaAssets = Array.isArray(mediaAssetsRaw) ? mediaAssetsRaw : [];
+  // يشمل اليتامى بلا URL — الفلترة القديمة كانت تخفي المرفق فلا يظهر زر الحذف.
+  const editableAttachments = listEditableAttachments(mediaAssets);
 
   // مقالات الرأي: اليوم الأسبوعي المخصص لكاتب المقال — يعبّئ الجدولة تلقائياً ويبقى قابلاً للتغيير
   const writerSlotPrefillRef = useRef<string | null>(null);
@@ -759,7 +765,10 @@ export default function ArticleEditor() {
       setThumbnailUrl(validThumbnailUrl);
       setThumbnailManuallyDeleted((article as any).thumbnailManuallyDeleted || false);
       setImageFocalPoint((article as any).imageFocalPoint || null);
-      setAlbumImages(Array.isArray((article as any).albumImages) ? (article as any).albumImages : []);
+      const loadedAlbum = Array.isArray((article as any).albumImages) ? (article as any).albumImages : [];
+      setAlbumImages(loadedAlbum);
+      // ألبوم مطوي افتراضياً كان يخفي صوراً موجودة — افتحه إن وُجدت صور.
+      if (loadedAlbum.length > 0) setAlbumOpen(true);
       const loadedArticleType = (article.articleType as any) || "news";
       setArticleType(loadedArticleType);
       // Handle infographic type
@@ -2266,13 +2275,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
   const handleAttachmentDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active.id !== over?.id) {
-      const filteredAssets = mediaAssets
-        .filter((a: any) => a.mediaFile?.url || a.url)
-        .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
-      const oldIndex = filteredAssets.findIndex((a: any) => a.id === active.id);
-      const newIndex = filteredAssets.findIndex((a: any) => a.id === over?.id);
+      const ordered = listEditableAttachments(mediaAssets);
+      const oldIndex = ordered.findIndex((a: any) => a.id === active.id);
+      const newIndex = ordered.findIndex((a: any) => a.id === over?.id);
       if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(filteredAssets, oldIndex, newIndex);
+        const newOrder = arrayMove(ordered, oldIndex, newIndex);
         reorderAttachmentsMutation.mutate(newOrder.map((a: any) => a.id));
       }
     }
@@ -3024,6 +3031,27 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     onOpenLibrary={() => setShowMediaPicker(true)}
                   />
                 )}
+                {/* تعريف بارز يتيم بعد مسح الصورة — كان يختفي مع اختفاء نموذج الشرح. */}
+                {!imageUrl && !isOpinionAuthor && (() => {
+                  const orphanHero = mediaAssets.find((a: any) => a.displayOrder === 0);
+                  if (!orphanHero?.id) return null;
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      <span>يوجد تعريف صورة بارزة بلا صورة — احذفه إن لم تعد تحتاجه.</span>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-7"
+                        disabled={deleteCaptionMutation.isPending}
+                        onClick={() => deleteCaptionMutation.mutate(orphanHero.id)}
+                        data-testid="button-delete-orphan-hero-caption"
+                      >
+                        حذف التعريف اليتيم
+                      </Button>
+                    </div>
+                  );
+                })()}
                 {imageUrl && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg border">
                     <img
@@ -3205,11 +3233,16 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         variant="destructive"
                         size="sm"
                         onClick={() => {
+                          const heroAsset = mediaAssets.find((a: any) => a.displayOrder === 0);
                           setImageUrl("");
                           setIsAiGeneratedImage(false);
                           setThumbnailUrl("");
                           setHeroImageMediaId(null);
                           setImageFocalPoint(null);
+                          // صف التعريف (displayOrder 0) كان يبقى يتيماً في المرفقات/المكتبة.
+                          if (heroAsset?.id) {
+                            deleteCaptionMutation.mutate(heroAsset.id);
+                          }
                           toast({
                             title: "تم حذف الصورة",
                             description: "تم حذف الصورة البارزة بنجاح",
@@ -3582,7 +3615,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
-                          {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length} مرفق
+                          {editableAttachments.length} مرفق
                         </Badge>
                         <Button
                           variant="outline"
@@ -3596,7 +3629,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         </Button>
                       </div>
                     </div>
-                    {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
+                    {editableAttachments.some((a) => !mediaAssetUrl(a)) && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+                        يوجد مرجع مرفق بلا صورة ظاهرة — احذفه من البطاقة التي تحمل علامة «!» إن لم تعد تحتاجه.
+                      </p>
+                    )}
+                    {editableAttachments.length > 0 ? (
                       <div className="max-h-[400px] overflow-y-auto rounded-lg border bg-muted/10 p-2" dir="rtl">
                         <DndContext
                           sensors={sensors}
@@ -3604,17 +3642,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           onDragEnd={handleAttachmentDragEnd}
                         >
                           <SortableContext
-                            items={mediaAssets
-                              .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                              .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                              .map((asset: any) => asset.id)}
+                            items={editableAttachments.map((asset: any) => asset.id)}
                             strategy={rectSortingStrategy}
                           >
                             <div className="grid grid-cols-2 gap-3">
-                              {mediaAssets
-                                .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                                .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                                .map((asset: any, index: number) => (
+                              {editableAttachments.map((asset: any, index: number) => (
                                   <SortableAttachmentItem
                                     key={asset.id}
                                     asset={asset}
@@ -4764,34 +4796,40 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       المرفقات
                     </span>
                     <Badge variant="outline" className="text-xs">
-                      {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length || 0}
+                      {editableAttachments.length}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    صور مرفقة من البريد الإلكتروني أو واتساب
+                    صور مرفقة من البريد أو واتساب — بما فيها المراجع اليتيمة بلا معاينة
                   </p>
                   
-                  {/* Quick preview of attachments */}
-                  {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
+                  {/* Quick preview of attachments (يشمل اليتامى) */}
+                  {editableAttachments.length > 0 ? (
                     <div className="grid grid-cols-3 gap-2">
-                      {mediaAssets
-                        .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                        .slice(0, 6)
-                        .map((asset: any, index: number) => {
-                          const imageUrl = asset.mediaFile?.url || asset.url;
+                      {editableAttachments.slice(0, 6).map((asset: any, index: number) => {
+                          const previewUrl = mediaAssetUrl(asset);
                           return (
                             <div 
                               key={asset.id} 
-                              className="relative aspect-square rounded-md border bg-muted/30"
+                              className={`relative aspect-square rounded-md border bg-muted/30 ${
+                                !previewUrl ? "border-dashed border-amber-400" : ""
+                              }`}
                             >
-                              <img
-                                src={imageUrl}
-                                alt={asset.altText || `مرفق ${index + 1}`}
-                                className="w-full h-full object-cover rounded-md"
-                                loading="lazy"
-                              />
+                              {previewUrl ? (
+                                <img
+                                  src={previewUrl}
+                                  alt={asset.altText || `مرفق ${index + 1}`}
+                                  className="w-full h-full object-cover rounded-md"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-center bg-amber-50 dark:bg-amber-950/30 rounded-md">
+                                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                                  <span className="text-[9px] font-bold text-amber-800 dark:text-amber-200">بلا صورة</span>
+                                </div>
+                              )}
                               <Button
                                 variant="destructive"
                                 size="icon"
@@ -4820,10 +4858,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
                   
-                  {/* Show more indicator if there are more than 6 */}
-                  {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 6 && (
+                  {editableAttachments.length > 6 && (
                     <p className="text-xs text-center text-muted-foreground">
-                      +{mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length - 6} مرفق آخر
+                      +{editableAttachments.length - 6} مرفق آخر
                     </p>
                   )}
                   
