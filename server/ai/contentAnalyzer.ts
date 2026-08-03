@@ -10,6 +10,7 @@ import {
   SABQ_PRIMARY_EDITOR_MODEL,
   SABQ_FALLBACK_EDITOR_MODEL,
 } from "./sabqEditorialPrompt";
+import { assertEditedContentComplete } from "./editorialOutputGuards";
 
 // حدود صريحة بدل افتراضات SDK (10 دقائق × 2 retries) — انظر نظيرتها في
 // server/openai.ts. fallback التحرير هنا 8000 توكن فالمهلة أسخى قليلًا.
@@ -432,8 +433,10 @@ ${SABQ_FEWSHOT_AR}
 ✅ **نظّف**: النص من أي شيء لا يتعلق بالخبر
 ✅ **حرّر**: بأسلوب سبق الاحترافي
 ✅ **احتفظ**: بكل التفاصيل والمعلومات الإخبارية
+✅ **الاقتباس**: استخدم القوسين «...» لكل اقتباس أو تسمية داخل النصوص
 ❌ **لا تضيف**: حقائق غير موجودة
 ❌ **لا تغيّر**: الحقائق الواردة أو المصادر
+❌ **لا تستخدم أبدًا** علامة التنصيص المزدوجة (") داخل قيم JSON — استبدلها بـ«...»
 
 ## 🎯 الهدف النهائي
 خبر نظيف، محرّر باحترافية، جاهز للنشر فوراً وفق معايير صحيفة سبق! 🚀`,
@@ -565,9 +568,11 @@ Evaluate the ORIGINAL text (after cleaning, before editing) on a 0-100 scale:
 ✅ **Edit**: In Sabq English professional style for international readers
 ✅ **Keep**: All news details, verified facts, and proper attribution
 ✅ **Reflect**: Saudi Arabia positively, emphasizing achievements and development
+✅ **Quotes**: Use curly quotation marks "…" for quotes inside text values
 ❌ **Don't add**: Facts not in original
 ❌ **Don't change**: Stated facts or sources
 ❌ **Don't use**: Sensationalism, clickbait, or casual language
+❌ **Never use** straight double quotes (") inside JSON string values — use curly "…" instead
 
 ## 🎯 Final Goal
 Professional English news story, ready for immediate publication, presenting Saudi Arabia to the world with accuracy and polish! 🚀`,
@@ -663,8 +668,10 @@ Professional English news story, ready for immediate publication, presenting Sau
 ✅ **صاف کریں**: متن سے کوئی بھی چیز جو خبر سے متعلق نہیں
 ✅ **ترمیم کریں**: سبق پیشہ ورانہ انداز میں
 ✅ **رکھیں**: تمام خبری تفصیلات اور معلومات
+✅ **اقتباس**: متن کے اندر اقتباسات کے لیے ہمیشہ «...» استعمال کریں
 ❌ **شامل نہ کریں**: حقائق جو اصل میں نہیں
 ❌ **تبدیل نہ کریں**: بیان شدہ حقائق یا ذرائع
+❌ JSON اقدار کے اندر سیدھی ڈبل کوٹیشن (") کبھی استعمال نہ کریں — «...» استعمال کریں
 
 ## 🎯 حتمی ہدف
 صاف خبر، پیشہ ورانہ طور پر ترمیم شدہ، سبق کے معیار کے مطابق فوری اشاعت کے لیے تیار! 🚀`,
@@ -716,6 +723,9 @@ Professional English news story, ready for immediate publication, presenting Sau
         throw new Error("Empty response from Claude");
       }
       result = JSON.parse(stripJsonCodeFences(responseText));
+      // بتر Structured Outputs الصامت (علامة " غير مهرَّبة تُغلق السلسلة مبكرًا)
+      // يمر من فحص stop_reason لأن JSON يصل صالحًا — نفحص اكتمال المحتوى نفسه
+      assertEditedContentComplete(result?.optimized?.content || "", editorInput);
       console.log(`[Sabq Editor] Edited with ${SABQ_PRIMARY_EDITOR_MODEL}`);
     } catch (claudeError: any) {
       console.warn(
@@ -747,6 +757,8 @@ Professional English news story, ready for immediate publication, presenting Sau
       }
 
       result = JSON.parse(response.choices[0].message.content || "{}");
+      // نفس فحص الاكتمال على البديل — الرمي هنا يصعد لـ withRetry فيعيد المحاولة
+      assertEditedContentComplete(result?.optimized?.content || "", editorInput);
     }
 
     console.log("[Sabq Editor] Analysis and editing completed successfully");
@@ -755,6 +767,7 @@ Professional English news story, ready for immediate publication, presenting Sau
     console.log("[Sabq Editor] Category:", result.detectedCategory);
     console.log("[Sabq Editor] Has news value:", result.hasNewsValue);
     console.log("[Sabq Editor] Optimized title:", result.optimized?.title?.substring(0, 60));
+    console.log("[Sabq Editor] Optimized content length:", result.optimized?.content?.length || 0, "(input:", text.length + ")");
 
     const finalLang = normalizeLanguageCode(result.language || normalizedLang);
 
