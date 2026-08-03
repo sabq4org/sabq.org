@@ -14191,6 +14191,8 @@ export const opinionTicketMessagesRelations = relations(opinionTicketMessages, (
 export const insertOpinionTicketSchema = z.object({
   title: z.string().trim().min(3, "العنوان قصير جداً").max(255, "العنوان طويل جداً"),
   message: z.string().trim().min(1, "نص الاستفسار مطلوب").max(10000, "النص طويل جداً"),
+  /** أدمن فقط: إنشاء تذكرة صادرة إلى مساهم (مراسل / كاتب رأي / زاوية). */
+  writerId: z.string().trim().min(1).optional(),
 });
 
 export const insertOpinionTicketMessageSchema = z.object({

@@ -1,6 +1,6 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-08-03 (لحظية روشن: هيرو/ترتيب/جولات + سباقات أثناء البث) | المالك: sports
+> آخر مراجعة: 2026-08-03 (لحظية روشن + كأس الملك أثناء البث) | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
@@ -147,8 +147,22 @@
 
 **Gotcha:** لوحات السباق الموسمية تتبع مزود `players/top*` (ليست دمج أحداث المباراة ككأس آسيا). الكروت/الأهداف **داخل** مركز المباراة لحظية عبر TheSports.
 
+## لحظية كأس الملك (`/kings-cup` + `/api/kings-cup/*`)
+الطبقة الأساسية كانت جاهزة (`overlayLiveFixturesForComp` / `overlayLiveMatchDetail` على fixtures/live/overview/match). فجوات أُغلقت لتطابق روشن:
+
+| السطح | المصدر اللحظي | إيقاع العميل |
+|--------|----------------|---------------|
+| `/api/kings-cup/overview` | live + دمج فوق fixtures | 15ث عند live (صفحة + بلوك الرئيسية) |
+| `/api/kings-cup/fixtures` + `/bracket` | overlay TheSports | 15ث عند live |
+| `/api/kings-cup/match/:id` | `overlayLiveMatchDetail` | **8ث** live (كان 15ث) |
+| هدّافون / صناعة / بطاقات | `raceBoardCache` مع `:live` + SHORT حتى مع `KC_SEASON` للموسم الجاري | استطلاع 2د على `/kings-cup` |
+| Cache-Control عند live | `s-maxage=5` (overview/fixtures/live/bracket/match) | — |
+
+**Gotcha:** `raceBoardCache` كان يعامل أي `seasonOverride` كأرشيف (TTL طويل بلا `:live`). كأس الملك يمرّر `KC_SEASON` دائمًا عند ضبطه — الأرشيف فقط عندما يختلف الموسم عن `current` للمنافسة.
+
 ## عند التعديل
 - [ ] قرأت هذا الملف
 - [ ] إن لمس التوقعات: اقرأ أيضاً `predictions-core/SYSTEM.md`
 - [ ] إن لمس روشن: اختبر فك `scorers/assists/cards` وصفحة نادٍ ومركز مباراة على iOS
+- [ ] إن لمس كأس الملك: اختبر overview/fixtures/bracket + مركز مباراة + سباقات أثناء مباراة حية (ومع `KC_SEASON` مضبوط)
 - [ ] حافظ على الأرقام اللاتينية وروابط `/roshn` و`/sports/team/*`
