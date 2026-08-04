@@ -29,7 +29,9 @@ import {
 import { fetchSingleSource, runRadarCycle } from "../services/radar/cycle";
 import { isRadarForceDisabled } from "../services/radar/flags";
 import { transformItem } from "../services/radar/transformer";
+import { developItem } from "../services/radar/developer";
 import { exportItemToArticle } from "../services/radar/exporter";
+import { isWebSearchConfigured } from "../services/webSearchService";
 import { isTelegramConfigured } from "../services/radar/alerts";
 import { detectWatchType, xProvidersConfigured } from "../services/radar/xProvider";
 
@@ -69,7 +71,11 @@ export function registerRadarRoutes(app: Express) {
   app.get("/api/radar/stats", requireAuth, canView, async (_req, res) => {
     try {
       const stats = await radarStats();
-      res.json({ ...stats, telegramConfigured: isTelegramConfigured() });
+      res.json({
+        ...stats,
+        telegramConfigured: isTelegramConfigured(),
+        webSearchConfigured: isWebSearchConfigured(),
+      });
     } catch (error) {
       console.error("[Radar API] stats failed:", error);
       res.status(500).json({ message: "تعذر جلب إحصاءات الرادار" });
@@ -114,6 +120,22 @@ export function registerRadarRoutes(app: Express) {
     } catch (error) {
       console.error("[Radar API] transform failed:", error);
       res.status(502).json({ message: "تعذر التحويل التحريري — حاول مجددًا" });
+    }
+  });
+
+  // «طوّر ببحث» — نظام التحرير الموحد: بحث تحقق + مسودة مثراة بعزو (المرحلة 2)
+  app.post("/api/radar/items/:id/develop", requireAuth, canWork, async (req, res) => {
+    try {
+      const item = await getItem(String(req.params.id));
+      if (!item) return res.status(404).json({ message: "المادة غير موجودة" });
+      if (item.status === "exported") {
+        return res.status(409).json({ message: "المادة صُدّرت مسبقًا" });
+      }
+      const updated = await developItem(item);
+      res.json({ item: updated });
+    } catch (error) {
+      console.error("[Radar API] develop failed:", error);
+      res.status(502).json({ message: "تعذر التطوير التحريري — حاول مجددًا" });
     }
   });
 
