@@ -1228,7 +1228,8 @@ private fun MxMatchRow(
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onToggleFollow, Modifier.size(24.dp)) {
+        // ‏40dp هدف لمس (كانت 24 فوق صف قابل للنقر — اللمسة الخاطئة تفتح المباراة).
+        IconButton(onToggleFollow, Modifier.size(40.dp)) {
             Icon(
                 if (following) Icons.Default.Star else Icons.Default.StarBorder,
                 contentDescription = if (following) "إلغاء متابعة المباراة" else "متابعة المباراة",
@@ -1236,7 +1237,7 @@ private fun MxMatchRow(
                 modifier = Modifier.size(16.dp),
             )
         }
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(2.dp))
         MxTeamCell(fx.home.name, fx.home.logo, Modifier.weight(1f), reverse = false)
         MxRowCenter(fx, showCompetition)
         MxTeamCell(fx.away.name, fx.away.logo, Modifier.weight(1f), reverse = true)

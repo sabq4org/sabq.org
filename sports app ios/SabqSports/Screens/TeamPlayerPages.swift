@@ -34,7 +34,8 @@ struct SpTeamPage: View {
                 if loading && profile == nil {
                     SpLoading().padding(.top, 20)
                 } else if let loadError, profile == nil {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                 retry: { Task { await load() } })
                 } else if let p = profile {
                     content(p)
                 }
@@ -467,7 +468,8 @@ struct SpPlayerPage: View {
                 if loading && card == nil {
                     SpLoading().padding(.top, 30)
                 } else if let loadError, card == nil {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                 retry: { Task { await load() } })
                 } else if let c = card {
                     identityHeader(c)
                     factTiles(c)

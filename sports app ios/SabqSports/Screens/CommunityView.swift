@@ -37,7 +37,8 @@ struct CommunityView: View {
                     if loading {
                         SpLoading()
                     } else if let loadError {
-                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                     retry: { Task { await load(force: true) } })
                     } else if entries.isEmpty {
                         SpEmptyState(icon: "trophy", title: L("لا متصدّرين بعد"),
                                      subtitle: L("كن أول من يتصدّر بتوقّعاتك هذا الموسم"))

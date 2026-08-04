@@ -242,7 +242,8 @@ struct SpMatchCenter: View {
                 if loading && detail == nil {
                     SpLoading()
                 } else if let loadError, detail == nil {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                 retry: { Task { await load() } })
                 } else if let d = detail {
                     content(d)
                 }
@@ -250,6 +251,7 @@ struct SpMatchCenter: View {
             .padding(.vertical, 8)
             .padding(.bottom, 24)
         }
+        .refreshable { await load() }
         .background(SpAmbientBackground())
         .navigationTitle(L("مركز المباراة"))
         .navigationBarTitleDisplayMode(.inline)

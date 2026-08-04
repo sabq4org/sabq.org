@@ -56,6 +56,22 @@ android {
         }
     }
 
+    // حارس النشر: AAB بمفتاح debug يرفضه Play حتمًا — نفشل عند طلب حزمة المتجر
+    // بدل اكتشاف الخطأ عند الرفع. assembleRelease يبقى مسموحًا للبناء المحلي
+    // (سقوط آمن لمفتاح debug كما هو موثق أدناه).
+    if (!hasVaraSigning) {
+        tasks.configureEach {
+            if (name == "bundleRelease" || name == "signReleaseBundle") {
+                doFirst {
+                    throw GradleException(
+                        "مفاتيح توقيع VARA غائبة (vara.* في android-native/local.properties أو متغيرات VARA_*) — " +
+                            "حزمة AAB ستُوقَّع بمفتاح debug وسيرفضها Google Play. أضف المفاتيح ثم أعد البناء.",
+                    )
+                }
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".dev"

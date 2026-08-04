@@ -56,7 +56,8 @@ struct LiveView: View {
         if loading && world.isEmpty {
             SpLoading()
         } else if let loadError, world.isEmpty {
-            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                         retry: { Task { await load(force: true) } })
         } else if world.isEmpty {
             SpEmptyState(icon: "globe",
                          title: L("لا مباريات مباشرة عالميًا الآن"),

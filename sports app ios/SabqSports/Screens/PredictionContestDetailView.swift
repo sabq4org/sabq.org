@@ -28,7 +28,8 @@ struct PredictionContestDetailView: View {
                 } else {
                     SpEmptyState(icon: "wifi.exclamationmark",
                                  title: L("تعذّر تحميل المسابقة"),
-                                 subtitle: L("تحقق من اتصالك ثم حاول مجددًا"))
+                                 subtitle: L("تحقق من اتصالك ثم حاول مجددًا"),
+                                 retry: { Task { await load() } })
                 }
             }
             .padding(.horizontal, 16)

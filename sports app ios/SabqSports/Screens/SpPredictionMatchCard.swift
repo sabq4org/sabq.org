@@ -1,7 +1,7 @@
 import SwiftUI
 
 // بطاقة توقّع مباراة — عدّادات النتيجة + «توقّع VARA» + نبض الجمهور +
-// معاينة البركة (50/30/20) + زرّ الإرسال. تتكيّف مع الحالة: قابلة للتوقّع /
+// معاينة الجائزة (50/30/20) + زرّ الإرسال. تتكيّف مع الحالة: قابلة للتوقّع /
 // مُقفلة (بانتظار النتيجة) / مُسوّاة (تعرض النتيجة وطبقتي ونصيبي).
 struct SpPredictionMatchCard: View {
     let match: SpPredictableMatch
@@ -270,7 +270,7 @@ struct SpPredictionMatchCard: View {
         .frame(maxWidth: 100)
     }
 
-    // MARK: - نبض الجمهور + معاينة البركة
+    // MARK: - نبض الجمهور + معاينة الجائزة
 
     private var crowdLine: some View {
         HStack(spacing: 4) {
@@ -285,7 +285,7 @@ struct SpPredictionMatchCard: View {
         VStack(spacing: 9) {
             HStack(spacing: 6) {
                 Image(systemName: "banknote").font(.system(size: 11)).foregroundStyle(SpTheme.gold)
-                Text(L("البركة المتاحة"))
+                Text(L("الجائزة المتاحة"))
                     .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 Spacer(minLength: 0)
                 Text(Lf("%d نقطة", match.poolAvailable))

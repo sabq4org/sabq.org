@@ -421,7 +421,7 @@ private fun CpCompetitionRow(comp: CpComp, isFavorite: Boolean, onToggleFavorite
             Text(label, color = color, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(4.dp))
         }
-        IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onToggleFavorite, modifier = Modifier.size(40.dp)) {
             Icon(
                 if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                 if (isFavorite) "إزالة من بطولاتي" else "إضافة إلى بطولاتي",

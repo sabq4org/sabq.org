@@ -240,6 +240,10 @@ class VaraViewModel(application: Application) : AndroidViewModel(application) {
         if (!token.isNullOrBlank()) runCatching {
             api.memberDelete("/devices/unregister", body = buildJsonObject { put("deviceToken", token) })
         }
+        // الخروج الصريح يمسح بيانات الإكمال التلقائي المحفوظة (لا تبقى كلمة مرور
+        // صالحة على الجهاز بعد قرار مغادرة)؛ انتهاء الجلسة القسري (clearSession
+        // عبر مسبار 401) يبقيها كي يسهل الدخول مجددًا — نظير سلوك iOS.
+        credentials.clear()
         clearSession()
         _account.value = _account.value.copy(error = null)
     }

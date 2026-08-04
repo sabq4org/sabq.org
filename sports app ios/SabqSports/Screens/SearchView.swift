@@ -64,6 +64,8 @@ struct SpSearchView: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(SpTheme.onDarkFaint)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Circle().inset(by: -10))
                 }
                 .accessibilityLabel(L("مسح البحث"))
             }

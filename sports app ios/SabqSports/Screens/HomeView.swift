@@ -111,7 +111,8 @@ struct HomeView: View {
                         if loading && matches == nil && standings.isEmpty {
                             SpLoading().padding(.top, 40)
                         } else if let loadError, matches == nil, standings.isEmpty, outlook == nil {
-                            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                         retry: { Task { await loadAll(force: true) } })
                                 .padding(.horizontal, 16)
                         } else {
                             dashboardContent
