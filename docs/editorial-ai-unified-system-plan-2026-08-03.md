@@ -5,7 +5,10 @@
 `server/ai/prompts/{constitution,tasks}.ts` + `server/services/editorialAiService.ts` +
 `server/routes/editorialAi.ts` (مسجل في splitRoutesIndex). ملاحظة تنفيذية: البرومبتات
 ثوابت TS لا ملفات md — بناء الخادم حزمة esbuild واحدة لا تُنسخ معها ملفات md
-(نفس نمط sabqEditorialPrompt.ts). المتبقي من المرحلة 1: شريط الأدوات في ArticleEditor.
+(نفس نمط sabqEditorialPrompt.ts). واجهة «محرر سبق» في ArticleEditor منفذة
+(`client/src/components/article-editor/SabqEditorAssistant.tsx` + زر في صف أدوات
+الذكاء) — فاكتملت المرحلة 1. المتبقي: المرحلة 2 (زر «طوّر» بالرادار مع
+verificationContext من بحث ويب) والمرحلة 4 (لوحة القياس).
 **المرجع:** جلسة عمل تحريرية موسعة (رادار/تحرير/تطوير/دمج/مراجعة/تقارير) صُقلت خلالها المنهجية المدونة أدناه
 
 ---
