@@ -52,6 +52,7 @@ import {
   Send,
   ArrowRight,
   Sparkles,
+  NotebookPen,
   FileText,
   ImagePlus,
   Loader2,
@@ -109,6 +110,7 @@ import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
 import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
+import { SabqEditorAssistant } from "@/components/article-editor/SabqEditorAssistant";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
@@ -314,6 +316,7 @@ export default function ArticleEditor() {
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<Date | null>(null);
   const [showDraftRecoveryDialog, setShowDraftRecoveryDialog] = useState(false);
   const [showProofreadDialog, setShowProofreadDialog] = useState(false);
+  const [showSabqAssistant, setShowSabqAssistant] = useState(false);
   const [proofreadIssues, setProofreadIssues] = useState<Array<{
     original: string;
     suggestion: string;
@@ -2396,6 +2399,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         setContent={setContent}
       />
 
+      {/* محرر سبق — مهام التحرير الموحد */}
+      <SabqEditorAssistant
+        open={showSabqAssistant}
+        onOpenChange={setShowSabqAssistant}
+        articleTitle={title}
+        articleContent={content}
+        onApplyHeadline={handleTitleChange}
+        onApplyBody={(html) => {
+          setContent(html);
+          editorInstance?.commands.setContent(html);
+        }}
+      />
+
       <AlertDialog open={showDraftRecoveryDialog} onOpenChange={setShowDraftRecoveryDialog}>
         <AlertDialogContent className="max-w-md" data-testid="dialog-draft-recovery">
           <AlertDialogHeader>
@@ -3709,6 +3725,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Button>
                       )}
                       
+                      {/* محرر سبق — نظام التحرير الموحد (حرر/طور/ادمج/راجع/فحص...) */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowSabqAssistant(true)}
+                        className="gap-2 w-full sm:w-auto justify-center"
+                        data-testid="button-sabq-assistant"
+                        title="مهام التحرير الموحد وفق الدستور التحريري — المخرج مسودة لا تُطبق إلا بقرارك"
+                      >
+                        <NotebookPen className="h-4 w-4" />
+                        محرر سبق
+                      </Button>
+
                       {/* Proofread Button - Spell check only, no auto-modification */}
                       <Button
                         variant="outline"
