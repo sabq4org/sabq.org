@@ -34,7 +34,8 @@
 | 14 | كبسولة iOS | حسم DEVELOPMENT_TEAM في pbxproj (CBU7MJEC5R أم 23LXQW27YA) — تغيير غير ملتزم | ذاكرة `capsulah-ios-app` |
 | 15 | كاش سلبي للمحتوى المحذوف + `sports/player` + سقف autoscale | مؤجلات حادثة ضغط Neon | ذاكرة `slowness-db-pressure-2026-07-22` |
 | 16 | **مهلة على single-flight في `withSWR`** — وعد جلب معلّق لا يكتمل أبدًا يسمّم مفتاح الكاش للأبد (حادثة VARA ‏2026-07-31) | ✅ الإصلاح مكتمل على PR ‏#1325 ‏(2026-07-31): سقف انتظار 20ث + إسقاط الوعود المعمّرة 45ث في `withSWR`/`withCache` + `query_timeout` 60ث لبركة pg — بانتظار الدمج | ذاكرة `swr-poisoned-inflight-2026-07-31` |
+| 17 | **نظام التحرير الموحد بالذكاء الاصطناعي («محرر سبق»)** | ✅ المرحلة 0 + خلفية المرحلة 1 منفذتان 2026-08-03 (غير مكوميت): برومبتات `server/ai/prompts/` + `editorialAiService` + مسار `/api/editorial-ai` مع فحص precheck. المتبقي: واجهة شريط الأدوات في ArticleEditor، زر «طوّر» بالرادار مع بحث ويب، ولوحة القياس | [`docs/editorial-ai-unified-system-plan-2026-08-03.md`](editorial-ai-unified-system-plan-2026-08-03.md) |
 
 ---
 
-*آخر تحديث: 2026-07-31*
+*آخر تحديث: 2026-08-03*

@@ -87,6 +87,7 @@ import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
 import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
+import editorialAiRouter from "./editorialAi";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -185,4 +186,6 @@ export function registerSplitRoutes(app: Express) {
   // إكمال تسجيل عضوية الجوال + استكمال الحسابات القديمة (auth-rbac)
   app.use(phoneRegistrationRouter);
   app.use(audioNewsletterCompatibilityRouter);
+  // نظام التحرير الموحد «محرر سبق» (docs/editorial-ai-unified-system-plan-2026-08-03.md)
+  app.use(editorialAiRouter);
 }
