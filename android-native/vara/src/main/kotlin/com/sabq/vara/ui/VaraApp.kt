@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,6 +102,7 @@ object Routes {
     const val About = "about"
     const val Terms = "terms"
     const val Usage = "usage"
+    const val Privacy = "privacy"
     const val DeleteAccount = "delete-account"
     const val CompleteName = "complete-name"
 }
@@ -230,6 +233,10 @@ private fun VaraNavigation(nav: NavHostController, vm: VaraViewModel) {
             startDestination = Routes.Matches,
             modifier = Modifier
                 .padding(padding)
+                // مع edge-to-edge لا يعمل adjustResize وحده: نستهلك حشوة الـScaffold
+                // ثم نرفع المحتوى فوق الكيبورد كي لا يغطي حقول الإدخال وأزرارها.
+                .consumeWindowInsets(padding)
+                .imePadding()
                 .then(if (isRoot) Modifier.nestedScroll(tabBarScroll) else Modifier),
         ) {
             composable(Routes.Matches) { MatchesScreen(nav, vm) }
@@ -256,6 +263,7 @@ private fun VaraNavigation(nav: NavHostController, vm: VaraViewModel) {
             composable(Routes.About) { LegalScreen(nav, "عن التطبيق") }
             composable(Routes.Terms) { LegalScreen(nav, "الشروط والأحكام") }
             composable(Routes.Usage) { LegalScreen(nav, "سياسة الاستخدام") }
+            composable(Routes.Privacy) { LegalScreen(nav, "سياسة الخصوصية") }
             composable(Routes.DeleteAccount) { DeleteAccountScreen(nav, vm) }
             composable(Routes.CompleteName) { CompleteNameScreen(nav, vm) }
             // صفحتا «الكل» من شاشة روشن: الترتيب الكامل والهدّافون/الصنّاع.
