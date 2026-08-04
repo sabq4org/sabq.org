@@ -535,6 +535,8 @@ private fun AcAboutSection(nav: NavHostController, context: Context, version: St
         Column(Modifier.fillMaxWidth().clip(VaraCardShape).background(c.surface)) {
             SettingsRow(Icons.Default.Info, "عن التطبيق", null, c.textDim) { nav.navigate(Routes.About) }
             Box(Modifier.padding(start = 56.dp)) { VaraDivider() }
+            SettingsRow(Icons.Default.Lock, "سياسة الخصوصية", null, c.textDim) { nav.navigate(Routes.Privacy) }
+            Box(Modifier.padding(start = 56.dp)) { VaraDivider() }
             SettingsRow(Icons.Default.VerifiedUser, "سياسة الاستخدام", null, c.textDim) { nav.navigate(Routes.Usage) }
             Box(Modifier.padding(start = 56.dp)) { VaraDivider() }
             SettingsRow(Icons.Default.Description, "شروط الاستخدام", null, c.textDim) { nav.navigate(Routes.Terms) }
@@ -1592,6 +1594,26 @@ fun LegalScreen(nav: NavHostController, title: String) {
                 ),
                 LegalSectionSpec("مصادر البيانات", "تُجمع نتائج المباريات والإحصاءات من مزوّدي بيانات رياضية متخصّصين، وقد تتأخّر أو تختلف قليلًا عن المصادر الرسمية. وتبقى توقّعات التطبيق تقديرية للمتعة والتحليل فقط."),
                 LegalSectionSpec("الإصدار", "النسخة الحالية: $version."),
+            ),
+        )
+        // متطلب Google Play: سياسة خصوصية متاحة داخل التطبيق (User Data policy).
+        "سياسة الخصوصية" -> Triple(
+            Icons.Default.Lock,
+            "خصوصيتك أولوية. توضّح هذه السياسة ما نجمعه من بيانات وكيف نستخدمها ونحميها، وحقوقك في حذفها.",
+            listOf(
+                LegalSectionSpec(
+                    "البيانات التي نجمعها",
+                    bullets = listOf(
+                        "بيانات العضوية عند التسجيل: الاسم، والبريد الإلكتروني أو رقم الجوال، وصورة الملف الاختيارية.",
+                        "معرّف الجهاز ورمز الإشعارات لتوصيل التنبيهات إلى جهازك.",
+                        "تفضيلاتك داخل التطبيق: الفِرق والمباريات والبطولات المتابَعة وإعدادات التنبيهات.",
+                        "نشاط الاستخدام (مثل المباريات التي تفتحها) لتخصيص تجربتك واحتساب نقاط الولاء.",
+                    ),
+                ),
+                LegalSectionSpec("كيف نستخدمها", "تُستخدم بياناتك حصريًا لتقديم الخدمة: الدخول بعضوية سبق، التنبيهات اللحظية، التوقّعات ولوحات المتصدّرين، وتخصيص المحتوى. لا نبيع بياناتك ولا نشاركها مع أطراف ثالثة لأغراض إعلانية، ولا يتضمّن التطبيق أدوات تتبّع إعلانية."),
+                LegalSectionSpec("التخزين والأمان", "تنتقل بياناتك مشفّرةً عبر HTTPS، وتُحفظ بيانات جلستك على جهازك مشفّرةً بمخزن مفاتيح النظام. المباريات والفِرق المتابَعة بلا تسجيل دخول تبقى على جهازك فقط."),
+                LegalSectionSpec("حقوقك والحذف", "يمكنك تعديل بياناتك أو حذف حسابك وكامل بياناتك نهائيًا في أي وقت من داخل التطبيق (حسابي ← منطقة الخطر ← حذف الحساب)، أو عبر التواصل معنا."),
+                LegalSectionSpec("التواصل والنسخة الكاملة", "النسخة الكاملة من سياسة خصوصية سبق على sabq.org/privacy، وللاستفسارات تواصل معنا عبر sabq.org/contact."),
             ),
         )
         "سياسة الاستخدام" -> Triple(
