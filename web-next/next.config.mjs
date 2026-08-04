@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Pin the workspace root to this app. Without it, Turbopack infers the
+  // monorepo root from the parent lockfile and nests the standalone output
+  // under web-next/, breaking the Dockerfile's `node server.js` layout.
+  turbopack: {
+    root: new URL(".", import.meta.url).pathname,
+  },
   // Standalone output keeps the Railway Docker image small (only the traced
   // server + minimal node_modules are copied).
   output: "standalone",
