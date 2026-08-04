@@ -1254,6 +1254,10 @@ export const radarItems = pgTable("radar_items", {
     categorySlug?: string;
     provider?: string;
     model?: string;
+    // مسار «طوّر ببحث» (نظام التحرير الموحد): ملاحظات المراجع ومصادر التحقق
+    developNotes?: string[];
+    developSources?: { title: string; url: string }[];
+    developedWithSearch?: boolean;
   }>(),
   draftGeneratedAt: timestamp("draft_generated_at"),
   analyzedAt: timestamp("analyzed_at"),
