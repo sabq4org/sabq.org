@@ -1,7 +1,7 @@
 import SwiftUI
 
-// مركز التوقّعات — نظام بركة متدرّجة مشتركة (pari-mutuel) معمّم على كل البطولات.
-// لكل مباراة بركة 1000 نقطة (+ جاكبوت متراكم للبطولة) تُقسَّم 50/30/20 على
+// مركز التوقّعات — نظام جائزة متدرّجة مشتركة (pari-mutuel) معمّم على كل البطولات.
+// لكل مباراة جائزة 1000 نقطة (+ جاكبوت متراكم للبطولة) تُقسَّم 50/30/20 على
 // طبقات: النتيجة الدقيقة / الفارق الصحيح / النتيجة الصحيحة، وتُوزَّع بالتساوي
 // على فائزي كل طبقة. خمسة تبويبات: المباريات · توقّعاتي · المتصدّرون · البطل
 // والهدّاف · الإنجازات. يُخفى التبويب عند تعطيل المسابقة في الخادم (503).
@@ -209,7 +209,7 @@ struct PredictionsHubView: View {
     private func explainerPill(_ emoji: String, _ title: String, _ pct: String) -> some View {
         VStack(spacing: 2) {
             Text("\(emoji) \(title)").font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDark)
-            Text(Lf("%@ من البركة", pct)).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+            Text(Lf("%@ من الجائزة", pct)).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
@@ -300,7 +300,8 @@ struct PredictionsHubView: View {
         if loadingToday {
             SpLoading()
         } else if let todayError {
-            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: todayError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: todayError,
+                         retry: { Task { await loadToday() } })
         } else if matches.isEmpty {
             SpEmptyState(icon: "calendar", title: L("لا مباريات للتوقّع الآن"),
                          subtitle: L("تظهر هنا مباريات اليوم والغد القابلة للتوقّع"))
@@ -323,7 +324,8 @@ struct PredictionsHubView: View {
         } else if loadingMine {
             SpLoading()
         } else if let mineError {
-            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: mineError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: mineError,
+                         retry: { Task { await loadMine() } })
         } else if mine.isEmpty {
             SpEmptyState(icon: "soccerball", title: L("لم تتوقّع بعد"),
                          subtitle: L("ابدأ من تبويب «المباريات» وستظهر توقّعاتك هنا"))
@@ -338,7 +340,8 @@ struct PredictionsHubView: View {
         } else if loadingScorerPicks {
             SpLoading()
         } else if let scorerPicksError {
-            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: scorerPicksError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: scorerPicksError,
+                         retry: { Task { await loadMyScorerPicks() } })
         } else if myScorerPicks.isEmpty {
             SpEmptyState(icon: "soccerball", title: L("لم تتوقّع هدّافًا بعد"),
                          subtitle: L("اختر هدّاف كل مباراة من بطاقتها — ستظهر توقّعاتك هنا"))
@@ -351,7 +354,8 @@ struct PredictionsHubView: View {
         if loadingLeaders {
             SpLoading()
         } else if let leadersError {
-            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: leadersError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: leadersError,
+                         retry: { Task { await loadLeaders() } })
         } else if leaders.isEmpty {
             SpEmptyState(icon: "trophy", title: L("لا متصدّرين بعد"),
                          subtitle: L("كن أول من يتصدّر بتوقّعاتك"))
@@ -383,7 +387,7 @@ struct PredictionsHubView: View {
                 rows: [
                     ("questionmark.circle.fill", L("ما هذا؟"), L("لعبة توقّع مجانيّة بالكامل — لا تدفع شيئًا للمشاركة، والمكافآت كلّها نقاط ولاء قابلة للاستبدال داخل التطبيق.")),
                     ("1.circle.fill", L("توقّع ثم انتظر"), L("اختر نتيجة كل مباراة (وهدافها) قبل انطلاقها، ثم تُسوّى تلقائيًا فور انتهائها.")),
-                    ("2.circle.fill", L("كلّما قلّ المصيبون زاد نصيبك"), L("النقاط لا تُمنح من رأس مال — بل تُقتسم بين المصيبين. فلو أصبت وحدك، أخذت البركة كاملة.")),
+                    ("2.circle.fill", L("كلّما قلّ المصيبون زاد نصيبك"), L("النقاط لا تُمنح من رأس مال — بل تُقتسم بين المصيبين. فلو أصبت وحدك، أخذت الجائزة كاملة.")),
                     ("3.circle.fill", L("ارفع طبقتك وتصدّر"), L("نقاطك تُضاف لرصيد ولائك وتُرقّيك بين 5 طبقات، وفي الأسبوع تُرتّب في 4 أقسام متفاوتة.")),
                 ],
                 tint: SpTheme.green)
@@ -393,17 +397,17 @@ struct PredictionsHubView: View {
                 title: L("ليست رهانًا — كيف؟"),
                 rows: [
                     ("hand.raised.fill", L("دخول مجّاني"), L("لا تدفع مبلغًا ولا تخاطر بشيء. المشاركة مفتوحة لكل المستخدمين بلا مقابل.")),
-                    ("banknote", L("سبق تموّل الجوائز"), L("بركة كل مباراة يدفعها تطبيق سبق من ميزانيته التسويقية، لا من خسائر المستخدمين.")),
-                    ("equal.circle", L("توزيع عادل شفّاف"), L("البركة تُقسَّم بالتساوي بين المصيبين وفق قواعد معلنة — لا احتمالات يعدّلها أحد لصالحه.")),
+                    ("banknote", L("سبق تموّل الجوائز"), L("جائزة كل مباراة يدفعها تطبيق سبق من ميزانيته التسويقية، لا من خسائر المستخدمين.")),
+                    ("equal.circle", L("توزيع عادل شفّاف"), L("الجائزة تُقسَّم بالتساوي بين المصيبين وفق قواعد معلنة — لا احتمالات يعدّلها أحد لصالحه.")),
                     ("gift.fill", L("مكافآت داخل التطبيق"), L("النقاط تُستبدل مزايا وجوائز داخل سبق، لا يمكن سحبها نقدًا.")),
                 ],
                 tint: SpTheme.teal)
 
             // (3) طبقات توقّع النتيجة — تفصيل 50/30/20.
             howToCard(
-                title: L("طبقات النتيجة — بركة 1000"),
+                title: L("طبقات النتيجة — جائزة 1000"),
                 rows: [
-                    ("target", L("🎯 النتيجة الدقيقة — 50٪"), L("أصبت الرقمين بالضبط (مثال 2-1). نصيبك من البركة = 500 نقطة تُقسَّم على المصيبين.")),
+                    ("target", L("🎯 النتيجة الدقيقة — 50٪"), L("أصبت الرقمين بالضبط (مثال 2-1). نصيبك من الجائزة = 500 نقطة تُقسَّم على المصيبين.")),
                     ("ruler", L("📏 الفارق الصحيح — 30٪"), L("أصبت الفارق والاتجاه لا الرقمين (مثال توقّعت 3-1 وانتهت 2-0). نصيبك = 300 نقطة تُقسَّم.")),
                     ("checkmark.seal", L("✅ النتيجة الصحيحة — 20٪"), L("أصبت الفائز أو التعادل فقط. نصيبك = 200 نقطة تُقسَّم على المصيبين.")),
                     ("arrow.triangle.2.circlepath", L("النتيجة المقلوبة لا تفوز"), L("من أصاب الفائز لكن قلب الرقمين (توقّع 1-2 وانتهت 2-1) لا يُكافأ.")),
@@ -424,8 +428,8 @@ struct PredictionsHubView: View {
             howToCard(
                 title: L("توقّع الهداف ⚽"),
                 rows: [
-                    ("soccerball", L("هداف المباراة — بركة 300"), L("إضافةً لتوقّع النتيجة، اختر من سيسجّل. أصبت؟ تأخذ حصّتك من بركة 300 نقطة تُقسَّم على المصيبين.")),
-                    ("1.circle", L("أول هدّاف — بركة 200"), L("اختر من سيفتتح التسجيل. بركة أصغر لكن مكافأة أعلى لأنّ التحدّي أصعب.")),
+                    ("soccerball", L("هداف المباراة — جائزة 300"), L("إضافةً لتوقّع النتيجة، اختر من سيسجّل. أصبت؟ تأخذ حصّتك من جائزة 300 نقطة تُقسَّم على المصيبين.")),
+                    ("1.circle", L("أول هدّاف — جائزة 200"), L("اختر من سيفتتح التسجيل. جائزة أصغر لكن مكافأة أعلى لأنّ التحدّي أصعب.")),
                     ("person.2.crop.square.stack", L("من قائمة اللاعبين الفعليّين"), L("تختار من تشكيلتي الفريقين اللتين تنزلان قبل المباراة. الأساسيّون والاحتياط ظاهرون.")),
                     ("clock.fill", L("قبل الانطلاق فقط"), L("يُقفل توقّع الهداف مع بداية المباراة تمامًا كتوقّع النتيجة.")),
                 ],
@@ -435,7 +439,7 @@ struct PredictionsHubView: View {
             howToCard(
                 title: L("مضاعف الولاء 🔮"),
                 rows: [
-                    ("rosette", L("كلّما ارتفع ولاؤك زاد نصيبك"), L("حصّتك من البركة تُضرب بمضاعف حسب طبقة ولائك: من 1.0× للقارئ الجديد إلى 1.5× لسفير سبق.")),
+                    ("rosette", L("كلّما ارتفع ولاؤك زاد نصيبك"), L("حصّتك من الجائزة تُضرب بمضاعف حسب طبقة ولائك: من 1.0× للقارئ الجديد إلى 1.5× لسفير سبق.")),
                     ("chart.bar.fill", L("مثال محسوب"), L("أصبت النتيجة الدقيقة ونصيبك 100 نقطة، وطبقتك «العضو الذهبي» (1.2×) → تحصل على 120 نقطة فعلية.")),
                     ("arrow.up.circle.fill", L("كيف أرفع طبقتي؟"), L("بالقراءة والتفاعل اليومي والمشاركة المنتظمة — لا بتوقّع واحد كبير. ولاؤك تراكمي طويل المدى.")),
                 ],
@@ -456,7 +460,7 @@ struct PredictionsHubView: View {
             howToCard(
                 title: L("البطل والهداف — توقّعات البطولة"),
                 rows: [
-                    ("trophy.fill", L("بركة 5000 لكل نوع"), L("توقّع من سيفوز بالبطولة ومن سيكون هدّافها. بركة منفصلة 5000 لكل نوع تُسوّى عند ختام البطولة.")),
+                    ("trophy.fill", L("جائزة 5000 لكل نوع"), L("توقّع من سيفوز بالبطولة ومن سيكون هدّافها. جائزة منفصلة 5000 لكل نوع تُسوّى عند ختام البطولة.")),
                     ("lock.open.fill", L("مفتوحة حتى دور الثمانية"), L("تبقى هذه التوقّعات متاحة حتى انطلاق ربع النهائي ثم تُقفل نهائيًا.")),
                     ("hourglass", L("مكافأة متأخّرة"), L("هذه التوقّعات لا تُسوّى إلا في نهاية البطولة — صبرك فيها يُكافأ بنقاط كبيرة.")),
                 ],

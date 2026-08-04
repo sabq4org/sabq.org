@@ -99,6 +99,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -2552,12 +2554,17 @@ private fun PredScoreStepper(team: String, value: Int, update: (Int) -> Unit) {
             Text("$value", color = c.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // ‏44dp هدف لمس + وصف TalkBack — «−/+» وحدهما لا يوضحان الفعل ولا الفريق.
             Box(
-                Modifier.size(34.dp).clip(CircleShape).background(c.accent.copy(.12f)).clickable { if (value > 0) update(value - 1) },
+                Modifier.size(44.dp).clip(CircleShape).background(c.accent.copy(.12f))
+                    .clickable(onClickLabel = "إنقاص توقّع $team") { if (value > 0) update(value - 1) }
+                    .semantics { contentDescription = "إنقاص توقّع $team" },
                 contentAlignment = Alignment.Center,
             ) { Text("−", color = c.accent, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
             Box(
-                Modifier.size(34.dp).clip(CircleShape).background(c.accent.copy(.12f)).clickable { if (value < 20) update(value + 1) },
+                Modifier.size(44.dp).clip(CircleShape).background(c.accent.copy(.12f))
+                    .clickable(onClickLabel = "زيادة توقّع $team") { if (value < 20) update(value + 1) }
+                    .semantics { contentDescription = "زيادة توقّع $team" },
                 contentAlignment = Alignment.Center,
             ) { Text("+", color = c.accent, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
         }

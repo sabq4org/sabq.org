@@ -147,7 +147,8 @@ struct CompetitionDetailView: View {
                 if loading && !hasAnyData {
                     SpLoading().padding(.top, 20)
                 } else if let loadError, !hasAnyData {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                 retry: { Task { await loadAll(force: true) } })
                 } else {
                     tabBar
                     Group {

@@ -1,6 +1,6 @@
 import Foundation
 
-// نماذج «نظام التوقّعات المتطوّر» (بركة متدرّجة مشتركة pari-mutuel) — مطابقة
+// نماذج «نظام التوقّعات المتطوّر» (جائزة متدرّجة مشتركة pari-mutuel) — مطابقة
 // لـ DTOs الخادم في sportsPoolPredictionsService.ts. كل النقاط تحت
 // /api/v1/sports/predictions/* بجلسة العضو (Bearer). nonisolated لأن
 // SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor على مستوى المشروع.
@@ -252,12 +252,12 @@ nonisolated struct SpLongSubmitBody: Encodable {
     let playerName: String?
 }
 
-// MARK: - معاينة البركة (مطابقة لمنطق الخادم 50/30/20)
+// MARK: - معاينة الجائزة (مطابقة لمنطق الخادم 50/30/20)
 
 nonisolated enum SpPoolMath {
     static let split: (exact: Double, margin: Double, outcome: Double) = (0.5, 0.3, 0.2)
 
-    /// حجم طبقة معيّنة من البركة المتاحة (للعرض فقط — النصيب الفعلي يعتمد عدد الفائزين).
+    /// حجم طبقة معيّنة من الجائزة المتاحة (للعرض فقط — النصيب الفعلي يعتمد عدد الفائزين).
     static func tierPool(_ available: Int, _ tier: SpTier) -> Int {
         let e = Int(Double(available) * split.exact)
         let m = Int(Double(available) * split.margin)
@@ -290,7 +290,7 @@ extension APIClient {
                       ignoreCache: true, apiRoot: URLConstants.mobileAPI)
     }
 
-    /// لوحة المتصدّرين (نظام البركة).
+    /// لوحة المتصدّرين (نظام الجائزة).
     func fetchPoolLeaderboard(ignoreCache: Bool = false) async throws -> [SpPoolLeader] {
         try await get(SpPoolLeaderboardResponse.self, path: "/sports/predictions/leaderboard",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).leaders

@@ -39,7 +39,8 @@ struct CompetitionsView: View {
                     if loading && competitions.isEmpty {
                         SpLoading()
                     } else if let loadError, competitions.isEmpty {
-                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                     retry: { Task { await load(force: true) } })
                     } else {
                         filters
                         ForEach(grouped, id: \.category) { group in
@@ -232,7 +233,7 @@ struct CompetitionRow: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(isFavorite ? SpTheme.gold : SpTheme.onDarkFaint)
                         .frame(width: 28, height: 28)
-                        .contentShape(Circle())
+                        .contentShape(Circle().inset(by: -8))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isFavorite ? L("إزالة من بطولاتي") : L("إضافة إلى بطولاتي"))

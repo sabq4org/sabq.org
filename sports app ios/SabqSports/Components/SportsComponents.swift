@@ -369,6 +369,8 @@ struct SpEmptyState: View {
     let icon: String
     let title: String
     let subtitle: String
+    // زر «إعادة المحاولة» الموحّد لحالات الخطأ — يظهر فقط حين يُمرَّر إجراء.
+    var retry: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 8) {
@@ -382,6 +384,18 @@ struct SpEmptyState: View {
                 .font(SportsFonts.app(size: 12))
                 .foregroundStyle(SpTheme.onDarkDim)
                 .multilineTextAlignment(.center)
+            if let retry {
+                Button(action: retry) {
+                    Label(L("إعادة المحاولة"), systemImage: "arrow.clockwise")
+                        .font(SportsFonts.subhead(size: 13))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(SpTheme.green))
+                }
+                .padding(.top, 8)
+                .accessibilityLabel(L("إعادة المحاولة"))
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
@@ -728,7 +742,8 @@ struct SpMyMatchesCard: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(SpTheme.gold)
                 .frame(width: 24, height: 24)
-                .contentShape(Circle())
+                // هدف لمس ‎44pt بموسّع سالب — دون إزاحة الشكل عن فراغه المحجوز.
+                .contentShape(Circle().inset(by: -10))
         }
         .buttonStyle(.plain)
     }

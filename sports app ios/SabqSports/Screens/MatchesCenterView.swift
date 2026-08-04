@@ -653,8 +653,16 @@ struct MatchesCenterView: View {
                 SpLoading().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         } else if let loadError, fixtures.isEmpty {
-            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // الترويسة تبقى + الخطأ داخل ScrollView كي يرث السحب-للتحديث من جذر
+            // الشاشة (كان يُعرض خارج أي سطح سحب فتتجمد الشاشة بلا سبيل تعافٍ).
+            VStack(spacing: 0) {
+                pinnedTopBar
+                ScrollView {
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                 retry: { Task { await load(force: true) } })
+                        .padding(.top, 48)
+                }
+            }
         } else {
             ZStack(alignment: .bottom) {
                 // نفس بنية MatchesView: الطيّ إزاحة تحويلية للكتلة كلها — لا تغيير
@@ -1644,7 +1652,9 @@ private struct SpCenterMatchRow: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(following ? SpTheme.gold : SpTheme.onDarkFaint)
                 .frame(width: 24, height: 24)
-                .contentShape(Circle())
+                // موسّع سالب: هدف لمس ‎44pt دون تغيير التخطيط — النجمة فوق صف قابل
+                // للنقر واللمسة القريبة كانت تفتح المباراة بدل المتابعة.
+                .contentShape(Circle().inset(by: -10))
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: following)

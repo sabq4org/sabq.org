@@ -211,7 +211,8 @@ struct SpLongPredictionsView: View {
             if loading {
                 SpLoading()
             } else if let error {
-                SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: error)
+                SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: error,
+                             retry: { Task { await loadComps(); await loadLong() } })
             } else if let data {
                 championCard(data)
                 scorerCard(data)
@@ -815,7 +816,7 @@ struct SpScorerPickSection: View {
     private var poolChip: some View {
         HStack(spacing: 3) {
             Image(systemName: "banknote").font(.system(size: 9))
-            Text(Lf("بركة %d", kind.pool))
+            Text(Lf("جائزة %d", kind.pool))
                 .font(SportsFonts.app(size: 10, weight: .semibold))
         }
         .foregroundStyle(SpTheme.gold)
@@ -955,7 +956,8 @@ struct SpScorerPickerSheet: View {
                 if loading {
                     SpLoading()
                 } else if let loadError {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError,
+                                 retry: { Task { await load() } })
                 } else if let players, !players.lineupsReady {
                     lineupPending
                 } else {

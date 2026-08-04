@@ -204,7 +204,7 @@ struct AccountView: View {
         return L("أهلًا بك في VARA")
     }
 
-    // MARK: - التوقّعات (نظام البركة المتدرّجة المعمّم — يُفتح من هنا)
+    // MARK: - التوقّعات (نظام الجائزة المتدرّجة المعمّم — يُفتح من هنا)
 
     private var predictionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {

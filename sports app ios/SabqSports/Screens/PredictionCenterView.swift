@@ -38,7 +38,8 @@ struct PredictionCenterView: View {
                 } else if loadFailed {
                     SpEmptyState(icon: "wifi.exclamationmark",
                                  title: L("تعذّر تحميل التوقّعات"),
-                                 subtitle: L("تحقق من اتصالك ثم حاول مجددًا"))
+                                 subtitle: L("تحقق من اتصالك ثم حاول مجددًا"),
+                                 retry: { Task { await reloadSelected() } })
                 } else if competitions.isEmpty {
                     SpEmptyState(icon: "sportscourt",
                                  title: L("لا بطولات متاحة حاليًا"),

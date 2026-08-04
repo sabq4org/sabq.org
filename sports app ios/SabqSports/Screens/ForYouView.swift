@@ -30,7 +30,7 @@ struct SpForYouView: View {
                         SpLoading()
                     } else if mine.isEmpty {
                         SpEmptyState(icon: "soccerball", title: L("لم تتوقّع بعد"),
-                                     subtitle: L("ابدأ من تبويب «روشن» ← التوقّعات"))
+                                     subtitle: L("افتح «التوقّعات» من تبويب «حسابي»"))
                     } else {
                         SpMyPredictionsList(rows: Array(mine.prefix(6)))
                     }

@@ -998,7 +998,8 @@ struct TransferCenterView: View {
             SpLoading().padding(.top, 30)
         } else if globalLoadFailed && globalConfirmed.isEmpty {
             SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"),
-                         subtitle: L("اسحب للتحديث أو أعد المحاولة لاحقًا."))
+                         subtitle: L("اسحب للتحديث أو أعد المحاولة لاحقًا."),
+                         retry: { Task { await loadGlobalIfNeeded(force: true) } })
                 .padding(.horizontal, 16)
         } else if items.isEmpty {
             SpEmptyState(icon: "globe", title: L("لا نتائج"),

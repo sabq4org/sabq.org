@@ -462,7 +462,11 @@ final class SpAuthStore {
         return error.localizedDescription
     }
 
-    func signOut() {
+    /// `clearSavedCredentials`: الخروج الصريح يمسح بيانات الإكمال التلقائي المحفوظة
+    /// (لا تبقى كلمة مرور صالحة على الجهاز بعد قرار مغادرة)؛ انتهاء الجلسة القسري
+    /// (`handleUnauthorizedSession`) يبقيها كي يسهل الدخول مجددًا.
+    func signOut(clearSavedCredentials: Bool = true) {
+        if clearSavedCredentials { clearSavedMembershipCredentials() }
         // إلغاء ربط رمز الدفع على الخادم أولًا كي لا تستمر تنبيهات العضو السابق لهذا الجهاز.
         let devicePushToken = pushToken
         token = nil
@@ -495,7 +499,7 @@ final class SpAuthStore {
     func handleUnauthorizedSession() {
         guard token != nil else { return }
         errorMessage = L("انتهت جلستك، يرجى تسجيل الدخول")
-        signOut()
+        signOut(clearSavedCredentials: false)
     }
 
     /// حذف الحساب نهائيًّا (Apple 5.1.1(v)). أصحاب كلمة المرور: تُطلب للتأكيد؛
