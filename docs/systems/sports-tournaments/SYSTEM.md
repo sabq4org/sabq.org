@@ -1,6 +1,6 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-08-03 (لحظية روشن + كأس الملك أثناء البث) | المالك: sports
+> آخر مراجعة: 2026-08-05 (موسم UCL/UEL — لا كاش season منفصل يُسمَّم بـfallback) | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
@@ -54,6 +54,13 @@
 - **اختلاف منصة مقصود**: مركز المباراة وجهة تنقّل كاملة (`roshn/match/{id}`) لا ورقة سفلية — عرف مراكز المباريات في التطبيق كله؛ وأيقونات SF Symbols استُبدلت برموز نصية.
 - **الروابط العميقة**: `/roshn` و`/roshn/match/:id` و`/sports/team/:id` في فرع `LaunchedEffect(pendingPush)` داخل `SabqApp.kt` (App Links تغطي مضيف sabq.org كاملًا — لا تعديل مانيفست). لا مخطط `sabq://roshn` — نفس معاملة كأس آسيا.
 - **عقد البطاقات المزدوج** (نص+`teamLogo` أو كائن) يطبَّع في `RsLeader.teamRef` — لا تفترض شكلًا واحدًا.
+
+## موسم البطولة (`seasonFor` ↔ `getCompetitionMeta`) — حادثة 2026-08-05
+
+- **مصدر واحد:** `seasonFor` يقرأ `(await getCompetitionMeta(comp)).season` فقط. لا كاش `spl:season:*` منفصل.
+- **لماذا:** الكاش القديم كان يلتقط فشل المزوّد داخل الـfetcher ويُخزّن `fallbackSeason` لـ6 ساعات. بعد انتقال تصفيات 2026/27 بقي دوري الأبطال والدوري الأوروبي على موسم 2025 المنتهي → `upcoming/today` فارغان في `/api/sports/:comp/matches` و`/api/sports/fixtures` بينما `?season=2026` يعيد التصفيات صحيحة، و`/competitions` تعرض `season: 2026`.
+- **احتياط السجل:** `fallbackSeason` لـ`champions-league` و`europa-league` = **2026**. لا تُرجعهما إلى 2025.
+- **تحقق سريع:** إن اختفت مباريات بطولة `ongoing` من VARA، قارن `/matches` مع `/matches?season=<meta.season>` قبل اتهام الاشتراك.
 
 ## حواجز API-Football (بعد حادثة 2026-07-24)
 

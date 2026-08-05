@@ -144,8 +144,10 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 61, slug: "ligue-1", name: "الدوري الفرنسي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
   // كؤوس أوروبا للأندية — مرحلة الدوري الحديثة جدول واحد (36 فريقًا) فيعمل
   // hasStandings مباشرة عبر standings[0]؛ الأدوار الإقصائية تظهر في المباريات.
-  { id: 2, slug: "champions-league", name: "دوري أبطال أوروبا", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
-  { id: 3, slug: "europa-league", name: "الدوري الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
+  // fallbackSeason=2026 (موسم 2026/27 بدأ تصفياته يوليو 2026). القيمة القديمة 2025
+  // سمّمت كاش seasonFor عند فشل المزوّد فأفرغت مباريات VARA (حادثة 2026-08-05).
+  { id: 2, slug: "champions-league", name: "دوري أبطال أوروبا", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "european" },
+  { id: 3, slug: "europa-league", name: "الدوري الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "european" },
   // كأس السوبر الأوروبي (API-Football id 531) — مباراة سنوية بين بطل الأبطال وبطل يوروبا.
   { id: 531, slug: "uefa-super-cup", name: "كأس السوبر الأوروبي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "european" },
   // أُزيلت البطولات الثانوية الأوروبية من الاشتراك النشط (تخفيف الجدول):
@@ -232,18 +234,17 @@ export function listCompetitions() {
   }));
 }
 
-/** الموسم الحالي من المزود (current=true) مخزَّن 6 ساعات؛ يصمد أمام انتقال المواسم تلقائيًا */
+/**
+ * الموسم الحالي للبطولة — مصدر واحد مع `getCompetitionMeta`.
+ *
+ * سابقًا كان هنا كاش `spl:season:*` مستقل يستدعي `leagues?current=true` ويلتقط
+ * الخطأ داخل الـfetcher فيُخزّن `fallbackSeason` لـ6 ساعات. عند انتقال أغسطس
+ * 2026 بقي دوري الأبطال/يوروبا على 2025 المنتهي (نتائج نهائية بلا قادمة) بينما
+ * الميتا (`spl:compmeta:v2`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
+ * لا تُعِد كاشًا منفصلًا ولا تُخزّن fallback عند فشل المزوّد.
+ */
 async function seasonFor(comp: SaudiCompetition): Promise<number> {
-  return withSWR(`spl:season:${comp.id}`, SEASON_TTL, SEASON_TTL * 2, async () => {
-    try {
-      const rows = await apiGet("leagues", { id: comp.id, current: "true" });
-      const seasons: any[] = rows[0]?.seasons ?? [];
-      const year = seasons.find((s: any) => s.current)?.year ?? seasons[seasons.length - 1]?.year;
-      return typeof year === "number" ? year : comp.fallbackSeason;
-    } catch {
-      return comp.fallbackSeason;
-    }
-  });
+  return (await getCompetitionMeta(comp)).season;
 }
 
 /** الموسم الحالي للبطولة (المُحلّ من المزوّد) — للمستهلكين خارج هذا الملف */
