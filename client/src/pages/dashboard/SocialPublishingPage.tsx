@@ -97,11 +97,15 @@ export default function SocialPublishingPage() {
   const { data: accountsRaw, isLoading: accountsLoading } = useQuery<{
     accounts: SafeAccount[];
     oauthConfigured: boolean;
+    transport?: "x_api" | "publer";
+    publerConfigured?: boolean;
   }>({
     queryKey: ["/api/social-publishing/accounts"],
   });
   const accounts = Array.isArray(accountsRaw?.accounts) ? accountsRaw!.accounts : [];
   const oauthConfigured = Boolean(accountsRaw?.oauthConfigured);
+  const transport = accountsRaw?.transport ?? "x_api";
+  const isPubler = transport === "publer";
   const xAccount = accounts.find((a) => a.platform === "x") ?? null;
 
   const { data: postsRaw, isLoading: postsLoading } = useQuery<{ posts: SocialPostRow[] }>({
@@ -125,6 +129,26 @@ export default function SocialPublishingPage() {
       toast({ title: "تعذر بدء الربط", description: error.message, variant: "destructive" });
     },
   });
+
+  // وسيلة نقل Publer: الربط يتم في لوحة Publer، وهنا مزامنة فقط
+  const publerSyncMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest(`/api/social-publishing/publer/sync`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/social-publishing/accounts"] });
+      toast({ title: "تمت مزامنة حساب X من Publer" });
+    },
+    onError: (error: any) => {
+      toast({ title: "تعذرت المزامنة", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const connectPending = connectMutation.isPending || publerSyncMutation.isPending;
+  const connectAction = () =>
+    isPubler ? publerSyncMutation.mutate() : connectMutation.mutate();
+  const connectDisabled =
+    connectPending || (isPubler ? !accountsRaw?.publerConfigured : !oauthConfigured);
+  const connectLabel = isPubler ? "مزامنة حساب X من Publer" : "ربط حساب X";
 
   const disconnectMutation = useMutation({
     mutationFn: async (accountId: string) =>
@@ -224,7 +248,19 @@ export default function SocialPublishingPage() {
                 </div>
                 {canManageAccounts && (
                   <div className="mr-auto flex gap-2">
-                    {xAccount.status !== "connected" && (
+                    {isPubler && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => publerSyncMutation.mutate()}
+                        disabled={connectDisabled}
+                        data-testid="button-publer-sync"
+                      >
+                        {publerSyncMutation.isPending && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
+                        إعادة المزامنة من Publer
+                      </Button>
+                    )}
+                    {!isPubler && xAccount.status !== "connected" && (
                       <Button
                         size="sm"
                         onClick={() => connectMutation.mutate()}
@@ -251,10 +287,16 @@ export default function SocialPublishingPage() {
             ) : (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  لا يوجد حساب X مرتبط. الربط يتم عبر تفويض OAuth الرسمي من X —
-                  لا تُدخل كلمات مرور هنا أبداً.
+                  {isPubler
+                    ? "وسيلة النشر: Publer — يُربط حساب X من لوحة Publer (workspace)، ثم يُزامَن هنا. لا تُخزن أي توكنات لدينا."
+                    : "لا يوجد حساب X مرتبط. الربط يتم عبر تفويض OAuth الرسمي من X — لا تُدخل كلمات مرور هنا أبداً."}
                 </p>
-                {!oauthConfigured && (
+                {isPubler && !accountsRaw?.publerConfigured && (
+                  <p className="text-sm text-amber-600">
+                    التهيئة ناقصة: يلزم ضبط PUBLER_API_KEY وPUBLER_WORKSPACE_ID في بيئة الخادم أولاً.
+                  </p>
+                )}
+                {!isPubler && !oauthConfigured && (
                   <p className="text-sm text-amber-600">
                     التهيئة ناقصة: يلزم ضبط X_CLIENT_ID وX_CLIENT_SECRET في بيئة الخادم أولاً.
                   </p>
@@ -262,12 +304,12 @@ export default function SocialPublishingPage() {
                 {canManageAccounts && (
                   <Button
                     size="sm"
-                    onClick={() => connectMutation.mutate()}
-                    disabled={connectMutation.isPending || !oauthConfigured}
+                    onClick={connectAction}
+                    disabled={connectDisabled}
                     data-testid="button-connect-x"
                   >
-                    {connectMutation.isPending && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
-                    ربط حساب X
+                    {connectPending && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
+                    {connectLabel}
                   </Button>
                 )}
               </div>

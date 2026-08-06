@@ -24,6 +24,7 @@ import { resolveImageForSocialUpload } from "./imageResolver";
 import { sanitizeSecretText } from "./tokenCrypto";
 import { SocialProviderError, type SocialPublishProvider } from "./types";
 import { xProvider } from "./xApiClient";
+import { activeSocialTransport, publerProvider } from "./publerApiClient";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -33,7 +34,15 @@ const providers: Record<string, SocialPublishProvider> = {
   [xProvider.platform]: xProvider,
 };
 
+/**
+ * منصة X لها وسيلتا نقل: X API مباشرة (OAuth) أو Publer (مفتاح API).
+ * SOCIAL_PUBLISH_TRANSPORT=publer + تهيئة Publer تُفعّل الثانية —
+ * التبديل تهيئة لا كود، والرجوع للمباشر ممكن دائماً.
+ */
 export function getProvider(platform: string): SocialPublishProvider {
+  if (platform === "x" && activeSocialTransport() === "publer") {
+    return publerProvider;
+  }
   const provider = providers[platform];
   if (!provider) {
     throw new SocialProviderError(`منصة غير مدعومة: ${platform}`, { retryable: false });
@@ -111,7 +120,8 @@ export async function saveConnectedAccount(input: {
   handle: string;
   externalAccountId: string;
   displayName: string;
-  credentialsEncrypted: string;
+  /** null لوسيلة نقل Publer — لا اعتماد اجتماعي يُخزن لدينا */
+  credentialsEncrypted: string | null;
   tokenExpiresAt: Date | null;
   scopes: string;
   connectedByUserId: string;
