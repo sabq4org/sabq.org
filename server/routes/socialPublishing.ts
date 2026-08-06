@@ -34,6 +34,11 @@ import {
   X_OAUTH_SCOPES,
 } from "../services/socialPublishing/xApiClient";
 import { decryptCredentials, encryptCredentials } from "../services/socialPublishing/tokenCrypto";
+import {
+  activeSocialTransport,
+  listPublerAccounts,
+  publerConfigured,
+} from "../services/socialPublishing/publerApiClient";
 import { SocialProviderError } from "../services/socialPublishing/types";
 
 const router = Router();
@@ -83,6 +88,8 @@ router.get(
         accounts: await listAccounts(),
         oauthConfigured: xOAuthConfigured(),
         requiredScopes: X_OAUTH_SCOPES,
+        transport: activeSocialTransport(),
+        publerConfigured: publerConfigured(),
       });
     } catch (error) {
       handleError(res, error, "تعذر جلب الحسابات");
@@ -155,6 +162,46 @@ router.get(
     } catch (error) {
       console.error("[SocialPublish oauth callback]", error);
       res.redirect(`${dashboardUrl}?x=error`);
+    }
+  },
+);
+
+// مزامنة حساب X من workspace لدى Publer — بديل الربط بOAuth عندما تكون
+// وسيلة النقل publer. لا اعتماد اجتماعي يُخزن لدينا (credentialsEncrypted=null).
+router.post(
+  "/api/social-publishing/publer/sync",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_ACCOUNTS),
+  async (req, res) => {
+    try {
+      if (activeSocialTransport() !== "publer") {
+        return res.status(409).json({
+          message:
+            "وسيلة النقل الحالية ليست Publer — اضبط SOCIAL_PUBLISH_TRANSPORT=publer مع PUBLER_API_KEY وPUBLER_WORKSPACE_ID أولاً",
+        });
+      }
+      const accounts = await listPublerAccounts();
+      const xAccounts = accounts.filter((a) => a.provider === "twitter");
+      if (xAccounts.length === 0) {
+        return res.status(404).json({
+          message: "لا يوجد حساب X مربوط في workspace لدى Publer — اربطه من لوحة Publer أولاً",
+        });
+      }
+      // v1: حساب واحد لكل منصة — نأخذ الأول ونعيد القائمة للشفافية
+      const picked = xAccounts[0];
+      const saved = await saveConnectedAccount({
+        platform: "x",
+        handle: picked.name.replace(/^@/, ""),
+        externalAccountId: picked.id,
+        displayName: picked.name,
+        credentialsEncrypted: null,
+        tokenExpiresAt: null,
+        scopes: "publer",
+        connectedByUserId: requestUserId(req),
+      });
+      res.json({ account: saved, publerAccounts: xAccounts });
+    } catch (error) {
+      handleError(res, error, "تعذرت مزامنة حسابات Publer");
     }
   },
 );

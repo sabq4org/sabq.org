@@ -21,7 +21,7 @@
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `server/services/socialPublishing/` (service + xApiClient + imageResolver + tokenCrypto + suggest) |
+| Backend | `server/services/socialPublishing/` (service + xApiClient + publerApiClient + imageResolver + tokenCrypto + suggest) |
 | Routes | `server/routes/socialPublishing.ts` — `/api/social-publishing/*` (Passport + RBAC + CSRF عام) |
 | Worker | `server/jobs/socialPublishWorker.ts` — cron كل دقيقة، مسجل في `server/index.ts` |
 | Shared | `shared/socialPostText.ts` (العد الموزون) + جداول في `shared/schema.ts` |
@@ -64,10 +64,25 @@
 - **متطلبات X:** النشر البرمجي يتطلب خطة مدفوعة أو pay-per-use — راجع
   `docs/setup/X_PUBLISHING_SETUP_AR.md`. غياب `X_CLIENT_ID/SECRET` يعطّل
   الربط برسالة واضحة في الواجهة (`oauthConfigured`).
+- **وسيلة نقل Publer (بديلة):** `SOCIAL_PUBLISH_TRANSPORT=publer` +
+  `PUBLER_API_KEY/PUBLER_WORKSPACE_ID` تجعل `getProvider("x")` يعيد
+  `publerProvider` — جدولتنا وexactly-once والسجل تبقى حاكمة، وPubller
+  ينفذ الرفع (`POST /media` حقل `file`) والنشر
+  (`POST /posts/schedule/publish` بـ`bulk.state="scheduled"` **بلا**
+  `scheduled_at` = فوري) مع استطلاع `job_status`. **مهلة الاستطلاع بعد
+  إرسال النشر خطأ دائم عمداً** (الحالة مجهولة — إعادة آلية قد تكرر
+  المنشور). `job_status` لا يعيد رابط المنشور — يُحل best-effort من
+  `GET /posts` (`post_link`) بمطابقة النص ولا يُفشل منشوراً صدر فعلاً.
+  الربط بلا OAuth: الحساب يُربط في لوحة Publer ثم يُزامَن عبر
+  `POST /api/social-publishing/publer/sync` (صف الحساب بـ
+  `credentialsEncrypted=null` — 401/403 من Publer خلل مفتاح/خطة ولا
+  يعلّم الحساب `expired`).
 
 ## متغيرات البيئة
 `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_OAUTH_REDIRECT_URI` (اختياري)،
-`SOCIAL_PUBLISH_TOKEN_SECRET` (اختياري — يسقط على `SESSION_SECRET`).
+`SOCIAL_PUBLISH_TOKEN_SECRET` (اختياري — يسقط على `SESSION_SECRET`)،
+`SOCIAL_PUBLISH_TRANSPORT` (`publer` لتفعيل وسيلة Publer)،
+`PUBLER_API_KEY`, `PUBLER_WORKSPACE_ID` (خطة Publer Business).
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
