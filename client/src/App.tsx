@@ -268,6 +268,7 @@ const UserBehavior = lazy(() => retryImport(() => import("@/pages/UserBehavior")
 const AdvancedAnalytics = lazy(() => retryImport(() => import("@/pages/AdvancedAnalytics")));
 const NewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/NewsletterAnalytics")));
 const ArticleAnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/ArticleAnalyticsDashboard")));
+const SocialPublishingPage = lazy(() => retryImport(() => import("@/pages/dashboard/SocialPublishingPage")));
 
 // === LAZY IMPORTS (Notifications) ===
 const Notifications = lazy(() => retryImport(() => import("@/pages/Notifications")));
@@ -899,6 +900,16 @@ function Router() {
         <Route path="/dashboard/articles/:id/edit">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/articles/:id">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* النشر الاجتماعي (X) — social_publish.view */}
+        <Route path="/dashboard/social-publishing">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["social_publish.view"]}>
+              <Suspense fallback={<PageLoader />}>
+                <SocialPublishingPage />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/dashboard/quizzes">{() => <LazyRoute component={QuizManagement} />}</Route>
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>

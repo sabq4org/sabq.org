@@ -1884,6 +1884,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // النشر الاجتماعي المجدول (X): نفس نمط التسجيل الدائم وفحص القيادة
+      // داخل الدورة — المطالبة بـ SKIP LOCKED تمنع النشر المكرر.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSocialPublishWorker } = await import("./jobs/socialPublishWorker");
+            startSocialPublishWorker();
+          } catch (error) {
+            console.error("[Server] Error starting social publish worker:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // مسودّات أخبار SportMonks: نفس نمط التسجيل الدائم وفحص القيادة داخل
       // الدورة (sportmonksNewsJob). خلف WC_NEWS_ENABLED + توكن SportMonks.
       if (enableBackgroundWorkers) {

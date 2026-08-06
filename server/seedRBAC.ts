@@ -97,6 +97,16 @@ export async function seedRBAC() {
     { code: "tasks.delete_any", label: "Delete Any Task", labelAr: "حذف أي مهمة", module: "tasks" },
     { code: "tasks.assign", label: "Assign Tasks", labelAr: "تعيين مهام للآخرين", module: "tasks" },
     { code: "tasks.view_analytics", label: "View Task Analytics", labelAr: "عرض تحليلات المهام", module: "tasks" },
+
+    // Social Publishing (X) - النشر الاجتماعي
+    { code: "social_publish.view", label: "View Social Publishing", labelAr: "عرض واجهة النشر الاجتماعي", module: "social_publish" },
+    { code: "social_publish.create", label: "Create Social Post Draft", labelAr: "إنشاء مسودة منشور اجتماعي", module: "social_publish" },
+    { code: "social_publish.ai_generate", label: "AI Generate Social Post", labelAr: "توليد نص المنشور بالذكاء", module: "social_publish" },
+    { code: "social_publish.publish_now", label: "Publish Now on X", labelAr: "النشر الفوري على X", module: "social_publish" },
+    { code: "social_publish.schedule", label: "Schedule Social Post", labelAr: "جدولة منشور على X", module: "social_publish" },
+    { code: "social_publish.manage_scheduled", label: "Manage Scheduled Posts", labelAr: "تعديل/إلغاء المنشورات المجدولة", module: "social_publish" },
+    { code: "social_publish.view_log", label: "View Social Publish Log", labelAr: "عرض سجل النشر الاجتماعي", module: "social_publish" },
+    { code: "social_publish.manage_accounts", label: "Manage Social Accounts", labelAr: "إدارة حسابات المنصات وربطها", module: "social_publish" },
   ];
 
   const insertedPermissions = await db

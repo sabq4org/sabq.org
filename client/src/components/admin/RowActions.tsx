@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,12 +28,15 @@ interface RowActionsProps {
   onDelete: () => void;
   /** Opens the parent's revision-request dialog (returns article to author as draft). */
   onRequestRevision?: () => void;
+  /** يفتح نافذة «النشر على X» في الصفحة الأم (SocialPublishDialog). */
+  onSocialPublish?: () => void;
   canEdit?: boolean;
   canDelete?: boolean;
   canFeature?: boolean;
   canPublish?: boolean;
   canSendNotification?: boolean;
   canTranslate?: boolean;
+  canSocialPublish?: boolean;
 }
 
 export function RowActions({ 
@@ -44,12 +47,14 @@ export function RowActions({
   isFeatured: initialIsFeatured, 
   onDelete,
   onRequestRevision,
+  onSocialPublish,
   canEdit = true,
   canDelete = true,
   canFeature = true,
   canPublish = true,
   canSendNotification = true,
   canTranslate = true,
+  canSocialPublish = false,
 }: RowActionsProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -315,6 +320,18 @@ export function RowActions({
             title="إرسال إشعار"
           >
             <Bell className="w-4 h-4 text-blue-500" />
+          </Button>
+        )}
+        {canSocialPublish && onSocialPublish && status === "published" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onSocialPublish}
+            disabled={isLoading}
+            data-testid={`button-action-social-publish-${articleId}`}
+            title="النشر على X"
+          >
+            <Share2 className="w-4 h-4 text-sky-600" />
           </Button>
         )}
         {onRequestRevision && status !== "archived" && (

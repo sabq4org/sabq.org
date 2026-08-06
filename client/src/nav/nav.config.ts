@@ -63,6 +63,7 @@ import {
   Tv,
   Inbox,
   Radar,
+  Share2,
   HeartPulse,
   Headphones,
   Briefcase,
@@ -283,6 +284,15 @@ export const navConfig: NavItem[] = [
         icon: PlusCircle,
         roles: ["admin", "editor", "author"],
         permissions: ["articles.create"], // Users with articles.create permission can access
+      },
+      {
+        id: "social_publishing",
+        labelKey: "nav.social_publishing",
+        labelAr: "النشر الاجتماعي",
+        path: "/dashboard/social-publishing",
+        icon: Share2,
+        roles: ["admin", "editor"],
+        permissions: ["social_publish.view"],
       },
       {
         id: "smart_radar",
