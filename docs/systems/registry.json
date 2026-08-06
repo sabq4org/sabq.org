@@ -239,6 +239,8 @@
         "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
+        "server/services/articleViewCounterService.ts",
+        "server/services/articleViewStatsService.ts",
         "client/src/pages/admin/publishers/**",
         "client/src/components/admin/publishers/**",
         "client/src/pages/publisher/**",
@@ -278,7 +280,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-03"
+      "lastReviewed": "2026-08-06"
     },
     {
       "id": "ifox",

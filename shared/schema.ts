@@ -3243,6 +3243,17 @@ export const articleIpViews = pgTable("article_ip_views", {
   index("idx_article_ip_views_article").on(table.articleId),
 ]);
 
+// Pending view increments — hot-path flush never locks `articles` rows.
+// Memory buffer → UPSERT here → periodic merge into articles.views (SKIP LOCKED).
+// See server/services/articleViewCounterService.ts (2026-08-06 contention fix).
+export const articleViewDeltas = pgTable("article_view_deltas", {
+  articleId: varchar("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  pending: integer("pending").default(0).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_view_deltas_pending").on(table.pending),
+]);
+
 // Feed Recommendations - التوصيات المخصصة للعرض في الفيد
 export const feedRecommendations = pgTable("feed_recommendations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
