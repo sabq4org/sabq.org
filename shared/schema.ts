@@ -15106,3 +15106,78 @@ export type Meeting = typeof meetings.$inferSelect;
 export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
 export type MeetingEvent = typeof meetingEvents.$inferSelect;
 export type MeetingTranscript = typeof meetingTranscripts.$inferSelect;
+
+// ════════════════════════════════════════════════════════════════════
+// النشر الاجتماعي (منصة X أولاً) — حسابات المنصات، المنشورات، والمحاولات
+// docs/systems/social-publishing/SYSTEM.md
+// ════════════════════════════════════════════════════════════════════
+
+// حساب منصة تواصل مرتبط (v1: حساب واحد لكل منصة — unique على platform).
+// بيانات الاعتماد مشفرة AES-256-GCM (v1:iv:tag:ct) — لا تُعاد للعميل أبداً.
+export const socialPlatformAccounts = pgTable("social_platform_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(), // 'x'
+  handle: text("handle"), // @sabqorg — بدون @
+  externalAccountId: text("external_account_id"),
+  displayName: text("display_name"),
+  status: text("status").default("connected").notNull(), // connected | expired | revoked | disconnected
+  credentialsEncrypted: text("credentials_encrypted"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  scopes: text("scopes"),
+  lastVerifiedAt: timestamp("last_verified_at"),
+  connectedByUserId: varchar("connected_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("social_platform_accounts_platform_unique").on(table.platform),
+]);
+
+export const socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").notNull().references(() => articles.id, { onDelete: "cascade" }),
+  platform: text("platform").default("x").notNull(),
+  accountId: varchar("account_id").references(() => socialPlatformAccounts.id),
+  textSource: text("text_source").default("custom").notNull(), // title | title_link | custom | ai
+  text: text("text").notNull(),
+  linkUrl: text("link_url"),
+  imageSource: text("image_source").default("none").notNull(), // article | upload | library | none
+  imageUrl: text("image_url"),
+  // draft | scheduled | processing | published | failed | canceled
+  status: text("status").default("draft").notNull(),
+  scheduledAt: timestamp("scheduled_at"),
+  publishedAt: timestamp("published_at"),
+  externalPostId: text("external_post_id"),
+  externalPostUrl: text("external_post_url"),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  publishedByUserId: varchar("published_by_user_id").references(() => users.id),
+  canceledByUserId: varchar("canceled_by_user_id").references(() => users.id),
+  attempts: integer("attempts").default(0).notNull(),
+  lastError: text("last_error"),
+  lockedAt: timestamp("locked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("social_posts_article_idx").on(table.articleId),
+  index("social_posts_status_scheduled_idx").on(table.status, table.scheduledAt),
+  index("social_posts_status_locked_idx").on(table.status, table.lockedAt),
+]);
+
+// سجل محاولات append-only — كل محاولة نشر (فورية أو من العامل) بصفّها
+export const socialPostAttempts = pgTable("social_post_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  phase: text("phase").notNull(), // media_upload | create_post | token_refresh
+  outcome: text("outcome").notNull(), // success | error
+  httpStatus: integer("http_status"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"), // مُنظّف — بلا توكنات
+  retryable: boolean("retryable"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("social_post_attempts_post_idx").on(table.postId, table.createdAt),
+]);
+
+export type SocialPlatformAccount = typeof socialPlatformAccounts.$inferSelect;
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type SocialPostAttempt = typeof socialPostAttempts.$inferSelect;

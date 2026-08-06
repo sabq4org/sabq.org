@@ -198,6 +198,16 @@ export const PERMISSION_CODES = {
   MUQTARAB_OWN_TOPIC_CREATE: "muqtarab.own.topic.create",
   MUQTARAB_OWN_TOPIC_EDIT: "muqtarab.own.topic.edit",
   MUQTARAB_OWN_TOPIC_SUBMIT: "muqtarab.own.topic.submit",
+
+  // Social Publishing (X) - النشر الاجتماعي على منصة X
+  SOCIAL_PUBLISH_VIEW: "social_publish.view",
+  SOCIAL_PUBLISH_CREATE: "social_publish.create",
+  SOCIAL_PUBLISH_AI_GENERATE: "social_publish.ai_generate",
+  SOCIAL_PUBLISH_NOW: "social_publish.publish_now",
+  SOCIAL_PUBLISH_SCHEDULE: "social_publish.schedule",
+  SOCIAL_PUBLISH_MANAGE_SCHEDULED: "social_publish.manage_scheduled",
+  SOCIAL_PUBLISH_VIEW_LOG: "social_publish.view_log",
+  SOCIAL_PUBLISH_MANAGE_ACCOUNTS: "social_publish.manage_accounts",
 } as const;
 
 // Role to permissions mapping (for UI display)
@@ -267,6 +277,14 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
     // Breaking News Ticker
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // Social Publishing — المحرر ينشر ويجدول على X (بلا إدارة الحسابات)
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
     // اجتماعات سبق — أكواد نصية كنمط hr أدناه
     "meetings.view",
     "meetings.create",
@@ -299,6 +317,14 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.CATEGORIES_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // Social Publishing — مدير المحتوى ينشر ويجدول على X
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
     "meetings.view",
   ],
 
@@ -511,6 +537,16 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE]: "إضافة موضوع في زاويتي",
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT]: "تعديل مواضيع زاويتي",
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT]: "إرسال موضوع لمراجعة الإدارة",
+
+  // Social Publishing - النشر الاجتماعي على X
+  [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW]: "عرض واجهة النشر الاجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_CREATE]: "إنشاء مسودة منشور اجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE]: "توليد نص المنشور بالذكاء",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_NOW]: "النشر الفوري على X",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE]: "جدولة منشور على X",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED]: "تعديل/إلغاء المنشورات المجدولة",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG]: "عرض سجل النشر الاجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_ACCOUNTS]: "إدارة حسابات المنصات وربطها",
 };
 
 // Helper function to get all permissions for given roles.

@@ -36,7 +36,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2 } from "lucide-react";
+import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
@@ -187,6 +188,7 @@ export default function ArticlesManagement() {
   const canPublishArticle = user && hasAnyPermission(user, "articles.publish");
   const canFeatureArticle = user && hasAnyPermission(user, "articles.feature");
   const canArchiveArticle = user && hasAnyPermission(user, "articles.archive");
+  const canSocialPublish = user && hasAnyPermission(user, "social_publish.view", "social_publish.create");
 
   // Helper function to check if user can edit a specific article
   // Reporters cannot edit articles after publication
@@ -218,6 +220,7 @@ export default function ArticlesManagement() {
   // State for dialogs and filters
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
   const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
+  const [socialPublishArticle, setSocialPublishArticle] = useState<Article | null>(null);
   const [revisionNotes, setRevisionNotes] = useState("");
   const [revisionNotesError, setRevisionNotesError] = useState<string | null>(null);
   // Reason captured in the archive dialog. Required by the backend
@@ -1295,10 +1298,12 @@ export default function ArticlesManagement() {
                                       ? () => setRevisionArticle(article)
                                       : undefined
                                   }
+                                  onSocialPublish={() => setSocialPublishArticle(article)}
                                   canEdit={canEditArticle(article)}
                                   canDelete={!!(canDeleteArticle || canArchiveArticle)}
                                   canFeature={!!canFeatureArticle}
                                   canPublish={!!canPublishArticle}
+                                  canSocialPublish={!!canSocialPublish}
                                 />
                               </div>
                             </td>
@@ -1542,6 +1547,17 @@ export default function ArticlesManagement() {
                         ) : (
                           <Languages className="h-4 w-4 text-emerald-500" />
                         )}
+                      </Button>
+                    )}
+                    {canSocialPublish && article.status === "published" && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setSocialPublishArticle(article)}
+                        data-testid={`button-social-publish-mobile-${article.id}`}
+                        title="النشر على X"
+                      >
+                        <Share2 className="h-4 w-4 text-sky-600" />
                       </Button>
                     )}
                     {canArchiveArticle && article.status !== "archived" && (
@@ -1992,6 +2008,18 @@ export default function ArticlesManagement() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* النشر على X */}
+      {socialPublishArticle && (
+        <SocialPublishDialog
+          articleId={socialPublishArticle.id}
+          articleTitle={socialPublishArticle.title}
+          open={!!socialPublishArticle}
+          onOpenChange={(open) => {
+            if (!open) setSocialPublishArticle(null);
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }

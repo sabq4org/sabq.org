@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-06",
   "systems": [
     {
       "id": "account-center",
@@ -812,6 +812,42 @@
       ],
       "lastReviewed": "2026-07-19",
       "notes": "Homepage bundle + SWR cache under blocks:smart:* to avoid DB pressure"
+    },
+    {
+      "id": "social-publishing",
+      "nameAr": "النشر الاجتماعي",
+      "nameEn": "Social Publishing (X)",
+      "status": "active",
+      "category": "content",
+      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. المعمارية provider-based لإضافة منصات لاحقاً.",
+      "docPath": "docs/systems/social-publishing/SYSTEM.md",
+      "relatedDocs": [
+        "docs/setup/X_PUBLISHING_SETUP_AR.md",
+        "docs/systems/editorial/SYSTEM.md",
+        "docs/systems/auth-rbac/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "shared/socialPostText.ts",
+        "server/services/socialPublishing/**",
+        "server/routes/socialPublishing.ts",
+        "server/jobs/socialPublishWorker.ts",
+        "client/src/components/social/SocialPublishDialog.tsx",
+        "client/src/pages/dashboard/SocialPublishingPage.tsx",
+        "tests/unit/socialPostText.test.ts",
+        "tests/unit/socialTokenCrypto.test.ts",
+        "tests/unit/socialPublishingLogic.test.ts",
+        "tests/unit/xApiClient.test.ts",
+        "docs/systems/social-publishing/**"
+      ],
+      "aiFeatureKeys": [
+        "social-post-suggest"
+      ],
+      "dashboardPath": "/dashboard/social-publishing",
+      "owners": [
+        "editorial",
+        "platform"
+      ],
+      "lastReviewed": "2026-08-06"
     },
     {
       "id": "sahraa-tv-block",

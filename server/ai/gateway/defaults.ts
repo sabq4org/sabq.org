@@ -119,6 +119,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // ── Moderation / communications ──
   { featureKey: "comment-moderation", displayName: "إشراف التعليقات", category: "moderation", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   { featureKey: "reply-polish", displayName: "تحرير ردود التواصل", category: "agents", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI, maxTokens: 800, temperature: 0.4 },
+  { featureKey: "social-post-suggest", displayName: "اقتراح منشور X", category: "agents", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI, maxTokens: 400, temperature: 0.6 },
 
   // ── Agents ──
   { featureKey: "whatsapp-agent", displayName: "وكيل واتساب", category: "agents", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
