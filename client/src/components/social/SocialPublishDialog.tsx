@@ -326,7 +326,7 @@ export function SocialPublishDialog({
             </DialogTitle>
             <DialogDescription className="text-right">
               {xAccount
-                ? `سيُنشر عبر حساب @${xAccount.handle || "sabq"} — ${xAccount.displayName || ""}`
+                ? `سيُنشر عبر حساب @${xAccount.handle || "sabqorg"} — ${xAccount.displayName || ""}`
                 : "لا يوجد حساب X مرتبط"}
             </DialogDescription>
           </DialogHeader>
@@ -484,7 +484,7 @@ export function SocialPublishDialog({
                   <div className="text-sm">
                     <div className="font-bold">{xAccount?.displayName || "صحيفة سبق"}</div>
                     <div className="text-muted-foreground" dir="ltr">
-                      @{xAccount?.handle || "sabq"}
+                      @{xAccount?.handle || "sabqorg"}
                     </div>
                   </div>
                   <Badge variant="outline" className="mr-auto text-[10px]">
@@ -678,7 +678,7 @@ export function SocialPublishDialog({
             <AlertDialogTitle>تأكيد النشر على X</AlertDialogTitle>
             <AlertDialogDescription className="text-right">
               سيُنشر هذا المحتوى فوراً على حساب
-              {" "}@{xAccount?.handle || "sabq"} العام. لا يمكن التراجع بعد النشر.
+              {" "}@{xAccount?.handle || "sabqorg"} العام. لا يمكن التراجع بعد النشر.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
