@@ -36,9 +36,14 @@ export interface SocialPublishProvider {
   verifyIdentity(accountId: string): Promise<ProviderIdentity>;
   /** يرفع صورة ويعيد معرف الوسائط لدى المنصة */
   uploadImage(accountId: string, image: { buffer: Buffer; mimeType: string }): Promise<string>;
+  /**
+   * يرفع فيديو من رابط عام ويعيد معرف الوسائط — اختياري:
+   * v1 يطبقه Publer فقط (from-url)؛ غيابه = الفيديو غير مدعوم للوسيلة.
+   */
+  uploadVideoFromUrl?(accountId: string, url: string): Promise<string>;
   /** ينشئ المنشور ويعيد معرفه ورابطه */
   createPost(
     accountId: string,
-    input: { text: string; mediaIds?: string[] },
+    input: { text: string; mediaIds?: string[]; videoMediaId?: string },
   ): Promise<ProviderPostResult>;
 }

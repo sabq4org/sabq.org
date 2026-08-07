@@ -435,11 +435,14 @@ async function uploadImage(
 
 async function createPost(
   accountId: string,
-  input: { text: string; mediaIds?: string[] },
+  input: { text: string; mediaIds?: string[]; videoMediaId?: string },
 ): Promise<ProviderPostResult> {
   const payload: Record<string, unknown> = { text: input.text };
-  if (input.mediaIds && input.mediaIds.length > 0) {
-    payload.media = { media_ids: input.mediaIds };
+  // X يقبل معرفات الصور والفيديو في media_ids نفسها (الفيديو يصل عبر Publer
+  // فقط في v1 — الوسيلة المباشرة لا تملك uploadVideoFromUrl)
+  const allMediaIds = [...(input.mediaIds ?? []), ...(input.videoMediaId ? [input.videoMediaId] : [])];
+  if (allMediaIds.length > 0) {
+    payload.media = { media_ids: allMediaIds };
   }
   const json = await xApiFetch(
     accountId,

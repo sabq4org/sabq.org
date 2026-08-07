@@ -22,7 +22,8 @@ import {
   type SocialPostAttempt,
 } from "@shared/schema";
 import { composeXPostText, validateXPostText } from "@shared/socialPostText";
-import { resolveImageForSocialUpload } from "./imageResolver";
+import { assertSafeImageUrl } from "../../utils/safeImageUrl";
+import { absolutizeImageUrl, resolveImageForSocialUpload } from "./imageResolver";
 import { sanitizeSecretText } from "./tokenCrypto";
 import { SocialProviderError, type SocialPublishProvider } from "./types";
 import { xProvider } from "./xApiClient";
@@ -168,14 +169,42 @@ export async function disconnectAccount(accountId: string): Promise<boolean> {
 // ── إنشاء/تعديل المنشورات ──────────────────────────────────────────
 
 export interface CreatePostInput {
-  articleId: string;
+  /** غيابه = تغريدة مستقلة من صفحة النشر الاجتماعي */
+  articleId?: string | null;
   platform?: string;
   text: string;
   textSource: "title" | "title_link" | "custom" | "ai";
   includeLink: boolean;
   imageSource: "article" | "upload" | "library" | "none";
   imageUrl?: string | null;
+  /** وسائط التأليف المستقل: image = حتى 4 صور، video = رابط واحد */
+  mediaKind?: "none" | "image" | "video";
+  mediaUrls?: string[];
   createdByUserId: string;
+}
+
+export const MAX_POST_IMAGES = 4;
+
+/** تحقق خالص لوسائط التأليف — يُستخدم في الإنشاء والاختبارات */
+export function validateComposeMedia(
+  mediaKind: "none" | "image" | "video",
+  mediaUrls: string[],
+): void {
+  if (mediaKind === "none") {
+    if (mediaUrls.length > 0) {
+      throw new SocialPublishValidationError("وسائط مرفقة بلا نوع محدد");
+    }
+    return;
+  }
+  if (mediaKind === "image") {
+    if (mediaUrls.length < 1 || mediaUrls.length > MAX_POST_IMAGES) {
+      throw new SocialPublishValidationError(`الصور من 1 إلى ${MAX_POST_IMAGES} كحد أقصى`);
+    }
+    return;
+  }
+  if (mediaUrls.length !== 1) {
+    throw new SocialPublishValidationError("الفيديو رابط واحد بالضبط");
+  }
 }
 
 export class SocialPublishValidationError extends Error {
@@ -198,11 +227,28 @@ async function requireConnectedAccount(platform: string): Promise<SocialPlatform
 
 export async function createDraftPost(input: CreatePostInput): Promise<SocialPost> {
   const platform = input.platform ?? "x";
-  const context = await getArticleShareContext(input.articleId);
-  if (!context) throw new SocialPublishValidationError("الخبر غير موجود", 404);
+  // تغريدة مستقلة (بلا خبر) أو منشور مرتبط بخبر
+  const context = input.articleId ? await getArticleShareContext(input.articleId) : null;
+  if (input.articleId && !context) {
+    throw new SocialPublishValidationError("الخبر غير موجود", 404);
+  }
   const account = await requireConnectedAccount(platform);
 
-  const linkUrl = input.includeLink ? context.url : null;
+  const mediaKind = input.mediaKind ?? "none";
+  const mediaUrls = (input.mediaUrls ?? []).map((u) => u.trim()).filter(Boolean);
+  validateComposeMedia(mediaKind, mediaUrls);
+  // حارس مبكر للمضيفين (الجالب يعيد الفحص عند النشر) — رسالة 400 فورية أوضح
+  for (const url of mediaUrls) {
+    try {
+      assertSafeImageUrl(absolutizeImageUrl(url));
+    } catch (err: any) {
+      throw new SocialPublishValidationError(
+        `رابط الوسائط مرفوض: ${err?.message || "غير مسموح"}`,
+      );
+    }
+  }
+
+  const linkUrl = input.includeLink && context ? context.url : null;
   const validation = validateXPostText(input.text, linkUrl);
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
@@ -217,7 +263,7 @@ export async function createDraftPost(input: CreatePostInput): Promise<SocialPos
   const [post] = await db
     .insert(socialPosts)
     .values({
-      articleId: input.articleId,
+      articleId: input.articleId ?? null,
       platform,
       accountId: account.id,
       textSource: input.textSource,
@@ -225,6 +271,8 @@ export async function createDraftPost(input: CreatePostInput): Promise<SocialPos
       linkUrl,
       imageSource: input.imageUrl ? input.imageSource : "none",
       imageUrl: input.imageUrl ?? null,
+      mediaKind,
+      mediaUrls,
       status: "draft",
       createdByUserId: input.createdByUserId,
     })
@@ -250,12 +298,14 @@ export async function updateEditablePost(postId: string, input: UpdatePostInput)
       409,
     );
   }
-  const context = await getArticleShareContext(post.articleId);
-  if (!context) throw new SocialPublishValidationError("الخبر غير موجود", 404);
+  const context = post.articleId ? await getArticleShareContext(post.articleId) : null;
+  if (post.articleId && !context) {
+    throw new SocialPublishValidationError("الخبر غير موجود", 404);
+  }
 
   const text = input.text !== undefined ? input.text : post.text;
   const includeLink = input.includeLink !== undefined ? input.includeLink : Boolean(post.linkUrl);
-  const linkUrl = includeLink ? context.url : null;
+  const linkUrl = includeLink && context ? context.url : null;
   const validation = validateXPostText(text, linkUrl);
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
@@ -589,14 +639,32 @@ export async function publishClaimedPost(
     return failWith(new SocialProviderError("المنشور بلا حساب مستهدف", { retryable: false }));
   }
 
-  // 1) الصورة (إن وجدت)
+  // 1) الوسائط (إن وجدت): فيديو واحد، أو حتى 4 صور، أو صورة الخبر القديمة
   const mediaIds: string[] = [];
-  if (claimed.imageSource !== "none" && claimed.imageUrl) {
+  let videoMediaId: string | undefined;
+  const composeUrls = Array.isArray(claimed.mediaUrls) ? claimed.mediaUrls : [];
+  const hasComposeMedia = claimed.mediaKind !== "none" && composeUrls.length > 0;
+  if (hasComposeMedia || (claimed.imageSource !== "none" && claimed.imageUrl)) {
     const started = Date.now();
     try {
-      const image = await resolveImageForSocialUpload(claimed.imageUrl);
-      const mediaId = await provider.uploadImage(accountId, image);
-      mediaIds.push(mediaId);
+      if (claimed.mediaKind === "video" && composeUrls[0]) {
+        if (!provider.uploadVideoFromUrl) {
+          throw new SocialProviderError(
+            "نشر الفيديو مدعوم عبر وسيلة Publer فقط حالياً — فعّل SOCIAL_PUBLISH_TRANSPORT=publer",
+            { retryable: false },
+          );
+        }
+        const safeUrl = assertSafeImageUrl(absolutizeImageUrl(composeUrls[0]));
+        videoMediaId = await provider.uploadVideoFromUrl(accountId, safeUrl);
+      } else if (claimed.mediaKind === "image" && composeUrls.length > 0) {
+        for (const url of composeUrls.slice(0, MAX_POST_IMAGES)) {
+          const image = await resolveImageForSocialUpload(url);
+          mediaIds.push(await provider.uploadImage(accountId, image));
+        }
+      } else if (claimed.imageUrl) {
+        const image = await resolveImageForSocialUpload(claimed.imageUrl);
+        mediaIds.push(await provider.uploadImage(accountId, image));
+      }
       await recordAttempt({
         postId: claimed.id,
         phase: "media_upload",
@@ -626,6 +694,7 @@ export async function publishClaimedPost(
     const result = await provider.createPost(accountId, {
       text: finalText,
       mediaIds: mediaIds.length > 0 ? mediaIds : undefined,
+      videoMediaId,
     });
     await recordAttempt({
       postId: claimed.id,

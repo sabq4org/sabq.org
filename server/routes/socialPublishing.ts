@@ -278,15 +278,35 @@ router.post(
   },
 );
 
+// رابط رفع موقّع لفيديو التغريدة المستقلة — نفس مسار كائنات التخزين
+// المستخدم في الشورتس؛ العميل يرفع مباشرة ثم يمرر الرابط العام للمنشور.
+router.post(
+  "/api/social-publishing/media/upload-url",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_CREATE),
+  async (_req, res) => {
+    try {
+      const { ObjectStorageService } = await import("../objectStorage");
+      const uploadURL = await new ObjectStorageService().getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      handleError(res, error, "تعذر إنشاء رابط الرفع");
+    }
+  },
+);
+
 // ── المنشورات ──────────────────────────────────────────────────────
 
 const createPostSchema = z.object({
-  articleId: z.string().min(1),
+  // غيابه = تغريدة مستقلة من صفحة النشر الاجتماعي
+  articleId: z.string().min(1).nullish(),
   text: z.string().min(1).max(2000),
   textSource: z.enum(["title", "title_link", "custom", "ai"]),
   includeLink: z.boolean(),
   imageSource: z.enum(["article", "upload", "library", "none"]),
   imageUrl: z.string().max(2000).nullish(),
+  mediaKind: z.enum(["none", "image", "video"]).optional(),
+  mediaUrls: z.array(z.string().min(1).max(2000)).max(4).optional(),
 });
 
 router.post(
@@ -298,6 +318,7 @@ router.post(
       const body = createPostSchema.parse(req.body);
       const post = await createDraftPost({
         ...body,
+        articleId: body.articleId ?? null,
         imageUrl: body.imageUrl ?? null,
         createdByUserId: requestUserId(req),
       });

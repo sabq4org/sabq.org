@@ -15145,7 +15145,8 @@ export const socialPlatformAccounts = pgTable("social_platform_accounts", {
 
 export const socialPosts = pgTable("social_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  articleId: varchar("article_id").notNull().references(() => articles.id, { onDelete: "cascade" }),
+  // null = تغريدة مستقلة (تأليف مباشر من صفحة النشر الاجتماعي بلا خبر)
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }),
   platform: text("platform").default("x").notNull(),
   accountId: varchar("account_id").references(() => socialPlatformAccounts.id),
   textSource: text("text_source").default("custom").notNull(), // title | title_link | custom | ai
@@ -15153,6 +15154,9 @@ export const socialPosts = pgTable("social_posts", {
   linkUrl: text("link_url"),
   imageSource: text("image_source").default("none").notNull(), // article | upload | library | none
   imageUrl: text("image_url"),
+  // وسائط متعددة (التأليف المستقل): image = حتى 4 صور، video = رابط واحد
+  mediaKind: text("media_kind").default("none").notNull(), // none | image | video
+  mediaUrls: jsonb("media_urls").$type<string[]>().default([]),
   // draft | scheduled | processing | published | failed | canceled
   status: text("status").default("draft").notNull(),
   scheduledAt: timestamp("scheduled_at"),
