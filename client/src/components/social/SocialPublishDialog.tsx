@@ -318,7 +318,11 @@ export function SocialPublishDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto" dir="rtl">
+        {/* dvh لا vh — شريط أدوات سفاري الجوال يقتطع من vh؛ وعرض داخل الحواف مع حشوة أصغر للشاشات الصغيرة */}
+        <DialogContent
+          className="w-[calc(100vw-1.25rem)] max-w-2xl max-h-[86dvh] overflow-y-auto overflow-x-hidden rounded-lg p-4 sm:p-6"
+          dir="rtl"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <XIcon className="w-5 h-5" />
@@ -673,7 +677,7 @@ export function SocialPublishDialog({
 
       {/* تأكيد النشر الفوري */}
       <AlertDialog open={confirmPublishOpen} onOpenChange={setConfirmPublishOpen}>
-        <AlertDialogContent dir="rtl">
+        <AlertDialogContent className="w-[calc(100vw-1.25rem)] max-w-md rounded-lg" dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد النشر على X</AlertDialogTitle>
             <AlertDialogDescription className="text-right">
