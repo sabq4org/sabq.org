@@ -1075,6 +1075,10 @@ export const articles = pgTable("articles", {
   // فهارس trigram لبحث اللوحة (ILIKE %..%) — بدونها يمسح الجدول كاملاً (6.9GB):
   // شرط OR يتطلب فهرساً صالحاً لكل طرف، والفهرس القديم على lower(title) الجزئي
   // لا يطابق title ILIKE. أُنشئت يدوياً CONCURRENTLY في الإنتاج 2026-07-23.
+  // ⚠️ كل فهارس GIN الستة على articles مضبوطة في الإنتاج بـ fastupdate=off
+  // (حادثة 2026-08-08: تفريغ قائمة الانتظار المؤجلة كان يسكّت أي كاتب صدفةً
+  // 27-38 ثانية فتفشل حفوظات المحررين بمهلة الدور 15s). أي REINDEX أو إعادة
+  // إنشاء يجب أن يتبعها ALTER INDEX ... SET (fastupdate=off) وإلا عادت السكتات.
   index("idx_articles_title_trgm_raw").using("gin", table.title.op("gin_trgm_ops")),
   index("idx_articles_excerpt_trgm").using("gin", table.excerpt.op("gin_trgm_ops")),
   // idx_articles_subtitle_trgm حُذف من الإنتاج 2026-07-25: ظل 176MB بصفر

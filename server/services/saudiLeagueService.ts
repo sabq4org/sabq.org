@@ -8,7 +8,7 @@
  * كل ما يصل للواجهة معرَّب، وكل نقطة بيانات خلف كاش SWR ليخدم آلاف الزوار
  * من طلب واحد للمزود.
  */
-import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
+import { withSWR, swrCache, swrCacheFor, CACHE_TTL } from "../memoryCache";
 import { isEnglishSports, runWithSportsLang } from "./sportsLang";
 import pLimit from "p-limit";
 import { apiFootballGet } from "./apiFootballClient";
@@ -2875,7 +2875,8 @@ export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | n
     if (incomplete) {
       void resolveNames(nameList)
         .then((tr2) => {
-          swrCache.set(storeKey, buildCard(tr2), PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2);
+          // مفتاح لاعب → لازم يكتب في نفس الكاش الذي تقرأ منه withSWR
+          swrCacheFor(storeKey).set(storeKey, buildCard(tr2), PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2);
         })
         .catch(() => {});
     }
