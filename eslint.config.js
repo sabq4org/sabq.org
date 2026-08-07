@@ -101,8 +101,12 @@ export default tseslint.config(
     // the next extraction must ratchet this back down.
     // Re-ratcheted 2026-08-01 after production-log privacy cleanup: the file is
     // 36346 lines. Keep the ceiling exact so no new monolith growth is hidden.
+    // RAISED to 36377 on 2026-08-06: breaking-push stampede guards inside the
+    // existing GET /api/articles/:slug handler (micro-cached views/reactions,
+    // mediaAssets embedded in the cached payload) — no new endpoints. The
+    // ratchet's intent is unchanged; the next extraction must lower this.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36346 }] },
+    rules: { "max-lines": ["error", { max: 36377 }] },
   },
   {
     files: ["server/storage.ts"],
@@ -122,8 +126,12 @@ export default tseslint.config(
     // takes effect immediately instead of after the session's 30-day life
     // (audit #19/#68). Guards inside existing handlers — no new endpoints. The
     // ratchet's intent is unchanged; the next extraction must lower this.
+    // RAISED to 10157 on 2026-08-06: the push-notification landing endpoint
+    // GET /articles/:id gained a user-neutral withCache wrapper (breaking-push
+    // stampede was running 6 uncached DB queries per click and exhausting the
+    // pool) — refactor inside the existing handler, no new endpoints.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10120 }] },
+    rules: { "max-lines": ["error", { max: 10157 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

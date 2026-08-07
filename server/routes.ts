@@ -22,7 +22,7 @@ import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findExistingPhoneUser } from "./services/phoneAuth";
-import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
+import { bufferArticleViewIncrement, initArticleViewCounters, getLiveArticleViews } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
 import {
@@ -13357,6 +13357,20 @@ Respond in valid JSON format only:
         const fetchedArticle = await storage.getArticleBySlug(slug, undefined, userRole);
         // Only cache published articles
         if (fetchedArticle && fetchedArticle.status === 'published') {
+          // mediaAssets تُدمج داخل الحمولة المكيّشة (محايدة للمستخدم) — كانت
+          // استعلامًا مستقلًا لكل طلب، وهذه النقطة تستقبل طوفة نقرات العاجل.
+          try {
+            const cachedMediaAssets = await storage.getArticleMediaAssetWithDetails?.(fetchedArticle.id);
+            (fetchedArticle as any).mediaAssets = (cachedMediaAssets || [])
+              .filter((a: any) => a.mediaFile?.url)
+              .map((a: any) => ({
+                url: a.mediaFile.url,
+                altText: a.altText || "",
+                displayOrder: a.displayOrder ?? 0,
+              }));
+          } catch {
+            (fetchedArticle as any).mediaAssets = [];
+          }
           return fetchedArticle;
         }
         return null; // Don't cache non-published articles
@@ -13383,50 +13397,66 @@ Respond in valid JSON format only:
       // their own like/bookmark and an up-to-date count (also keeps web + iOS
       // + Android consistent since they all read this endpoint).
       // Always overlay the LIVE view count so the 5-10 boost shows immediately
-      // on refresh — the cached payload's `views` is up to 5 min stale. The
-      // heavy article query stays cached; this is just one PK-indexed lookup.
+      // on refresh — the cached payload's `views` is up to 5 min stale. Read
+      // through a 10s micro-cache (matches the counter merge window) instead
+      // of one PK lookup per request — breaking-push stampedes were turning
+      // this into thousands of per-click queries (2026-08-06).
       {
-        const [viewsRow] = await db.select({ views: articles.views }).from(articles)
-          .where(eq(articles.id, finalArticle.id)).limit(1);
-        if (viewsRow) {
-          finalArticle = { ...finalArticle, views: Number(viewsRow.views ?? (finalArticle as any).views ?? 0) };
+        const liveViews = await getLiveArticleViews(finalArticle.id);
+        if (liveViews != null) {
+          finalArticle = { ...finalArticle, views: liveViews };
         }
       }
 
       if (userId) {
         const articleId = finalArticle.id;
-        const [reactionRow, bookmarkRow, [countRow]] = await Promise.all([
+        // العدّاد المشترك (reactionsCount) عبر micro-cache قصير — محايد
+        // للمستخدم؛ يبقى الاستعلامان الشخصيان (hasReacted/isBookmarked) فقط.
+        const [reactionRow, bookmarkRow, reactionsCountShared] = await Promise.all([
           db.select({ id: reactions.id }).from(reactions)
             .where(and(eq(reactions.userId, userId), eq(reactions.articleId, articleId)))
             .limit(1),
           db.select({ id: bookmarks.id }).from(bookmarks)
             .where(and(eq(bookmarks.userId, userId), eq(bookmarks.articleId, articleId)))
             .limit(1),
-          db.select({ count: sql<number>`count(*)::int` }).from(reactions)
-            .where(eq(reactions.articleId, articleId)),
+          withCache(`article:reactions-count:${articleId}`, 10_000, async () => {
+            const [countRow] = await db.select({ count: sql<number>`count(*)::int` }).from(reactions)
+              .where(eq(reactions.articleId, articleId));
+            return Number(countRow?.count ?? 0);
+          }),
         ]);
         finalArticle = {
           ...finalArticle,
           hasReacted: reactionRow.length > 0,
           isBookmarked: bookmarkRow.length > 0,
-          reactionsCount: Number(countRow?.count ?? (finalArticle as any).reactionsCount ?? 0),
+          reactionsCount: Number(reactionsCountShared ?? (finalArticle as any).reactionsCount ?? 0),
         };
       }
 
       if (userId) {
-        await storage.recordArticleRead(userId, finalArticle.id);
+        // fire-and-forget: كتابة سجل القراءة لا تحجب الرد — كانت تضيف كتابة
+        // متزامنة لكل مشاهدة مسجّلة أثناء ذروة العاجل.
+        storage.recordArticleRead(userId, finalArticle.id).catch(() => {});
       }
 
-      // Attach media assets (email agent images) so mobile apps can render them
-      const mediaAssets = await storage.getArticleMediaAssetWithDetails?.(finalArticle.id);
-      if (mediaAssets && mediaAssets.length > 0) {
-        (finalArticle as any).mediaAssets = mediaAssets
-          .filter((a: any) => a.mediaFile?.url)
-          .map((a: any) => ({
-            url: a.mediaFile.url,
-            altText: a.altText || "",
-            displayOrder: a.displayOrder ?? 0,
-          }));
+      // Attach media assets (email agent images) so mobile apps can render
+      // them. The published path embeds them in the cached payload above;
+      // this per-request fallback covers only uncached (non-published) reads.
+      if ((finalArticle as any).mediaAssets === undefined) {
+        const mediaAssets = await storage.getArticleMediaAssetWithDetails?.(finalArticle.id);
+        if (mediaAssets && mediaAssets.length > 0) {
+          (finalArticle as any).mediaAssets = mediaAssets
+            .filter((a: any) => a.mediaFile?.url)
+            .map((a: any) => ({
+              url: a.mediaFile.url,
+              altText: a.altText || "",
+              displayOrder: a.displayOrder ?? 0,
+            }));
+        }
+      } else if (Array.isArray((finalArticle as any).mediaAssets) && (finalArticle as any).mediaAssets.length === 0) {
+        // حافظ على الشكل القديم للاستجابة: الحقل كان يغيب عند عدم وجود أصول.
+        finalArticle = { ...finalArticle };
+        delete (finalArticle as any).mediaAssets;
       }
 
       res.json(finalArticle);
