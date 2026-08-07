@@ -253,7 +253,7 @@ export async function createDraftPost(input: CreatePostInput): Promise<SocialPos
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
     throw new SocialPublishValidationError(
-      `النص يتجاوز حد منصة X (${validation.weightedLength}/280)`,
+      `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
     );
   }
   if (input.imageSource !== "none" && !input.imageUrl) {
@@ -310,7 +310,7 @@ export async function updateEditablePost(postId: string, input: UpdatePostInput)
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
     throw new SocialPublishValidationError(
-      `النص يتجاوز حد منصة X (${validation.weightedLength}/280)`,
+      `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
     );
   }
   if (input.scheduledAt !== undefined && input.scheduledAt !== null) {
