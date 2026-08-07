@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { aiGateway } from "../ai/gateway";
+import { memoryCache } from "../memoryCache";
 import { articles, comments, editorialNotifications, worldDays } from "@shared/schema";
 
 type WriterArticle = {
@@ -350,11 +351,31 @@ export async function reviewWriterArticle(userId: string, articleId: string, ove
   return parseJson<Record<string, unknown>>(response.content);
 }
 
+// الملف الأسلوبي لا يتغير إلا بنشر مقال جديد (بصمة أحدث مقال ضمن المفتاح)،
+// فيوم كامل آمن. فشل التوليد يُحفظ لفترة أقصر كي لا يُعاد استدعاء AI بطيء
+// (15-19 ثانية في حادثة 2026-08-07) مع كل فتح للوحة الكاتب.
+const STYLE_PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
+const STYLE_PROFILE_FALLBACK_TTL_MS = 15 * 60 * 1000;
+
 export async function getWriterStyleProfile(userId: string) {
-  const published = (await getWriterArticles(userId)).filter((article) => article.status === "published").slice(0, 8);
+  // استعلام مخصص بدل getWriterArticles: ذاك يجلب محتوى كل مقالات الكاتب كاملة
+  // بينما الملف الأسلوبي يحتاج أحدث 8 منشورة فقط.
+  const published = await db
+    .select({ id: articles.id, title: articles.title, content: articles.content, excerpt: articles.excerpt })
+    .from(articles)
+    .where(and(
+      eq(articles.articleType, "opinion"),
+      eq(articles.status, "published"),
+      or(eq(articles.authorId, userId), eq(articles.submitterId, userId)),
+    ))
+    .orderBy(desc(articles.updatedAt))
+    .limit(8);
   if (published.length === 0) {
     return { ready: false, message: "يُبنى ملف أسلوبك بعد نشر أول مقال.", traits: [], guidance: [] };
   }
+  const cacheKey = `writer:style-profile:v1:${userId}:${published[0].id}:${published.length}`;
+  const cached = memoryCache.get<Record<string, unknown>>(cacheKey);
+  if (cached) return cached;
   try {
     const response = await aiGateway.complete({
       feature: "opinion-writer-style-profile",
@@ -373,17 +394,23 @@ export async function getWriterStyleProfile(userId: string) {
           }))),
         },
       ],
-      options: { jsonMode: true, temperature: 0.3, maxTokens: 1200 },
+      // 1200 كانت تُبتر دائمًا (JSON عربي ≈ توكن لكل حرف تقريبًا) فيفشل parse
+      // ويظهر الـ fallback الثابت لكل الكتّاب — حادثة "Unterminated string".
+      options: { jsonMode: true, temperature: 0.3, maxTokens: 2500 },
     });
-    return parseJson<Record<string, unknown>>(response.content);
+    const profile = parseJson<Record<string, unknown>>(response.content);
+    memoryCache.set(cacheKey, profile, STYLE_PROFILE_TTL_MS);
+    return profile;
   } catch (error) {
     console.warn("[Writer Workspace] style profile fallback:", error instanceof Error ? error.message : error);
-    return {
+    const fallback = {
       ready: true,
       signature: "صوتك يتضح أكثر مع كل مقال جديد.",
       traits: ["لغة رأي مباشرة", "اهتمام بالقضايا القريبة من القارئ"],
       guidance: ["حافظ على وضوح موقفك في المقدمة", "امنح الرأي المضاد مساحة عادلة"],
     };
+    memoryCache.set(cacheKey, fallback, STYLE_PROFILE_FALLBACK_TTL_MS);
+    return fallback;
   }
 }
 
