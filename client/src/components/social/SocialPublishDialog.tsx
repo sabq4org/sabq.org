@@ -240,6 +240,8 @@ export function SocialPublishDialog({
         title: "نُشر على X",
         description: data.post.externalPostUrl || "تم النشر بنجاح",
       });
+      // النجاح يغلق النافذة — السجل متاح في صفحة النشر الاجتماعي
+      onOpenChange(false);
     },
     onError: (error: any) => {
       setConfirmPublishOpen(false);
@@ -266,6 +268,7 @@ export function SocialPublishDialog({
       queryClient.invalidateQueries({ queryKey: postsQueryKey });
       setScheduleMode(false);
       toast({ title: "تمت الجدولة", description: "سيُنشر المنشور تلقائياً في الموعد" });
+      onOpenChange(false);
     },
     onError: (error: any) => {
       toast({ title: "تعذرت الجدولة", description: error.message || "حاول مجدداً", variant: "destructive" });
