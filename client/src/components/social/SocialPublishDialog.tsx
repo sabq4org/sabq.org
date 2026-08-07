@@ -43,6 +43,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { validateXPostText, X_MAX_WEIGHTED_LENGTH } from "@shared/socialPostText";
+import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 
 interface SocialPublishDialogProps {
@@ -602,7 +603,7 @@ export function SocialPublishDialog({
                             <div className="line-clamp-2 break-words">{p.text}</div>
                             {p.status === "scheduled" && p.scheduledAt && (
                               <div className="text-xs text-muted-foreground">
-                                موعد النشر: {new Date(p.scheduledAt).toLocaleString("ar-SA")}
+                                موعد النشر: {fmtSocialDateTime(p.scheduledAt)}
                               </div>
                             )}
                             {p.status === "failed" && p.lastError && (

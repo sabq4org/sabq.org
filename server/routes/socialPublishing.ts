@@ -15,6 +15,7 @@ import {
   getConnectedAccount,
   getPost,
   getPostAttempts,
+  getPublishStats,
   listAccounts,
   listPostsForArticle,
   listRecentPosts,
@@ -324,6 +325,19 @@ router.get(
       }
     } catch (error) {
       handleError(res, error, "تعذر جلب سجل المنشورات");
+    }
+  },
+);
+
+router.get(
+  "/api/social-publishing/stats",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG),
+  async (_req, res) => {
+    try {
+      res.json(await getPublishStats());
+    } catch (error) {
+      handleError(res, error, "تعذر جلب الإحصائيات");
     }
   },
 );
