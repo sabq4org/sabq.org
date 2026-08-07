@@ -189,9 +189,18 @@ router.post(
       }
       // v1: حساب واحد لكل منصة — نأخذ الأول ونعيد القائمة للشفافية
       const picked = xAccounts[0];
+      // name لدى Publer اسم عرض (قد يكون عربياً) لا username — لا نعتمده
+      // معرفاً إلا إذا طابق شكل معرفات X، وإلا نبقي المعرف المخزن سابقاً
+      const isValidXHandle = (h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h);
+      const nameAsHandle = picked.name.replace(/^@/, "");
+      const existing = await getConnectedAccount("x");
+      // المخزن سابقاً قد يكون ملوثاً باسم عرض من مزامنة قديمة — لا نبقيه إلا صالحاً
+      const storedHandle =
+        existing?.handle && isValidXHandle(existing.handle) ? existing.handle : "";
+      const handle = isValidXHandle(nameAsHandle) ? nameAsHandle : storedHandle;
       const saved = await saveConnectedAccount({
         platform: "x",
-        handle: picked.name.replace(/^@/, ""),
+        handle,
         externalAccountId: picked.id,
         displayName: picked.name,
         credentialsEncrypted: null,
