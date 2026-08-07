@@ -38,7 +38,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
-import { validateXPostText, X_MAX_WEIGHTED_LENGTH } from "@shared/socialPostText";
+import {
+  validateXPostText,
+  X_MAX_PREMIUM_WEIGHTED_LENGTH,
+  X_MAX_WEIGHTED_LENGTH,
+} from "@shared/socialPostText";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 import { ObjectUploader } from "@/components/ObjectUploader";
 
@@ -238,16 +242,20 @@ export function ComposeTweetDialog({ open, onOpenChange }: ComposeTweetDialogPro
               />
               <div
                 className={`text-xs ${
-                  validation.remaining < 0
+                  !validation.valid
                     ? "text-destructive font-bold"
-                    : validation.remaining < 20
+                    : validation.overStandard || validation.remaining < 20
                       ? "text-amber-600"
                       : "text-muted-foreground"
                 }`}
                 data-testid="text-compose-counter"
               >
-                {validation.weightedLength} / {X_MAX_WEIGHTED_LENGTH}
-                {validation.remaining < 0 && " — تجاوزت الحد"}
+                {validation.weightedLength} /{" "}
+                {validation.overStandard
+                  ? X_MAX_PREMIUM_WEIGHTED_LENGTH.toLocaleString("en-US")
+                  : X_MAX_WEIGHTED_LENGTH}
+                {!validation.valid && " — تجاوزت الحد"}
+                {validation.valid && validation.overStandard && " — أطول من 280: يظهر مطوياً (Premium)"}
               </div>
             </div>
 

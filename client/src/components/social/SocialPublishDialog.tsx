@@ -42,7 +42,11 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
-import { validateXPostText, X_MAX_WEIGHTED_LENGTH } from "@shared/socialPostText";
+import {
+  validateXPostText,
+  X_MAX_PREMIUM_WEIGHTED_LENGTH,
+  X_MAX_WEIGHTED_LENGTH,
+} from "@shared/socialPostText";
 import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 
@@ -414,16 +418,20 @@ export function SocialPublishDialog({
                 <div className="flex items-center justify-between text-xs">
                   <span
                     className={
-                      validation.remaining < 0
+                      !validation.valid
                         ? "text-destructive font-bold"
-                        : validation.remaining < 20
+                        : validation.overStandard || validation.remaining < 20
                           ? "text-amber-600"
                           : "text-muted-foreground"
                     }
                     data-testid="text-char-counter"
                   >
-                    {validation.weightedLength} / {X_MAX_WEIGHTED_LENGTH}
-                    {validation.remaining < 0 && " — تجاوزت الحد"}
+                    {validation.weightedLength} /{" "}
+                    {validation.overStandard
+                      ? X_MAX_PREMIUM_WEIGHTED_LENGTH.toLocaleString("en-US")
+                      : X_MAX_WEIGHTED_LENGTH}
+                    {!validation.valid && " — تجاوزت الحد"}
+                    {validation.valid && validation.overStandard && " — أطول من 280: يظهر مطوياً (Premium)"}
                   </span>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Switch

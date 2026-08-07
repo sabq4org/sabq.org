@@ -3,7 +3,10 @@
 // وما عداها (إيموجي، CJK، …) يُحسب 2، وكل رابط يُحسب 23 بغض النظر عن طوله
 // (اختصار t.co). يستخدمه العميل للعداد والخادم للتحقق قبل النشر.
 
+/** العتبة القياسية — بعدها تظهر التغريدة مطوية («عرض المزيد») في الخط الزمني */
 export const X_MAX_WEIGHTED_LENGTH = 280;
+/** حد الرفض الفعلي — منشورات Premium/التوثيق المؤسسي الطويلة (حساب @sabqorg) */
+export const X_MAX_PREMIUM_WEIGHTED_LENGTH = 25_000;
 export const X_URL_WEIGHT = 23;
 
 // نطاقات codepoint ذات الوزن 1 كما في twitter-text v3 config
@@ -58,8 +61,12 @@ export function composeXPostText(text: string, linkUrl?: string | null): string 
 
 export interface XTextValidation {
   weightedLength: number;
+  /** المتبقي حتى العتبة القياسية 280 (قد يكون سالباً لمنشور Premium طويل) */
   remaining: number;
+  /** صالح حتى حد Premium ‏(25k) — الرفض الفعلي */
   valid: boolean;
+  /** تجاوز 280 — سيظهر مطوياً ويتطلب اشتراك Premium على الحساب */
+  overStandard: boolean;
   empty: boolean;
 }
 
@@ -70,7 +77,8 @@ export function validateXPostText(text: string, linkUrl?: string | null): XTextV
   return {
     weightedLength,
     remaining: X_MAX_WEIGHTED_LENGTH - weightedLength,
-    valid: weightedLength > 0 && weightedLength <= X_MAX_WEIGHTED_LENGTH,
+    valid: weightedLength > 0 && weightedLength <= X_MAX_PREMIUM_WEIGHTED_LENGTH,
+    overStandard: weightedLength > X_MAX_WEIGHTED_LENGTH,
     empty: composed.trim().length === 0,
   };
 }

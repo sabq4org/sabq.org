@@ -3,6 +3,7 @@ import {
   composeXPostText,
   validateXPostText,
   xWeightedLength,
+  X_MAX_PREMIUM_WEIGHTED_LENGTH,
   X_MAX_WEIGHTED_LENGTH,
   X_URL_WEIGHT,
 } from "../../shared/socialPostText";
@@ -37,19 +38,29 @@ describe("socialPostText — العد الموزون لمنصة X", () => {
     expect(composeXPostText("", "https://sabq.org/a")).toBe("https://sabq.org/a");
   });
 
-  it("نص عربي بطول 280 بالضبط صالح، و281 مرفوض", () => {
+  it("280 بالضبط قياسي، و281 صالح لكنه Premium (overStandard)", () => {
     const exact = "ا".repeat(X_MAX_WEIGHTED_LENGTH);
     expect(validateXPostText(exact).valid).toBe(true);
-    expect(validateXPostText(exact + "ا").valid).toBe(false);
+    expect(validateXPostText(exact).overStandard).toBe(false);
+    const over = validateXPostText(exact + "ا");
+    expect(over.valid).toBe(true);
+    expect(over.overStandard).toBe(true);
   });
 
-  it("مع الرابط: الحد الفعلي للنص 256 حرفاً (23 للرابط + 1 لسطر جديد)", () => {
+  it("تجاوز حد Premium ‏25k مرفوض فعلياً", () => {
+    expect(validateXPostText("ا".repeat(X_MAX_PREMIUM_WEIGHTED_LENGTH)).valid).toBe(true);
+    expect(validateXPostText("ا".repeat(X_MAX_PREMIUM_WEIGHTED_LENGTH + 1)).valid).toBe(false);
+  });
+
+  it("مع الرابط: 256 حرفاً يبلغ 280 بالضبط، و257 يتخطى العتبة القياسية فقط", () => {
     const link = "https://sabq.org/article/some-slug";
     const okText = "ا".repeat(256);
-    const tooLong = "ا".repeat(257);
+    const overText = "ا".repeat(257);
     expect(validateXPostText(okText, link).valid).toBe(true);
     expect(validateXPostText(okText, link).weightedLength).toBe(280);
-    expect(validateXPostText(tooLong, link).valid).toBe(false);
+    expect(validateXPostText(okText, link).overStandard).toBe(false);
+    expect(validateXPostText(overText, link).valid).toBe(true);
+    expect(validateXPostText(overText, link).overStandard).toBe(true);
   });
 
   it("النص الفارغ غير صالح ويُعلَّم empty", () => {
