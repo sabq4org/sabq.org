@@ -1060,6 +1060,10 @@ export const articles = pgTable("articles", {
   index("idx_articles_homepage").on(table.status, table.hideFromHomepage, table.publishedAt.desc()),
   index("idx_articles_homepage_order").on(table.status, table.hideFromHomepage, table.displayOrder.desc(), table.publishedAt.desc()),
   index("idx_articles_views").on(table.views.desc()),
+  // «أحدث المقالات» في لوحة التحكم تفرز created_at بلا شرط — بدون الفهرس مسحٌ
+  // كامل لمليون صف كل 4 دقائق (حادثة بطء اللوحة 2026-08-07). هذا الفهرس وفهرس
+  // views أعلاه أُنشئا يدوياً CONCURRENTLY في الإنتاج 2026-08-07.
+  index("idx_articles_created_at").on(table.createdAt.desc()),
   index("idx_articles_slug").on(table.slug),
   // Edge slug-redirect does OR(englishSlug, slug); englishSlug was unindexed → full scan.
   index("idx_articles_english_slug").on(table.englishSlug),
