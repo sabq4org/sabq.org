@@ -1,7 +1,6 @@
-// صفحة «النشر الاجتماعي» — التصميم المعتمد 2026-08-07:
-// بطاقة حساب غنية + 4 بطاقات إحصائية + سجل بفلاتر وبطاقات ملونة الحالة
-// تعرض المنشئ/الناشر والخبر المصدر، بتواريخ ميلادية وأرقام لاتينية
-// بتوقيت الرياض (fmtSocialDateTime). البوابة: social_publish.view.
+// صفحة «النشر الاجتماعي» — إعادة ضبط UI/UX 2026-08-07:
+// رأس مضغوط + شريط حساب تشغيلي + مؤشرات compact + سجل بهرمية أوضح.
+// المنطق والصلاحيات والـ APIs كما هي. البوابة: social_publish.view.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -24,6 +23,7 @@ import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { fmtRelativeToNow, fmtSocialDateTime } from "@/components/social/socialFormat";
+import { cn } from "@/lib/utils";
 
 interface SafeAccount {
   id: string;
@@ -295,17 +296,29 @@ export default function SocialPublishingPage() {
     switch (status) {
       case "connected":
         return (
-          <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 gap-1.5 border-0">
+          <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 gap-1.5 border-0 text-sm font-medium px-2.5 py-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
             متصل
           </Badge>
         );
       case "expired":
-        return <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-0">انتهى الاعتماد</Badge>;
+        return (
+          <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-0 text-sm font-medium px-2.5 py-0.5">
+            انتهى الاعتماد
+          </Badge>
+        );
       case "revoked":
-        return <Badge className="bg-red-500/10 text-red-700 dark:text-red-400 border-0">مسحوب</Badge>;
+        return (
+          <Badge className="bg-red-500/10 text-red-700 dark:text-red-400 border-0 text-sm font-medium px-2.5 py-0.5">
+            مسحوب
+          </Badge>
+        );
       default:
-        return <Badge variant="outline">غير متصل</Badge>;
+        return (
+          <Badge variant="outline" className="text-sm font-medium px-2.5 py-0.5">
+            غير متصل
+          </Badge>
+        );
     }
   };
 
@@ -315,6 +328,7 @@ export default function SocialPublishingPage() {
       label: "نُشر اليوم",
       value: stats?.publishedToday,
       icon: CheckCircle2,
+      valueClass: "text-emerald-600 dark:text-emerald-400",
       chip: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     },
     {
@@ -322,6 +336,7 @@ export default function SocialPublishingPage() {
       label: "مجدولة قادمة",
       value: stats?.scheduledUpcoming,
       icon: CalendarClock,
+      valueClass: "text-amber-600 dark:text-amber-400",
       chip: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
     },
     {
@@ -329,6 +344,7 @@ export default function SocialPublishingPage() {
       label: "تحتاج انتباهك",
       value: stats?.failed,
       icon: AlertTriangle,
+      valueClass: "text-red-600 dark:text-red-400",
       chip: "bg-red-500/10 text-red-600 dark:text-red-400",
     },
     {
@@ -336,6 +352,7 @@ export default function SocialPublishingPage() {
       label: "إجمالي المنشورات",
       value: stats?.total,
       icon: BarChart3,
+      valueClass: "text-foreground",
       chip: "bg-primary/10 text-primary",
     },
   ];
@@ -349,364 +366,447 @@ export default function SocialPublishingPage() {
 
   return (
     <DashboardLayout>
-      <DashboardPageShell contentClassName="pb-10 space-y-5">
+      <DashboardPageShell
+        maxWidthClassName="max-w-[1400px]"
+        contentClassName="px-4 pb-10 sm:px-6 space-y-4"
+      >
         <DashboardPageHeader
           icon={Share2}
           title="النشر الاجتماعي"
           description="نشر أخبار سبق على منصة X — فورياً أو بجدولة، مع سجل كامل للمحاولات"
           titleTestId="heading-social-publishing"
+          className="p-4 sm:p-4"
         />
 
-        {/* الحساب + الإحصائيات */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(300px,1.1fr)_2fr]">
-          <Card className="rounded-2xl">
-            <CardContent className="p-5 space-y-4">
-              {accountsLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-              ) : xAccount ? (
-                <>
-                  <div className="flex items-center gap-3">
-                    <div className="w-13 h-13 min-w-12 min-h-12 rounded-full bg-gradient-to-br from-primary to-blue-600 text-white flex items-center justify-center text-xl font-bold">
-                      س
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-base truncate">
+        {/* الحساب المتصل — شريط تشغيلي مضغوط */}
+        <Card className="rounded-xl border-border/80 shadow-none">
+          <CardContent className="p-4 sm:p-5">
+            {accountsLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm">جاري تحميل الحساب…</span>
+              </div>
+            ) : xAccount ? (
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-start gap-3 sm:items-center">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-blue-600 text-lg font-bold text-white sm:h-14 sm:w-14 sm:text-xl">
+                    س
+                  </div>
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-lg font-bold tracking-tight sm:text-xl">
                         {xAccount.displayName || "حساب X"}
-                      </div>
-                      <div className="text-sm text-muted-foreground" dir="ltr">
+                      </h2>
+                      <Badge
+                        variant="outline"
+                        className="border-border/80 bg-muted/40 text-sm font-semibold"
+                      >
+                        X
+                      </Badge>
+                      {accountStatusPill(xAccount.status)}
+                      {isPubler && (
+                        <Badge className="border-0 bg-primary/10 px-2.5 py-0.5 text-sm font-medium text-primary">
+                          عبر Publer
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground/80" dir="ltr">
                         @{xAccount.handle || "sabqorg"}
-                      </div>
+                      </span>
+                      {xAccount.lastVerifiedAt && (
+                        <span style={{ fontVariantNumeric: latn }}>
+                          آخر تحقق: {fmtSocialDateTime(xAccount.lastVerifiedAt)}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {accountStatusPill(xAccount.status)}
-                    {isPubler && (
-                      <Badge className="bg-primary/10 text-primary border-0">عبر Publer</Badge>
+                </div>
+
+                {canManageAccounts && (
+                  <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                    {isPubler ? (
+                      <Button
+                        size="default"
+                        variant="outline"
+                        onClick={() => publerSyncMutation.mutate()}
+                        disabled={connectDisabled}
+                        data-testid="button-publer-sync"
+                      >
+                        {publerSyncMutation.isPending && (
+                          <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />
+                        )}
+                        إعادة المزامنة
+                      </Button>
+                    ) : (
+                      xAccount.status !== "connected" && (
+                        <Button
+                          size="default"
+                          onClick={() => connectMutation.mutate()}
+                          disabled={connectDisabled}
+                          data-testid="button-reconnect-x"
+                        >
+                          {connectMutation.isPending && (
+                            <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />
+                          )}
+                          إعادة الربط
+                        </Button>
+                      )
+                    )}
+                    <Button
+                      size="default"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => setDisconnectTarget(xAccount)}
+                      disabled={disconnectMutation.isPending}
+                      data-testid="button-disconnect-x"
+                    >
+                      <Unlink className="ml-1.5 h-4 w-4" />
+                      فك الربط
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <Link2 className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-base font-bold sm:text-lg">لا يوجد حساب X مرتبط</div>
+                    <p className="max-w-xl text-sm leading-6 text-muted-foreground">
+                      {isPubler
+                        ? "يُربط الحساب من لوحة Publer ثم يُزامَن هنا — لا تُخزن توكنات لدينا"
+                        : "الربط عبر تفويض OAuth الرسمي من X — لا كلمات مرور هنا أبداً"}
+                    </p>
+                    {isPubler && !accountsRaw?.publerConfigured && (
+                      <p className="text-sm text-amber-600">
+                        التهيئة ناقصة: يلزم ضبط PUBLER_API_KEY وPUBLER_WORKSPACE_ID أولاً.
+                      </p>
+                    )}
+                    {!isPubler && !oauthConfigured && (
+                      <p className="text-sm text-amber-600">
+                        التهيئة ناقصة: يلزم ضبط X_CLIENT_ID وX_CLIENT_SECRET أولاً.
+                      </p>
                     )}
                   </div>
-                  {xAccount.lastVerifiedAt && (
-                    <p className="text-xs text-muted-foreground" style={{ fontVariantNumeric: latn }}>
-                      آخر تحقق: {fmtSocialDateTime(xAccount.lastVerifiedAt)}
-                    </p>
-                  )}
-                  {canManageAccounts && (
-                    <div className="flex gap-2 pt-1">
-                      {isPubler ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => publerSyncMutation.mutate()}
-                          disabled={connectDisabled}
-                          data-testid="button-publer-sync"
-                        >
-                          {publerSyncMutation.isPending && (
-                            <Loader2 className="w-4 h-4 ml-1 animate-spin" />
-                          )}
-                          إعادة المزامنة
-                        </Button>
-                      ) : (
-                        xAccount.status !== "connected" && (
-                          <Button
-                            size="sm"
-                            onClick={() => connectMutation.mutate()}
-                            disabled={connectDisabled}
-                            data-testid="button-reconnect-x"
-                          >
-                            {connectMutation.isPending && (
-                              <Loader2 className="w-4 h-4 ml-1 animate-spin" />
-                            )}
-                            إعادة الربط
-                          </Button>
-                        )
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground"
-                        onClick={() => setDisconnectTarget(xAccount)}
-                        disabled={disconnectMutation.isPending}
-                        data-testid="button-disconnect-x"
-                      >
-                        <Unlink className="w-4 h-4 ml-1" />
-                        فك الربط
-                      </Button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                      <Link2 className="w-5 h-5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <div className="font-bold">لا يوجد حساب X مرتبط</div>
-                      <p className="text-xs text-muted-foreground">
-                        {isPubler
-                          ? "يُربط الحساب من لوحة Publer ثم يُزامَن هنا — لا تُخزن توكنات لدينا"
-                          : "الربط عبر تفويض OAuth الرسمي من X — لا كلمات مرور هنا أبداً"}
-                      </p>
-                    </div>
-                  </div>
-                  {isPubler && !accountsRaw?.publerConfigured && (
-                    <p className="text-sm text-amber-600">
-                      التهيئة ناقصة: يلزم ضبط PUBLER_API_KEY وPUBLER_WORKSPACE_ID أولاً.
-                    </p>
-                  )}
-                  {!isPubler && !oauthConfigured && (
-                    <p className="text-sm text-amber-600">
-                      التهيئة ناقصة: يلزم ضبط X_CLIENT_ID وX_CLIENT_SECRET أولاً.
-                    </p>
-                  )}
-                  {canManageAccounts && (
-                    <Button
-                      size="sm"
-                      onClick={() => (isPubler ? publerSyncMutation.mutate() : connectMutation.mutate())}
-                      disabled={connectDisabled}
-                      data-testid="button-connect-x"
-                    >
-                      {connectPending && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
-                      {isPubler ? "مزامنة حساب X من Publer" : "ربط حساب X"}
-                    </Button>
-                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {statTiles.map((tile) => (
-              <Card key={tile.key} className="rounded-2xl">
-                <CardContent className="p-4 space-y-2">
-                  <span
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center ${tile.chip}`}
+                {canManageAccounts && (
+                  <Button
+                    onClick={() =>
+                      isPubler ? publerSyncMutation.mutate() : connectMutation.mutate()
+                    }
+                    disabled={connectDisabled}
+                    data-testid="button-connect-x"
                   >
-                    <tile.icon className="w-4 h-4" />
-                  </span>
-                  <div
-                    className="text-2xl font-bold leading-none"
-                    dir="ltr"
-                    style={{ fontVariantNumeric: latn }}
-                    data-testid={`stat-${tile.key}`}
-                  >
-                    {tile.value ?? "—"}
-                  </div>
-                  <div className="text-xs font-semibold text-muted-foreground">{tile.label}</div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* السجل */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            سجل المنشورات
-            <span className="text-xs font-medium text-muted-foreground">
-              التواريخ ميلادية بتوقيت الرياض
-            </span>
-          </h2>
-          <div className="flex gap-1.5 flex-wrap">
-            {filterButtons.map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setStatusFilter(f.key)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                  statusFilter === f.key
-                    ? "bg-foreground text-background border-foreground"
-                    : "bg-card text-muted-foreground border-border hover:bg-muted"
-                }`}
-                data-testid={`filter-${f.key}`}
-              >
-                {f.label}{" "}
-                <span dir="ltr" style={{ fontVariantNumeric: latn }}>
-                  {filterCounts[f.key]}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <Card className="rounded-2xl overflow-hidden">
-          <CardContent className="p-0">
-            {postsLoading ? (
-              <div className="p-8 flex justify-center">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : filteredPosts.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-10 text-center">
-                {posts.length === 0
-                  ? "لا منشورات بعد — افتح خبراً منشوراً من «إدارة الأخبار» واختر «النشر على X»."
-                  : "لا منشورات بهذه الحالة."}
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {filteredPosts.map((p) => {
-                  const meta = STATUS_META[p.status] ?? STATUS_META.draft;
-                  const thumb = p.imageUrl || p.articleImageUrl || null;
-                  return (
-                    <article
-                      key={p.id}
-                      className="relative flex gap-4 p-4 sm:p-5"
-                      data-testid={`social-log-row-${p.id}`}
-                    >
-                      <span className={`absolute inset-y-0 right-0 w-[3px] ${meta.strip}`} />
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge className={`${meta.pill} border-0`}>
-                            {meta.label}
-                            {p.status === "scheduled" && p.scheduledAt && (
-                              <> · {fmtRelativeToNow(p.scheduledAt)}</>
-                            )}
-                          </Badge>
-                          {p.status === "failed" && (
-                            <Badge className="bg-muted text-muted-foreground border-0" dir="ltr" style={{ fontVariantNumeric: latn }}>
-                              {p.attempts}/3
-                            </Badge>
-                          )}
-                          {p.articleTitle && (
-                            <span className="text-xs text-muted-foreground min-w-0 truncate">
-                              من خبر: <b className="text-foreground font-semibold">{p.articleTitle}</b>
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-[15px] leading-[1.75] break-words m-0">{p.text}</p>
-
-                        {p.status === "failed" && p.lastError && (
-                          <div className="bg-red-500/10 text-red-700 dark:text-red-400 rounded-lg px-3 py-2 text-[13px] leading-relaxed break-words">
-                            {p.lastError}
-                          </div>
-                        )}
-
-                        <div
-                          className="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-muted-foreground"
-                          style={{ fontVariantNumeric: latn }}
-                        >
-                          {p.createdByName && (
-                            <span className="inline-flex items-center gap-1">
-                              <User className="w-3.5 h-3.5 opacity-70" />
-                              أنشأه <b className="text-foreground font-semibold">{p.createdByName}</b>
-                            </span>
-                          )}
-                          {p.publishedByName && p.status === "published" && p.publishedByName !== p.createdByName && (
-                            <span>
-                              نشره <b className="text-foreground font-semibold">{p.publishedByName}</b>
-                            </span>
-                          )}
-                          {p.status === "scheduled" && p.scheduledAt ? (
-                            <span className="inline-flex items-center gap-1">
-                              <CalendarClock className="w-3.5 h-3.5 opacity-70" />
-                              موعد النشر: {fmtSocialDateTime(p.scheduledAt)}
-                            </span>
-                          ) : (
-                            <span>{fmtSocialDateTime(p.publishedAt || p.createdAt)}</span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {p.externalPostUrl && (
-                            <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1.5">
-                              <a href={p.externalPostUrl} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                فتح في X
-                              </a>
-                            </Button>
-                          )}
-                          {p.status === "scheduled" && canManageScheduled && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs text-red-600 border-red-500/20 hover:bg-red-500/10"
-                              disabled={cancelMutation.isPending}
-                              onClick={() => cancelMutation.mutate(p.id)}
-                              data-testid={`button-log-cancel-${p.id}`}
-                            >
-                              إلغاء الجدولة
-                            </Button>
-                          )}
-                          {p.status === "failed" && canPublishNow && (
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs"
-                              disabled={retryMutation.isPending}
-                              onClick={() => retryMutation.mutate(p.id)}
-                              data-testid={`button-log-retry-${p.id}`}
-                            >
-                              <RefreshCcw className="w-3.5 h-3.5 ml-1" />
-                              إعادة المحاولة
-                            </Button>
-                          )}
-                          {(p.status === "failed" || p.attempts > 1) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 text-xs text-muted-foreground"
-                              onClick={() => setAttemptsFor(attemptsFor === p.id ? null : p.id)}
-                              data-testid={`button-attempts-${p.id}`}
-                            >
-                              <ListTree className="w-3.5 h-3.5 ml-1" />
-                              {attemptsFor === p.id ? "إخفاء المحاولات" : "عرض المحاولات"}
-                            </Button>
-                          )}
-                        </div>
-
-                        {attemptsFor === p.id && (
-                          <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1.5">
-                            {attemptsLoading ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                            ) : attempts.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">لا محاولات مسجلة.</p>
-                            ) : (
-                              attempts.map((a) => (
-                                <div
-                                  key={a.id}
-                                  className="flex items-center gap-2 flex-wrap text-xs"
-                                  style={{ fontVariantNumeric: latn }}
-                                >
-                                  <span
-                                    className={`w-1.5 h-1.5 rounded-full ${
-                                      a.outcome === "success" ? "bg-emerald-500" : "bg-red-500"
-                                    }`}
-                                  />
-                                  <span className="font-semibold">
-                                    {ATTEMPT_PHASES[a.phase] ?? a.phase}
-                                  </span>
-                                  {a.httpStatus && <span dir="ltr">HTTP {a.httpStatus}</span>}
-                                  {a.durationMs != null && <span dir="ltr">{a.durationMs}ms</span>}
-                                  <span className="text-muted-foreground">
-                                    {fmtSocialDateTime(a.createdAt)}
-                                  </span>
-                                  {a.errorMessage && (
-                                    <span className="text-red-600 dark:text-red-400 w-full break-words">
-                                      {a.errorMessage}
-                                    </span>
-                                  )}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {thumb && (
-                        <img
-                          src={thumb}
-                          alt=""
-                          loading="lazy"
-                          className="w-16 h-16 sm:w-[84px] sm:h-[84px] rounded-xl object-cover border border-border shrink-0 bg-muted"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      )}
-                    </article>
-                  );
-                })}
+                    {connectPending && <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />}
+                    {isPubler ? "مزامنة حساب X من Publer" : "ربط حساب X"}
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* مؤشرات الأداء — compact، الرقم أولاً */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+          {statTiles.map((tile) => (
+            <div
+              key={tile.key}
+              className="rounded-xl border border-border/80 bg-card px-3.5 py-3 sm:px-4 sm:py-3.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-muted-foreground">{tile.label}</p>
+                <span
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-lg",
+                    tile.chip,
+                  )}
+                >
+                  <tile.icon className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p
+                className={cn(
+                  "mt-1.5 text-3xl font-bold tracking-tight leading-none",
+                  tile.valueClass,
+                )}
+                dir="ltr"
+                style={{ fontVariantNumeric: latn }}
+                data-testid={`stat-${tile.key}`}
+              >
+                {tile.value ?? "—"}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* سجل المنشورات — العنصر البصري الرئيسي */}
+        <section className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold tracking-tight">سجل المنشورات</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                التواريخ ميلادية بتوقيت الرياض
+              </p>
+            </div>
+
+            <Tabs
+              value={statusFilter}
+              onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-0.5 p-1 sm:w-auto">
+                {filterButtons.map((f) => {
+                  const active = statusFilter === f.key;
+                  return (
+                    <TabsTrigger
+                      key={f.key}
+                      value={f.key}
+                      className="gap-1.5 px-3.5 py-2 text-sm font-semibold"
+                      data-testid={`filter-${f.key}`}
+                    >
+                      {f.label}
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums",
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "bg-background/80 text-muted-foreground",
+                        )}
+                        dir="ltr"
+                        style={{ fontVariantNumeric: latn }}
+                      >
+                        {filterCounts[f.key]}
+                      </span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </Tabs>
+          </div>
+
+          <Card className="overflow-hidden rounded-xl border-border/80 shadow-none">
+            <CardContent className="p-0">
+              {postsLoading ? (
+                <div className="flex justify-center p-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredPosts.length === 0 ? (
+                <p className="px-4 py-12 text-center text-base text-muted-foreground">
+                  {posts.length === 0
+                    ? "لا منشورات بعد — افتح خبراً منشوراً من «إدارة الأخبار» واختر «النشر على X»."
+                    : "لا منشورات بهذه الحالة."}
+                </p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {filteredPosts.map((p) => {
+                    const meta = STATUS_META[p.status] ?? STATUS_META.draft;
+                    const thumb = p.imageUrl || p.articleImageUrl || null;
+                    return (
+                      <article
+                        key={p.id}
+                        className="relative flex gap-3 p-4 sm:gap-4 sm:p-5"
+                        data-testid={`social-log-row-${p.id}`}
+                      >
+                        <span
+                          className={cn("absolute inset-y-0 right-0 w-1", meta.strip)}
+                          aria-hidden
+                        />
+
+                        {/* الصورة أولاً في RTL = يمين الصف */}
+                        {thumb ? (
+                          <img
+                            src={thumb}
+                            alt=""
+                            loading="lazy"
+                            className="h-[88px] w-[88px] shrink-0 rounded-xl border border-border object-cover bg-muted sm:h-24 sm:w-24"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="flex h-[88px] w-[88px] shrink-0 items-center justify-center rounded-xl border border-dashed border-border bg-muted/40 sm:h-24 sm:w-24">
+                            <Share2 className="h-6 w-6 text-muted-foreground/50" />
+                          </div>
+                        )}
+
+                        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={cn(meta.pill, "border-0 px-2.5 py-0.5 text-sm font-semibold")}>
+                              {meta.label}
+                              {p.status === "scheduled" && p.scheduledAt && (
+                                <> · {fmtRelativeToNow(p.scheduledAt)}</>
+                              )}
+                            </Badge>
+                            {p.status === "failed" && (
+                              <Badge
+                                className="border-0 bg-muted px-2.5 py-0.5 text-sm text-muted-foreground"
+                                dir="ltr"
+                                style={{ fontVariantNumeric: latn }}
+                              >
+                                {p.attempts}/3
+                              </Badge>
+                            )}
+                          </div>
+
+                          {p.articleTitle && (
+                            <h3 className="text-base font-bold leading-snug tracking-tight text-foreground sm:text-[17px]">
+                              <span className="font-medium text-muted-foreground">من خبر: </span>
+                              {p.articleTitle}
+                            </h3>
+                          )}
+
+                          <p className="m-0 line-clamp-3 text-[15px] leading-7 text-foreground/90 break-words sm:text-base sm:leading-7">
+                            {p.text}
+                          </p>
+
+                          {p.status === "failed" && p.lastError && (
+                            <div className="rounded-lg bg-red-500/10 px-3 py-2 text-sm leading-relaxed text-red-700 break-words dark:text-red-400">
+                              {p.lastError}
+                            </div>
+                          )}
+
+                          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                            <div
+                              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
+                              style={{ fontVariantNumeric: latn }}
+                            >
+                              {p.createdByName && (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <User className="h-4 w-4 opacity-70" />
+                                  أنشأه{" "}
+                                  <b className="font-semibold text-foreground/80">
+                                    {p.createdByName}
+                                  </b>
+                                </span>
+                              )}
+                              {p.publishedByName &&
+                                p.status === "published" &&
+                                p.publishedByName !== p.createdByName && (
+                                  <span>
+                                    نشره{" "}
+                                    <b className="font-semibold text-foreground/80">
+                                      {p.publishedByName}
+                                    </b>
+                                  </span>
+                                )}
+                              {p.status === "scheduled" && p.scheduledAt ? (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <CalendarClock className="h-4 w-4 opacity-70" />
+                                  موعد النشر: {fmtSocialDateTime(p.scheduledAt)}
+                                </span>
+                              ) : (
+                                <span>{fmtSocialDateTime(p.publishedAt || p.createdAt)}</span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {p.externalPostUrl && (
+                                <Button
+                                  asChild
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                                >
+                                  <a
+                                    href={p.externalPostUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                    فتح في X
+                                  </a>
+                                </Button>
+                              )}
+                              {p.status === "scheduled" && canManageScheduled && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-sm text-red-600 border-red-500/20 hover:bg-red-500/10"
+                                  disabled={cancelMutation.isPending}
+                                  onClick={() => cancelMutation.mutate(p.id)}
+                                  data-testid={`button-log-cancel-${p.id}`}
+                                >
+                                  إلغاء الجدولة
+                                </Button>
+                              )}
+                              {p.status === "failed" && canPublishNow && (
+                                <Button
+                                  size="sm"
+                                  className="h-8 text-sm"
+                                  disabled={retryMutation.isPending}
+                                  onClick={() => retryMutation.mutate(p.id)}
+                                  data-testid={`button-log-retry-${p.id}`}
+                                >
+                                  <RefreshCcw className="ml-1 h-3.5 w-3.5" />
+                                  إعادة المحاولة
+                                </Button>
+                              )}
+                              {(p.status === "failed" || p.attempts > 1) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 text-sm text-muted-foreground"
+                                  onClick={() =>
+                                    setAttemptsFor(attemptsFor === p.id ? null : p.id)
+                                  }
+                                  data-testid={`button-attempts-${p.id}`}
+                                >
+                                  <ListTree className="ml-1 h-3.5 w-3.5" />
+                                  {attemptsFor === p.id ? "إخفاء المحاولات" : "عرض المحاولات"}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          {attemptsFor === p.id && (
+                            <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+                              {attemptsLoading ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              ) : attempts.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">لا محاولات مسجلة.</p>
+                              ) : (
+                                attempts.map((a) => (
+                                  <div
+                                    key={a.id}
+                                    className="flex flex-wrap items-center gap-2 text-sm"
+                                    style={{ fontVariantNumeric: latn }}
+                                  >
+                                    <span
+                                      className={cn(
+                                        "h-1.5 w-1.5 rounded-full",
+                                        a.outcome === "success" ? "bg-emerald-500" : "bg-red-500",
+                                      )}
+                                    />
+                                    <span className="font-semibold">
+                                      {ATTEMPT_PHASES[a.phase] ?? a.phase}
+                                    </span>
+                                    {a.httpStatus && <span dir="ltr">HTTP {a.httpStatus}</span>}
+                                    {a.durationMs != null && <span dir="ltr">{a.durationMs}ms</span>}
+                                    <span className="text-muted-foreground">
+                                      {fmtSocialDateTime(a.createdAt)}
+                                    </span>
+                                    {a.errorMessage && (
+                                      <span className="w-full break-words text-red-600 dark:text-red-400">
+                                        {a.errorMessage}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
       </DashboardPageShell>
 
       {/* تأكيد فك الربط */}
@@ -733,9 +833,9 @@ export default function SocialPublishingPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {disconnectMutation.isPending ? (
-                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                <Loader2 className="ml-2 h-4 w-4 animate-spin" />
               ) : (
-                <Unlink className="w-4 h-4 ml-2" />
+                <Unlink className="ml-2 h-4 w-4" />
               )}
               فك الربط
             </AlertDialogAction>
