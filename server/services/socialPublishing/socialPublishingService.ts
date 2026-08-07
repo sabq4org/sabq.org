@@ -9,9 +9,11 @@
 //   processing ── فشل مؤقت وattempts < MAX ──▶ scheduled (يعاد لاحقاً)
 //   processing ── فشل دائم أو استنفاد ──▶ failed ──(retry)──▶ processing
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "../../db";
 import {
   articles,
+  users,
   socialPlatformAccounts,
   socialPosts,
   socialPostAttempts,
@@ -354,14 +356,70 @@ export async function listPostsForArticle(articleId: string): Promise<SocialPost
     .limit(50);
 }
 
-export async function listRecentPosts(limit = 50): Promise<Array<SocialPost & { articleTitle: string | null }>> {
+export type SocialPostListItem = SocialPost & {
+  articleTitle: string | null;
+  articleImageUrl: string | null;
+  createdByName: string | null;
+  publishedByName: string | null;
+};
+
+export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]> {
+  const creator = alias(users, "social_post_creator");
+  const publisher = alias(users, "social_post_publisher");
   const rows = await db
-    .select({ post: socialPosts, articleTitle: articles.title })
+    .select({
+      post: socialPosts,
+      articleTitle: articles.title,
+      articleImageUrl: articles.imageUrl,
+      creatorFirst: creator.firstName,
+      creatorLast: creator.lastName,
+      publisherFirst: publisher.firstName,
+      publisherLast: publisher.lastName,
+    })
     .from(socialPosts)
     .leftJoin(articles, eq(socialPosts.articleId, articles.id))
+    .leftJoin(creator, eq(socialPosts.createdByUserId, creator.id))
+    .leftJoin(publisher, eq(socialPosts.publishedByUserId, publisher.id))
     .orderBy(desc(socialPosts.createdAt))
     .limit(Math.min(limit, 100));
-  return rows.map((r) => ({ ...r.post, articleTitle: r.articleTitle }));
+  const fullName = (first: string | null, last: string | null) =>
+    [first, last].filter(Boolean).join(" ") || null;
+  return rows.map((r) => ({
+    ...r.post,
+    articleTitle: r.articleTitle,
+    articleImageUrl: r.articleImageUrl,
+    createdByName: fullName(r.creatorFirst, r.creatorLast),
+    publishedByName: fullName(r.publisherFirst, r.publisherLast),
+  }));
+}
+
+export interface SocialPublishStats {
+  total: number;
+  publishedToday: number;
+  scheduledUpcoming: number;
+  failed: number;
+}
+
+/** عدادات لوحة النشر الاجتماعي — استعلام تجميعي واحد */
+export async function getPublishStats(): Promise<SocialPublishStats> {
+  const result = await db.execute(sql`
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (
+        WHERE status = 'published'
+          AND published_at >= (now() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'
+      )::int AS published_today,
+      count(*) FILTER (WHERE status = 'scheduled')::int AS scheduled_upcoming,
+      count(*) FILTER (WHERE status = 'failed')::int AS failed
+    FROM social_posts
+  `);
+  const row = (result.rows?.[0] ?? {}) as Record<string, number>;
+  return {
+    total: Number(row.total ?? 0),
+    publishedToday: Number(row.published_today ?? 0),
+    scheduledUpcoming: Number(row.scheduled_upcoming ?? 0),
+    failed: Number(row.failed ?? 0),
+  };
 }
 
 // ── المطالبة (exactly-once) ────────────────────────────────────────
