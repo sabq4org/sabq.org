@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { withCache } from "../memoryCache";
 
 /**
  * Buffered article view-count increments.
@@ -29,6 +30,20 @@ let merging = false;
 let droppedSinceWarn = 0;
 let flushTimer: NodeJS.Timeout | null = null;
 let mergeTimer: NodeJS.Timeout | null = null;
+
+/**
+ * قراءة العدّاد الحي بكاش قصير (10s) و single-flight — بدل SELECT لكل طلب.
+ * الدمج إلى articles.views يجري كل ~10s أصلًا، فالكاش لا يضيف تأخيرًا يُذكر،
+ * لكنه يحوّل آلاف قراءات ذروة العاجل إلى استعلام واحد لكل مقال كل 10 ثوانٍ.
+ * المفتاح يحمل الـid فيُبطل مع كتابة المقال (الإبطال الموجّه في contentInvalidation).
+ */
+const LIVE_VIEWS_CACHE_MS = 10_000;
+export function getLiveArticleViews(articleId: string): Promise<number | null> {
+  return withCache(`article:views:${articleId}`, LIVE_VIEWS_CACHE_MS, async () => {
+    const { rows } = await pool.query("SELECT views FROM articles WHERE id = $1 LIMIT 1", [articleId]);
+    return rows.length ? Number(rows[0].views ?? 0) : null;
+  });
+}
 
 /** Queue a view-count increment for an article (cheap, non-blocking). */
 export function bufferArticleViewIncrement(articleId: string, increment: number): void {

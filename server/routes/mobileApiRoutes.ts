@@ -3102,7 +3102,8 @@ function formatArticleForMobile(row: any, baseUrl: string) {
   };
 }
 
-import { memoryCache as sharedMemoryCache, withSWR, CACHE_TTL } from "../memoryCache";
+import { memoryCache as sharedMemoryCache, withSWR, withCache, CACHE_TTL } from "../memoryCache";
+import { getLiveArticleViews } from "../services/articleViewCounterService";
 
 function getCached(key: string) {
   return sharedMemoryCache.get(key);
@@ -3323,6 +3324,36 @@ router.get("/articles/:id", async (req: Request, res: Response, next: NextFuncti
     // published article, and 404s (route shadowing). Fall through instead.
     if (articleId === "my-revisions") return next();
 
+    // كاش محايد للمستخدم + single-flight لكل الحمولة. هذه نقطة هبوط نقرات
+    // إشعار العاجل (حادثة 2026-08-06: ‏38 ألف جهاز خلال دقائق) — بلا كاش كان
+    // كل نقر ينفّذ ٦ استعلامات DB مستقلة فتمتلئ البركة (pool=50/0idle/98wait)
+    // ويقف الموقع كله. المفتاح يحمل الـid/السلاق فيُبطل مع كتابة المقال فقط.
+    const cacheKey = `article:mobile:${articleId}`;
+    if (wantsFreshData(req)) sharedMemoryCache.delete(cacheKey);
+
+    let payload = await withCache(cacheKey, CACHE_TTL.MEDIUM, () => buildMobileArticlePayload(articleId));
+
+    if (!payload) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "المقالة غير موجودة", status: 404 },
+      });
+    }
+
+    // العدّاد الحي فوق النسخة المكيّشة — قراءة واحدة كل 10 ثوانٍ لكل مقال.
+    const liveViews = await getLiveArticleViews(payload.id);
+    if (liveViews != null) payload = { ...payload, views_count: liveViews };
+
+    res.json(payload);
+  } catch (error) {
+    console.error("[Mobile API] GET /articles/:id error:", error);
+    res.status(500).json({
+      error: { code: "SERVER_ERROR", message: "فشل في جلب المقالة", status: 500 },
+    });
+  }
+});
+
+/** يبني حمولة تفاصيل المقال للجوال كاملة (محايدة للمستخدم) — تُخزَّن كما هي. */
+async function buildMobileArticlePayload(articleId: string): Promise<any | null> {
     let condition;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
     if (uuidRegex.test(articleId)) {
@@ -3337,11 +3368,7 @@ router.get("/articles/:id", async (req: Request, res: Response, next: NextFuncti
       .where(and(condition, eq(articles.status, "published")))
       .limit(1);
 
-    if (!articleRows.length) {
-      return res.status(404).json({
-        error: { code: "NOT_FOUND", message: "المقالة غير موجودة", status: 404 },
-      });
-    }
+    if (!articleRows.length) return null;
 
     const articleRow = articleRows[0];
 
@@ -3421,7 +3448,7 @@ router.get("/articles/:id", async (req: Request, res: Response, next: NextFuncti
     };
     const formatted = formatArticleForMobile(formattedResult, BASE_URL);
 
-    res.json({
+    return {
       ...formatted,
       tags: tagsList,
       // `author_image` is the byline avatar. Prefer reporter's image for the
@@ -3436,14 +3463,8 @@ router.get("/articles/:id", async (req: Request, res: Response, next: NextFuncti
         slug: r.slug,
         published_at: r.publishedAt?.toISOString() || null,
       })),
-    });
-  } catch (error) {
-    console.error("[Mobile API] GET /articles/:id error:", error);
-    res.status(500).json({
-      error: { code: "SERVER_ERROR", message: "فشل في جلب المقالة", status: 500 },
-    });
-  }
-});
+    };
+}
 
 // GET /api/v1/sections
 router.get("/sections", async (req: Request, res: Response) => {
