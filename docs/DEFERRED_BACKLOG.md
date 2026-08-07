@@ -29,7 +29,7 @@
 | # | البند | الحالة | المرجع |
 |---|-------|--------|--------|
 | 11 | ترقية TypeScript 7 | tsc يعمل لكن typescript-eslint لا يدعمه؛ الفرع `chore/typescript-7` محفوظ للإحياء | ذاكرة `typescript-7-upgrade-deferred` |
-| 12 | نتائج الفحص العميق 2026-07-25 | 53 فهرسًا مفقودًا (drift) + كرون daily-stats ميت + جداول بلا سياسة احتفاظ — بانتظار قرار المالك | ذاكرة `sabq-deep-audit-2026-07-25` |
+| 12 | نتائج الفحص العميق 2026-07-25 | **الفهارس عولجت 2026-08-08**: أُعيد حصر الـdrift (بلغ 74) وأُنشئ 61 فهرسًا `CONCURRENTLY` في الإنتاج (منها views/created_at على articles — جذر بطء اللوحة). المتبقي بقرار المالك عبر db:push: 3 جداول غائبة كليًا (`sports_tournaments`, `sports_tournament_audit`, `image_migrations`) + أعمدة `sort_order/playbook` في عائلة smart_blocks + PK مركّب لـ`user_reading_history`. ما زال معلقًا: كرون daily-stats الميت + سياسات الاحتفاظ | ذاكرة `sabq-deep-audit-2026-07-25` |
 | 13 | ثغرات نقاط الكتابة | 120 ثغرة مصنفة بجذور ستة (الحرجتان عولجتا) | ذاكرة `write-endpoint-audit-2026-07-24` |
 | 14 | كبسولة iOS | حسم DEVELOPMENT_TEAM في pbxproj (CBU7MJEC5R أم 23LXQW27YA) — تغيير غير ملتزم | ذاكرة `capsulah-ios-app` |
 | 15 | كاش سلبي للمحتوى المحذوف + `sports/player` + سقف autoscale | مؤجلات حادثة ضغط Neon | ذاكرة `slowness-db-pressure-2026-07-22` |
