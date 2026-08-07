@@ -239,7 +239,7 @@ export default function StaffMembers() {
   }, [userRolesMap]);
 
   const suspendMutation = useMutation({
-    mutationFn: async ({ userId, reason, duration }: { userId: string; reason: string; duration: string }) => {
+    mutationFn: async ({ userId, reason, duration }: { userId: string; reason: string; duration?: number }) => {
       return await apiRequest(`/api/dashboard/users/${userId}/suspend`, {
         method: "POST",
         body: JSON.stringify({ reason, duration }),
@@ -258,7 +258,7 @@ export default function StaffMembers() {
   });
 
   const banMutation = useMutation({
-    mutationFn: async ({ userId, reason, isPermanent, duration }: { userId: string; reason: string; isPermanent: boolean; duration?: string }) => {
+    mutationFn: async ({ userId, reason, isPermanent, duration }: { userId: string; reason: string; isPermanent: boolean; duration?: number }) => {
       return await apiRequest(`/api/dashboard/users/${userId}/ban`, {
         method: "POST",
         body: JSON.stringify({ reason, isPermanent, duration }),
@@ -845,7 +845,7 @@ export default function StaffMembers() {
                   suspendMutation.mutate({
                     userId: selectedUser.id,
                     reason: suspendReason,
-                    duration: suspendDuration,
+                    duration: suspendDuration === "permanent" ? undefined : Number(suspendDuration),
                   });
                 }
               }}
@@ -915,7 +915,7 @@ export default function StaffMembers() {
                     userId: selectedUser.id,
                     reason: banReason,
                     isPermanent: banIsPermanent,
-                    duration: banIsPermanent ? undefined : banDuration,
+                    duration: banIsPermanent ? undefined : Number(banDuration),
                   });
                 }
               }}

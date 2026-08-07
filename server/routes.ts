@@ -18235,7 +18235,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const parsed = suspendUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error });
+        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.flatten() });
       }
 
       const { reason, duration } = parsed.data;
@@ -18277,7 +18277,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const parsed = banUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error });
+        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.flatten() });
       }
 
       const { reason, isPermanent, duration } = parsed.data;

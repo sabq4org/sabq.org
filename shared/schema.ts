@@ -3682,13 +3682,14 @@ export const adminUpdateUserRolesSchema = z.object({
 
 export const suspendUserSchema = z.object({
   reason: z.string().min(5, "يجب إدخال سبب التعليق (5 أحرف على الأقل)"),
-  duration: z.number().int().positive().optional(), // in days
+  // coerce: dashboard Selects submit "30"-style strings
+  duration: z.coerce.number().int().positive().optional(), // in days
 });
 
 export const banUserSchema = z.object({
   reason: z.string().min(5, "يجب إدخال سبب الحظر (5 أحرف على الأقل)"),
   isPermanent: z.boolean().default(false),
-  duration: z.number().int().positive().optional(), // in days, only if not permanent
+  duration: z.coerce.number().int().positive().optional(), // in days, only if not permanent
 });
 export const insertCategorySchema = createInsertSchema(categories).omit({ 
   id: true, 
