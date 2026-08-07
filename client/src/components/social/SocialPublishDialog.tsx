@@ -320,7 +320,7 @@ export function SocialPublishDialog({
       <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
         {/* dvh لا vh — شريط أدوات سفاري الجوال يقتطع من vh؛ وعرض داخل الحواف مع حشوة أصغر للشاشات الصغيرة */}
         <DialogContent
-          className="w-[calc(100vw-1.25rem)] max-w-2xl max-h-[86dvh] overflow-y-auto overflow-x-hidden rounded-lg p-4 sm:p-6"
+          className="w-[calc(100vw-1.25rem)] max-w-2xl max-h-[86dvh] overflow-y-auto overflow-x-hidden scrollbar-hide rounded-lg p-4 sm:p-6"
           dir="rtl"
         >
           <DialogHeader>
@@ -599,25 +599,25 @@ export function SocialPublishDialog({
                         >
                           <Badge className={badge.className}>{badge.label}</Badge>
                           <div className="flex-1 min-w-0 space-y-1">
-                            <div className="truncate">{p.text}</div>
+                            <div className="line-clamp-2 break-words">{p.text}</div>
                             {p.status === "scheduled" && p.scheduledAt && (
                               <div className="text-xs text-muted-foreground">
                                 موعد النشر: {new Date(p.scheduledAt).toLocaleString("ar-SA")}
                               </div>
                             )}
                             {p.status === "failed" && p.lastError && (
-                              <div className="text-xs text-destructive truncate">{p.lastError}</div>
+                              <div className="text-xs text-destructive line-clamp-2 break-words">{p.lastError}</div>
                             )}
                             {p.externalPostUrl && (
                               <a
                                 href={p.externalPostUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-sky-600 inline-flex items-center gap-1"
+                                className="text-xs text-sky-600 inline-flex items-center gap-1 max-w-full"
                                 dir="ltr"
                               >
-                                <ExternalLink className="w-3 h-3" />
-                                {p.externalPostUrl}
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{p.externalPostUrl}</span>
                               </a>
                             )}
                           </div>

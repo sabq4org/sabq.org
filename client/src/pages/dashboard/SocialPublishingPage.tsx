@@ -352,7 +352,7 @@ export default function SocialPublishingPage() {
                             {p.articleTitle}
                           </div>
                         )}
-                        <div className="truncate">{p.text}</div>
+                        <div className="line-clamp-2 break-words">{p.text}</div>
                         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                           {p.scheduledAt && p.status === "scheduled" && (
                             <span>موعد النشر: {new Date(p.scheduledAt).toLocaleString("ar-SA")}</span>
@@ -362,18 +362,18 @@ export default function SocialPublishingPage() {
                           )}
                         </div>
                         {p.status === "failed" && p.lastError && (
-                          <div className="text-xs text-destructive">{p.lastError}</div>
+                          <div className="text-xs text-destructive line-clamp-2 break-words">{p.lastError}</div>
                         )}
                         {p.externalPostUrl && (
                           <a
                             href={p.externalPostUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-sky-600 inline-flex items-center gap-1"
+                            className="text-xs text-sky-600 inline-flex items-center gap-1 max-w-full"
                             dir="ltr"
                           >
-                            <ExternalLink className="w-3 h-3" />
-                            {p.externalPostUrl}
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{p.externalPostUrl}</span>
                           </a>
                         )}
                       </div>
