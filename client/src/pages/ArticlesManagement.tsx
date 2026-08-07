@@ -33,20 +33,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2 } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
-import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
 import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
 import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
+import { cn } from "@/lib/utils";
 import {
   DndContext,
   closestCenter,
@@ -149,7 +149,7 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-muted/60 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-muted/60 border-r-4 border-r-orange-500' : ''}`}
+      className={`border-b border-border/80 hover:bg-muted/25 odd:bg-muted/[0.12] ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-muted/60 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-muted/60 border-r-4 border-r-orange-500' : ''}`}
       data-testid={`row-article-${article.id}`}
     >
       <td 
@@ -167,12 +167,34 @@ function SortableRow({
   );
 }
 
-// Section Header component matching Dashboard style
-const SectionHeader = ({ title }: { title: string }) => (
-  <div className="px-1">
-    <h2 className="text-base font-semibold text-foreground">{title}</h2>
-  </div>
-);
+const TYPE_CHIP: Record<string, { label: string; className: string; icon?: typeof Camera }> = {
+  news: {
+    label: "خبر",
+    className: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  opinion: {
+    label: "رأي",
+    className: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+  analysis: {
+    label: "تحليل",
+    className: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+  },
+  column: {
+    label: "عمود",
+    className: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+  },
+  weekly_photos: {
+    label: "صور",
+    className: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
+    icon: Camera,
+  },
+  infographic: {
+    label: "إنفوجرافيك",
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    icon: BarChart3,
+  },
+};
 
 export default function ArticlesManagement() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
@@ -786,51 +808,65 @@ export default function ArticlesManagement() {
   const formatPublishedDate = formatArticleDate;
 
   const getTypeBadge = (type: string) => {
-    const badges = {
-      news: <Badge variant="secondary">خبر</Badge>,
-      opinion: <Badge variant="outline">رأي</Badge>,
-      analysis: <Badge variant="default">تحليل</Badge>,
-      column: <Badge variant="default">عمود</Badge>,
-      weekly_photos: <Badge variant="default" className="bg-orange-500/90 text-white border-orange-600 gap-1"><Camera className="h-3 w-3" />صور</Badge>,
-      infographic: <Badge variant="default" className="bg-emerald-500/90 text-white border-emerald-600 gap-1"><BarChart3 className="h-3 w-3" /></Badge>,
-    };
-    return badges[type as keyof typeof badges] || <Badge>{type}</Badge>;
+    const meta = TYPE_CHIP[type] ?? { label: type, className: "bg-muted text-muted-foreground" };
+    const Icon = meta.icon;
+    return (
+      <Badge
+        className={cn(
+          "gap-1 border-0 px-2 py-0.5 text-xs font-semibold",
+          meta.className,
+        )}
+      >
+        {Icon ? <Icon className="h-3 w-3" /> : null}
+        {meta.label}
+      </Badge>
+    );
+  };
+
+  const getCategoryChip = (nameAr?: string | null) => {
+    if (!nameAr) return null;
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground/80">
+        <Tag className="h-3 w-3 text-muted-foreground" />
+        {nameAr}
+      </span>
+    );
   };
 
   const getSourceBadge = (source?: string) => {
     const badges = {
       manual: (
-        <Badge variant="outline" className="gap-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" data-testid="badge-source-manual">
+        <Badge variant="outline" className="gap-1 border-blue-200/80 bg-blue-50/80 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300" data-testid="badge-source-manual">
           <PenLine className="h-3 w-3" />
           المحرر
         </Badge>
       ),
       whatsapp: (
-        <Badge variant="outline" className="gap-1 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800" data-testid="badge-source-whatsapp">
+        <Badge variant="outline" className="gap-1 border-green-200/80 bg-green-50/80 text-xs font-medium text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300" data-testid="badge-source-whatsapp">
           <MessageCircle className="h-3 w-3" />
           واتساب
         </Badge>
       ),
       email: (
-        <Badge variant="outline" className="gap-1 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800" data-testid="badge-source-email">
+        <Badge variant="outline" className="gap-1 border-purple-200/80 bg-purple-50/80 text-xs font-medium text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-300" data-testid="badge-source-email">
           <Mail className="h-3 w-3" />
           البريد الذكي
         </Badge>
       ),
-      'ios-app': (
-        <Badge variant="outline" className="gap-1 bg-slate-100 dark:bg-slate-900/50 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700" data-testid="badge-source-ios">
+      "ios-app": (
+        <Badge variant="outline" className="gap-1 border-slate-300/80 bg-slate-100/80 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200" data-testid="badge-source-ios">
           <Smartphone className="h-3 w-3" />
           تطبيق iOS
         </Badge>
       ),
-      'android-app': (
-        <Badge variant="outline" className="gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800" data-testid="badge-source-android">
+      "android-app": (
+        <Badge variant="outline" className="gap-1 border-emerald-200/80 bg-emerald-50/80 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid="badge-source-android">
           <Smartphone className="h-3 w-3" />
           تطبيق Android
         </Badge>
       ),
     };
-    return badges[(source || 'manual') as keyof typeof badges] || badges.manual;
+    return badges[(source || "manual") as keyof typeof badges] || badges.manual;
   };
 
   const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
@@ -848,44 +884,44 @@ export default function ArticlesManagement() {
   const getMobilePlatformLabel = (source?: string) =>
     source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
 
+  const articlesTotal = articlesData?.total ?? 0;
+
   return (
     <DashboardLayout>
-      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="overflow-x-hidden pb-10 space-y-5 md:space-y-6">
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="overflow-x-hidden px-4 pb-10 sm:px-6 space-y-4">
         {/* Header */}
         <DashboardPageHeader
           icon={Newspaper}
           title="إدارة الأخبار والمقالات"
-          description="إدارة المحتوى الإخباري والمقالات من مكان واحد"
+          description="غرفة تحرير المحتوى — بحث سريع، فرز بالحالة، وإجراءات ظاهرة لكل خبر"
           titleTestId="heading-title"
+          className="p-4 sm:p-4"
           actions={canCreateArticle ? (
             <Button
               onClick={() => setLocation("/dashboard/articles/new")}
               className="gap-2 w-full sm:w-auto"
-              size="sm"
               data-testid="button-create-article"
             >
-              <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              <Plus className="h-4 w-4" />
               مقال جديد
             </Button>
           ) : undefined}
         />
 
-        {/* Status filter chips — compact; selected = darker filled */}
-        <div className="space-y-2">
-          <SectionHeader title="إحصائيات المقالات" />
+        {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="rounded-xl border-border/60">
-                <CardContent className="p-2.5 sm:p-3">
-                  <Skeleton className="mb-1.5 h-3 w-10" />
-                  <Skeleton className="h-5 w-12" />
+              <Card key={i} className="rounded-xl border-border/60 shadow-none">
+                <CardContent className="p-3">
+                  <Skeleton className="mb-2 h-3.5 w-14" />
+                  <Skeleton className="h-7 w-16" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2" role="tablist" aria-label="تصفية حسب الحالة">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
             {([
               {
                 key: "published" as const,
@@ -940,18 +976,19 @@ export default function ArticlesManagement() {
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => setActiveStatus(card.key)}
-                  className={`rounded-xl border px-2 py-2 text-start transition-colors sm:px-3 sm:py-2.5 ${
-                    isActive ? card.active : card.idle
-                  }`}
+                  className={cn(
+                    "rounded-xl border px-3 py-2.5 text-start transition-colors",
+                    isActive ? card.active : card.idle,
+                  )}
                   data-testid={card.testId}
                 >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="truncate text-[11px] font-semibold sm:text-xs">{card.label}</span>
-                    <span className={`rounded-md p-1 ${isActive ? card.iconActive : card.iconIdle}`}>
-                      <card.Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold">{card.label}</span>
+                    <span className={cn("rounded-lg p-1.5", isActive ? card.iconActive : card.iconIdle)}>
+                      <card.Icon className="h-3.5 w-3.5" aria-hidden="true" />
                     </span>
                   </div>
-                  <div className="mt-1 text-base font-bold tabular-nums sm:text-lg">
+                  <div className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight leading-none">
                     {card.value.toLocaleString("en-US")}
                   </div>
                 </button>
@@ -959,31 +996,24 @@ export default function ArticlesManagement() {
             })}
           </div>
         ) : (
-          <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
+          <div className="rounded-lg bg-destructive/10 p-4 text-destructive">
             خطأ في تحميل الإحصائيات: {metricsError?.message || "غير معروف"}
           </div>
         )}
-        </div>
 
-        {/* Filters - Mobile Optimized */}
-        <div className="space-y-3">
-          <SectionHeader title="البحث والفلاتر" />
-        <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
-          <div className="flex flex-col gap-3">
-            {/* Search */}
-            <div>
-              <Input
-                placeholder="البحث عن مقال..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                data-testid="input-search-articles"
-              />
-            </div>
-            
-            {/* Filters Row */}
-            <div className="grid grid-cols-3 md:flex gap-2">
+        {/* Search + filters — single compact toolbar */}
+        <div className="rounded-xl border border-border/80 bg-card p-3 shadow-none sm:p-3.5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <Input
+              placeholder="البحث عن مقال..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              data-testid="input-search-articles"
+              className="h-10 flex-1 text-sm"
+            />
+            <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger data-testid="select-type-filter" className="md:w-[150px]">
+                <SelectTrigger data-testid="select-type-filter" className="h-10 lg:w-[140px]">
                   <SelectValue placeholder="النوع" />
                 </SelectTrigger>
                 <SelectContent>
@@ -994,9 +1024,9 @@ export default function ArticlesManagement() {
                   <SelectItem value="column">عمود</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger data-testid="select-category-filter" className="md:w-[150px]">
+                <SelectTrigger data-testid="select-category-filter" className="h-10 lg:w-[150px]">
                   <SelectValue placeholder="التصنيف" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1008,9 +1038,10 @@ export default function ArticlesManagement() {
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Button
                 variant="outline"
+                className="h-10"
                 onClick={() => {
                   setSearchTerm("");
                   setTypeFilter("all");
@@ -1023,11 +1054,19 @@ export default function ArticlesManagement() {
             </div>
           </div>
         </div>
-        </div>
 
         {/* Articles List Section */}
         <div className="space-y-3">
-          <SectionHeader title="قائمة المقالات" />
+          <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
+            <div>
+              <h2 className="text-lg font-bold tracking-tight sm:text-xl">قائمة المقالات</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
+                {articlesLoading
+                  ? "جاري التحميل…"
+                  : `${articlesTotal.toLocaleString("en-US")} نتيجة · الصفحة ${currentPage.toLocaleString("en-US")}`}
+              </p>
+            </div>
+          </div>
 
           {/* Bulk Actions Toolbar */}
           {selectedArticles.size > 0 && (
@@ -1077,7 +1116,7 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden overflow-hidden rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:block">
+          <div className="hidden overflow-hidden rounded-xl border border-border/80 bg-card shadow-none md:block">
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
@@ -1087,233 +1126,266 @@ export default function ArticlesManagement() {
                 لا توجد مقالات
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <DndContext
-                  sensors={isMobile ? [] : sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <table className="w-full">
-                    <thead className="bg-muted/50 border-b border-border">
-                      <tr>
-                        <th className="text-center py-3 px-2 w-10" data-testid="header-drag"></th>
-                        <th className="text-center py-3 px-4 w-12">
-                          <Checkbox
-                            checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
-                            onCheckedChange={toggleSelectAll}
-                            data-testid="checkbox-select-all"
-                          />
-                        </th>
-                        <th className="text-right py-3 px-4 font-medium">العنوان</th>
-                        <th className="text-right py-3 px-4 font-medium">النوع</th>
-                        <th className="hidden xl:table-cell text-right py-3 px-4 font-medium">المصدر</th>
-                        <th className="hidden lg:table-cell text-right py-3 px-4 font-medium">الكاتب</th>
-                        <th className="text-right py-3 px-4 font-medium">التصنيف</th>
-                        <th className="text-right py-3 px-4 font-medium">عاجل</th>
-                        <th className="hidden xl:table-cell text-right py-3 px-4 font-medium">المشاهدات</th>
-                        <th className="text-right py-3 px-4 font-medium">الإجراءات</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <SortableContext
-                        items={localArticles.map(a => a.id)}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        {localArticles.map((article) => (
-                          <SortableRow
-                            key={article.id}
-                            article={article}
-                            isSaving={updateOrderMutation.isPending}
-                            highlightResubmitted={
-                              isResubmittedAfterRevision(article)
-                                ? "resubmitted"
-                                : isAwaitingContributorRevision(article)
-                                  ? "awaiting"
-                                  : false
-                            }
-                          >
-                            <td className="py-3 px-4 text-center">
-                              <Checkbox
-                                checked={selectedArticles.has(article.id)}
-                                onCheckedChange={() => toggleArticleSelection(article.id)}
-                                data-testid={`checkbox-article-${article.id}`}
-                              />
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1.5">
-                                  {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                                    <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                                  )}
-                                  <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
-                                  <EditorialDraftReviewCue
-                                    article={article}
-                                    layout="inline"
-                                    testId={`badge-review-desktop-${article.id}`}
-                                  />
+              <DndContext
+                sensors={isMobile ? [] : sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <table className="w-full table-fixed">
+                  <thead className="border-b border-border bg-muted/40">
+                    <tr>
+                      <th className="w-9 px-1 py-3 text-center" data-testid="header-drag"></th>
+                      <th className="w-11 px-2 py-3 text-center">
+                        <Checkbox
+                          checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </th>
+                      <th className="px-3 py-3 text-right text-sm font-semibold">الخبر</th>
+                      <th className="hidden w-[140px] px-3 py-3 text-right text-sm font-semibold lg:table-cell">الكاتب</th>
+                      <th className="w-[72px] px-2 py-3 text-center text-sm font-semibold">عاجل</th>
+                      <th className="w-[88px] px-2 py-3 text-center text-sm font-semibold">المشاهدات</th>
+                      <th className="w-[152px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <SortableContext
+                      items={localArticles.map((a) => a.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {localArticles.map((article) => (
+                        <SortableRow
+                          key={article.id}
+                          article={article}
+                          isSaving={updateOrderMutation.isPending}
+                          highlightResubmitted={
+                            isResubmittedAfterRevision(article)
+                              ? "resubmitted"
+                              : isAwaitingContributorRevision(article)
+                                ? "awaiting"
+                                : false
+                          }
+                        >
+                          <td className="px-2 py-3.5 text-center align-top">
+                            <Checkbox
+                              checked={selectedArticles.has(article.id)}
+                              onCheckedChange={() => toggleArticleSelection(article.id)}
+                              data-testid={`checkbox-article-${article.id}`}
+                            />
+                          </td>
+                          <td className="min-w-0 px-3 py-3.5 align-top">
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2">
+                                {((article as any).albumImages?.length > 0 ||
+                                  (article as any).mediaAssetsCount > 0) && (
+                                  <Images className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <h3 className="break-words text-[15px] font-bold leading-snug tracking-tight text-foreground sm:text-base">
+                                      {article.title}
+                                    </h3>
+                                    <EditorialDraftReviewCue
+                                      article={article}
+                                      layout="inline"
+                                      testId={`badge-review-desktop-${article.id}`}
+                                    />
+                                  </div>
                                 </div>
-                                <EditorialDraftReviewCue
-                                  article={article}
-                                  layout="banner"
-                                  testId={`banner-review-desktop-${article.id}`}
-                                />
-                                <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                  {article.source === 'email' ? (
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {getTypeBadge(article.articleType || "news")}
+                                {getCategoryChip(article.category?.nameAr)}
+                                {getSourceBadge(article.source)}
+                              </div>
+
+                              <EditorialDraftReviewCue
+                                article={article}
+                                layout="banner"
+                                testId={`banner-review-desktop-${article.id}`}
+                              />
+
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                                <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400">
+                                  {article.source === "email" ? (
                                     <>
-                                      <Mail className="h-3 w-3" />
-                                      <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'بريد إلكتروني'}</span>
+                                      <Mail className="h-3.5 w-3.5 shrink-0" />
+                                      <span>
+                                        أُرسل بواسطة:{" "}
+                                        {article.sourceMetadata?.senderName ||
+                                          article.sourceMetadata?.from ||
+                                          "بريد إلكتروني"}
+                                      </span>
                                     </>
-                                  ) : article.source === 'whatsapp' ? (
+                                  ) : article.source === "whatsapp" ? (
                                     <>
-                                      <MessageCircle className="h-3 w-3" />
-                                      <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
+                                      <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                                      <span>
+                                        أُرسل بواسطة:{" "}
+                                        {article.sourceMetadata?.senderName ||
+                                          article.sourceMetadata?.from ||
+                                          "واتساب"}
+                                      </span>
                                     </>
                                   ) : isMobileAppSource(article.source) ? (
                                     <>
-                                      <Smartphone className="h-3 w-3" />
-                                      <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
+                                      <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                                      <span>
+                                        أُرسل من {getMobilePlatformLabel(article.source)}:{" "}
+                                        {getMobileSenderName(article)}
+                                      </span>
                                     </>
                                   ) : (article as any).publisher?.companyName ? (
                                     <>
-                                      <Building2 className="h-3 w-3" />
-                                      <span>أُرسل بواسطة: {(article as any).publisher.companyName}</span>
+                                      <Building2 className="h-3.5 w-3.5 shrink-0" />
+                                      <span>
+                                        أُرسل بواسطة: {(article as any).publisher.companyName}
+                                      </span>
                                     </>
                                   ) : (
                                     <>
-                                      <PenLine className="h-3 w-3" />
-                                      <span>نُشر بواسطة: {article.author?.firstName && article.author?.lastName 
-                                        ? `${article.author.firstName} ${article.author.lastName}` 
-                                        : article.author?.firstName || article.author?.email || 'المحرر'}</span>
+                                      <PenLine className="h-3.5 w-3.5 shrink-0" />
+                                      <span>
+                                        نُشر بواسطة:{" "}
+                                        {article.author?.firstName && article.author?.lastName
+                                          ? `${article.author.firstName} ${article.author.lastName}`
+                                          : article.author?.firstName ||
+                                            article.author?.email ||
+                                            "المحرر"}
+                                      </span>
                                     </>
                                   )}
-                                </div>
+                                </span>
                                 {article.status === "scheduled" && (article as any).scheduledAt && (
-                                  <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1" data-testid={`scheduled-label-desktop-${article.id}`}>
-                                    <Clock className="h-3 w-3 flex-shrink-0" />
-                                    <span>تمت الجدولة في: {formatScheduledDate((article as any).scheduledAt)}</span>
-                                  </div>
+                                  <span
+                                    className="inline-flex items-center gap-1 text-green-700 dark:text-green-300"
+                                    data-testid={`scheduled-label-desktop-${article.id}`}
+                                  >
+                                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                                    {formatScheduledDate((article as any).scheduledAt)}
+                                  </span>
                                 )}
                                 {article.status === "draft" && article.createdAt && (
-                                  <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1" data-testid={`draft-date-desktop-${article.id}`}>
-                                    <Clock className="h-3 w-3 flex-shrink-0" />
-                                    <span>أُرسلت بتاريخ: {formatDraftDate(article.createdAt)}</span>
-                                  </div>
-                                )}
-                                {article.status === "draft" && (
-                                  <EditorialDraftReviewCue
-                                    article={article}
-                                    layout="meta"
-                                    testId={`meta-review-desktop-${article.id}`}
-                                  />
+                                  <span
+                                    className="inline-flex items-center gap-1 text-green-700 dark:text-green-300"
+                                    data-testid={`draft-date-desktop-${article.id}`}
+                                  >
+                                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                                    {formatDraftDate(article.createdAt)}
+                                  </span>
                                 )}
                                 {article.status === "published" && article.publishedAt && (
-                                  <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid={`published-date-desktop-${article.id}`}>
-                                    <Clock className="h-3 w-3 flex-shrink-0" />
-                                    <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
-                                  </div>
-                                )}
-                                {article.status === "archived" && (article as any).reviewNotes && (
-                                  <div
-                                    className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-0.5"
-                                    data-testid={`archive-reason-desktop-${article.id}`}
+                                  <span
+                                    className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"
+                                    data-testid={`published-date-desktop-${article.id}`}
                                   >
-                                    <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                                    <span>
-                                      <span className="font-semibold">سبب الأرشفة:</span>{" "}
-                                      {(article as any).reviewNotes}
+                                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                                    <span dir="ltr" className="font-medium tabular-nums">
+                                      {formatPublishedDate(article.publishedAt)}
                                     </span>
-                                  </div>
+                                  </span>
                                 )}
                               </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              {getTypeBadge(article.articleType || "news")}
-                            </td>
-                            <td className="hidden xl:table-cell py-3 px-4">
-                              {getSourceBadge(article.source)}
-                            </td>
-                            <td className="hidden lg:table-cell py-3 px-4">
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarImage src={article.author?.profileImageUrl || ""} />
-                                    <AvatarFallback className="text-xs">
-                                      {article.author?.firstName?.[0] || article.author?.email?.[0]?.toUpperCase()}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm">
-                                    {article.author?.firstName || article.author?.email}
+
+                              {article.status === "draft" && (
+                                <EditorialDraftReviewCue
+                                  article={article}
+                                  layout="meta"
+                                  testId={`meta-review-desktop-${article.id}`}
+                                />
+                              )}
+                              {article.status === "archived" && (article as any).reviewNotes && (
+                                <div
+                                  className="flex items-start gap-1 text-sm text-red-600 dark:text-red-400"
+                                  data-testid={`archive-reason-desktop-${article.id}`}
+                                >
+                                  <Archive className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                  <span>
+                                    <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                                    {(article as any).reviewNotes}
                                   </span>
                                 </div>
-                                {article.publisher?.companyName && (
-                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <Building2 className="h-3 w-3" />
-                                    <span>{article.publisher.companyName}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="text-sm">{article.category?.nameAr || "-"}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              {canPublishArticle ? (
-                                <BreakingSwitch 
-                                  articleId={article.id}
-                                  initialValue={article.newsType === "breaking"}
-                                />
-                              ) : (
-                                <span className="text-sm text-muted-foreground">
-                                  {article.newsType === "breaking" ? "عاجل" : "-"}
-                                </span>
                               )}
-                            </td>
-                            <td className="hidden xl:table-cell py-3 px-4">
-                              <ViewsCount 
-                                views={article.views}
-                                iconClassName="h-4 w-4"
-                              />
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex gap-1">
-                                {/* AI Generated Image Indicator (Featured or Thumbnail) */}
-                                {(article.isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
-                                  <div 
-                                    className="flex items-center justify-center w-8 h-8"
-                                    title="صورة مولدة بالذكاء الاصطناعي"
-                                    data-testid={`badge-ai-image-${article.id}`}
-                                  >
-                                    <Brain className="w-4 h-4 text-purple-500" />
-                                  </div>
-                                )}
-                                <RowActions 
-                                  articleId={article.id}
-                                  articleTitle={article.title}
-                                  status={article.status}
-                                  onEdit={() => handleEdit(article)}
-                                  isFeatured={article.isFeatured}
-                                  onDelete={() => setDeletingArticle(article)}
-                                  onRequestRevision={
-                                    activeStatus !== "archived"
-                                      ? () => setRevisionArticle(article)
-                                      : undefined
-                                  }
-                                  onSocialPublish={() => setSocialPublishArticle(article)}
-                                  canEdit={canEditArticle(article)}
-                                  canDelete={!!(canDeleteArticle || canArchiveArticle)}
-                                  canFeature={!!canFeatureArticle}
-                                  canPublish={!!canPublishArticle}
-                                  canSocialPublish={!!canSocialPublish}
-                                />
+                            </div>
+                          </td>
+                          <td className="hidden px-3 py-3.5 align-top lg:table-cell">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-7 w-7">
+                                  <AvatarImage src={article.author?.profileImageUrl || ""} />
+                                  <AvatarFallback className="text-xs">
+                                    {article.author?.firstName?.[0] ||
+                                      article.author?.email?.[0]?.toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="truncate text-sm font-medium">
+                                  {article.author?.firstName || article.author?.email}
+                                </span>
                               </div>
-                            </td>
-                          </SortableRow>
-                        ))}
-                      </SortableContext>
-                    </tbody>
-                  </table>
-                </DndContext>
-              </div>
+                              {article.publisher?.companyName && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <Building2 className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{article.publisher.companyName}</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-2 py-3.5 text-center align-top">
+                            {canPublishArticle ? (
+                              <BreakingSwitch
+                                articleId={article.id}
+                                initialValue={article.newsType === "breaking"}
+                              />
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                {article.newsType === "breaking" ? "عاجل" : "-"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-3.5 text-center align-top">
+                            <ViewsCount views={article.views} iconClassName="h-4 w-4" />
+                          </td>
+                          <td className="px-2 py-3.5 align-top">
+                            <div className="flex flex-col items-center gap-1">
+                              {(article.isAiGeneratedThumbnail ||
+                                (article as any).isAiGeneratedImage) && (
+                                <div
+                                  className="flex h-6 w-6 items-center justify-center"
+                                  title="صورة مولدة بالذكاء الاصطناعي"
+                                  data-testid={`badge-ai-image-${article.id}`}
+                                >
+                                  <Brain className="h-4 w-4 text-purple-500" />
+                                </div>
+                              )}
+                              <RowActions
+                                articleId={article.id}
+                                articleTitle={article.title}
+                                status={article.status}
+                                onEdit={() => handleEdit(article)}
+                                isFeatured={article.isFeatured}
+                                onDelete={() => setDeletingArticle(article)}
+                                onRequestRevision={
+                                  activeStatus !== "archived"
+                                    ? () => setRevisionArticle(article)
+                                    : undefined
+                                }
+                                onSocialPublish={() => setSocialPublishArticle(article)}
+                                canEdit={canEditArticle(article)}
+                                canDelete={!!(canDeleteArticle || canArchiveArticle)}
+                                canFeature={!!canFeatureArticle}
+                                canPublish={!!canPublishArticle}
+                                canSocialPublish={!!canSocialPublish}
+                              />
+                            </div>
+                          </td>
+                        </SortableRow>
+                      ))}
+                    </SortableContext>
+                  </tbody>
+                </table>
+              </DndContext>
             )}
           </div>
 
@@ -1429,14 +1501,15 @@ export default function ArticlesManagement() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {getTypeBadge(article.articleType || "news")}
+                        {getCategoryChip(article.category?.nameAr)}
                         {getSourceBadge(article.source)}
                       </div>
                     </div>
                   </div>
                   
-                  {/* Meta Info: Author + Publisher + Category */}
+                  {/* Meta Info: Author + Publisher */}
                   <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-5 w-5">
@@ -1456,8 +1529,6 @@ export default function ArticlesManagement() {
                         </div>
                       </>
                     )}
-                    <span>•</span>
-                    <span>{article.category?.nameAr || "-"}</span>
                   </div>
                   
                   {/* Stats Row */}
