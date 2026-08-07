@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentProps, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2 } from "lucide-react";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 
 interface RowActionsProps {
   articleId: string;
@@ -39,12 +40,41 @@ interface RowActionsProps {
   canSocialPublish?: boolean;
 }
 
-export function RowActions({ 
+function ActionBtn({
+  children,
+  className,
+  ...props
+}: ComponentProps<typeof Button>) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("h-8 w-8 shrink-0", className)}
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function ActionsGrid({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="grid w-[136px] grid-cols-4 gap-0.5 justify-items-center"
+      role="group"
+      aria-label="إجراءات المقال"
+    >
+      {children}
+    </div>
+  );
+}
+
+export function RowActions({
   articleId,
   articleTitle,
-  status, 
-  onEdit, 
-  isFeatured: initialIsFeatured, 
+  status,
+  onEdit,
+  isFeatured: initialIsFeatured,
   onDelete,
   onRequestRevision,
   onSocialPublish,
@@ -148,12 +178,12 @@ export function RowActions({
       await apiRequest(`/api/admin/articles/${articleId}/publish`, {
         method: "POST",
       });
-      
+
       queryClient.removeQueries({ queryKey: ["/api/admin/articles"] });
       queryClient.removeQueries({ queryKey: ["/api/admin/articles/metrics"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/articles"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/articles/metrics"] });
-      
+
       toast({
         title: "تم النشر",
         description: "تم نشر المقال بنجاح",
@@ -171,21 +201,21 @@ export function RowActions({
 
   const handleFeature = async () => {
     const previousValue = isFeatured;
-    
+
     // Optimistic update
     setIsFeatured(!isFeatured);
     setIsLoading(true);
-    
+
     try {
       await apiRequest(`/api/admin/articles/${articleId}/feature`, {
         method: "POST",
         body: JSON.stringify({ featured: !previousValue }),
         headers: { "Content-Type": "application/json" },
       });
-      
+
       queryClient.removeQueries({ queryKey: ["/api/admin/articles"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/articles"] });
-      
+
       toast({
         title: !previousValue ? "تم التمييز" : "تم إلغاء التمييز",
         description: !previousValue ? "تم تمييز المقال بنجاح" : "تم إلغاء تمييز المقال بنجاح",
@@ -193,7 +223,7 @@ export function RowActions({
     } catch (error: any) {
       // Revert on error
       setIsFeatured(previousValue);
-      
+
       toast({
         title: "خطأ",
         description: error.message || "فشل تحديث حالة التمييز",
@@ -207,81 +237,89 @@ export function RowActions({
   // للمقالات المؤرشفة: تعديل - مميز - نشر
   if (status === "archived") {
     return (
-      <div className="flex gap-1">
+      <ActionsGrid>
         {canEdit && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={onEdit}
             disabled={isLoading}
             data-testid={`button-action-edit-${articleId}`}
             title="تعديل"
           >
             <Edit className="w-4 h-4" />
-          </Button>
+          </ActionBtn>
         )}
         {canFeature && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={handleFeature}
             disabled={isLoading}
             data-testid={`button-action-feature-${articleId}`}
             title={isFeatured ? "إلغاء التمييز" : "تمييز"}
           >
-            <Star className={`w-4 h-4 ${isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-          </Button>
+            <Star className={`w-4 h-4 ${isFeatured ? "text-yellow-500 fill-yellow-500" : ""}`} />
+          </ActionBtn>
         )}
         {canPublish && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={handlePublish}
             disabled={isLoading}
             data-testid={`button-action-publish-${articleId}`}
             title="نشر"
           >
             <Send className="w-4 h-4" />
-          </Button>
+          </ActionBtn>
         )}
-      </div>
+      </ActionsGrid>
     );
   }
 
-  // للمقالات النشطة (منشور/مسودة/مجدول): تعديل - مميز - ترجمة - إشعار - أرشفة بالسبب
-  // ملاحظة: زر سلة المهملات الأحمر = أرشفة + إشعار + إيميل للكاتب بالسبب
-  // (يفتح حواراً في الصفحة الأم يطلب السبب إلزامياً ثم يرسل PATCH).
+  // للمقالات النشطة: شبكة ظاهرة بدون قائمة منسدلة
+  // صف أساسي: تعديل · تمييز · طلب تعديل · أرشفة
+  // صف توزيع/ذكاء: ترجمة · إنعاش · إشعار · نشر على X
   return (
     <>
-      <div className="flex gap-1">
+      <ActionsGrid>
         {canEdit && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={onEdit}
             disabled={isLoading}
             data-testid={`button-action-edit-${articleId}`}
             title="تعديل"
           >
             <Edit className="w-4 h-4" />
-          </Button>
+          </ActionBtn>
         )}
         {canFeature && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={handleFeature}
             disabled={isLoading}
             data-testid={`button-action-feature-${articleId}`}
             title={isFeatured ? "إلغاء التمييز" : "تمييز"}
           >
-            <Star className={`w-4 h-4 ${isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-          </Button>
+            <Star className={`w-4 h-4 ${isFeatured ? "text-yellow-500 fill-yellow-500" : ""}`} />
+          </ActionBtn>
+        )}
+        {onRequestRevision && (
+          <ActionBtn
+            onClick={onRequestRevision}
+            disabled={isLoading}
+            data-testid={`button-action-revision-${articleId}`}
+            title="طلب تعديل (مع ملاحظات)"
+          >
+            <FilePenLine className="w-4 h-4 text-amber-600" />
+          </ActionBtn>
+        )}
+        {canDelete && (
+          <ActionBtn
+            onClick={onDelete}
+            disabled={isLoading}
+            data-testid={`button-action-delete-${articleId}`}
+            title="أرشفة (مع ذكر السبب)"
+          >
+            <Trash2 className="w-4 h-4 text-destructive" />
+          </ActionBtn>
         )}
         {canTranslate && status === "published" && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={() => setTranslateDialogOpen(true)}
             disabled={isLoading || isTranslating}
             data-testid={`button-action-translate-${articleId}`}
@@ -292,12 +330,10 @@ export function RowActions({
             ) : (
               <Languages className="w-4 h-4 text-emerald-500" />
             )}
-          </Button>
+          </ActionBtn>
         )}
         {canPublish && status === "published" && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={() => setResurfaceDialogOpen(true)}
             disabled={isLoading || isResurfacing}
             data-testid={`button-action-resurface-${articleId}`}
@@ -308,57 +344,29 @@ export function RowActions({
             ) : (
               <HeartPulse className="w-4 h-4 text-rose-500" />
             )}
-          </Button>
+          </ActionBtn>
         )}
         {canSendNotification && status === "published" && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={() => setNotifyDialogOpen(true)}
             disabled={isLoading}
             data-testid={`button-action-notify-${articleId}`}
             title="إرسال إشعار"
           >
             <Bell className="w-4 h-4 text-blue-500" />
-          </Button>
+          </ActionBtn>
         )}
         {canSocialPublish && onSocialPublish && status === "published" && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={onSocialPublish}
             disabled={isLoading}
             data-testid={`button-action-social-publish-${articleId}`}
             title="النشر على X"
           >
             <Share2 className="w-4 h-4 text-sky-600" />
-          </Button>
+          </ActionBtn>
         )}
-        {onRequestRevision && status !== "archived" && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onRequestRevision}
-            disabled={isLoading}
-            data-testid={`button-action-revision-${articleId}`}
-            title="طلب تعديل (مع ملاحظات)"
-          >
-            <FilePenLine className="w-4 h-4 text-amber-600" />
-          </Button>
-        )}
-        {canDelete && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onDelete}
-            disabled={isLoading}
-            data-testid={`button-action-delete-${articleId}`}
-            title="أرشفة (مع ذكر السبب)"
-          >
-            <Trash2 className="w-4 h-4 text-destructive" />
-          </Button>
-        )}
-      </div>
+      </ActionsGrid>
 
       <AlertDialog open={translateDialogOpen} onOpenChange={setTranslateDialogOpen}>
         <AlertDialogContent>
