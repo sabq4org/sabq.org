@@ -79,7 +79,26 @@
   يعيده) — عند تعذر الحل يُسجل رابط الحساب بدلاً منه ويبقى المنشور «منشور».
 - مهلة تأكيد النشر خطأ **دائم** عمداً (تحقق يدوياً قبل الإعادة — منع التكرار).
 
-## 6) استكشاف الأخطاء
+## 6) التغريدة المستقلة والوسائط المتعددة (2026-08-07)
+
+زر «تغريدة جديدة» في `/dashboard/social-publishing` (صلاحية
+`social_publish.create`) يؤلف تغريدة **بلا ارتباط بخبر**: نص + حتى **4
+صور** (المكتبة/الرفع) أو **فيديو واحد** (يُرفع مباشرة للتخزين عبر رابط
+موقّع ثم يمر إلى Publer بـ`/media/from-url`)، ونشر فوري أو مجدول.
+
+- **الفيديو عبر وسيلة Publer فقط** في v1 — الوسيلة المباشرة ترد بخطأ واضح.
+- الصيغ: MP4/MOV حتى 512MB. الصور تمر بنفس خط المعالجة (تحويل/ضغط/5MB).
+- أعمدة جديدة في `social_posts` — **SQL الإنتاج** (idempotent، ينفذه المالك):
+
+```sql
+ALTER TABLE social_posts ALTER COLUMN article_id DROP NOT NULL;
+ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS media_kind text NOT NULL DEFAULT 'none';
+ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS media_urls jsonb DEFAULT '[]'::jsonb;
+```
+
+قبل تنفيذ الـSQL: التأليف المستقل يفشل بإدخال الصف (بقية النظام يعمل كما هو).
+
+## 7) استكشاف الأخطاء
 
 - **«انتهى الاعتماد»**: X يناوب refresh tokens؛ فشل تجديد دائم يعلّم الحساب
   `expired` — أعد الربط من الصفحة.

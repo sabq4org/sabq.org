@@ -210,11 +210,67 @@ export async function uploadImageToPubler(image: {
   return String(mediaId);
 }
 
+/**
+ * رفع فيديو من رابط عام عبر POST /media/from-url — غير متزامن:
+ * يعيد job_id ثم نستطلع حتى الاكتمال ونستخرج معرف الوسائط من الحمولة.
+ * مهلة أطول (المعالجة قد تطول) وقابلة لإعادة المحاولة — لا منشور صدر بعد.
+ */
+export async function uploadVideoToPublerFromUrl(
+  url: string,
+  opts: PollJobOptions = {},
+): Promise<string> {
+  const json = await publerFetch(
+    "/media/from-url",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ media: [{ url }], type: "single", in_library: false }),
+    },
+    "media from-url",
+    MEDIA_TIMEOUT_MS,
+  );
+  const jobId: string | undefined = json?.data?.job_id ?? json?.job_id;
+  if (!jobId) {
+    throw new SocialProviderError("استجابة رفع الفيديو لدى Publer بلا job_id", { retryable: false });
+  }
+  const data = await pollPublerJob(String(jobId), {
+    intervalMs: opts.intervalMs ?? 3_000,
+    timeoutMs: opts.timeoutMs ?? 5 * 60 * 1000,
+    timeoutRetryable: opts.timeoutRetryable ?? true,
+  });
+  const mediaId = extractMediaIdFromJobPayload(data);
+  if (!mediaId) {
+    throw new SocialProviderError(
+      "اكتملت مهمة رفع الفيديو لكن تعذر استخراج معرف الوسائط من استجابة Publer",
+      { retryable: false },
+    );
+  }
+  return mediaId;
+}
+
+/** يبحث دفاعياً عن معرف الوسائط في حمولة المهمة — أشكال Publer غير موثقة بدقة */
+export function extractMediaIdFromJobPayload(data: any): string | null {
+  const payload = data?.result?.payload ?? data?.payload ?? data;
+  const candidates = [
+    payload?.media?.[0]?.id,
+    payload?.media?.[0]?._id,
+    payload?.ids?.[0],
+    payload?.id,
+    Array.isArray(payload) ? payload[0]?.id : undefined,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.length > 0) return c;
+    if (typeof c === "number") return String(c);
+  }
+  return null;
+}
+
 // ── النشر ──────────────────────────────────────────────────────────
 
 export interface PublerCreatePostInput {
   text: string;
   mediaIds?: string[];
+  videoMediaId?: string;
   pollOptions?: PollJobOptions;
 }
 
@@ -226,12 +282,15 @@ export async function publishToPublerAccount(
   publerAccountId: string,
   input: PublerCreatePostInput,
 ): Promise<{ jobId: string }> {
-  const hasMedia = Boolean(input.mediaIds && input.mediaIds.length > 0);
+  const hasImages = Boolean(input.mediaIds && input.mediaIds.length > 0);
+  const hasVideo = Boolean(input.videoMediaId);
   const network: Record<string, unknown> = {
-    type: hasMedia ? "photo" : "status",
+    type: hasVideo ? "video" : hasImages ? "photo" : "status",
     text: input.text,
   };
-  if (hasMedia) {
+  if (hasVideo) {
+    network.media = [{ id: input.videoMediaId, type: "video" }];
+  } else if (hasImages) {
     network.media = input.mediaIds!.map((id) => ({ id, type: "image" }));
   }
   const body = {
@@ -334,11 +393,17 @@ export const publerProvider: SocialPublishProvider = {
     return uploadImageToPubler(image);
   },
 
+  async uploadVideoFromUrl(accountId, url): Promise<string> {
+    await loadPublerLinkedAccount(accountId);
+    return uploadVideoToPublerFromUrl(url);
+  },
+
   async createPost(accountId, input): Promise<ProviderPostResult> {
     const account = await loadPublerLinkedAccount(accountId);
     const { jobId } = await publishToPublerAccount(account.externalAccountId!, {
       text: input.text,
       mediaIds: input.mediaIds,
+      videoMediaId: input.videoMediaId,
     });
     // المنشور صدر — حل الرابط تحسين لا شرط، وفشله لا يُفشل النشر
     const resolved = await resolvePublishedPostLink(account.externalAccountId!, input.text);

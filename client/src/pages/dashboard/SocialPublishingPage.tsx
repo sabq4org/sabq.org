@@ -12,6 +12,7 @@ import {
   Link2,
   ListTree,
   Loader2,
+  PenSquare,
   RefreshCcw,
   Share2,
   Unlink,
@@ -38,6 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { fmtRelativeToNow, fmtSocialDateTime } from "@/components/social/socialFormat";
+import { ComposeTweetDialog } from "@/components/social/ComposeTweetDialog";
 import { cn } from "@/lib/utils";
 
 interface SafeAccount {
@@ -138,9 +140,12 @@ export default function SocialPublishingPage() {
   const canManageScheduled = hasPermission(user, "social_publish.manage_scheduled");
   const canPublishNow = hasPermission(user, "social_publish.publish_now");
 
+  const canCreate = hasPermission(user, "social_publish.create");
+
   const [disconnectTarget, setDisconnectTarget] = useState<SafeAccount | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [attemptsFor, setAttemptsFor] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   // نتيجة ربط OAuth تصل عبر ?x=connected|denied|…
   useEffect(() => {
@@ -376,6 +381,18 @@ export default function SocialPublishingPage() {
           description="نشر أخبار سبق على منصة X — فورياً أو بجدولة، مع سجل كامل للمحاولات"
           titleTestId="heading-social-publishing"
           className="p-4 sm:p-4"
+          actions={
+            canCreate ? (
+              <Button
+                onClick={() => setComposeOpen(true)}
+                disabled={!xAccount}
+                data-testid="button-new-tweet"
+              >
+                <PenSquare className="w-4 h-4 ml-2" />
+                تغريدة جديدة
+              </Button>
+            ) : undefined
+          }
         />
 
         {/* الحساب المتصل — شريط تشغيلي مضغوط */}
@@ -808,6 +825,9 @@ export default function SocialPublishingPage() {
           </Card>
         </section>
       </DashboardPageShell>
+
+      {/* تأليف تغريدة مستقلة */}
+      <ComposeTweetDialog open={composeOpen} onOpenChange={setComposeOpen} />
 
       {/* تأكيد فك الربط */}
       <AlertDialog

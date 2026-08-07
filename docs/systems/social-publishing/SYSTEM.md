@@ -33,6 +33,11 @@
   `SOCIAL_PUBLISH_TOKEN_SECRET` (وإلا `SESSION_SECRET`). لا يُعاد للعميل أبداً.
 - `social_posts` — المنشور وحالته: `draft | scheduled | processing |
   published | failed | canceled` + `attempts` + `lockedAt` + المعرف/الرابط الخارجي.
+  `article_id` **nullable** منذ 2026-08-07 (null = تغريدة مستقلة من زر
+  «تغريدة جديدة»)، مع `media_kind` (`none|image|video`) و`media_urls`
+  (حتى 4 صور أو فيديو واحد — `validateComposeMedia`). الفيديو يُرفع
+  للتخزين برابط موقّع (`/api/social-publishing/media/upload-url`) ثم
+  عبر Publer `/media/from-url` — **الوسيلة المباشرة لا تدعم الفيديو v1**.
 - `social_post_attempts` — سجل append-only لكل محاولة (طور، نتيجة، HTTP،
   رسالة منظفة من الأسرار، مدة).
 
