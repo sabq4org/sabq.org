@@ -88,6 +88,8 @@ export interface AutoImageGenerationRequest {
   language: "ar" | "en" | "ur";
   articleType?: string;
   forceGeneration?: boolean;
+  /** اختيار المحرر لنمط هذه التوليدة — يتقدم على نمط الإعدادات (newsStyle/articleStyle) */
+  styleSlug?: string;
 }
 
 export interface AutoImageGenerationResult {
@@ -252,7 +254,7 @@ export async function autoGenerateImage(
       articleSummary: request.excerpt || extractSummary(request.content || ""),
       category: request.category || "عام",
       language: request.language,
-      style: resolveStyleForArticleType(request.articleType, settings) as any,
+      style: request.styleSlug || resolveStyleForArticleType(request.articleType, settings),
       mood: "neutral"
     });
     
