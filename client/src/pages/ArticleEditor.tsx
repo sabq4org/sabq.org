@@ -278,7 +278,7 @@ export default function ArticleEditor() {
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
   
-  const [status, setStatus] = useState<"draft" | "published">("draft");
+  const [status, setStatus] = useState<"draft" | "published" | "scheduled" | "archived">("draft");
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<string | null>(null);
   const [reviewedAt, setReviewedAt] = useState<string | null>(null);
@@ -1490,9 +1490,14 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         isVideoTemplate,
         videoUrl: isVideoTemplate && normalizedVideoUrl ? normalizedVideoUrl : null,
         videoThumbnailUrl: isVideoTemplate && normalizedVideoThumbnailUrl ? normalizedVideoThumbnailUrl : null,
-        status: publishNow 
+        // مادة مجدولة/منشورة: زر الحفظ يحفظ التعديلات على الحالة نفسها — إرسال
+        // "draft" حرفيًا كان يُسقط الجدولة بصمت والكرون لا يلتقط المادة بعدها
+        // (حادثة 2026-08-08). الخادم يتجاهل الهبوط الضمني من جهته أيضًا.
+        status: publishNow
           ? (publishType === "scheduled" ? "scheduled" : "published")
-          : "draft",
+          : (!isNewArticle && (status === "scheduled" || status === "published"))
+            ? status
+            : "draft",
         ...(submitForReview ? { submitForReview: true } : {}),
         seo: {
           metaTitle: metaTitle ? metaTitle.substring(0, 70) : (title ? title.substring(0, 70) : ""),
@@ -2570,8 +2575,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         )}
 
-        {/* Lock Status Indicator - When current user owns the lock */}
-        {!isNewArticle && lockStatus?.isOwner && (
+        {/* Lock Status Indicator - When current user owns the lock.
+            لا تظهر مع وجود محررين آخرين — رسالة «حصري» بجوار «فلان يحرّر الآن
+            أيضًا» كانت تقرأ كتناقض وتوحي بتصريحٍ بالمتابعة رغم التحذير. */}
+        {!isNewArticle && lockStatus?.isOwner && coEditors.length === 0 && (
           <div 
             className="mb-4 flex items-center gap-2 text-xs text-muted-foreground"
             data-testid="lock-status"
@@ -2691,7 +2698,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 data-testid="button-save-draft"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                <span className="hidden xs:inline">حفظ كمسودة</span>
+                <span className="hidden xs:inline">
+                  {status === "scheduled" || status === "published" ? "حفظ التعديلات" : "حفظ كمسودة"}
+                </span>
                 <span className="xs:hidden">حفظ</span>
               </Button>
               {reviewStatus === "needs_changes" && isContributorRole && !canPublish && (
@@ -5148,7 +5157,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               data-testid="button-save-draft-mobile-bar"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              مسودة
+              {status === "scheduled" || status === "published" ? "حفظ" : "مسودة"}
             </Button>
             <Button
               size="sm"
