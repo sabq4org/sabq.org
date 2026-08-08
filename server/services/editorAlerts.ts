@@ -126,7 +126,7 @@ function getFrontendUrl(): string {
  * Format timestamp to Arabic locale
  */
 function formatArabicDateTime(date: Date): string {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -2579,17 +2579,17 @@ function generateReporterScheduleEmailTemplate(data: {
   // Pin to Asia/Riyadh — the Railway server runs in UTC, so omitting the
   // timezone caused scheduled-publish emails to display "4:25 ص" for an
   // article actually scheduled at 7:25 AM Saudi time.
-  const scheduledDateStr = data.scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
-    timeZone: 'Asia/Riyadh',
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  const scheduledDateStr = data.scheduledAt.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
-  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString('ar-SA', {
-    timeZone: 'Asia/Riyadh',
-    hour: '2-digit',
-    minute: '2-digit',
+  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    hour: "2-digit",
+    minute: "2-digit",
   });
   
   const html = `
@@ -2780,17 +2780,17 @@ function generateOpinionAuthorScheduleEmailTemplate(data: {
   // Pin to Asia/Riyadh — the Railway server runs in UTC, so omitting the
   // timezone caused scheduled-publish emails to display "4:25 ص" for an
   // article actually scheduled at 7:25 AM Saudi time.
-  const scheduledDateStr = data.scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
-    timeZone: 'Asia/Riyadh',
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  const scheduledDateStr = data.scheduledAt.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
-  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString('ar-SA', {
-    timeZone: 'Asia/Riyadh',
-    hour: '2-digit',
-    minute: '2-digit',
+  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    hour: "2-digit",
+    minute: "2-digit",
   });
   
   const html = `
