@@ -15,6 +15,7 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
@@ -7256,10 +7257,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // فتح المقال في المحرر سطحُ تحرير لا سطحُ عرض: «articles.view» تكفي لرؤية
-      // القوائم لكنها لا تفتح مواد الآخرين (حادثة 2026-08-08: مراسل فتح مقال
-      // رأي مجدولًا لغيره لأن view كانت ضمن canViewAny). فتحُ أي مقال يتطلب
-      // صلاحية تحرير/نشر على مستوى المكتب؛ ومن عداهم مالكو المادة فقط.
+      // فتح المقال في المحرر سطحُ تحرير لا عرض: «articles.view» ترى القوائم ولا
+      // تفتح مواد الآخرين (حادثة 2026-08-08) — الفتح للمكتب أو للمالك فقط.
       const userPermissions = await getEffectiveUserPermissions(userId);
       const isOpinionArticle = result.article.articleType === "opinion";
       const canOpenAny =
@@ -7845,19 +7844,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Check permissions: edit_own or edit_any.
-      // نفس مصدر البوابة (requireAnyPermission = DB ∪ خريطة الأدوار) — القراءة
-      // من getUserPermissions (DB فقط) جعلت البوابة تمرّر ما يرفضه هذا الفحص.
+      // Check permissions: edit_own or edit_any — من الصلاحيات الفعلية (نفس
+      // مصدر بوابة requireAnyPermission) بدل getUserPermissions (DB فقط).
       const userPermissions = await getEffectiveUserPermissions(userId);
-      const hasAllPerms = userPermissions.includes("*") || userPermissions.includes("system.admin");
-      const isOpinionArticle = existingArticle.articleType === "opinion";
-      const canEditOwn =
-        userPermissions.includes("articles.edit_own") ||
-        (isOpinionArticle && userPermissions.includes("opinion.edit_own"));
-      const canEditAny =
-        hasAllPerms ||
-        userPermissions.includes("articles.edit_any") ||
-        (isOpinionArticle && userPermissions.includes("opinion.edit_any"));
+      const { canEditOwn, canEditAny } = resolveArticleEditFlags(
+        userPermissions,
+        existingArticle.articleType,
+      );
 
       // User can edit if they have edit_any, or if they have edit_own AND own the row
       // (author, reporter, or original submitter — matches contributor analytics).
@@ -7900,34 +7893,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      // حارس الهبوط: مادة مجدولة/منشورة لا تُنزَّل إلى «مسودة» ضمنيًا — زر
-      // «حفظ كمسودة» على مادة حية كان يقتل الجدولة بصمت، وكرون النشر يستعلم
-      // عن status='scheduled' فقط فلا تُنشر المادة أبدًا ولا يُنبَّه أحد
-      // (حادثة 2026-08-08). الحفظ العادي يُبقي الحالة؛ والإنزال الصريح يمرّ
-      // فقط بعلم confirmStatusDowngrade مع صلاحية نشر/إلغاء نشر.
-      const LIVE_STATUSES = ["scheduled", "published"];
-      if (
-        parsed.data.status === "draft" &&
-        LIVE_STATUSES.includes(existingArticle.status)
-      ) {
-        if (req.body?.confirmStatusDowngrade === true) {
-          const canDowngrade =
-            hasAllPerms ||
-            userPermissions.includes("articles.unpublish") ||
-            userPermissions.includes("articles.publish") ||
-            (isOpinionArticle && userPermissions.includes("opinion.edit_any"));
-          if (!canDowngrade) {
-            return res.status(403).json({
-              message: "سحب مادة مجدولة/منشورة إلى مسودة يتطلب صلاحية نشر",
-              code: "STATUS_DOWNGRADE_FORBIDDEN",
-            });
-          }
-        } else {
-          console.warn(
-            `[ARTICLE UPDATE] ignored implicit ${existingArticle.status}→draft demotion for ${articleId} by ${userId} — status preserved`,
-          );
-          delete parsed.data.status;
-        }
+      // حارس الهبوط scheduled/published→draft — القاعدة في publishGateRules.decideStatusDemotion
+      const demotion = decideStatusDemotion({
+        requestedStatus: parsed.data.status,
+        currentStatus: existingArticle.status,
+        confirmed: req.body?.confirmStatusDowngrade === true,
+        permissions: userPermissions,
+        articleType: existingArticle.articleType,
+      });
+      if (demotion.action === "forbid") {
+        return res.status(demotion.httpStatus).json({ message: demotion.message, code: demotion.code });
+      }
+      if (demotion.action === "ignore") {
+        console.warn(`[ARTICLE UPDATE] ignored implicit ${existingArticle.status}→draft demotion for ${articleId} by ${userId} — status preserved`);
+        delete parsed.data.status;
       }
 
       // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
@@ -8055,10 +8034,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           }
         } else if (existingArticle.reviewStatus !== "pending_review") {
           updateData.reviewStatus = "pending_review";
-          // مادة حية (مجدولة/منشورة) تبقى على حالتها — الإرسال للمراجعة لا يُسقط الجدولة
-          if (!LIVE_STATUSES.includes(existingArticle.status)) {
-            updateData.status = "draft";
-          }
+          updateData.status = statusAfterSubmitForReview(existingArticle.status);
         }
       }
 
@@ -12233,16 +12209,11 @@ Respond in valid JSON format only:
         }
       }
 
-      // مادة مجدولة/منشورة لا تُسقَط إلى مسودة عند الإرسال للمراجعة — كان هذا
-      // يقتل الجدولة بصمت (نفس حارس PATCH /api/admin/articles/:id).
-      const submitStatus = ["scheduled", "published"].includes(existingArticle.status)
-        ? existingArticle.status
-        : "draft";
       const [updatedArticle] = await db
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: submitStatus,
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -14314,8 +14285,7 @@ Respond in valid JSON format only:
     try {
       const articleId = req.params.id;
 
-      // كانت النقطة بلا أي فحص صلاحية/ملكية فيكتب أي مستخدم مسجّل أعمدة
-      // المصداقية لأي مقال — نفس إصلاح analyze-seo المجاورة.
+      // كانت بلا أي فحص فيكتب أي مسجّل أعمدة المصداقية — نفس إصلاح analyze-seo.
       const access = await authorizeArticleWrite(req.user.id, articleId);
       if (!access.ok) {
         return res.status(access.httpStatus).json({ message: access.message });
@@ -25637,17 +25607,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const { page = 1, limit = 20, status, reviewStatus, search } = req.query;
       const offset = (Number(page) - 1) * Number(limit);
 
-      // رؤية كل مواد الرأي حكرٌ على مكتب التحرير؛ ومن عداهم يرى مواده هو فقط.
-      // الصيغة القديمة كانت fail-open: الفلتر يُطبَّق فقط على حاملي opinion.edit_own،
-      // فمن لا يحملها أصلًا (كالمراسل) كان يرى كل مواد الرأي بمن فيها المجدولة لغيره.
+      // رؤية كل مواد الرأي للمكتب فقط؛ غيرهم يرى مواده هو. (القديم كان fail-open:
+      // الفلتر كان يُطبَّق فقط على حاملي opinion.edit_own)
       const canSeeAllOpinion =
         userPermissions.includes("*") ||
         userPermissions.includes("system.admin") ||
         userPermissions.includes("articles.edit_any") ||
         userPermissions.includes("opinion.edit_any");
 
-      // شرط واحد مركّب — استدعاءات .where() المتسلسلة في Drizzle «تستبدل»
-      // بعضها ولا تتراكم، فكان أي فلتر status يمسح فلتري النوع والملكية معًا.
+      // شرط واحد مركّب — .where() المتسلسلة في Drizzle تستبدل بعضها ولا تتراكم.
       const conditions = [eq(articles.articleType, "opinion")];
       if (!canSeeAllOpinion) {
         conditions.push(eq(articles.authorId, userId));
@@ -25962,15 +25930,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         }
       }
 
-      // مادة مجدولة/منشورة تبقى على حالتها عند الإرسال للمراجعة (نفس حارس PATCH).
-      const submitStatus = ["scheduled", "published"].includes(existingArticle.status)
-        ? existingArticle.status
-        : "draft";
       const [updatedArticle] = await db
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: submitStatus,
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
