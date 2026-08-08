@@ -15,6 +15,7 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
@@ -68,7 +69,7 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_NAMES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
@@ -7256,23 +7257,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Own-only roles (edit_own / opinion.edit_own without broader view/edit)
-      // may only open articles they authored, reported, or submitted.
-      const userPermissions = await getUserPermissions(userId);
-      const canViewAny =
-        userPermissions.includes("articles.view") ||
-        userPermissions.includes("articles.edit") ||
+      // فتح المقال في المحرر سطحُ تحرير لا عرض: «articles.view» ترى القوائم ولا
+      // تفتح مواد الآخرين (حادثة 2026-08-08) — الفتح للمكتب أو للمالك فقط.
+      const userPermissions = await getEffectiveUserPermissions(userId);
+      const isOpinionArticle = result.article.articleType === "opinion";
+      const canOpenAny =
+        userPermissions.includes("*") ||
+        userPermissions.includes("system.admin") ||
         userPermissions.includes("articles.edit_any") ||
-        userPermissions.includes("opinion.view") ||
-        userPermissions.includes("opinion.edit_any") ||
-        userPermissions.includes("system.admin");
-      if (!canViewAny) {
+        userPermissions.includes("articles.publish") ||
+        (isOpinionArticle && userPermissions.includes("opinion.edit_any"));
+      if (!canOpenAny) {
         const isOwner =
           result.article.authorId === userId ||
           result.article.reporterId === userId ||
           result.article.submitterId === userId;
         if (!isOwner) {
-          return res.status(403).json({ message: "Forbidden" });
+          return res.status(403).json({ message: "لا تملك صلاحية فتح هذه المادة — ليست من موادك" });
         }
       }
 
@@ -7843,10 +7844,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Check permissions: edit_own or edit_any
-      const userPermissions = await getUserPermissions(userId);
-      const canEditOwn = userPermissions.includes("articles.edit_own");
-      const canEditAny = userPermissions.includes("articles.edit_any");
+      // Check permissions: edit_own or edit_any — من الصلاحيات الفعلية (نفس
+      // مصدر بوابة requireAnyPermission) بدل getUserPermissions (DB فقط).
+      const userPermissions = await getEffectiveUserPermissions(userId);
+      const { canEditOwn, canEditAny } = resolveArticleEditFlags(
+        userPermissions,
+        existingArticle.articleType,
+      );
 
       // User can edit if they have edit_any, or if they have edit_own AND own the row
       // (author, reporter, or original submitter — matches contributor analytics).
@@ -7887,6 +7891,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           message: "Invalid data",
           errors: parsed.error.flatten(),
         });
+      }
+
+      // حارس الهبوط scheduled/published→draft — القاعدة في publishGateRules.decideStatusDemotion
+      const demotion = decideStatusDemotion({
+        requestedStatus: parsed.data.status,
+        currentStatus: existingArticle.status,
+        confirmed: req.body?.confirmStatusDowngrade === true,
+        permissions: userPermissions,
+        articleType: existingArticle.articleType,
+      });
+      if (demotion.action === "forbid") {
+        return res.status(demotion.httpStatus).json({ message: demotion.message, code: demotion.code });
+      }
+      if (demotion.action === "ignore") {
+        console.warn(`[ARTICLE UPDATE] ignored implicit ${existingArticle.status}→draft demotion for ${articleId} by ${userId} — status preserved`);
+        delete parsed.data.status;
       }
 
       // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
@@ -8014,7 +8034,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           }
         } else if (existingArticle.reviewStatus !== "pending_review") {
           updateData.reviewStatus = "pending_review";
-          updateData.status = "draft";
+          updateData.status = statusAfterSubmitForReview(existingArticle.status);
         }
       }
 
@@ -12193,7 +12213,7 @@ Respond in valid JSON format only:
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: "draft",
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -14261,10 +14281,16 @@ Respond in valid JSON format only:
   });
 
   // News Analytics Endpoint - Smart statistics and insights
-  app.post("/api/articles/:id/analyze-credibility", isAuthenticated, async (req: any, res) => {
+  app.post("/api/articles/:id/analyze-credibility", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const articleId = req.params.id;
-      
+
+      // كانت بلا أي فحص فيكتب أي مسجّل أعمدة المصداقية — نفس إصلاح analyze-seo.
+      const access = await authorizeArticleWrite(req.user.id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const [article] = await db
         .select()
         .from(articles)
@@ -25577,11 +25603,39 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/dashboard/opinion", requireAuth, requireAnyPermission("articles.view", "articles.edit_own"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      const userPermissions = await getUserPermissions(userId);
+      const userPermissions = await getEffectiveUserPermissions(userId);
       const { page = 1, limit = 20, status, reviewStatus, search } = req.query;
       const offset = (Number(page) - 1) * Number(limit);
 
-      let query = db
+      // رؤية كل مواد الرأي للمكتب فقط؛ غيرهم يرى مواده هو. (القديم كان fail-open:
+      // الفلتر كان يُطبَّق فقط على حاملي opinion.edit_own)
+      const canSeeAllOpinion =
+        userPermissions.includes("*") ||
+        userPermissions.includes("system.admin") ||
+        userPermissions.includes("articles.edit_any") ||
+        userPermissions.includes("opinion.edit_any");
+
+      // شرط واحد مركّب — .where() المتسلسلة في Drizzle تستبدل بعضها ولا تتراكم.
+      const conditions = [eq(articles.articleType, "opinion")];
+      if (!canSeeAllOpinion) {
+        conditions.push(eq(articles.authorId, userId));
+      }
+      if (status && status !== "all") {
+        conditions.push(eq(articles.status, status as string));
+      }
+      if (reviewStatus && reviewStatus !== "all") {
+        conditions.push(eq(articles.reviewStatus, reviewStatus as string));
+      }
+      if (search) {
+        conditions.push(
+          or(
+            ilike(articles.title, `%${search}%`),
+            ilike(articles.excerpt, `%${search}%`)
+          )!
+        );
+      }
+
+      const results = await db
         .select({
           article: articleAdminSelect,
           category: categories,
@@ -25596,32 +25650,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(eq(articles.articleType, "opinion"))
-        .$dynamic();
-
-      // If user can only view their own, filter by authorId
-      if (!userPermissions.includes("opinion.edit_any") && userPermissions.includes("opinion.edit_own")) {
-        query = query.where(eq(articles.authorId, userId));
-      }
-
-      if (status && status !== "all") {
-        query = query.where(eq(articles.status, status as string));
-      }
-
-      if (reviewStatus && reviewStatus !== "all") {
-        query = query.where(eq(articles.reviewStatus, reviewStatus as string));
-      }
-
-      if (search) {
-        query = query.where(
-          or(
-            ilike(articles.title, `%${search}%`),
-            ilike(articles.excerpt, `%${search}%`)
-          )
-        );
-      }
-
-      const results = await query
+        .where(and(...conditions))
         .orderBy(desc(articles.createdAt))
         .limit(Number(limit))
         .offset(offset);
@@ -25632,19 +25661,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         author: row.author,
       }));
 
-      // Calculate metrics
-      let metricsQuery = db
+      // Calculate metrics — نفس قاعدة الرؤية أعلاه
+      const metricsConditions = [eq(articles.articleType, "opinion")];
+      if (!canSeeAllOpinion) {
+        metricsConditions.push(eq(articles.authorId, userId));
+      }
+      const allOpinionArticles = await db
         .select({ id: articles.id, status: articles.status, reviewStatus: articles.reviewStatus })
         .from(articles)
-        .where(eq(articles.articleType, "opinion"))
-        .$dynamic();
-
-      // Apply same permission filter for metrics
-      if (!userPermissions.includes("opinion.edit_any") && userPermissions.includes("opinion.edit_own")) {
-        metricsQuery = metricsQuery.where(eq(articles.authorId, userId));
-      }
-
-      const allOpinionArticles = await metricsQuery;
+        .where(and(...metricsConditions));
 
       const metrics = {
         total: allOpinionArticles.length,
@@ -25909,7 +25934,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: "draft",
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
