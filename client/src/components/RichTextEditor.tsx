@@ -215,7 +215,11 @@ export function RichTextEditor({
   });
 
   useEffect(() => {
-    if (!editor) return;
+    // isDestroyed إلزامي: تحديث حالة من مكوّن شقيق أثناء رندر التركيب (مثل
+    // جلب بيانات عند التحميل) يجعل React 18 يتخلص من محاولة الرندر الأولى،
+    // فيغلق هذا الـeffect على نسخة TipTap مُتلفة — getHTML عليها ينهار
+    // بـ"reading 'cached'" ويُسقط المحرر كاملًا في ErrorBoundary.
+    if (!editor || editor.isDestroyed) return;
     // صدى تغيير صادر من المحرر نفسه — لا تعد ضبط المستند
     if (content === lastEmittedHtmlRef.current) return;
     if (content !== editor.getHTML()) {
