@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-08-06 (عدّاد المشاهدات لا يقفل صف المقال أثناء الذروة) | المالك: editorial
+> آخر مراجعة: 2026-08-08 (فلتر الترخيص المهني في «راسل الزملاء») | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -58,6 +58,7 @@
 - **شارة الترخيص في الشريط:** غير مرخّص / منتهٍ / جدّد → تنقل إلى نموذج `WriterMediaLicenseCard` عبر `#writer-media-license` داخل `/dashboard/my-services` وتفتح النموذج إن لزم.
 - **شريط تحذير الترخيص في اللوحة:** لمراسل/كاتب رأي بلا ترخيص ساري معتمد أو بترخيص منتهٍ أو تحت المراجعة أو يحتاج تصحيحاً يظهر أعلى المحتوى في `DashboardLayout` (`MEDIA_LICENSE_DASHBOARD_WARNING` أو `MEDIA_LICENSE_PENDING_REVIEW_WARNING`)؛ الضغط يفتح نموذج الترخيص. المنطق مشترك عبر `useMediaLicenseGate`.
 - **تعطيل إنشاء مقال/خبر:** نفس الجمهور (بلا ترخيص / منتهٍ / تحت المراجعة / يحتاج تصحيحاً) — تُعطَّل أزرار «إنشاء مقال/خبر» و«ابدأ الكتابة» حتى تصبح الحالة `valid` (ملف + تاريخ ساري + `approved`). فتح `/dashboard/articles/new` يعيد إلى نموذج الترخيص.
+- **راسل الزملاء — فلتر الترخيص:** في `/dashboard/staff-communications` تُحفظ قيمة `metadata.licenseFilter` على الحملة: `all` | `with_valid` | `without_valid`. عند الإرسال يصفّي `resolveRecipients` في `server/services/staffCommunications.ts` المستلمين عبر `toMediaLicenseStatus(...).valid` (حساب «صحيفة سبق» يُعامل كساري). `without_valid` = بلا ملف / منتهٍ / تحت المراجعة / يحتاج تصحيحاً — لمراسلة من يحتاجون استخراج الترخيص.
 - **إدارة الترخيص — كتّاب الرأي:** `/dashboard/opinion-writers` عبر `DashboardPageHeader`؛ خلية مضغوطة + فلترة (تحت المراجعة / يحتاج تصحيحاً / …) + اعتماد/رفض/طلب تصحيح؛ `GET /api/admin/opinion-writers/:id/media-license-file`.
 - **إدارة المراسلين:** `/dashboard/reporters` — **مسؤول النظام فقط** (`requireRoles` في السايدبار + `ProtectedRoute` + `requireRole` على `/api/admin/reporters*`). لا تُفتح عبر `articles.view`/`users.view`. أعمدة الصفحة: ترخيص، مدينة، آخر دخول — **بدون** منشورة/آخر خبر/مشاهدات. API: `GET /api/admin/reporters` من `users` + ملف الترخيص؛ `GET /api/admin/reporters/:id/articles` موجود ولا تستهلكه الصفحة. ترتيب: تحت المراجعة → منتهٍ → يحتاج تصحيحاً → جدّد → بدون → ساري. KPI «نشطون آخر ٧ أيام» يعتمد `lastLoginAt` فقط.
 - **مفضلة لوحة التحكم:** نجمة ★ بجانب اسم الصفحة النشطة في `AppBreadcrumbs` (كل صفحات `/dashboard/*` ذات عنصر قائمة). `AppBreadcrumbs` يمرّر `permissions`/`allRoles` وإلا تُستبعد العناصر ذات صلاحيات ويُعرض «نظرة عامة» خطأً. `findActiveItem` لا يطابق `meta.exact` بالمقدّمة. `DashboardPageHeader.showFavoriteToggle` افتراضياً false لتفادي نجمتين.
