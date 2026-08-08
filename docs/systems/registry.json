@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-08-06",
+  "updatedAt": "2026-08-08",
   "systems": [
     {
       "id": "account-center",
@@ -192,6 +192,14 @@
         "server/services/aiSmartThumbnailService.ts",
         "server/services/autoImageGenerationService.ts",
         "server/services/aiImageGenerator.ts",
+        "server/services/imageStyleService.ts",
+        "server/routes/imageStyles.ts",
+        "shared/imageStyles.ts",
+        "client/src/components/AIImageGeneratorDialog.tsx",
+        "client/src/components/ImageStyleSelector.tsx",
+        "client/src/components/admin/ImageStylesManager.tsx",
+        "client/src/pages/AutoImageSettings.tsx",
+        "tests/unit/imageStyles.test.ts",
         "server/services/opinionAuthorWorkspaceService.ts",
         "server/utils/internalAnnouncementTargeting.ts",
         "server/services/opinionWritersService.ts",

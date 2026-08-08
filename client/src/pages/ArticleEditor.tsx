@@ -5225,7 +5225,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             description: "تم إضافة الصورة المولدة بالذكاء الاصطناعي كصورة بارزة للمقال",
           });
         }}
-        initialPrompt={title ? `صورة بارزة احترافية لمقال بعنوان: ${title}` : ""}
+        articleContext={{
+          title,
+          excerpt,
+          category:
+            allCategories.find((cat) => cat.id === categoryId)?.slug ||
+            allCategories.find((cat) => cat.id === categoryId)?.nameAr,
+        }}
       />
 
       {/* Infographic Generator Dialog */}
