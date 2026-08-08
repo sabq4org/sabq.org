@@ -198,8 +198,10 @@
         "server/services/authorProfileService.ts",
         "server/services/mediaLicenseService.ts",
         "server/services/mediaLicenseUpload.ts",
+        "server/services/staffCommunications.ts",
         "shared/mediaLicense.ts",
         "client/src/hooks/useMediaLicenseGate.ts",
+        "client/src/pages/dashboard/StaffCommunicationsPage.tsx",
         "client/src/components/ReporterSelect.tsx",
         "client/src/components/OpinionAuthorSelect.tsx",
         "server/services/reportersAdminService.ts",
@@ -280,7 +282,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-06"
+      "lastReviewed": "2026-08-08"
     },
     {
       "id": "ifox",
