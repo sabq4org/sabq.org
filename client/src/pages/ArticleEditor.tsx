@@ -1699,7 +1699,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const isUpdate = !isNewArticle && status === "published";
       const isScheduled = variables.publishNow && publishType === "scheduled";
       const scheduledLabel = isScheduled && scheduledAt
-        ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory", {
+        ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+            timeZone: "Asia/Riyadh",
             dateStyle: "medium",
             timeStyle: "short",
           })
