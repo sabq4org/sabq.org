@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 import { Sparkles, Image, FileText, ChartBar, Loader2, Download, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ImageStyleSelector } from "@/components/ImageStyleSelector";
+import type { EditorImageStyle } from "@shared/imageStyles";
 
 interface AIImageGeneratorDialogProps {
   open: boolean;
@@ -34,7 +36,20 @@ interface AIImageGeneratorDialogProps {
   initialPrompt?: string;
   /** Label for the confirm action (default "إدراج في المقال"). */
   insertLabel?: string;
+  /**
+   * سياق الخبر الحالي (اختياري): يحسّن الوصف المبدئي ويغذّي مطابقة
+   * التوجيه السياقي للنمط (مثل الواقعية الغذائية/الطبية) عبر التصنيف.
+   */
+  articleContext?: {
+    title?: string;
+    excerpt?: string;
+    /** slug التصنيف أو اسمه */
+    category?: string;
+  };
 }
+
+/** التبويبات التي ينطبق عليها نظام الأنماط (القوالب الأخرى تحمل توجيهها الكامل) */
+const STYLE_ENABLED_TABS = ["custom", "featured"];
 
 // Color style options for news graphics - Sabq branding, minimal and elegant
 const colorStyles = {
@@ -98,17 +113,42 @@ export function AIImageGeneratorDialog({
   onImageGenerated,
   initialPrompt = "",
   insertLabel = "إدراج في المقال",
+  articleContext,
 }: AIImageGeneratorDialogProps) {
   const [activeTab, setActiveTab] = useState("custom");
   const [prompt, setPrompt] = useState(initialPrompt);
   const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
   const [selectedColorStyle, setSelectedColorStyle] = useState<keyof typeof colorStyles>("red");
+  const [selectedStyleSlug, setSelectedStyleSlug] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState("2K");
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [enableThinking, setEnableThinking] = useState(true);
   const [enableSearchGrounding, setEnableSearchGrounding] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<{url: string; alt?: string} | null>(null);
   const { toast } = useToast();
+
+  // أنماط التوليد من السجلّ المركزي (تُدار من لوحة التحكم)
+  const { data: stylesDataRaw } = useQuery<{ styles: EditorImageStyle[]; defaultSlug: string }>({
+    queryKey: ["/api/image-styles"],
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+  const availableStyles = Array.isArray(stylesDataRaw?.styles) ? stylesDataRaw.styles : [];
+  // فشل الجلب أو لا أنماط → التوليد يستمر بدون styleSlug (سلوك الخادم الافتراضي)
+  const effectiveStyleSlug = selectedStyleSlug ?? stylesDataRaw?.defaultSlug ?? null;
+
+  // عند فتح الحوار: لو الوصف فارغ نزرعه من initialPrompt أو من سياق الخبر
+  useEffect(() => {
+    if (!open || prompt.trim()) return;
+    const contextPrompt = articleContext?.title
+      ? `مشهد تعبيري للخبر: ${articleContext.title}${
+          articleContext.excerpt ? `\n${articleContext.excerpt.slice(0, 200)}` : ""
+        }`
+      : "";
+    const seed = initialPrompt || contextPrompt;
+    if (seed) setPrompt(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const generateMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -119,16 +159,21 @@ export function AIImageGeneratorDialog({
     },
     onSuccess: (data) => {
       if (data.imageUrl) {
-        setGeneratedImage({ 
-          url: data.imageUrl, 
-          alt: prompt || "صورة مولدة بالذكاء الاصطناعي" 
+        setGeneratedImage({
+          url: data.imageUrl,
+          alt: prompt || "صورة مولدة بالذكاء الاصطناعي"
         });
         toast({
           title: "تم توليد الصورة بنجاح",
           description: "يمكنك الآن إدراج الصورة في المقال",
         });
       } else {
-        throw new Error(data.error || data.message || "فشل توليد الصورة");
+        // كان throw هنا يهرب من onSuccess فيضيع بلا رسالة للمستخدم
+        toast({
+          title: "خطأ في التوليد",
+          description: data.error || data.message || "فشل توليد الصورة",
+          variant: "destructive",
+        });
       }
     },
     onError: (error: any) => {
@@ -145,19 +190,31 @@ export function AIImageGeneratorDialog({
     let overlayText: string | undefined = undefined;
     let overlayOptions: any = undefined;
 
+    // هل نظام الأنماط فعّال لهذا التبويب؟ (البرومبت النهائي يُركَّب في الخادم)
+    const styleActive =
+      STYLE_ENABLED_TABS.includes(activeTab) && !!effectiveStyleSlug && availableStyles.length > 0;
+
     // If using template, build prompt from template
     if (activeTab !== "custom") {
       const template = templates[activeTab as keyof typeof templates];
       if (template) {
-        finalPrompt = template.prompt;
-        template.fields.forEach((field) => {
-          finalPrompt = finalPrompt.replace(`{${field}}`, templateFields[field] || "");
-        });
+        if (activeTab === "featured" && styleActive) {
+          // مع نمط فعّال: نرسل المضمون فقط — الأسلوب يأتي من النمط في الخادم
+          // (قالب «صورة بارزة» القديم كان يفرض واقعية تتعارض مع الأنماط الأخرى)
+          finalPrompt = templateFields.subject
+            ? `صورة بارزة لمقال إخباري عن: ${templateFields.subject}`
+            : "";
+        } else {
+          finalPrompt = template.prompt;
+          template.fields.forEach((field) => {
+            finalPrompt = finalPrompt.replace(`{${field}}`, templateFields[field] || "");
+          });
+        }
         // Replace color style placeholder if template has color option
         if (template.hasColorOption) {
           const colorStyle = colorStyles[selectedColorStyle];
           finalPrompt = finalPrompt.replace("{colorStyle}", colorStyle.prompt);
-          
+
           // For "breaking" template, add text overlay with the headline
           if (activeTab === "breaking" && templateFields.headline) {
             overlayText = templateFields.headline;
@@ -189,6 +246,10 @@ export function AIImageGeneratorDialog({
       enableSearchGrounding,
       overlayText,
       overlayOptions,
+      // النمط + تصنيف الخبر (للتوجيه السياقي) — الخادم يتكفل بالتركيب والحسم
+      ...(styleActive
+        ? { styleSlug: effectiveStyleSlug, category: articleContext?.category }
+        : {}),
     };
     generateMutation.mutate(payload);
   };
@@ -235,6 +296,13 @@ export function AIImageGeneratorDialog({
                 </TabsList>
 
                 <TabsContent value="custom" className="space-y-4">
+                  <ImageStyleSelector
+                    styles={availableStyles}
+                    selectedSlug={effectiveStyleSlug || ""}
+                    onSelect={setSelectedStyleSlug}
+                    category={articleContext?.category}
+                    disabled={generateMutation.isPending}
+                  />
                   <div>
                     <Label htmlFor="prompt">وصف الصورة</Label>
                     <Textarea
@@ -256,7 +324,17 @@ export function AIImageGeneratorDialog({
                         قالب {template.name} - املأ الحقول المطلوبة
                       </AlertDescription>
                     </Alert>
-                    
+
+                    {key === "featured" && (
+                      <ImageStyleSelector
+                        styles={availableStyles}
+                        selectedSlug={effectiveStyleSlug || ""}
+                        onSelect={setSelectedStyleSlug}
+                        category={articleContext?.category}
+                        disabled={generateMutation.isPending}
+                      />
+                    )}
+
                     {/* Color Style Selector for templates that support it */}
                     {template.hasColorOption && (
                       <div className="space-y-3">

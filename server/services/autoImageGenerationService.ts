@@ -282,8 +282,10 @@ export async function autoGenerateImage(
       caption: AI_DISCLAIMER[request.language],
       keywords: extractKeywords(request.title),
       isAiGenerated: true,
-      aiGenerationModel: settings.provider,
-      aiGenerationPrompt: smartPrompt,
+      // النموذج والبرومبت الفعليان من نتيجة التوليد (كان يُخزَّن smartPrompt
+      // بينما النموذج يستلم برومبتًا آخر — أثر مضلل)
+      aiGenerationModel: generationResult.model || settings.provider,
+      aiGenerationPrompt: generationResult.finalPrompt || smartPrompt,
       category: "articles",
       usedIn: [request.articleId],
       usageCount: 1,
@@ -295,8 +297,8 @@ export async function autoGenerateImage(
         imageUrl: generationResult.imageUrl,
         thumbnailUrl: generationResult.thumbnailUrl || generationResult.imageUrl, // Also set thumbnail
         isAiGeneratedImage: true,
-        aiImageModel: settings.provider,
-        aiImagePrompt: smartPrompt,
+        aiImageModel: generationResult.model || settings.provider,
+        aiImagePrompt: generationResult.finalPrompt || smartPrompt,
         updatedAt: new Date()
       })
       .where(eq(articles.id, request.articleId));
