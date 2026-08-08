@@ -137,6 +137,18 @@ function formatArabicDateTime(date: Date): string {
   }).format(date);
 }
 
+/** Compact WhatsApp datetime: Latin digits, Gregorian, no weekday. */
+function formatWhatsAppDateTime(date: Date): string {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Riyadh",
+  }).format(date);
+}
+
 /**
  * Get article URL based on language
  */
@@ -338,23 +350,29 @@ ${articleUrl}
 }
 
 /**
- * Generate WhatsApp message for article published alert
+ * Generate WhatsApp message for article published alert.
+ * Forward-friendly: title first, «بواسطة», Latin digits, light emoji.
  */
 function generateWhatsAppMessage(article: ArticlePublishData): string {
   const frontendUrl = getFrontendUrl();
   const articleUrl = getArticleUrl(frontendUrl, article);
-  const publishTime = article.publishedAt ? formatArabicDateTime(article.publishedAt) : formatArabicDateTime(new Date());
+  const publishTime = article.publishedAt
+    ? formatWhatsAppDateTime(article.publishedAt)
+    : formatWhatsAppDateTime(new Date());
 
-  return `📢 *نشرنا للتو:*
+  const categoryLine = article.categoryName
+    ? `🗂️ ${article.categoryName}\n`
+    : "";
 
-「 *${article.title}* 」
+  return `*خبر جديد من سبق*
 
-👤 ${article.authorName}
-${article.categoryName ? `🗂️ ${article.categoryName}\n` : ""}🕐 ${publishTime}
+${article.title}
 
-▶️ ${articleUrl}
+👤 بواسطة ${article.authorName}
+${categoryLine}🕐 ${publishTime}
 
-_صحيفة سبق الإلكترونية_`;
+اقرأ الخبر:
+${articleUrl}`;
 }
 
 /**
