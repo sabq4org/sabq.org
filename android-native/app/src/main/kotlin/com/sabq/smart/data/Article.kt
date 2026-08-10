@@ -22,6 +22,8 @@ data class Article(
     val isFeatured: Boolean = false,
     val slug: String? = null,
     val authorName: String? = null,
+    /** صورة كاتب الرأي (رابط مطلق) — تُعرض في قائمة «الرأي» بالرئيسية. */
+    val authorImageUrl: String? = null,
     val body: String? = null,
     val articleType: String? = null,
     val authorGender: String? = null,

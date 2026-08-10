@@ -1115,6 +1115,30 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0.95, green: 0.97, blue: 0.99, alpha: 1)
     })
 
+    // عائلة «الرأي والزوايا» بهوية سبق (دليل الهوية V2): بطاقة سماوية
+    // فاتحة جدًا، شريط عنوان بسماوي سبق #4CBCFD، والأسماء والروابط
+    // بالأزرق العميق #0E76B8 (يُستبدل بالسماوي في الداكن للتباين).
+    // الفاتح #DCF1FE من لوحة الهوية — أوضح تمايزًا عن خلفية التطبيق
+    // #F2F7FC بعد ملاحظة المالك أن الصبغة الأخف كانت تذوب فيها.
+    static let sectionCard = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.11, green: 0.15, blue: 0.21, alpha: 1)
+            : UIColor(red: 0.86, green: 0.95, blue: 1.00, alpha: 1)
+    })
+    static let sectionSeparator = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.20, green: 0.26, blue: 0.33, alpha: 1)
+            : UIColor(red: 0.72, green: 0.84, blue: 0.92, alpha: 1)
+    })
+    /// سماوي سبق #4CBCFD — ثابت في الوضعين، لون العلامة نفسه.
+    nonisolated static let brandSky = Color(red: 0.30, green: 0.74, blue: 0.99)
+    /// أزرق سبق العميق #0E76B8 للنصوص التفاعلية؛ سماوي في الداكن.
+    static let brandBlue = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.30, green: 0.74, blue: 0.99, alpha: 1)
+            : UIColor(red: 0.05, green: 0.46, blue: 0.72, alpha: 1)
+    })
+
     nonisolated static let cardRadius: CGFloat   = 28
     nonisolated static let tileRadius: CGFloat   = 22
     nonisolated static let chipRadius: CGFloat   = 14

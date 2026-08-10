@@ -53,6 +53,9 @@ data class MuqTopic(
     val publishedAt: String?,
     val viewCount: Int?,
     val angle: MuqTopicAngle?,
+    /** كاتب الزاوية — يصل في خلاصات الرئيسية بعد توسعة الخادم 2026-08؛
+     *  null مع الخوادم الأقدم فيُعرض اسم الزاوية بدلًا منه. */
+    val writer: MuqWriter? = null,
 ) {
     /** Best HTML for rendering (the editor stores `content.rawHtml`). */
     val html: String get() = rawHtml ?: ""
@@ -156,6 +159,7 @@ fun ApiMuqTopic.toDomain(): MuqTopic = MuqTopic(
     publishedAt = publishedAt,
     viewCount = viewCount,
     angle = angle?.toDomain(),
+    writer = writer?.toDomain(),
 )
 
 fun ApiMuqWriter.toDomain(): MuqWriter = MuqWriter(

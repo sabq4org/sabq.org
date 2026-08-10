@@ -77,6 +77,9 @@ nonisolated struct MuqTopic: Decodable, Hashable, Identifiable {
     /// مرفقة في خلاصات الواجهة (`featured`/`latest-topics`) لا في قائمة
     /// مواضيع الزاوية.
     let angle: MuqTopicAngle?
+    /// كاتب الزاوية (اسم + صورة) — يصل في خلاصات الرئيسية بعد توسعة
+    /// الخادم 2026-08؛ اختياري حتى يبقى التطبيق متوافقًا مع خوادم أقدم.
+    let writer: MuqWriter?
 
     /// أفضل HTML متاح للعرض (المحرّر يخزّن `content.rawHtml`).
     var html: String { content?.rawHtml ?? "" }
