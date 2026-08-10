@@ -48,6 +48,10 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
 
     val resolvedAuthor = authorName?.takeIf { it.isNotBlank() } ?: resolveAuthor(author)
 
+    val absoluteAuthorImage = authorImage
+        ?.takeIf { it.isNotBlank() }
+        ?.let { if (it.startsWith("http")) it else webOrigin + (if (it.startsWith("/")) it else "/$it") }
+
     val resolvedTags: List<String> = extractTags(seo, tags)
         .map { it.trim() }
         .filter { it.isNotEmpty() }
@@ -90,6 +94,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         isFeatured = isFeatured == true,
         slug = slug,
         authorName = resolvedAuthor,
+        authorImageUrl = absoluteAuthorImage,
         body = body?.takeIf { it.isNotBlank() },
         articleType = articleType,
         authorGender = authorGender,
@@ -157,8 +162,9 @@ private fun formatReadingMinutes(minutes: Int?): String? {
     }
 }
 
-/** Backend ships ISO-8601 in publishedAt. Tolerate missing or malformed input. */
-private fun parseDate(raw: String?): ZonedDateTime? {
+/** Backend ships ISO-8601 in publishedAt. Tolerate missing or malformed input.
+ *  Internal لأن شريط الزوايا يعيد استخدامه لتاريخ MuqTopic النسبي. */
+internal fun parseDate(raw: String?): ZonedDateTime? {
     if (raw.isNullOrBlank()) return null
     return runCatching { OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.of("Asia/Riyadh")) }
         .recoverCatching { ZonedDateTime.parse(raw) }
@@ -179,7 +185,7 @@ private fun parseDate(raw: String?): ZonedDateTime? {
  * `RelativeDateTimeFormatter` doesn't perfectly round-trip the iOS
  * output for Arabic.
  */
-private fun formatRelativeDate(date: ZonedDateTime?): String {
+internal fun formatRelativeDate(date: ZonedDateTime?): String {
     if (date == null) return ""
     val now = ZonedDateTime.now(ZoneId.of("Asia/Riyadh"))
     val diff = Duration.between(date, now)

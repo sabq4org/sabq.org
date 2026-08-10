@@ -102,6 +102,9 @@ data class ApiArticle(
     @JsonNames("author_name")
     val authorName: String? = null,
     val author: kotlinx.serialization.json.JsonElement? = null,
+    /** صورة كاتب الرأي — نفس مفاتيح iOS (APIModels.swift line 665). */
+    @JsonNames("author_image", "authorImage")
+    val authorImage: String? = null,
 
     @JsonNames("published_at", "publishedAt", "createdAt", "created_at")
     val publishedAt: String? = null,
