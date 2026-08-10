@@ -962,7 +962,7 @@ export interface IStorage {
   publishTopic(id: string, userId: string): Promise<Topic>;
   unpublishTopic(id: string, userId: string): Promise<Topic>;
   getPublishedTopicsByAngle(angleSlug: string, limit?: number): Promise<Topic[]>;
-  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>>;
+  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>>;
   
   // Angle Submissions operations - طلبات كتابة الزوايا
   createAngleSubmission(data: InsertAngleSubmission): Promise<AngleSubmission>;
@@ -10575,7 +10575,7 @@ export class DatabaseStorage implements IStorage {
     return results.map((r) => r.topic);
   }
 
-  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>> {
+  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>> {
     const results = await db
       .select({
         topic: topics,
@@ -10586,20 +10586,35 @@ export class DatabaseStorage implements IStorage {
           icon: angles.iconKey,
           colorHex: angles.colorHex,
         },
+        // كاتب الزاوية — نفس أسبقية getAngleWriter: بيانات المنسوب ثم حساب المستخدم
+        writerFirstName: users.firstName,
+        writerLastName: users.lastName,
+        writerProfileImage: users.profileImageUrl,
+        writerStaffName: staff.nameAr,
+        writerStaffImage: staff.profileImage,
       })
       .from(topics)
       .innerJoin(angles, eq(topics.angleId, angles.id))
+      .leftJoin(users, eq(angles.managerUserId, users.id))
+      .leftJoin(staff, eq(staff.userId, users.id))
       .where(and(
         eq(topics.status, 'published'),
         eq(angles.isActive, true)
       ))
       .orderBy(desc(topics.publishedAt))
       .limit(limit);
-    
-    return results.map((r) => ({
-      ...r.topic,
-      angle: r.angle,
-    }));
+
+    return results.map((r) => {
+      const writerName = (r.writerStaffName
+        || [r.writerFirstName, r.writerLastName].filter(Boolean).join(" ").trim()) || null;
+      return {
+        ...r.topic,
+        angle: r.angle,
+        writer: writerName
+          ? { name: writerName, avatar: r.writerStaffImage || r.writerProfileImage || null }
+          : null,
+      };
+    });
   }
 
   // Angle Submissions operations - طلبات كتابة الزوايا
