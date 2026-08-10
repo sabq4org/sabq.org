@@ -57,16 +57,22 @@ function ActionBtn({
   );
 }
 
-function ActionsGrid({ children }: { children: ReactNode }) {
+function ActionsRow({ children }: { children: ReactNode }) {
   return (
     <div
-      className="grid w-[136px] grid-cols-4 gap-0.5 justify-items-center"
+      className="flex items-center justify-center gap-0.5"
       role="group"
       aria-label="إجراءات المقال"
     >
       {children}
     </div>
   );
+}
+
+/** فاصل رأسي بين مجموعة التحرير (تعديل·تمييز·طلب تعديل·أرشفة)
+ *  ومجموعة التوزيع (ترجمة·إنعاش·إشعار·X). */
+function ActionsDivider() {
+  return <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />;
 }
 
 export function RowActions({
@@ -237,7 +243,7 @@ export function RowActions({
   // للمقالات المؤرشفة: تعديل - مميز - نشر
   if (status === "archived") {
     return (
-      <ActionsGrid>
+      <ActionsRow>
         {canEdit && (
           <ActionBtn
             onClick={onEdit}
@@ -268,16 +274,24 @@ export function RowActions({
             <Send className="w-4 h-4" />
           </ActionBtn>
         )}
-      </ActionsGrid>
+      </ActionsRow>
     );
   }
 
-  // للمقالات النشطة: شبكة ظاهرة بدون قائمة منسدلة
-  // صف أساسي: تعديل · تمييز · طلب تعديل · أرشفة
-  // صف توزيع/ذكاء: ترجمة · إنعاش · إشعار · نشر على X
+  // للمقالات النشطة: كل الإجراءات ظاهرة في سطر واحد بدون قائمة منسدلة،
+  // مع فاصل رأسي بين مجموعة التحرير ومجموعة التوزيع/الذكاء.
+  const hasEditGroup =
+    canEdit || canFeature || !!onRequestRevision || canDelete;
+  const hasDistributionGroup =
+    status === "published" &&
+    (canTranslate ||
+      canPublish ||
+      canSendNotification ||
+      (canSocialPublish && !!onSocialPublish));
+
   return (
     <>
-      <ActionsGrid>
+      <ActionsRow>
         {canEdit && (
           <ActionBtn
             onClick={onEdit}
@@ -318,6 +332,7 @@ export function RowActions({
             <Trash2 className="w-4 h-4 text-destructive" />
           </ActionBtn>
         )}
+        {hasEditGroup && hasDistributionGroup && <ActionsDivider />}
         {canTranslate && status === "published" && (
           <ActionBtn
             onClick={() => setTranslateDialogOpen(true)}
@@ -366,7 +381,7 @@ export function RowActions({
             <Share2 className="w-4 h-4 text-sky-600" />
           </ActionBtn>
         )}
-      </ActionsGrid>
+      </ActionsRow>
 
       <AlertDialog open={translateDialogOpen} onOpenChange={setTranslateDialogOpen}>
         <AlertDialogContent>
