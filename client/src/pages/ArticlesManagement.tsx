@@ -1143,10 +1143,9 @@ export default function ArticlesManagement() {
                         />
                       </th>
                       <th className="px-3 py-3 text-right text-sm font-semibold">الخبر</th>
-                      <th className="hidden w-[140px] px-3 py-3 text-right text-sm font-semibold lg:table-cell">الكاتب</th>
                       <th className="w-[72px] px-2 py-3 text-center text-sm font-semibold">عاجل</th>
                       <th className="w-[88px] px-2 py-3 text-center text-sm font-semibold">المشاهدات</th>
-                      <th className="w-[152px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
+                      <th className="w-[300px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1176,22 +1175,23 @@ export default function ArticlesManagement() {
                           </td>
                           <td className="min-w-0 px-3 py-3.5 align-top">
                             <div className="space-y-2">
-                              <div className="flex items-start gap-2">
+                              <div className="flex items-center gap-2">
                                 {((article as any).albumImages?.length > 0 ||
                                   (article as any).mediaAssetsCount > 0) && (
-                                  <Images className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+                                  <Images className="h-4 w-4 shrink-0 text-sky-500" />
                                 )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <h3 className="break-words text-[15px] font-bold leading-snug tracking-tight text-foreground sm:text-base">
-                                      {article.title}
-                                    </h3>
-                                    <EditorialDraftReviewCue
-                                      article={article}
-                                      layout="inline"
-                                      testId={`badge-review-desktop-${article.id}`}
-                                    />
-                                  </div>
+                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                  <h3
+                                    title={article.title}
+                                    className="min-w-0 truncate text-[15px] font-bold leading-snug tracking-tight text-foreground sm:text-base"
+                                  >
+                                    {article.title}
+                                  </h3>
+                                  <EditorialDraftReviewCue
+                                    article={article}
+                                    layout="inline"
+                                    testId={`badge-review-desktop-${article.id}`}
+                                  />
                                 </div>
                               </div>
 
@@ -1199,6 +1199,16 @@ export default function ArticlesManagement() {
                                 {getTypeBadge(article.articleType || "news")}
                                 {getCategoryChip(article.category?.nameAr)}
                                 {getSourceBadge(article.source)}
+                                {(article.isAiGeneratedThumbnail ||
+                                  (article as any).isAiGeneratedImage) && (
+                                  <span
+                                    className="inline-flex items-center"
+                                    title="صورة مولدة بالذكاء الاصطناعي"
+                                    data-testid={`badge-ai-image-${article.id}`}
+                                  >
+                                    <Brain className="h-4 w-4 text-purple-500" />
+                                  </span>
+                                )}
                               </div>
 
                               <EditorialDraftReviewCue
@@ -1310,28 +1320,6 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="hidden px-3 py-3.5 align-top lg:table-cell">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-7 w-7">
-                                  <AvatarImage src={article.author?.profileImageUrl || ""} />
-                                  <AvatarFallback className="text-xs">
-                                    {article.author?.firstName?.[0] ||
-                                      article.author?.email?.[0]?.toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="truncate text-sm font-medium">
-                                  {article.author?.firstName || article.author?.email}
-                                </span>
-                              </div>
-                              {article.publisher?.companyName && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <Building2 className="h-3 w-3 shrink-0" />
-                                  <span className="truncate">{article.publisher.companyName}</span>
-                                </div>
-                              )}
-                            </div>
-                          </td>
                           <td className="px-2 py-3.5 text-center align-top">
                             {canPublishArticle ? (
                               <BreakingSwitch
@@ -1348,37 +1336,25 @@ export default function ArticlesManagement() {
                             <ViewsCount views={article.views} iconClassName="h-4 w-4" />
                           </td>
                           <td className="px-2 py-3.5 align-top">
-                            <div className="flex flex-col items-center gap-1">
-                              {(article.isAiGeneratedThumbnail ||
-                                (article as any).isAiGeneratedImage) && (
-                                <div
-                                  className="flex h-6 w-6 items-center justify-center"
-                                  title="صورة مولدة بالذكاء الاصطناعي"
-                                  data-testid={`badge-ai-image-${article.id}`}
-                                >
-                                  <Brain className="h-4 w-4 text-purple-500" />
-                                </div>
-                              )}
-                              <RowActions
-                                articleId={article.id}
-                                articleTitle={article.title}
-                                status={article.status}
-                                onEdit={() => handleEdit(article)}
-                                isFeatured={article.isFeatured}
-                                onDelete={() => setDeletingArticle(article)}
-                                onRequestRevision={
-                                  activeStatus !== "archived"
-                                    ? () => setRevisionArticle(article)
-                                    : undefined
-                                }
-                                onSocialPublish={() => setSocialPublishArticle(article)}
-                                canEdit={canEditArticle(article)}
-                                canDelete={!!(canDeleteArticle || canArchiveArticle)}
-                                canFeature={!!canFeatureArticle}
-                                canPublish={!!canPublishArticle}
-                                canSocialPublish={!!canSocialPublish}
-                              />
-                            </div>
+                            <RowActions
+                              articleId={article.id}
+                              articleTitle={article.title}
+                              status={article.status}
+                              onEdit={() => handleEdit(article)}
+                              isFeatured={article.isFeatured}
+                              onDelete={() => setDeletingArticle(article)}
+                              onRequestRevision={
+                                activeStatus !== "archived"
+                                  ? () => setRevisionArticle(article)
+                                  : undefined
+                              }
+                              onSocialPublish={() => setSocialPublishArticle(article)}
+                              canEdit={canEditArticle(article)}
+                              canDelete={!!(canDeleteArticle || canArchiveArticle)}
+                              canFeature={!!canFeatureArticle}
+                              canPublish={!!canPublishArticle}
+                              canSocialPublish={!!canSocialPublish}
+                            />
                           </td>
                         </SortableRow>
                       ))}
