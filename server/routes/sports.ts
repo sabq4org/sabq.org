@@ -167,12 +167,12 @@ function withClockAnchor<T extends SplFixture>(f: T): T {
 }
 
 /**
- * «ساخنة» = تستحق كاش الحافة القصير (5ث): جارية فعلًا، أو حان انطلاقها ولم يقلبها
- * المزوّد بعد، أو على وشك الانطلاق (≤10 دقائق). قبل هذا كانت استجابة ما قبل
- * الانطلاق تُخزَّن على الحافة بـ s-maxage طويل فيرى الجمهور «لم تبدأ» دقائق
- * بعد صافرة البداية.
+ * «ساخنة» = تستحق كاش الحافة القصير: جارية فعلًا، أو حان انطلاقها ولم يقلبها
+ * المزوّد بعد، أو داخل نافذة ما قبل الانطلاق التي تنزل فيها التشكيلات
+ * (عادةً قبل ~ساعة). كانت ≤10 دقائق فقط، فاستجابة بلا تشكيلة تُخزَّن على
+ * الحافة بـ s-maxage=300 ويبقى تبويب التشكيلة مخفيًا بعد صدورها لدى المزوّد.
  */
-const KICKOFF_HOT_BEFORE_SEC = 10 * 60;
+const KICKOFF_HOT_BEFORE_SEC = 75 * 60;
 const KICKOFF_HOT_AFTER_SEC = 3 * 3600;
 function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   if (f.status.live) return true;
@@ -788,9 +788,16 @@ export function registerSportsRoutes(app: Express) {
         return;
       }
       const fixture = withClockAnchor(detail.fixture);
-      // «ساخنة» تشمل نافذة الانطلاق (±) — استجابة ما قبل البدء كانت تُخزَّن على
-      // الحافة 300ث فيرى الجمهور «لم تبدأ» دقائق بعد الصافرة.
-      const ttl = isHotFixture(fixture) ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
+      // «ساخنة» تشمل نافذة التشكيلات/الانطلاق. كذلك أي قادمة بلا startXI داخل
+      // ساعتين تُخدم بكاش قصير حتى لا تتجمّد [] على الحافة بعد صدور التشكيلة.
+      const awaitingLineups =
+        !fixture.status.finished &&
+        !detail.lineups.some((lu) => (lu.startXI?.length ?? 0) > 0) &&
+        Math.floor(Date.now() / 1000) >= fixture.timestamp - 2 * 3600;
+      const ttl =
+        isHotFixture(fixture) || awaitingLineups
+          ? "max-age=10, s-maxage=15"
+          : "max-age=120, s-maxage=300";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
       res.json({ ...detail, fixture });
     } catch (error) {

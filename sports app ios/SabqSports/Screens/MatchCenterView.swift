@@ -208,6 +208,15 @@ struct SpMatchCenter: View {
         guard let e = expectedLineup, e.available else { return false }
         return e.home != nil || e.away != nil
     }
+    /// نافذة انتظار التشكيلة: قادمة/جارية بلا startXI وقبل ساعتين من الانطلاق أو بعده.
+    /// نُظهر التبويب بحالة فارغة بدل إخفائه فيبدو للمستخدم أن الميزة مفقودة.
+    private var awaitingLineups: Bool {
+        guard let f = fixture, !f.status.finished else { return false }
+        if detail?.lineups.contains(where: { !$0.startXI.isEmpty }) == true { return false }
+        if hasExpectedLineup { return false }
+        let secs = f.kickoff.timeIntervalSinceNow
+        return secs <= 2 * 3600 && secs > -3 * 3600
+    }
 
     private var segments: [Segment] {
         guard let d = detail else { return [] }
@@ -218,7 +227,7 @@ struct SpMatchCenter: View {
         if hasCommentary { s.append(.commentary) }
         if hasAnalysis { s.append(.analysis) }
         if hasRatings { s.append(.ratings) }
-        if !d.lineups.isEmpty || hasExpectedLineup { s.append(.lineups) }
+        if !d.lineups.isEmpty || hasExpectedLineup || awaitingLineups { s.append(.lineups) }
         if let st = d.statistics, !st.rows.isEmpty { s.append(.stats) }
         if hasH2H { s.append(.h2h) }
         return s
@@ -1373,6 +1382,13 @@ struct SpMatchCenter: View {
                     expectedBadge
                     lineupsView(expectedAsLineups(d))
                 }
+            } else if awaitingLineups || d.lineups.isEmpty {
+                SpEmptyState(
+                    icon: "person.3",
+                    title: L("لم تُعلَن التشكيلة بعد"),
+                    subtitle: L("تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف.")
+                )
+                .padding(.top, 12)
             } else {
                 lineupsView(d.lineups)
             }
@@ -1895,9 +1911,10 @@ struct SpMatchCenter: View {
             if f == nil || f?.status.finished == true { return }
             let live = f?.status.live == true
             let secsToKickoff = f?.kickoff.timeIntervalSinceNow ?? .greatestFiniteMagnitude
-            if !live && secsToKickoff > 1800 {
+            // نافذة التشكيلات ≈ ساعة قبل الانطلاق — كانت 30د فتفوت صدور التشكيلة.
+            if !live && secsToKickoff > 4500 {
                 // بعيدة: نَم حتى ما قبل النافذة (بدل الانسحاب — الشاشة قد تبقى مفتوحة).
-                let wait = min(secsToKickoff - 1700, 3600)
+                let wait = min(secsToKickoff - 4400, 3600)
                 try? await Task.sleep(nanoseconds: UInt64(max(wait, 30)) * 1_000_000_000)
                 continue
             }
@@ -1926,6 +1943,12 @@ struct SpMatchCenter: View {
         // التعليق قد يبدأ بعد فتح الشاشة فيظهر تبويبه حال توفّره).
         if let c = try? await APIClient.shared.fetchCommentary(matchId: fixtureId, ignoreCache: true) {
             self.commentary = c
+        }
+        // إن بقيت الرسمية فارغة أعد جلب المتوقعة — قد تصدر بعد أول فتح للشاشة.
+        if !fresh.lineups.contains(where: { !$0.startXI.isEmpty }) {
+            if let exp = try? await APIClient.shared.fetchExpectedLineup(matchId: fixtureId, ignoreCache: true) {
+                self.expectedLineup = exp
+            }
         }
     }
 
