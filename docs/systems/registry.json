@@ -537,6 +537,7 @@
         "client/src/components/worldcup/WorldCupHomeSection.tsx",
         "client/src/components/SabqPulseSection.tsx",
         "client/src/pages/RoshnHub.tsx",
+        "client/src/pages/SportsHub.tsx",
         "client/src/components/rsl/**",
         "sabq app ios/sabq/Services/RoshnModels.swift",
         "sabq app ios/sabq/Components/RoshnHomeStrip.swift",

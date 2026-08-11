@@ -2191,10 +2191,15 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
     },
   });
   const [tab, setTab] = useState("events");
-  useEffect(() => { setTab("events"); }, [id]);
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
+  // للمباراة القادمة التبويب الافتراضي هو «الغيابات» (لا «events»). كان setTab("events")
+  // عند كل id يُبقي الحالة على events بينما الواجهة تعرض absences عبر activeKey —
+  // فـ /facts لا يُجلب ويظهر «لا غيابات معلنة» رغم وجودها في API (فرق VARA↔البوابة).
+  useEffect(() => {
+    setTab(isUpcoming ? "absences" : "events");
+  }, [id, isUpcoming]);
   const { data: prediction } = useQuery<SpPrediction>({
     queryKey: [`/api/sports/match/${id}/prediction`],
     enabled: id != null && isUpcoming,
