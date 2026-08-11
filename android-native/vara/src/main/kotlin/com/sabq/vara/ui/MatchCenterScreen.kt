@@ -436,7 +436,7 @@ private suspend fun mcLoadAll(vm: VaraViewModel, fixtureId: Int, preview: Fixtur
     if (st.facts == null) st.facts = runCatching { mcParseFacts(vm.api.publicGet("/sports/match/$fixtureId/facts")) }.getOrNull()
 }
 
-/// تحديث لحظي خفيف بلا كاش: التفاصيل + التعليق فقط — استبدال state موضعي بلا وميض.
+/// تحديث لحظي خفيف بلا كاش: التفاصيل + التعليق (+ المتوقعة إن بقيت الرسمية فارغة).
 private suspend fun mcRefreshLive(vm: VaraViewModel, fixtureId: Int, st: McState) {
     if (st.refreshInFlight) return
     st.refreshInFlight = true
@@ -447,6 +447,14 @@ private suspend fun mcRefreshLive(vm: VaraViewModel, fixtureId: Int, st: McState
         }
         // التعليق أفضل جهد دائمًا — قد يبدأ بعد فتح الشاشة فيظهر تبويبه حال توفّره.
         runCatching { mcParseCommentary(vm.api.publicGet("/sports/match/$fixtureId/commentary", ignoreCache = true)) }.getOrNull()?.let { st.commentary = it }
+        // إن بقيت الرسمية فارغة أعد جلب المتوقعة — قد تصدر بعد أول فتح للشاشة.
+        val needExpected = st.detail?.let { d ->
+            !d.fixture.status.finished && d.lineups.none { it.startXI.isNotEmpty() }
+        } == true
+        if (needExpected) {
+            runCatching { mcParseExpected(vm.api.publicGet("/sports/match/$fixtureId/expected-lineup", ignoreCache = true)) }
+                .getOrNull()?.let { st.expected = it }
+        }
     } finally {
         st.refreshInFlight = false
     }
@@ -526,6 +534,14 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
     val hasExpected = st.expected?.let { it.available && (it.home != null || it.away != null) } == true
     val hasAnalysis = fixture?.started == true ||
         st.xg?.available == true || st.momentum?.available == true || st.pressure?.available == true || st.facts?.available == true
+    // نافذة انتظار التشكيلة: نُظهر التبويب بحالة فارغة بدل إخفائه قبيل الانطلاق.
+    val hasOfficialLineup = st.detail?.lineups?.any { it.startXI.isNotEmpty() } == true
+    val awaitingLineups = fixture?.let { f ->
+        !f.status.finished && !hasOfficialLineup && !hasExpected && run {
+            val secs = f.timestamp - System.currentTimeMillis() / 1000
+            secs <= 2 * 3600 && secs > -3 * 3600
+        }
+    } == true
     val segments = buildList {
         val d = st.detail
         if (d != null) {
@@ -535,7 +551,7 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
             if (hasCommentary) add(McSegment.COMMENTARY)
             if (hasAnalysis) add(McSegment.ANALYSIS)
             if (hasRatings) add(McSegment.RATINGS)
-            if (d.lineups.isNotEmpty() || hasExpected) add(McSegment.LINEUPS)
+            if (d.lineups.isNotEmpty() || hasExpected || awaitingLineups) add(McSegment.LINEUPS)
             if (d.statRows.isNotEmpty()) add(McSegment.STATS)
             if (hasH2H) add(McSegment.H2H)
         }
@@ -547,7 +563,7 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
         if (st.detail != null || effective == McSegment.PREVIEW) mcEnsureSegment(vm, fixtureId, st, effective, fixture)
     }
 
-    // استطلاع حي: 10ث أثناء اللعب / 25ث قرب الانطلاق / نوم للبعيدة / توقف عند الانتهاء.
+    // استطلاع حي: 10ث أثناء اللعب / 25ث داخل نافذة التشكيلات (~75د) / نوم للبعيدة.
     // أول نبضة كل عودة للمقدمة = تحديث فوري للمباراة الجارية.
     PollEffect(fixtureId, st.detail?.fixture?.id ?: -1, delayProvider = {
         val f = st.detail?.fixture
@@ -557,7 +573,8 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
             else -> {
                 val kick = f.kickoffMs
                 val secs = if (kick == null) Long.MAX_VALUE / 2000 else (kick - System.currentTimeMillis()) / 1000
-                if (secs > 1800) (secs - 1700).coerceIn(30, 3600) * 1000 else 25_000L
+                // كانت 30د فتفوت صدور التشكيلة (~ساعة قبل الانطلاق).
+                if (secs > 4500) (secs - 4400).coerceIn(30, 3600) * 1000 else 25_000L
             }
         }
     }) { first ->
@@ -1429,6 +1446,12 @@ private fun McLineupsSection(d: McDetail, st: McState, nav: NavHostController) {
             expected != null && expected.available && (expected.home != null || expected.away != null) -> {
                 McExpectedBadge()
                 McLineupCards(mcExpectedAsLineups(expected, d.fixture), nav)
+            }
+            d.lineups.isEmpty() || d.lineups.none { it.startXI.isNotEmpty() } -> {
+                EmptyState(
+                    "لم تُعلَن التشكيلة بعد",
+                    "تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف.",
+                )
             }
             else -> McLineupCards(d.lineups, nav)
         }

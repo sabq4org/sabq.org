@@ -42,12 +42,14 @@ import {
   getTsPlayerMarketHistory,
   getTsTeamInjuries,
   getTsTeamSquad,
+  isTheSportsConfigured,
   resolveTsMatchId,
   resolveTsNames,
   TS_I18N_TYPE,
   TS_VAR_RESULT_AR,
   type TsEvent,
   type TsLineup,
+  type TsLineupPlayer,
   type TsLiveBoardItem,
   type TsLiveStats,
   type TsPlayerMatchStat,
@@ -1376,6 +1378,75 @@ function localizeLineups(rows: any[], tr: NameTranslator): SplLineup[] {
   }));
 }
 
+// ---------- احتياطي تشكيلات TheSports (نمط المونديال) ----------
+// API-Football يتأخّر/يغيب عن تشكيلات بعض التصفيات (مثل دوري أبطال آسيا)، بينما
+// TheSports ينشرها أبكر. نحوّل قوائمه إلى SplLineup[] بنفس عقد الواجهة.
+// معرّفات اللاعبين تبقى 0 (لا تطابق AF) — يُعطّل فتح بطاقة اللاعب كما في المونديال.
+
+/** x/y → شبكة "صف:عمود" لرسم الملعب؛ بلا إحداثيات موثوقة → خريطة فارغة. */
+function tsPlayersToSplGrid(players: TsLineupPlayer[]): Map<string, string> {
+  const grid = new Map<string, string>();
+  const withXy = players.filter((p) => p.starter && (p.x != null || p.y != null) && (p.x || p.y));
+  if (withXy.length < 7) return grid;
+  const sorted = [...withXy].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+  const rows: TsLineupPlayer[][] = [];
+  for (const p of sorted) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs((last[0].x ?? 0) - (p.x ?? 0)) <= 6) last.push(p);
+    else rows.push([p]);
+  }
+  rows.forEach((row, ri) => {
+    row.sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+    row.forEach((p, ci) => grid.set(p.id, `${ri + 1}:${ci + 1}`));
+  });
+  return grid;
+}
+
+function tsSideToSplLineup(
+  side: TsLineupPlayer[],
+  formation: string | null,
+  team: SplFixture["home"],
+): SplLineup {
+  const gridMap = tsPlayersToSplGrid(side);
+  const toPlayer = (p: TsLineupPlayer): SplLineupPlayer => ({
+    id: 0,
+    number: p.shirtNumber,
+    name: p.nameAr || p.name,
+    pos: p.position ?? "",
+    grid: gridMap.get(p.id) ?? null,
+  });
+  return {
+    team: { id: team.id, name: team.name, logo: team.logo },
+    formation,
+    coach: null,
+    startXI: side.filter((p) => p.starter).map(toPlayer),
+    substitutes: side.filter((p) => !p.starter).map(toPlayer),
+  };
+}
+
+/**
+ * تشكيلتا المباراة من TheSports بشكل SplLineup[] — [] إن تعذّر الجسر/الجلب.
+ * تُستدعى خارج كاش AF حتى لا تُجمَّد تشكيلة فارغة بينما المزوّد الاحتياطي يملكها.
+ */
+async function getSplLineupsFromTs(detail: SplMatchDetail): Promise<SplLineup[]> {
+  if (!isTheSportsConfigured()) return [];
+  const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
+  const tsCompId = getTsCompetitionId(comp?.slug);
+  if (!comp || !tsCompId) return [];
+  const uuid = await resolveTsMatchId(detail.fixture.id, detail.fixture.timestamp, tsCompId).catch(() => null);
+  if (!uuid) return [];
+  const lineup = await getTsLineup(uuid).catch(() => null as TsLineup | null);
+  if (!lineup) return [];
+  const out: SplLineup[] = [];
+  if (lineup.home.length > 0) {
+    out.push(tsSideToSplLineup(lineup.home, lineup.homeFormation, detail.fixture.home));
+  }
+  if (lineup.away.length > 0) {
+    out.push(tsSideToSplLineup(lineup.away, lineup.awayFormation, detail.fixture.away));
+  }
+  return out;
+}
+
 function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
   const loc = localizeEvent(e.type ?? "", e.detail ?? "");
   // تبديل: API-Football يعكس الحقلين — e.player = الخارج، e.assist = الداخل. نعرض
@@ -1574,6 +1645,20 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     detail.fixture.timestamp * 1000 - Date.now() > PRE_MATCH_GAP_MS
   ) {
     swrCache.set(preKey, detail, PRE_MATCH_DETAIL_TTL, PRE_MATCH_DETAIL_TTL);
+  }
+
+  // تشكيلات API-Football تتأخّر/تغيب لبعض التصفيات والكؤوس → احتياطي TheSports
+  // (نفس نمط getMatchDetail في المونديال). خارج كاش AF حتى لا تتجمّد [] بينما
+  // lineup/detail جاهز لدى TheSports قبل ساعة الانطلاق.
+  if (
+    detail &&
+    !detail.lineups.some((lu) => lu.startXI.length > 0) &&
+    isTheSportsConfigured()
+  ) {
+    const tsLineups = await getSplLineupsFromTs(detail).catch(() => [] as SplLineup[]);
+    if (tsLineups.some((lu) => lu.startXI.length > 0)) {
+      return { ...detail, lineups: tsLineups };
+    }
   }
   return detail;
 }

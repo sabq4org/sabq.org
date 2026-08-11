@@ -544,7 +544,10 @@
         "sabq app ios/sabq/Screens/Roshn*.swift",
         "sabq app ios/sabqTests/RoshnModelsTests.swift",
         "sports app ios/SabqSports/Services/APIClient.swift",
-        "sports app ios/SabqSports/Services/AuthStore.swift"
+        "sports app ios/SabqSports/Services/AuthStore.swift",
+        "sports app ios/SabqSports/Screens/MatchCenterView.swift",
+        "android-native/vara/src/main/kotlin/com/sabq/vara/ui/MatchCenterScreen.kt",
+        "server/services/theSportsService.ts"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
