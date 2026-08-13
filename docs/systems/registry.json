@@ -545,6 +545,7 @@
         "client/src/pages/SportsDashboard.tsx",
         "client/src/pages/SportsMatchesBoard.tsx",
         "client/src/components/sports/pickPortalDefaultCompetition.ts",
+        "client/src/components/sports/matchCenterTabs.ts",
         "client/src/components/rsl/**",
         "sabq app ios/sabq/Services/RoshnModels.swift",
         "sabq app ios/sabq/Components/RoshnHomeStrip.swift",

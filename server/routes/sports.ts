@@ -200,8 +200,10 @@ function bucketFixtures(fixtures: SplFixture[]) {
   const todayKey = riyadhDayKey(Math.floor(Date.now() / 1000));
 
   const live = fixtures.filter((f) => f.status.live).sort(compareByMatchPhase);
+  // «اليوم» = كل مباريات يوم الرياض بما فيها الجارية (فلتر اليوم ليس «غير المباشر»).
+  // تبويب «مباشر» يبقى اختصارًا للجارية فقط.
   const today = fixtures
-    .filter((f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey)
+    .filter((f) => riyadhDayKey(f.timestamp) === todayKey)
     .sort(compareByMatchPhase);
   // 54 ≈ 6 جولات × 9 مباريات (روشن) — السقف السابق 20 كان يقطع منتصف الجولة
   // الثالثة. الجدول الكامل يبقى عبر /rounds + /round لا عبر هذه المعاينة.
@@ -1299,7 +1301,9 @@ export function registerSportsRoutes(app: Express) {
         const tr = await resolveNames(players.map((p) => p.name)).catch(() => null);
         if (tr) for (const p of players) p.name = tr(p.name) || p.name;
       }
-      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=600");
+      res.set("Cache-Control", data.available
+        ? "public, max-age=60, s-maxage=180, stale-while-revalidate=600"
+        : "public, max-age=15, s-maxage=15, stale-while-revalidate=30");
       res.json(data);
     } catch (error) {
       console.error("[Sports] expected-lineup failed:", error);

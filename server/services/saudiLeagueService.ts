@@ -1428,13 +1428,26 @@ function tsSideToSplLineup(
 /**
  * تشكيلتا المباراة من TheSports بشكل SplLineup[] — [] إن تعذّر الجسر/الجلب.
  * تُستدعى خارج كاش AF حتى لا تُجمَّد تشكيلة فارغة بينما المزوّد الاحتياطي يملكها.
+ *
+ * جولة روشن المتزامنة (عدة مباريات 21:00) تفشل بالمطابقة الزمنية وحدها —
+ * نفضّ الالتباس بجسر معرّفات الفريقين.
  */
-async function getSplLineupsFromTs(detail: SplMatchDetail): Promise<SplLineup[]> {
-  if (!isTheSportsConfigured()) return [];
+async function resolveSplTsMatchUuid(detail: SplMatchDetail): Promise<string | null> {
   const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
   const tsCompId = getTsCompetitionId(comp?.slug);
-  if (!comp || !tsCompId) return [];
-  const uuid = await resolveTsMatchId(detail.fixture.id, detail.fixture.timestamp, tsCompId).catch(() => null);
+  if (!comp || !tsCompId) return null;
+  const unique = await resolveTsMatchId(detail.fixture.id, detail.fixture.timestamp, tsCompId).catch(() => null);
+  if (unique) return unique;
+  const bridge = await getSplTeamBridge(comp).catch(() => new Map<number, string>());
+  const homeTsId = bridge.get(detail.fixture.home.id) ?? null;
+  const awayTsId = bridge.get(detail.fixture.away.id) ?? null;
+  if (!homeTsId || !awayTsId) return null;
+  return resolveTsMatchId(detail.fixture.id, detail.fixture.timestamp, tsCompId, { homeTsId, awayTsId }).catch(() => null);
+}
+
+async function getSplLineupsFromTs(detail: SplMatchDetail): Promise<SplLineup[]> {
+  if (!isTheSportsConfigured()) return [];
+  const uuid = await resolveSplTsMatchUuid(detail);
   if (!uuid) return [];
   const lineup = await getTsLineup(uuid).catch(() => null as TsLineup | null);
   if (!lineup) return [];
@@ -2023,7 +2036,7 @@ export async function getMatchTvChannels(fixtureId: number): Promise<SplMatchTv>
     const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
     const tsCompId = getTsCompetitionId(comp?.slug);
     if (!tsCompId) return { available: false, channels: [] };
-    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    const uuid = await resolveSplTsMatchUuid(detail);
     if (!uuid) return { available: false, channels: [] };
     const tv = await getTsMatchTv(uuid);
     const channels = tv.map((c) => ({ name: c.name, url: c.url })).filter((c) => c.name);
@@ -2076,7 +2089,7 @@ export async function getMatchTeamStats(fixtureId: number): Promise<SplMatchTeam
     const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
     const tsCompId = getTsCompetitionId(comp?.slug);
     if (!comp || !tsCompId) return { available: false, rows: [] };
-    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    const uuid = await resolveSplTsMatchUuid(detail);
     if (!uuid) return { available: false, rows: [] };
     const sides = await getTsMatchTeamStats(uuid).catch(() => [] as TsTeamStatSide[]);
     if (sides.length < 2) return { available: false, rows: [] };
@@ -2146,7 +2159,7 @@ export async function getMatchPlayerStatsTs(fixtureId: number): Promise<SplMatch
     const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
     const tsCompId = getTsCompetitionId(comp?.slug);
     if (!comp || !tsCompId) return empty;
-    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    const uuid = await resolveSplTsMatchUuid(detail);
     if (!uuid) return empty;
 
     const [rows, lineup] = await Promise.all([
