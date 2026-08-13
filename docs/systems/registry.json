@@ -232,6 +232,7 @@
         "server/seo-generator.ts",
         "server/ai-classifier.ts",
         "server/ai/contentAnalyzer.ts",
+        "server/ai/editorialOutputGuards.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
@@ -292,7 +293,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-08"
+      "lastReviewed": "2026-08-13"
     },
     {
       "id": "ifox",

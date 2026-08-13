@@ -10,7 +10,7 @@ import {
   SABQ_PRIMARY_EDITOR_MODEL,
   SABQ_FALLBACK_EDITOR_MODEL,
 } from "./sabqEditorialPrompt";
-import { assertEditedContentComplete } from "./editorialOutputGuards";
+import { assertEditedContentComplete, extractLockedSourceNumbers, restoreSourceNumbers } from "./editorialOutputGuards";
 
 // حدود صريحة بدل افتراضات SDK (10 دقائق × 2 retries) — انظر نظيرتها في
 // server/openai.ts. fallback التحرير هنا 8000 توكن فالمهلة أسخى قليلًا.
@@ -436,6 +436,7 @@ ${SABQ_FEWSHOT_AR}
 ✅ **الاقتباس**: استخدم القوسين «...» لكل اقتباس أو تسمية داخل النصوص
 ❌ **لا تضيف**: حقائق غير موجودة
 ❌ **لا تغيّر**: الحقائق الواردة أو المصادر
+❌ **لا تغيّر أي رقم** من المصدر (أسعار، نسب، كميات، تواريخ رقمية) — انسخ الخانات كما هي حتى لو بدا الرقم غير مألوف
 ❌ **لا تستخدم أبدًا** علامة التنصيص المزدوجة (") داخل قيم JSON — استبدلها بـ«...»
 
 ## 🎯 الهدف النهائي
@@ -571,6 +572,7 @@ Evaluate the ORIGINAL text (after cleaning, before editing) on a 0-100 scale:
 ✅ **Quotes**: Use curly quotation marks "…" for quotes inside text values
 ❌ **Don't add**: Facts not in original
 ❌ **Don't change**: Stated facts or sources
+❌ **Don't change any number** from the source (prices, percentages, quantities, numeric dates) — copy digits exactly even if the figure looks unusual
 ❌ **Don't use**: Sensationalism, clickbait, or casual language
 ❌ **Never use** straight double quotes (") inside JSON string values — use curly "…" instead
 
@@ -671,6 +673,7 @@ Professional English news story, ready for immediate publication, presenting Sau
 ✅ **اقتباس**: متن کے اندر اقتباسات کے لیے ہمیشہ «...» استعمال کریں
 ❌ **شامل نہ کریں**: حقائق جو اصل میں نہیں
 ❌ **تبدیل نہ کریں**: بیان شدہ حقائق یا ذرائع
+❌ **کوئی عدد نہ بدلیں** ماخذ سے (قیمتیں، فیصد، مقدار) — ہندسے جوں کے توں نقل کریں چاہے عدد غیر مانوس لگے
 ❌ JSON اقدار کے اندر سیدھی ڈبل کوٹیشن (") کبھی استعمال نہ کریں — «...» استعمال کریں
 
 ## 🎯 حتمی ہدف
@@ -695,7 +698,12 @@ Professional English news story, ready for immediate publication, presenting Sau
     if (text.length > MAX_EDITOR_INPUT_CHARS) {
       console.warn(`[Sabq Editor] Input trimmed from ${text.length} to ${MAX_EDITOR_INPUT_CHARS} chars (safety cap)`);
     }
-    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:\n\n${editorInput}`;
+    const lockedNumbers = extractLockedSourceNumbers(editorInput);
+    const lockBlock =
+      lockedNumbers.length > 0
+        ? `\n\n## أرقام المصدر — انسخها حرفياً دون تغيير أي خانة:\n${lockedNumbers.map((n) => `- ${n}`).join("\n")}`
+        : "";
+    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:${lockBlock}\n\n${editorInput}`;
     let result: any;
     try {
       const anthropic = getAnthropicClient();
@@ -771,6 +779,21 @@ Professional English news story, ready for immediate publication, presenting Sau
 
     const finalLang = normalizeLanguageCode(result.language || normalizedLang);
 
+    const title = applyPoliticalFactsFilter(result.optimized?.title || "", finalLang);
+    const lead = applyPoliticalFactsFilter(result.optimized?.lead || "", finalLang);
+    const content = applyPoliticalFactsFilter(result.optimized?.content || "", finalLang);
+
+    const restoredTitle = restoreSourceNumbers(editorInput, title);
+    const restoredLead = restoreSourceNumbers(editorInput, lead);
+    const restoredContent = restoreSourceNumbers(editorInput, content);
+    const restoredAll = [...restoredTitle.restored, ...restoredLead.restored, ...restoredContent.restored];
+    if (restoredAll.length > 0) {
+      console.warn(
+        "[Sabq Editor] Restored source numbers mutated by the model:",
+        restoredAll.map((item) => `${item.from}→${item.to}`).join(", "),
+      );
+    }
+
     return {
       qualityScore: result.qualityScore || 0,
       language: finalLang,
@@ -783,9 +806,9 @@ Professional English news story, ready for immediate publication, presenting Sau
         // "former president Trump" / "الرئيس السابق ترامب" that the model
         // emitted despite the preamble gets rewritten before the article
         // hits the database.
-        title: applyPoliticalFactsFilter(result.optimized?.title || "", finalLang),
-        lead: applyPoliticalFactsFilter(result.optimized?.lead || "", finalLang),
-        content: applyPoliticalFactsFilter(result.optimized?.content || "", finalLang),
+        title: restoredTitle.text,
+        lead: restoredLead.text,
+        content: restoredContent.text,
         seoKeywords: result.optimized?.seoKeywords || [],
       },
     };
