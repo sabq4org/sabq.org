@@ -460,6 +460,108 @@ export async function getUserLedger(
   };
 }
 
+// ---------------------------------------------------------------------------
+// توقعاتي — كل ما توقّعه المستخدم مع نتيجته وجوائزه (تبويب المراجعة في الويب).
+// تفاصيل البطولة تقتطع المسوّاة لأحدث 20، فتضيع مراجعة التوقعات القديمة منتصف
+// الموسم — هذه النقطة تعيد تاريخ المستخدم كاملًا بكيرسور ثابت.
+// ---------------------------------------------------------------------------
+
+export async function getUserEntries(
+  userId: string,
+  options: { competitionSlug?: string; cursor?: string; limit?: number } = {},
+) {
+  const limit = Math.min(options.limit ?? 30, 100);
+  const conditions: SQL[] = [
+    eq(predictionEntries.userId, userId),
+    eq(predictionEntries.status, "active"),
+    sql`${predictionContests.status} <> 'draft'`,
+  ];
+  if (options.competitionSlug) {
+    const [comp] = await db
+      .select({ id: predictionCompetitions.id })
+      .from(predictionCompetitions)
+      .where(eq(predictionCompetitions.slug, options.competitionSlug))
+      .limit(1);
+    if (!comp) return { items: [], nextCursor: null };
+    conditions.push(eq(predictionContests.competitionId, comp.id));
+  }
+  // Keyset على (locksAt, contestId) تنازليًا — الأحدث موعدًا أولًا وصفحات ثابتة
+  if (options.cursor) {
+    const decoded = decodeCursor(options.cursor);
+    if (decoded) {
+      conditions.push(
+        sql`(${predictionContests.locksAt}, ${predictionContests.id}) < (${decoded.createdAt}, ${decoded.id})`,
+      );
+    }
+  }
+
+  const rows = await db
+    .select({ entry: predictionEntries, contest: predictionContests })
+    .from(predictionEntries)
+    .innerJoin(predictionContests, eq(predictionContests.id, predictionEntries.contestId))
+    .where(and(...conditions))
+    .orderBy(desc(predictionContests.locksAt), desc(predictionContests.id))
+    .limit(limit + 1);
+  const page = rows.slice(0, limit);
+  const nextCursor = rows.length > limit
+    ? encodeCursor({
+        createdAt: page[page.length - 1].contest.locksAt,
+        id: page[page.length - 1].contest.id,
+      })
+    : null;
+
+  // جوائز الدفتر لكل مسابقة في الصفحة — المبرر («نتيجة دقيقة») مع النقاط
+  const awardsByContest = new Map<
+    string,
+    { points: number; reasonCode: string; reasonLabelAr: string; breakdown: unknown }[]
+  >();
+  const contestIds = page.map((r) => r.contest.id);
+  if (contestIds.length > 0) {
+    const awardRows = await db
+      .select()
+      .from(predictionPointsLedger)
+      .where(and(
+        eq(predictionPointsLedger.userId, userId),
+        inArray(predictionPointsLedger.contestId, contestIds),
+      ))
+      .orderBy(desc(predictionPointsLedger.createdAt));
+    for (const row of awardRows) {
+      if (!row.contestId) continue;
+      const list = awardsByContest.get(row.contestId) ?? [];
+      list.push({
+        points: row.points,
+        reasonCode: row.reasonCode,
+        reasonLabelAr: REASON_LABELS_AR[row.reasonCode as ReasonCode] ?? row.reasonCode,
+        breakdown: row.breakdown,
+      });
+      awardsByContest.set(row.contestId, list);
+    }
+  }
+
+  return {
+    items: page.map(({ entry, contest }) => {
+      const awards = awardsByContest.get(contest.id) ?? [];
+      return {
+        contestId: contest.id,
+        contestType: contest.contestType,
+        status: contest.status,
+        externalRef: contest.externalRef,
+        locksAt: contest.locksAt,
+        settledAt: contest.settledAt,
+        metadata: contest.metadata,
+        // نفس قاعدة serializeContest: النتيجة بعد التسوية فقط
+        result: contest.status === "settled" ? contest.resultPayload : null,
+        payload: entry.predictionPayload,
+        submittedAt: entry.submittedAt,
+        updatedAt: entry.updatedAt,
+        awards,
+        totalPoints: awards.reduce((sum, award) => sum + award.points, 0),
+      };
+    }),
+    nextCursor,
+  };
+}
+
 function encodeCursor(cursor: { createdAt: Date; id: string }): string {
   return Buffer.from(`${cursor.createdAt.toISOString()}|${cursor.id}`).toString("base64url");
 }

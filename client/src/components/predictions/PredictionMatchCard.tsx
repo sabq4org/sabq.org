@@ -67,6 +67,7 @@ export function PredictionMatchCard({
       toast({ title: "تم حفظ توقّعك ✅", description: "يمكنك تعديله حتى ضربة البداية" });
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
     },
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "";
@@ -81,6 +82,7 @@ export function PredictionMatchCard({
       if (locked) {
         setEditing(false);
         queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
       }
     },
   });
