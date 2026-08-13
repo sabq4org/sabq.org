@@ -67,6 +67,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
+import { RslPredictionsMatchPromo } from "@/components/rsl/RslPredictionsPromo";
+import type { RslHero } from "@/components/rsl/rslTypes";
 import type { ArticleWithDetails, Category } from "@shared/schema";
 
 // ============================================================
@@ -2205,6 +2207,14 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
     enabled: id != null && isUpcoming,
     staleTime: 5 * 60_000,
   });
+  // ترويج مسابقة Prediction Core في مركز مباراة روشن — قبل الانطلاق فقط.
+  const { data: rslHero } = useQuery<RslHero>({
+    queryKey: ["/api/rsl/hero"],
+    enabled: roshn && isUpcoming,
+    staleTime: 60_000,
+  });
+  const showRslPredictionsPromo =
+    roshn && isUpcoming && id != null && rslHero?.predictionsEnabled === true;
   const homeId = data?.fixture?.home?.id;
   const awayId = data?.fixture?.away?.id;
   const { data: h2hData } = useQuery<SpH2H>({
@@ -2448,6 +2458,13 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
               </div>
             )}
           </div>
+        )}
+        {showRslPredictionsPromo && fx && (
+          <RslPredictionsMatchPromo
+            fixtureId={fx.id}
+            homeName={fx.home.name}
+            awayName={fx.away.name}
+          />
         )}
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
         {tabs.length > 0 && (

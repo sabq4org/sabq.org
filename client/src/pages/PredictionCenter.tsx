@@ -3,7 +3,7 @@
 // 2026-07-17 — بطاقة بطولة تفصل نقاط الترتيب عن المحفظة، تبويبات
 // المباريات/سجلّي/المتصدرون، ولوحة تعلن نطاقها وما تشمله نقاطها.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { CalendarClock, ChevronLeft, ListOrdered, LogIn, Trophy } from "lucide-react";
@@ -43,16 +43,29 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "leaders", label: "المتصدّرون" },
 ];
 
-/** رابط عميق لكل بطولة: /predictions?competition=<slug> — تقرأه الصفحة عند
- *  الفتح وتزامنه عند التبديل، فتصلح الروابط للمشاركة وتحويلات المسارات القديمة. */
+/** رابط عميق: /predictions?competition=<slug>&fixture=<apiId>&contest=<id>
+ *  competition للتبديل بين البطولات؛ fixture/contest لتمييز بطاقة المباراة. */
 function competitionFromUrl(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("competition");
 }
 
-function syncCompetitionUrl(slug: string) {
+function deepTargetFromUrl(): { fixture: string | null; contest: string | null } {
+  if (typeof window === "undefined") return { fixture: null, contest: null };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    fixture: params.get("fixture"),
+    contest: params.get("contest"),
+  };
+}
+
+function syncCompetitionUrl(slug: string, keepDeep = true) {
   const url = new URL(window.location.href);
   url.searchParams.set("competition", slug);
+  if (!keepDeep) {
+    url.searchParams.delete("fixture");
+    url.searchParams.delete("contest");
+  }
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -61,6 +74,11 @@ export default function PredictionCenter() {
   const [tab, setTab] = useState<Tab>("matches");
   const [selectedSlug, setSelectedSlug] = useState<string | null>(competitionFromUrl);
   const [settlementContestId, setSettlementContestId] = useState<string | null>(null);
+  const [deepTarget] = useState(deepTargetFromUrl);
+  const [highlightContestId, setHighlightContestId] = useState<string | null>(
+    deepTarget.contest,
+  );
+  const deepScrollDoneRef = useRef(false);
 
   const goLogin = () => {
     rememberPostAuthReturn(window.location.pathname + window.location.search);
@@ -112,6 +130,41 @@ export default function PredictionCenter() {
 
   const grouped = useMemo(() => groupContests(contests), [contests]);
 
+  // رابط عميق من مركز المباراة: ?fixture= أو ?contest= → تبويب المباريات + تمرير وتمييز
+  useEffect(() => {
+    if (deepScrollDoneRef.current || detailLoading || contests.length === 0) return;
+    if (!deepTarget.contest && !deepTarget.fixture) return;
+
+    const byContest = deepTarget.contest
+      ? contests.find((c) => c.id === deepTarget.contest)
+      : null;
+    const byFixture =
+      !byContest && deepTarget.fixture
+        ? contests.find(
+            (c) =>
+              c.contestType === "match_score" &&
+              String(c.externalRef ?? "") === String(deepTarget.fixture),
+          )
+        : null;
+    const target = byContest ?? byFixture;
+    if (!target) return;
+
+    deepScrollDoneRef.current = true;
+    setHighlightContestId(target.id);
+    setTab("matches");
+
+    const timer = window.setTimeout(() => {
+      document
+        .getElementById(`pred-contest-${target.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+    const clearHighlight = window.setTimeout(() => setHighlightContestId(null), 8_000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clearHighlight);
+    };
+  }, [detailLoading, contests, deepTarget.contest, deepTarget.fixture]);
+
   return (
     <div className="flex min-h-screen flex-col bg-background" dir="rtl">
       <Header user={user || undefined} />
@@ -151,7 +204,8 @@ export default function PredictionCenter() {
                     type="button"
                     onClick={() => {
                       setSelectedSlug(comp.slug);
-                      syncCompetitionUrl(comp.slug);
+                      setHighlightContestId(null);
+                      syncCompetitionUrl(comp.slug, false);
                     }}
                     className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[12px] font-bold transition ${
                       comp.slug === selected?.slug
@@ -204,6 +258,7 @@ export default function PredictionCenter() {
                   isAuthenticated={isAuthenticated}
                   onLoginNeeded={goLogin}
                   onOpenSettlement={setSettlementContestId}
+                  highlightContestId={highlightContestId}
                 />
               )}
               {tab === "ledger" &&
@@ -323,6 +378,7 @@ function MatchesTab({
   isAuthenticated,
   onLoginNeeded,
   onOpenSettlement,
+  highlightContestId,
 }: {
   grouped: GroupedContests;
   loading: boolean;
@@ -330,6 +386,7 @@ function MatchesTab({
   isAuthenticated: boolean;
   onLoginNeeded: () => void;
   onOpenSettlement: (contestId: string) => void;
+  highlightContestId?: string | null;
 }) {
   if (loading) {
     return (
@@ -364,6 +421,7 @@ function MatchesTab({
       isAuthenticated={isAuthenticated}
       onLoginNeeded={onLoginNeeded}
       onOpenSettlement={onOpenSettlement}
+      highlighted={highlightContestId === contest.id}
     />
   );
 
