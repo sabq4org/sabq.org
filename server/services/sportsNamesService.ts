@@ -21,6 +21,7 @@ import { db } from "../db";
 import { isEnglishSports } from "./sportsLang";
 import { aiGateway } from "../ai/gateway";
 import { sportsNameTranslations, wcPlayerNames } from "@shared/schema";
+import { correctSportsPlayerName } from "./sportsPlayerNameFixes";
 
 export type SportsNameType =
   | "team"
@@ -107,7 +108,10 @@ const TYPE_HINT: Record<SportsNameType, string> = {
   coach: "مدربو كرة قدم (انقل النطق: Jorge Jesus → جورجي جيزوس)",
   referee: "حكّام كرة قدم (انقل النطق بالصيغة الصحفية)",
   source: "صحفيون ووسائل إعلام رياضية (مثل: Fabrizio Romano → فابريتسيو رومانو، Sky Sports → سكاي سبورتس، The Athletic → ذا أثلتيك)",
-  player: "لاعبو كرة قدم (مثل: Mbappé → كيليان مبابي، Di María → أنخيل دي ماريا)",
+  player:
+    "لاعبو كرة قدم (مثل: Mbappé → كيليان مبابي، Di María → أنخيل دي ماريا). " +
+    "التزم بنطق اللقب اللاتيني ولا تستبدل لقبًا بآخر أشهر — خصوصًا الأسماء السعودية المتشابهة " +
+    "(Al-Dwehe/Al-Dhuwayhi → عبدالعزيز الضويحي، ليس عبدالعزيز البيشي)",
 };
 
 export interface SportsNameItem {
@@ -298,7 +302,8 @@ export async function resolveSportsNames(
   return (name: string | null | undefined): string => {
     if (!name) return "";
     const trimmed = name.trim();
-    return applyArabicFixes(memory.get(memKey(type, trimmed)) ?? trimmed);
+    const resolved = applyArabicFixes(memory.get(memKey(type, trimmed)) ?? trimmed);
+    return type === "player" ? correctSportsPlayerName(trimmed, resolved) : resolved;
   };
 }
 

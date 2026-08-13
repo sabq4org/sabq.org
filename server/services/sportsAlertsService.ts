@@ -45,6 +45,7 @@ import {
   type TsMatchLive,
 } from "./theSportsService";
 import { resolveNames } from "./worldCupNameTranslator";
+import { resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
 import {
   filterUsersByEventPref,
   type SportsAlertEventKey,
@@ -1321,7 +1322,13 @@ async function detectTsEventAlerts(
         for (const a of aliases) nextSeen.add(a);
         const minute = e.minute ? ` · د${e.minute}` : "";
         const teamName = TEAM_NAME(m, e.team);
-        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : teamName || matchName);
+        const teamId = e.team === "home" ? m.home.id : e.team === "away" ? m.away.id : 0;
+        const who = resolveTsEventPlayerName(
+          e.player,
+          arById(e.playerId),
+          e.player ? tr(e.player) : teamName || matchName,
+          teamId,
+        );
         const score =
           e.homeScore != null && e.awayScore != null
             ? `${m.home.name} ${e.homeScore}-${e.awayScore} ${m.away.name}`
@@ -1330,7 +1337,7 @@ async function detectTsEventAlerts(
           e.type === "own_goal"
             ? `هدف عكسي${who ? ` من ${who}` : ""}${minute}`
             : `هدف ${who}${e.type === "penalty_goal" ? " (ركلة جزاء)" : ""}${minute}${
-                e.assist ? ` · صناعة ${tr(e.assist)}` : ""
+                e.assist ? ` · صناعة ${resolveTsEventPlayerName(e.assist, null, tr(e.assist), teamId)}` : ""
               }`;
         out.push({
           fixtureId: m.id,
@@ -1381,9 +1388,15 @@ async function detectTsEventAlerts(
       for (const a of aliases) nextSeen.add(a);
       const minute = e.minute ? ` · د${e.minute}` : "";
       const teamName = TEAM_NAME(m, e.team);
+      const teamId = e.team === "home" ? m.home.id : e.team === "away" ? m.away.id : 0;
+      const who = resolveTsEventPlayerName(
+        e.player,
+        arById(e.playerId),
+        e.player ? tr(e.player) : "",
+        teamId,
+      );
 
       if (e.type === "red" || e.type === "yellow_red") {
-        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
           kind: "card",
@@ -1399,7 +1412,6 @@ async function detectTsEventAlerts(
           ),
         });
       } else if (e.type === "yellow") {
-        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
           kind: "card",

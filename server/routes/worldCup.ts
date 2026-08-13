@@ -68,6 +68,7 @@ import {
   type TsEventType,
   type TsLiveStats,
 } from "../services/theSportsService";
+import { resolveTsEventPlayerName } from "../services/sportsPlayerNameFixes";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -172,9 +173,9 @@ function mapTsEventsToWc(
         detail: "Substitution",
         // الاسم بمعرّف اللاعب (name_aa الكامل) أولًا لتفادي تصادم الاختصارات
         // ("H. Hassan" للاعبين مختلفين)؛ يتراجع لتعريب سلسلة الاسم.
-        player: arById(e.playerId) ?? tr(e.inPlayer), // الداخل
+        player: resolveTsEventPlayerName(e.inPlayer, arById(e.playerId), tr(e.inPlayer), teamId), // الداخل
         playerId: null, // معرّف TheSports نصّي لا يطابق بطاقة اللاعب (API-Football)
-        assist: e.outPlayer ? tr(e.outPlayer) : null, // «بديلًا عن»
+        assist: e.outPlayer ? resolveTsEventPlayerName(e.outPlayer, null, tr(e.outPlayer), teamId) : null, // «بديلًا عن»
         assistId: null,
       });
     } else {
@@ -198,9 +199,9 @@ function mapTsEventsToWc(
                 ? "Second Yellow card"
                 : "",
         // الاسم بمعرّف اللاعب (name_aa الكامل) أولًا — يحلّ تصادم الاختصارات.
-        player: arById(e.playerId) ?? tr(e.player),
+        player: resolveTsEventPlayerName(e.player, arById(e.playerId), tr(e.player), teamId),
         playerId: null,
-        assist: e.assist ? tr(e.assist) : null,
+        assist: e.assist ? resolveTsEventPlayerName(e.assist, null, tr(e.assist), teamId) : null,
         assistId: null,
       });
     }
