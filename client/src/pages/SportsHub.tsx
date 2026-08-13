@@ -18,6 +18,7 @@ import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { defaultMatchCenterTab, isAwaitingLineups } from "@/components/sports/matchCenterTabs";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy,
@@ -2196,12 +2197,14 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
-  // للمباراة القادمة التبويب الافتراضي هو «الغيابات» (لا «events»). كان setTab("events")
-  // عند كل id يُبقي الحالة على events بينما الواجهة تعرض absences عبر activeKey —
-  // فـ /facts لا يُجلب ويظهر «لا غيابات معلنة» رغم وجودها في API (فرق VARA↔البوابة).
+  const msToKickoff = data?.fixture?.timestamp != null
+    ? data.fixture.timestamp * 1000 - Date.now()
+    : Number.POSITIVE_INFINITY;
+  // للمباراة القادمة التبويب الافتراضي هو «الغيابات»، وقرب الصافرة «التشكيلات»
+  // حتى لا يُفتح المركز على الغيابات بينما التشكيلة هي ما يهم المشاهد.
   useEffect(() => {
-    setTab(isUpcoming ? "absences" : "events");
-  }, [id, isUpcoming]);
+    setTab(defaultMatchCenterTab(isUpcoming, msToKickoff));
+  }, [id, isUpcoming, msToKickoff <= 15 * 60_000]);
   const { data: prediction } = useQuery<SpPrediction>({
     queryKey: [`/api/sports/match/${id}/prediction`],
     enabled: id != null && isUpcoming,
@@ -2295,7 +2298,12 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
   const { data: expectedData } = useQuery<SpExpectedLineups>({
     queryKey: [`/api/sports/match/${id}/expected-lineup`],
     enabled: id != null && !!data?.fixture && !fixtureFinished && !officialXiReady,
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchInterval: () => {
+      if (officialXiReady) return false;
+      const ms = (data?.fixture?.timestamp ?? 0) * 1000 - Date.now();
+      return ms <= 75 * 60_000 && ms > -2 * 3_600_000 ? 25_000 : false;
+    },
   });
 
   if (id == null) return null;
@@ -2319,6 +2327,12 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
           expectedData.away && expSide(expectedData.away, { id: fx.away.id, name: fx.away.name, logo: fx.away.logo }),
         ].filter(Boolean) as SpLineup[])
       : [];
+  const awaitingLineups = isAwaitingLineups({
+    finished: !!fx?.status.finished,
+    officialXiReady,
+    hasExpected: expectedLineups.length > 0,
+    msToKickoff: fx?.timestamp != null ? fx.timestamp * 1000 - Date.now() : Number.POSITIVE_INFINITY,
+  });
   // إحصاءات بديلة من SportMonks (facts.statistics) حين تغيب إحصاءات API-Football،
   // فيظهر تبويب «نبض الأرقام» لمباريات أكثر بدل أن يُهدَر مصدر جاهز.
   const factStatRows: SpStatRow[] = (facts?.statistics ?? []).map((s) => ({ type: s.key, label: s.label, home: s.home, away: s.away }));
@@ -2336,7 +2350,7 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
     started || hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
-    started || lineups.length > 0 || expectedLineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
+    started || lineups.length > 0 || expectedLineups.length > 0 || awaitingLineups ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
@@ -2636,7 +2650,7 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
               )}
               {expectedLineups.length === 0 && lineups.length === 0 && (
                 <div className="py-8 text-center text-muted-foreground text-sm">
-                  التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة عادةً
+                  لم تُعلَن التشكيلة بعد
                 </div>
               )}
               <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
