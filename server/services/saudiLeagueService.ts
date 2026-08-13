@@ -75,7 +75,7 @@ import {
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 import { pickActiveRoundKey } from "./pickActiveRound";
-import { resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
+import { correctSportsPlayerName, resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
 
 const TIMEZONE = "Asia/Riyadh";
 
@@ -1409,10 +1409,11 @@ function tsSideToSplLineup(
   team: SplFixture["home"],
 ): SplLineup {
   const gridMap = tsPlayersToSplGrid(side);
+  // name_aa يمرّ على التصحيح التحريري — كان خامًا فتسربت أخطاؤه (حمام الحمامي).
   const toPlayer = (p: TsLineupPlayer): SplLineupPlayer => ({
     id: 0,
     number: p.shirtNumber,
-    name: p.nameAr || p.name,
+    name: correctSportsPlayerName(p.name, p.nameAr || p.name, { teamId: team.id }),
     pos: p.position ?? "",
     grid: gridMap.get(p.id) ?? null,
   });
