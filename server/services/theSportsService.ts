@@ -530,8 +530,8 @@ export function pickTsDiaryMatch(
   kickoffTs: number,
   teams?: TsMatchTeamHint,
 ): string | null {
-  const rows = Array.isArray(day) ? day : [];
-  const candidates = rows.filter((m: any) =>
+  const rows: any[] = Array.isArray(day) ? day : [];
+  const candidates = rows.filter((m) =>
     m?.competition_id === competitionId &&
     Math.abs((m?.match_time ?? 0) - kickoffTs) <= 120,
   );

@@ -11,7 +11,7 @@
  * لا يستورد db (ملتزم بـ ADR-001) — كل الوصول للبيانات عبر الخدمة فقط.
  */
 import type { Express, Request, Response } from "express";
-import { applyProvisionalTable } from "../services/liveStandings";
+import { applyProvisionalTable, selectUnabsorbedFinished } from "../services/liveStandings";
 import { bestEffortWithin } from "../utils/bestEffortDeadline";
 import { warnThrottled } from "../utils/throttledWarn";
 import {
@@ -179,6 +179,28 @@ function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   if (f.status.finished) return false;
   const now = Math.floor(Date.now() / 1000);
   return now >= f.timestamp - KICKOFF_HOT_BEFORE_SEC && now <= f.timestamp + KICKOFF_HOT_AFTER_SEC;
+}
+
+/**
+ * جولات تُحسب في جدول الترتيب: «الجولة N» للدوريات (وصيغتها الإنجليزية Round N)
+ * و«مرحلة الدوري» لأبطال أوروبا/يوروبا — دون الملحق والأدوار الإقصائية التي لا
+ * يعدّها جدول المزوّد. حقل round معرَّب في SplFixture، فالمطابقة على التسميات.
+ */
+function isLeagueTableRound(round: string | undefined): boolean {
+  if (!round) return false;
+  return /^(الجولة|Round)\s*\d+$/.test(round) || /مرحلة الدوري|League (Phase|Stage)/i.test(round);
+}
+
+/**
+ * قائمة موسم موحّدة: صفّ المباراة الجارية (الأدقّ لحظيًّا — TheSports يعلن النهاية
+ * قبل كاش الموسم) يعلو صفّ الموسم بنفس المعرّف، فكل مباراة تظهر مرة واحدة إمّا
+ * جارية أو منتهية — شرط applyProvisionalTable ضد الازدواج.
+ */
+function mergeSeasonWithLive(seasonFx: SplFixture[], live: SplFixture[]): SplFixture[] {
+  if (live.length === 0) return seasonFx;
+  const liveById = new Map(live.map((f) => [f.id, f]));
+  const seen = new Set(seasonFx.map((f) => f.id));
+  return [...seasonFx.map((f) => liveById.get(f.id) ?? f), ...live.filter((f) => !seen.has(f.id))];
 }
 
 /** مباشر → قادمة → منتهية (يمنع ظهور «انتهت» فوق «مباشر» داخل نفس القائمة). */
@@ -629,13 +651,20 @@ export function registerSportsRoutes(app: Express) {
         return;
       }
       // ترتيب مبدئي لحظي: نطبّق نتائج المباريات الجارية (بعد طبقة TheSports) فوق
-      // الجدول فيتحرّك مع كل هدف بنفس دقة قائمة المباريات.
-      const [base, liveNow] = await Promise.all([
+      // الجدول فيتحرّك مع كل هدف بنفس دقة قائمة المباريات. وقائمة الموسم تسدّ
+      // فجوة ما بعد الصافرة: المنتهية التي لم يستوعبها جدول المزوّد بعد تبقى
+      // محسوبة مبدئيًّا حتى يلحق (حادثة الحزم–أبها، افتتاح روشن 2026-08-13).
+      const [base, liveNow, seasonFx] = await Promise.all([
         getStandings(comp),
         getLiveFixtures(comp).catch(() => []),
+        comp.hasStandings
+          ? getFixtures(comp).catch(() => [] as SplFixture[])
+          : Promise.resolve([] as SplFixture[]),
       ]);
       const live = await overlayLiveFixturesForComp(liveNow, comp.slug).catch(() => liveNow);
-      const standings = applyProvisionalTable(base, live);
+      const allFx = mergeSeasonWithLive(seasonFx, live);
+      const pending = selectUnabsorbedFinished(base, allFx, { isCountedRound: isLeagueTableRound });
+      const standings = applyProvisionalTable(base, allFx, pending);
       const hasLive = standings.some((r) => r.live);
       res.set(
         "Cache-Control",
@@ -983,7 +1012,12 @@ export function registerSportsRoutes(app: Express) {
       const liveIds = new Set(liveNow.map((f) => f.id));
       const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
       const live = season ? [] : await overlayLiveFixturesForComp(mergedLive, comp.slug).catch(() => mergedLive);
-      const standings = season ? baseStandings : applyProvisionalTable(baseStandings, live);
+      // نفس معالجة مسار الترتيب: الجارية + المنتهية المعلّقة فوق الجدول الرسمي.
+      const allFx = mergeSeasonWithLive(fixtures, live);
+      const pending = season
+        ? []
+        : selectUnabsorbedFinished(baseStandings, allFx, { isCountedRound: isLeagueTableRound });
+      const standings = season ? baseStandings : applyProvisionalTable(baseStandings, allFx, pending);
       const featured = live[0] ?? buckets.today[0] ?? buckets.upcoming[0] ?? buckets.results[0] ?? null;
 
       const leader = standings[0] ?? null;
