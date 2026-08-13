@@ -11,6 +11,14 @@ export const AL_HAZEM_TEAM_ID = 2945; // API-Football — الحزم
 export const PLAYER_AR_AL_DWEHE = "عبدالعزيز الضويحي";
 export const PLAYER_AR_AL_BISHI = "عبدالعزيز البيشي";
 
+/**
+ * حادثة 2026-08-13 (الثانية في اليوم نفسه): همام الهمامي (الشباب) ظهر
+ * «ح. الحمامي» في الأحداث و«حمام الحمامي» في التشكيلة — حرف H اللاتيني ملتبس
+ * (هاء/حاء) في الاسمين الأول واللقب معًا، والتعريب الحرفي لا يحسمه بلا معرفة
+ * اللاعب. تظهر له عند المزوّد هويتان (463864 في التشكيلة و543065 في الأحداث).
+ */
+export const PLAYER_AR_AL_HAMAMI = "همام الهمامي";
+
 /** صيغ المزوّد الشائعة — تُدمَج في WC_PLAYER_AR عبر resolveNames. */
 export const CURATED_PLAYER_AR: Record<string, string> = {
   "Abdulaziz Al-Dwehe": PLAYER_AR_AL_DWEHE,
@@ -41,6 +49,30 @@ export const CURATED_PLAYER_AR: Record<string, string> = {
   "A. Al-Bishi": PLAYER_AR_AL_BISHI,
   "A. Al Bishi": PLAYER_AR_AL_BISHI,
   [PLAYER_AR_AL_BISHI]: PLAYER_AR_AL_BISHI,
+
+  // همام الهمامي (الشباب) — صيغ المزوّد اللاتينية والتعريبات الخاطئة المكاشة
+  "Hamam Al-Hamami": PLAYER_AR_AL_HAMAMI,
+  "Hamam Al Hamami": PLAYER_AR_AL_HAMAMI,
+  "Hamam Alhamami": PLAYER_AR_AL_HAMAMI,
+  "Hammam Al-Hamami": PLAYER_AR_AL_HAMAMI,
+  "Hammam Al Hamami": PLAYER_AR_AL_HAMAMI,
+  "Hammam Alhamami": PLAYER_AR_AL_HAMAMI,
+  "Humam Al-Hamami": PLAYER_AR_AL_HAMAMI,
+  "Humam Al Hamami": PLAYER_AR_AL_HAMAMI,
+  "H. Al-Hamami": PLAYER_AR_AL_HAMAMI,
+  "H. Al Hamami": PLAYER_AR_AL_HAMAMI,
+  "H. Alhamami": PLAYER_AR_AL_HAMAMI,
+  // التعريبات الخاطئة (حاء بدل هاء / ياء مقصورة) — تلتقط كاش الترجمة وname_aa
+  "حمام الحمامي": PLAYER_AR_AL_HAMAMI,
+  "حمام الحمامى": PLAYER_AR_AL_HAMAMI,
+  "همام الحمامي": PLAYER_AR_AL_HAMAMI,
+  "حمام الهمامي": PLAYER_AR_AL_HAMAMI,
+  "ح. الحمامي": PLAYER_AR_AL_HAMAMI,
+  "ح. الحمامى": PLAYER_AR_AL_HAMAMI,
+  "ه. الحمامي": PLAYER_AR_AL_HAMAMI,
+  "هـ. الهمامي": PLAYER_AR_AL_HAMAMI,
+  "ح. الهمامي": PLAYER_AR_AL_HAMAMI,
+  [PLAYER_AR_AL_HAMAMI]: PLAYER_AR_AL_HAMAMI,
 };
 
 const DWEHE_SOURCE =
