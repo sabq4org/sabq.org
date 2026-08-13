@@ -4,7 +4,9 @@
 import { describe, expect, it } from "vitest";
 import {
   assertEditedContentComplete,
+  extractLockedSourceNumbers,
   htmlToPlainText,
+  restoreSourceNumbers,
 } from "../../server/ai/editorialOutputGuards";
 
 const P = (s: string) => `<p>${s}</p>`;
@@ -65,5 +67,42 @@ describe("assertEditedContentComplete", () => {
   it("does not flag plain-text output that uses no HTML blocks", () => {
     const plain = "نص محرر بلا وسوم HTML يغطي كامل تفاصيل المادة الأصلية ويحافظ على كل المعلومات الواردة فيها. ".repeat(12);
     expect(() => assertEditedContentComplete(plain, INPUT)).not.toThrow();
+  });
+});
+
+describe("extractLockedSourceNumbers", () => {
+  it("locks prices and percentages, skips lone digits and hex hashes", () => {
+    const source =
+      "وارتفع الذهب 0.6% إلى 4433.62 دولاراً للأونصة و4493 للعقود. 05b4d38ea377c348d1bed1454c661b09308a0a1eecd5df71d73135f7b94b0b4f";
+    const locked = extractLockedSourceNumbers(source);
+    expect(locked).toEqual(expect.arrayContaining(["0.6%", "4433.62", "4493"]));
+    expect(locked.some((token) => token.startsWith("05"))).toBe(false);
+  });
+});
+
+describe("restoreSourceNumbers", () => {
+  it("restores a one-digit mutation of a gold price (4433.62 → 3433.62)", () => {
+    const source = "وارتفع الذهب في المعاملات الفورية 0.6% إلى 4433.62 دولاراً للأونصة.";
+    const edited =
+      "<p>ارتفع الذهب في المعاملات الفورية 0.6% إلى 3433.62 دولاراً للأونصة.</p>";
+    const result = restoreSourceNumbers(source, edited);
+    expect(result.text).toContain("4433.62");
+    expect(result.text).not.toContain("3433.62");
+    expect(result.restored).toEqual([{ from: "3433.62", to: "4433.62" }]);
+  });
+
+  it("does not rewrite a number that already matches the source", () => {
+    const source = "الفضة عند 65.91 دولاراً";
+    const edited = "<p>استقرت الفضة عند 65.91 دولاراً للأونصة.</p>";
+    const result = restoreSourceNumbers(source, edited);
+    expect(result.restored).toEqual([]);
+    expect(result.text).toBe(edited);
+  });
+
+  it("does not replace a mutated lookalike if that value exists in the source", () => {
+    const source = "بين 3433.62 و4433.62 دولاراً";
+    const edited = "<p>تراوح السعر بين 3433.62 و4433.62 دولاراً.</p>";
+    const result = restoreSourceNumbers(source, edited);
+    expect(result.restored).toEqual([]);
   });
 });
