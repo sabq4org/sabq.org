@@ -124,6 +124,8 @@
         "server/routes/rslPredictions.ts",
         "client/src/pages/PredictionCenter.tsx",
         "client/src/components/predictions/**",
+        "client/src/components/rsl/RslPredictionsPromo.tsx",
+        "client/src/components/rsl/RslHero.tsx",
         "sports app ios/SabqSports/Services/PredictionCoreModels.swift",
         "sports app ios/SabqSports/Screens/PredictionCenterView.swift",
         "sports app ios/SabqSports/Screens/PredictionContestDetailView.swift",
@@ -136,7 +138,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-07-31"
+      "lastReviewed": "2026-08-13"
     },
     {
       "id": "editorial",

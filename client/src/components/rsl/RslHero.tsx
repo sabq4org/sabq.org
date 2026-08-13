@@ -24,6 +24,7 @@ import {
   type RslFixture,
   type RslHero as RslHeroData,
 } from "./rslTypes";
+import { RslPredictionsHeroPromo } from "./RslPredictionsPromo";
 
 interface RslHeroProps {
   hero: RslHeroData | undefined;
@@ -275,15 +276,6 @@ function PreSeasonCard({ hero, onOpenMatch }: { hero: RslHeroData; onOpenMatch: 
           </p>
         )}
 
-        {/* الزر رهن مفتاح التشغيل — كان يظهر دائمًا حتى مع تعطيل منصة التوقعات،
-            ويَعِد بتبويب «بطل الموسم» غير موجود. الوجهة الآن مركز التوقعات مباشرة. */}
-        {hero.predictionsEnabled && (
-          <div className="flex justify-center">
-            <Button asChild className="bg-sky-300 text-sky-950 hover:bg-sky-200 font-bold rounded-full px-6">
-              <a href="/predictions?competition=rsl-2026">توقّع ونافس على نقاط الموسم</a>
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -423,6 +415,8 @@ export function RslHero({ hero, isLoading, onOpenMatch, teamsCount }: RslHeroPro
                 </div>
               </div>
             )}
+            {/* إعلان دائم لمسابقة التوقعات — يظهر في كل حالات الهيرو عند تفعيل المنصة */}
+            {hero.predictionsEnabled && <RslPredictionsHeroPromo />}
           </motion.div>
         )}
       </div>

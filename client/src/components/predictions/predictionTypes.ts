@@ -35,6 +35,8 @@ export type PredEntryPayload = PredScorePayload & PredPickPayload;
 export type PredContest = {
   id: string;
   contestType: string;
+  /** معرّف المباراة عند المصدر (API-Football) — للروابط العميقة من مركز المباراة. */
+  externalRef?: string | null;
   status: "open" | "locked" | "ready" | "settled" | "void" | string;
   opensAt?: string | null;
   locksAt: string;

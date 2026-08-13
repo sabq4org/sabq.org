@@ -22,6 +22,8 @@ type Props = {
   isAuthenticated: boolean;
   onLoginNeeded: () => void;
   onOpenSettlement: (contestId: string) => void;
+  /** تمييز من رابط عميق (?fixture= / ?contest=) */
+  highlighted?: boolean;
 };
 
 export function PredictionMatchCard({
@@ -30,6 +32,7 @@ export function PredictionMatchCard({
   isAuthenticated,
   onLoginNeeded,
   onOpenSettlement,
+  highlighted = false,
 }: Props) {
   const { toast } = useToast();
   const mine = contest.myEntry?.payload;
@@ -87,7 +90,16 @@ export function PredictionMatchCard({
   const countdown = isOpen ? lockCountdownAr(contest.locksAt, now) : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div
+      id={`pred-contest-${contest.id}`}
+      data-fixture-ref={contest.externalRef ?? undefined}
+      data-testid={`prediction-match-card-${contest.id}`}
+      className={`rounded-2xl border bg-card p-4 shadow-sm scroll-mt-24 transition ring-offset-2 ${
+        highlighted
+          ? "border-sky-500 ring-2 ring-sky-400/70"
+          : "border-border"
+      }`}
+    >
       {/* الفريقان والوسط */}
       <div className="flex items-center gap-2">
         <TeamSide name={home?.name} logo={home?.logo} />
