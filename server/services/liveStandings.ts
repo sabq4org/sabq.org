@@ -186,3 +186,26 @@ export function applyProvisionalGroups<T extends StandingRowLike, G extends { ro
     rows: applyProvisionalTable(g.rows, live),
   }));
 }
+
+/**
+ * جولات تُحسب في جدول الترتيب: «الجولة N» للدوريات (وصيغتها الإنجليزية Round N)
+ * و«مرحلة الدوري» لأبطال أوروبا/يوروبا — دون الملحق والأدوار الإقصائية التي لا
+ * يعدّها جدول المزوّد. حقل round معرَّب في SplFixture، فالمطابقة على التسميات.
+ */
+export function isLeagueTableRound(round: string | undefined): boolean {
+  if (!round) return false;
+  return /^(الجولة|Round)\s*\d+$/.test(round) || /مرحلة الدوري|League (Phase|Stage)/i.test(round);
+}
+
+/**
+ * قائمة موسم موحّدة: صفّ المباراة الجارية (الأدقّ لحظيًّا — TheSports يعلن النهاية
+ * قبل كاش الموسم) يعلو صفّ الموسم بنفس المعرّف، فكل مباراة تظهر مرة واحدة إمّا
+ * جارية أو منتهية — شرط applyProvisionalTable ضد الازدواج.
+ */
+export function mergeSeasonWithLive<F extends { id: number }>(seasonFx: F[], live: F[]): F[] {
+  if (live.length === 0) return seasonFx;
+  const liveById = new Map(live.map((f) => [f.id, f]));
+  const seen = new Set(seasonFx.map((f) => f.id));
+  return [...seasonFx.map((f) => liveById.get(f.id) ?? f), ...live.filter((f) => !seen.has(f.id))];
+}
+

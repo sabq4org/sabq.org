@@ -11,7 +11,12 @@
  * لا يستورد db (ملتزم بـ ADR-001) — كل الوصول للبيانات عبر الخدمة فقط.
  */
 import type { Express, Request, Response } from "express";
-import { applyProvisionalTable, selectUnabsorbedFinished } from "../services/liveStandings";
+import {
+  applyProvisionalTable,
+  selectUnabsorbedFinished,
+  isLeagueTableRound,
+  mergeSeasonWithLive,
+} from "../services/liveStandings";
 import { bestEffortWithin } from "../utils/bestEffortDeadline";
 import { warnThrottled } from "../utils/throttledWarn";
 import {
@@ -179,28 +184,6 @@ function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   if (f.status.finished) return false;
   const now = Math.floor(Date.now() / 1000);
   return now >= f.timestamp - KICKOFF_HOT_BEFORE_SEC && now <= f.timestamp + KICKOFF_HOT_AFTER_SEC;
-}
-
-/**
- * جولات تُحسب في جدول الترتيب: «الجولة N» للدوريات (وصيغتها الإنجليزية Round N)
- * و«مرحلة الدوري» لأبطال أوروبا/يوروبا — دون الملحق والأدوار الإقصائية التي لا
- * يعدّها جدول المزوّد. حقل round معرَّب في SplFixture، فالمطابقة على التسميات.
- */
-function isLeagueTableRound(round: string | undefined): boolean {
-  if (!round) return false;
-  return /^(الجولة|Round)\s*\d+$/.test(round) || /مرحلة الدوري|League (Phase|Stage)/i.test(round);
-}
-
-/**
- * قائمة موسم موحّدة: صفّ المباراة الجارية (الأدقّ لحظيًّا — TheSports يعلن النهاية
- * قبل كاش الموسم) يعلو صفّ الموسم بنفس المعرّف، فكل مباراة تظهر مرة واحدة إمّا
- * جارية أو منتهية — شرط applyProvisionalTable ضد الازدواج.
- */
-function mergeSeasonWithLive(seasonFx: SplFixture[], live: SplFixture[]): SplFixture[] {
-  if (live.length === 0) return seasonFx;
-  const liveById = new Map(live.map((f) => [f.id, f]));
-  const seen = new Set(seasonFx.map((f) => f.id));
-  return [...seasonFx.map((f) => liveById.get(f.id) ?? f), ...live.filter((f) => !seen.has(f.id))];
 }
 
 /** مباشر → قادمة → منتهية (يمنع ظهور «انتهت» فوق «مباشر» داخل نفس القائمة). */
