@@ -98,6 +98,37 @@ export type PredLeaderboardResponse = {
   myRank: { rank: number; points: number } | null;
 };
 
+/** جائزة واحدة من دفتر النقاط داخل عنصر «توقعاتي» — المبرر مع النقاط. */
+export type PredMyEntryAward = {
+  points: number;
+  reasonCode: string;
+  reasonLabelAr: string;
+  breakdown?: {
+    prediction?: string;
+    finalScore?: string;
+    pool?: { base?: number; carriedIn?: number; tierShare?: number; tierPoints?: number; winners?: number };
+  } | null;
+};
+
+/** عنصر تبويب «توقعاتي» — توقّع المستخدم ومعه حالة المسابقة ونتيجتها وجوائزه. */
+export type PredMyEntryItem = {
+  contestId: string;
+  contestType: string;
+  status: PredContest["status"];
+  externalRef?: string | null;
+  locksAt: string;
+  settledAt?: string | null;
+  metadata?: PredContestMeta | null;
+  result?: PredContest["result"];
+  payload?: PredEntryPayload | null;
+  submittedAt?: string | null;
+  updatedAt?: string | null;
+  awards: PredMyEntryAward[];
+  totalPoints: number;
+};
+
+export type PredMyEntriesResponse = { items: PredMyEntryItem[]; nextCursor: string | null };
+
 export type PredMyAward = {
   points: number;
   reasonCode: string;

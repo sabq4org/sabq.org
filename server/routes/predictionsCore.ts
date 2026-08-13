@@ -10,6 +10,7 @@ import {
   getContestSettlement,
   getHomepagePromoFeed,
   getLeaderboard,
+  getUserEntries,
   getUserLedger,
   getUserPoints,
   isPredictionCoreEnabled,
@@ -136,6 +137,19 @@ router.get("/api/predictions/me/points", requireAuth, async (req: any, res) => {
 router.get("/api/predictions/me/ledger", requireAuth, async (req: any, res) => {
   try {
     res.json(await getUserLedger(req.user.id, {
+      competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
+      cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    }));
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// «توقعاتي» — تاريخ توقعات المستخدم كاملًا مع النتائج والجوائز (لا يقتطع كتفاصيل البطولة)
+router.get("/api/predictions/me/entries", requireAuth, async (req: any, res) => {
+  try {
+    res.json(await getUserEntries(req.user.id, {
       competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
       cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,

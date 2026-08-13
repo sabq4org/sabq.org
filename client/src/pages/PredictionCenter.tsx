@@ -13,21 +13,23 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { formatNumber } from "@/lib/format";
+import { apiRequest } from "@/lib/queryClient";
 import { rememberPostAuthReturn } from "@/lib/postAuthRedirect";
 import { PredictionMatchCard } from "@/components/predictions/PredictionMatchCard";
+import { PredictionMyEntryCard } from "@/components/predictions/PredictionMyEntryCard";
 import { PredictionRulesCard } from "@/components/predictions/PredictionRulesCard";
 import { PredictionSeasonCard } from "@/components/predictions/PredictionSeasonCard";
 import { PredictionSettlementDrawer } from "@/components/predictions/PredictionSettlementDrawer";
 import {
-  kickoffDayAr,
   type PredCompetitionDetail,
   type PredCompetitionSummary,
   type PredContest,
   type PredLeaderboardResponse,
-  type PredLedgerResponse,
+  type PredMyEntriesResponse,
+  type PredMyEntryItem,
 } from "@/components/predictions/predictionTypes";
 
-type Tab = "matches" | "ledger" | "leaders";
+type Tab = "matches" | "mine" | "leaders";
 
 /** طريق العودة لمركز كل بطولة — الصفحة كانت بلا أي رابط راجع (طلب المالك). */
 const HUB_LINKS: { prefix: string; href: string; label: string }[] = [
@@ -39,7 +41,7 @@ const HUB_LINKS: { prefix: string; href: string; label: string }[] = [
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "matches", label: "المباريات" },
-  { key: "ledger", label: "سجلّي" },
+  { key: "mine", label: "توقعاتي" },
   { key: "leaders", label: "المتصدّرون" },
 ];
 
@@ -121,14 +123,48 @@ export default function PredictionCenter() {
     staleTime: 60_000,
   });
 
-  // سجل نقاطي
-  const { data: ledgerRaw, isLoading: ledgerLoading } = useQuery<PredLedgerResponse>({
-    queryKey: ["/api/predictions/me/ledger", { competition: selected?.slug ?? "" }],
-    enabled: Boolean(selected) && isAuthenticated && tab === "ledger",
+  // توقعاتي — الصفحة الأولى عبر useQuery، والتالية تُلحق يدويًا بالكيرسور
+  const { data: mineRaw, isLoading: mineLoading } = useQuery<PredMyEntriesResponse>({
+    queryKey: ["/api/predictions/me/entries", { competition: selected?.slug ?? "" }],
+    enabled: Boolean(selected) && isAuthenticated && tab === "mine",
   });
-  const ledgerItems = Array.isArray(ledgerRaw?.items) ? ledgerRaw.items : [];
+  const [minePages, setMinePages] = useState<PredMyEntryItem[][]>([]);
+  const [mineCursor, setMineCursor] = useState<string | null>(null);
+  const [mineLoadingMore, setMineLoadingMore] = useState(false);
+  useEffect(() => {
+    // تبديل البطولة أو تحديث الصفحة الأولى يصفّر الصفحات الملحقة
+    setMinePages([]);
+    setMineCursor(mineRaw?.nextCursor ?? null);
+  }, [selected?.slug, mineRaw]);
+  const mineItems = useMemo(
+    () => [...(Array.isArray(mineRaw?.items) ? mineRaw.items : []), ...minePages.flat()],
+    [mineRaw, minePages],
+  );
+  const loadMoreMine = async () => {
+    if (!mineCursor || mineLoadingMore) return;
+    setMineLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ competition: selected?.slug ?? "", cursor: mineCursor });
+      const page = await apiRequest<PredMyEntriesResponse>(`/api/predictions/me/entries?${params}`);
+      setMinePages((pages) => [...pages, Array.isArray(page.items) ? page.items : []]);
+      setMineCursor(page.nextCursor ?? null);
+    } finally {
+      setMineLoadingMore(false);
+    }
+  };
 
   const grouped = useMemo(() => groupContests(contests), [contests]);
+
+  // من بطاقة توقّع مفتوحة في «توقعاتي» إلى بطاقتها في تبويب المباريات للتعديل
+  const goToContest = (contestId: string) => {
+    setTab("matches");
+    setHighlightContestId(contestId);
+    window.setTimeout(() => {
+      document
+        .getElementById(`pred-contest-${contestId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  };
 
   // رابط عميق من مركز المباراة: ?fixture= أو ?contest= → تبويب المباريات + تمرير وتمييز
   useEffect(() => {
@@ -261,9 +297,18 @@ export default function PredictionCenter() {
                   highlightContestId={highlightContestId}
                 />
               )}
-              {tab === "ledger" &&
+              {tab === "mine" &&
                 (isAuthenticated ? (
-                  <LedgerTab items={ledgerItems} loading={ledgerLoading} />
+                  <MyEntriesTab
+                    items={mineItems}
+                    loading={mineLoading}
+                    hasMore={Boolean(mineCursor)}
+                    loadingMore={mineLoadingMore}
+                    onLoadMore={loadMoreMine}
+                    onOpenSettlement={setSettlementContestId}
+                    onGoToContest={goToContest}
+                    onGoToMatches={() => setTab("matches")}
+                  />
                 ) : (
                   <SignInPrompt onLogin={goLogin} />
                 ))}
@@ -454,54 +499,76 @@ function MatchesTab({
 }
 
 // ---------------------------------------------------------------------------
-// تبويب سجلّي
+// تبويب توقعاتي — مراجعة توقعاتي كاملة ومقارنتها بالنتائج الفعلية (قرار المالك
+// بعد افتتاح روشن 2026-08-13؛ حلّ محل «سجلّي» الذي كان قيود نقاط صامتة).
 // ---------------------------------------------------------------------------
 
-function LedgerTab({
+function MyEntriesTab({
   items,
   loading,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  onOpenSettlement,
+  onGoToContest,
+  onGoToMatches,
 }: {
-  items: PredLedgerResponse["items"];
+  items: PredMyEntryItem[];
   loading: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  onOpenSettlement: (contestId: string) => void;
+  onGoToContest: (contestId: string) => void;
+  onGoToMatches: () => void;
 }) {
   if (loading) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-14 w-full rounded-xl" />
+          <Skeleton key={i} className="h-24 w-full rounded-2xl" />
         ))}
       </div>
     );
   }
   if (items.length === 0) {
     return (
-      <EmptyBlock
-        icon={<ListOrdered className="h-8 w-8" />}
-        title="لا قيود نقاط بعد"
-        subtitle="ستظهر نقاطك هنا فور تسوية أول مباراة توقّعتها"
-      />
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-12 text-center">
+        <ListOrdered className="h-8 w-8 text-primary" />
+        <p className="text-sm font-bold text-foreground">لم تتوقّع بعد</p>
+        <p className="text-[12px] text-muted-foreground">
+          توقّع مباريات الجولة وستجد توقعاتك ونتائجها هنا
+        </p>
+        <button
+          type="button"
+          onClick={onGoToMatches}
+          className="rounded-xl bg-primary px-6 py-2 text-[13px] font-bold text-primary-foreground transition hover:opacity-90"
+        >
+          إلى المباريات
+        </button>
+      </div>
     );
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.map((item) => (
-        <div
-          key={item.id}
-          className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3"
-        >
-          <div>
-            <div className="text-[12.5px] font-bold text-foreground">{item.reasonLabelAr}</div>
-            <div className="text-[10.5px] text-muted-foreground">{kickoffDayAr(item.createdAt)}</div>
-          </div>
-          <span
-            className={`text-sm font-extrabold tabular-nums ${
-              item.points >= 0 ? "text-primary" : "text-destructive"
-            }`}
-          >
-            {item.points >= 0 ? `+${formatNumber(item.points)}` : formatNumber(item.points)}
-          </span>
-        </div>
+        <PredictionMyEntryCard
+          key={item.contestId}
+          item={item}
+          onOpenSettlement={onOpenSettlement}
+          onGoToContest={onGoToContest}
+        />
       ))}
+      {hasMore && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full rounded-xl bg-muted py-2.5 text-[13px] font-bold text-muted-foreground transition hover:bg-muted/70 disabled:opacity-60"
+        >
+          {loadingMore ? "جارٍ التحميل…" : "عرض توقعات أقدم"}
+        </button>
+      )}
     </div>
   );
 }
