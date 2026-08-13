@@ -57,6 +57,44 @@ class AccountActionViewModel @Inject constructor(
         runAction { accountRepo.forgotPassword(email) }
     }
 
+    /** إتمام الاستعادة: رمز التحقق المرسَل بالبريد + كلمة المرور الجديدة. */
+    fun resetPassword(
+        email: String,
+        code: String,
+        newPassword: String,
+        onSuccess: () -> Unit = {},
+    ) {
+        if (code.length != 6 || newPassword.length < 6) return
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, errorMessage = null, success = false) }
+            try {
+                accountRepo.resetPassword(email, code, newPassword)
+                _state.update { it.copy(isLoading = false, success = true) }
+                onSuccess()
+            } catch (e: AccountException) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        // rawMessage هنا جسم JSON خام — 400 تعني رمزًا خاطئًا
+                        // أو منتهي الصلاحية، فنعرض رسالة مفهومة بدلًا منه
+                        errorMessage = if (e.code == 400) {
+                            "رمز التحقق غير صحيح أو منتهي الصلاحية"
+                        } else {
+                            friendlyMessage(e)
+                        },
+                    )
+                }
+            } catch (t: Throwable) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = t.localizedMessage ?: "تعذر إكمال العملية",
+                    )
+                }
+            }
+        }
+    }
+
     fun deleteAccount(password: String, onLogout: () -> Unit) {
         if (password.isBlank()) return
         viewModelScope.launch {
