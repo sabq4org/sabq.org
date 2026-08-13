@@ -1169,10 +1169,16 @@ export default function SportsDashboard() {
     () => summaries
       .filter((c) => c.category === summaryCat)
       .sort(
-        (a, b) =>
-          summaryStatusRank(a) - summaryStatusRank(b) ||
-          summaryKickoffRank(a) - summaryKickoffRank(b) ||
-          a.name.localeCompare(b.name, "ar"),
+        (a, b) => {
+          const aRoshn = a.slug === "pro-league" ? 0 : 1;
+          const bRoshn = b.slug === "pro-league" ? 0 : 1;
+          if (aRoshn !== bRoshn) return aRoshn - bRoshn;
+          return (
+            summaryStatusRank(a) - summaryStatusRank(b) ||
+            summaryKickoffRank(a) - summaryKickoffRank(b) ||
+            a.name.localeCompare(b.name, "ar")
+          );
+        },
       ),
     // summaryStatusRank/summaryKickoffRank تعتمدان على وقت الآن وملخّص اليوم،
     // لذا نُحدّث cache عند تغيّر المُدخلات الجوهرية.

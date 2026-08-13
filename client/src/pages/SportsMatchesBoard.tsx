@@ -97,12 +97,11 @@ const LIVE_IDLE_MS = 30_000;
 const TODAY_ACTIVE_MS = 10_000;
 const LIVE_STALE_MS = 5_000;
 
-// بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
-const PINNED_COMP_SLUGS = ["world-cup"];
+// بطولات تُثبّت أعلى لوحة المباريات بالترتيب (دوري روشن أولاً دائماً).
 const ROSHN_COMP_SLUG = "pro-league";
+const PINNED_COMP_SLUGS = [ROSHN_COMP_SLUG, "world-cup"];
 const IMPORTANT_COMP_SLUGS = [
   ...PINNED_COMP_SLUGS,
-  ROSHN_COMP_SLUG,
   "champions-league",
   "premier-league",
   "la-liga",
@@ -112,9 +111,9 @@ const IMPORTANT_COMP_SLUGS = [
 ];
 const IMPORTANT_COMP_SET = new Set(IMPORTANT_COMP_SLUGS);
 
-/** روشن يتصدّر الشريط والمجموعات طالما فيه مباراة قائمة — حتى لو بطولة أخرى فيها مباشر أكثر. */
-function liveRoshnRank(slug: string | null | undefined, hasLive: boolean): number {
-  return slug === ROSHN_COMP_SLUG && hasLive ? 0 : 1;
+/** دوري روشن دائماً في الأعلى (أولوية مطلقة). */
+function roshnRank(slug: string | null | undefined): number {
+  return slug === ROSHN_COMP_SLUG ? 0 : 1;
 }
 
 const ymdFmt = new Intl.DateTimeFormat("en-CA", {
@@ -705,15 +704,17 @@ export default function SportsMatchesBoard() {
     });
   }, [filtered, compMeta]);
 
-  // ترتيب المجموعات: روشن المباشر أولًا، ثم الأكثر مباشرًا، ثم المثبّتة (كأس العالم)، ثم أبكر موعد.
-  // لا تثبّت بطولة منتهية فوق بطولة فيها مباشر.
+  // ترتيب المجموعات: دوري روشن دائماً في الأعلى، ثم الأكثر مباشرًا، ثم أولوية الفئات (سعودي -> خليجي -> عربي -> أوروبي -> عالمي)، ثم أبكر موعد.
   const sortedGroups = useMemo(
     () =>
       [...groups].sort((a, b) => {
-        const ar = liveRoshnRank(a.slug, a.liveCount > 0);
-        const br = liveRoshnRank(b.slug, b.liveCount > 0);
+        const ar = roshnRank(a.slug);
+        const br = roshnRank(b.slug);
         if (ar !== br) return ar - br;
         if (a.liveCount !== b.liveCount) return b.liveCount - a.liveCount;
+        const aCatIdx = a.category ? COMP_CATEGORY_ORDER.indexOf(a.category) : 99;
+        const bCatIdx = b.category ? COMP_CATEGORY_ORDER.indexOf(b.category) : 99;
+        if (aCatIdx !== bCatIdx) return aCatIdx - bCatIdx;
         const ap = a.slug && PINNED_COMP_SLUGS.includes(a.slug) ? PINNED_COMP_SLUGS.indexOf(a.slug) : 99;
         const bp = b.slug && PINNED_COMP_SLUGS.includes(b.slug) ? PINNED_COMP_SLUGS.indexOf(b.slug) : 99;
         if (ap !== bp) return ap - bp;
@@ -726,8 +727,8 @@ export default function SportsMatchesBoard() {
   const flat = useMemo(
     () =>
       [...filtered].sort((a, b) => {
-        const ar = liveRoshnRank(a.competitionSlug, a.status.live);
-        const br = liveRoshnRank(b.competitionSlug, b.status.live);
+        const ar = a.status.live && a.competitionSlug === ROSHN_COMP_SLUG ? 0 : 1;
+        const br = b.status.live && b.competitionSlug === ROSHN_COMP_SLUG ? 0 : 1;
         if (ar !== br) return ar - br;
         return compareMatches(a, b);
       }),
@@ -761,10 +762,15 @@ export default function SportsMatchesBoard() {
       map.set(m.competitionSlug, current);
     }
     return Array.from(map.values()).sort((a, b) => {
-      const ar = liveRoshnRank(a.slug, a.live > 0);
-      const br = liveRoshnRank(b.slug, b.live > 0);
+      const ar = roshnRank(a.slug);
+      const br = roshnRank(b.slug);
       if (ar !== br) return ar - br;
       if (a.live !== b.live) return b.live - a.live;
+      const aCat = compMeta.get(a.slug)?.category;
+      const bCat = compMeta.get(b.slug)?.category;
+      const aCatIdx = aCat ? COMP_CATEGORY_ORDER.indexOf(aCat) : 99;
+      const bCatIdx = bCat ? COMP_CATEGORY_ORDER.indexOf(bCat) : 99;
+      if (aCatIdx !== bCatIdx) return aCatIdx - bCatIdx;
       if (a.count !== b.count) return b.count - a.count;
       return a.name.localeCompare(b.name, "ar");
     });
