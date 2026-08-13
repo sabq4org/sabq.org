@@ -99,9 +99,10 @@ const LIVE_STALE_MS = 5_000;
 
 // بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
 const PINNED_COMP_SLUGS = ["world-cup"];
+const ROSHN_COMP_SLUG = "pro-league";
 const IMPORTANT_COMP_SLUGS = [
   ...PINNED_COMP_SLUGS,
-  "pro-league",
+  ROSHN_COMP_SLUG,
   "champions-league",
   "premier-league",
   "la-liga",
@@ -110,6 +111,11 @@ const IMPORTANT_COMP_SLUGS = [
   "ligue-1",
 ];
 const IMPORTANT_COMP_SET = new Set(IMPORTANT_COMP_SLUGS);
+
+/** روشن يتصدّر الشريط والمجموعات طالما فيه مباراة قائمة — حتى لو بطولة أخرى فيها مباشر أكثر. */
+function liveRoshnRank(slug: string | null | undefined, hasLive: boolean): number {
+  return slug === ROSHN_COMP_SLUG && hasLive ? 0 : 1;
+}
 
 const ymdFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: RIYADH_TZ,
@@ -699,11 +705,14 @@ export default function SportsMatchesBoard() {
     });
   }, [filtered, compMeta]);
 
-  // ترتيب المجموعات: الأكثر مباشرًا أولًا، ثم المثبّتة (كأس العالم)، ثم أبكر موعد.
+  // ترتيب المجموعات: روشن المباشر أولًا، ثم الأكثر مباشرًا، ثم المثبّتة (كأس العالم)، ثم أبكر موعد.
   // لا تثبّت بطولة منتهية فوق بطولة فيها مباشر.
   const sortedGroups = useMemo(
     () =>
       [...groups].sort((a, b) => {
+        const ar = liveRoshnRank(a.slug, a.liveCount > 0);
+        const br = liveRoshnRank(b.slug, b.liveCount > 0);
+        if (ar !== br) return ar - br;
         if (a.liveCount !== b.liveCount) return b.liveCount - a.liveCount;
         const ap = a.slug && PINNED_COMP_SLUGS.includes(a.slug) ? PINNED_COMP_SLUGS.indexOf(a.slug) : 99;
         const bp = b.slug && PINNED_COMP_SLUGS.includes(b.slug) ? PINNED_COMP_SLUGS.indexOf(b.slug) : 99;
@@ -713,8 +722,17 @@ export default function SportsMatchesBoard() {
     [groups]
   );
 
-  // قائمة مسطّحة بالوقت.
-  const flat = useMemo(() => [...filtered].sort(compareMatches), [filtered]);
+  // قائمة مسطّحة بالوقت — مباراة روشن القائمة تتصدر إن وُجدت.
+  const flat = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        const ar = liveRoshnRank(a.competitionSlug, a.status.live);
+        const br = liveRoshnRank(b.competitionSlug, b.status.live);
+        if (ar !== br) return ar - br;
+        return compareMatches(a, b);
+      }),
+    [filtered]
+  );
 
   const liveTotal = allMatches.filter((m) => m.status.live).length;
 
@@ -743,6 +761,9 @@ export default function SportsMatchesBoard() {
       map.set(m.competitionSlug, current);
     }
     return Array.from(map.values()).sort((a, b) => {
+      const ar = liveRoshnRank(a.slug, a.live > 0);
+      const br = liveRoshnRank(b.slug, b.live > 0);
+      if (ar !== br) return ar - br;
       if (a.live !== b.live) return b.live - a.live;
       if (a.count !== b.count) return b.count - a.count;
       return a.name.localeCompare(b.name, "ar");
