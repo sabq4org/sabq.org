@@ -517,6 +517,7 @@
         "server/services/saudiLeagueService.ts",
         "server/services/sportsTournamentsService.ts",
         "server/services/sportsNamesService.ts",
+        "server/services/sportsPlayerNameFixes.ts",
         "server/services/worldCupNewsGenerator.ts",
         "server/services/kingsCupNewsGenerator.ts",
         "server/services/newsPulseInsights.ts",
@@ -573,7 +574,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-11"
+      "lastReviewed": "2026-08-13"
     },
     {
       "id": "push-notifications",

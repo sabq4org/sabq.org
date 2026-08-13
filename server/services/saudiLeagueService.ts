@@ -75,6 +75,7 @@ import {
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 import { pickActiveRoundKey } from "./pickActiveRound";
+import { resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
 
 const TIMEZONE = "Asia/Riyadh";
 
@@ -1460,9 +1461,19 @@ function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
     extra: e.time?.extra ?? null,
     teamId: e.team?.id ?? 0,
     team: localizeSplTeamName(e.team?.id, e.team?.name ?? ""),
-    player: tr(inSide?.name),
+    player: localizeSplPlayerName(
+      typeof inSide?.id === "number" ? inSide.id : null,
+      inSide?.name ?? "",
+      tr,
+    ),
     playerId: typeof inSide?.id === "number" ? inSide.id : undefined,
-    assist: outSide?.name ? tr(outSide.name) : null,
+    assist: outSide?.name
+      ? localizeSplPlayerName(
+          typeof outSide?.id === "number" ? outSide.id : null,
+          outSide.name,
+          tr,
+        )
+      : null,
     type: loc.type,
     label: loc.label,
   };
@@ -1769,13 +1780,15 @@ async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplM
     if (e.type === "sub") {
       out.push({
         minute: e.minute, extra: null, teamId, team,
-        player: arById(e.playerId) ?? tr(e.inPlayer), assist: e.outPlayer ? tr(e.outPlayer) : null,
+        player: resolveTsEventPlayerName(e.inPlayer, arById(e.playerId), tr(e.inPlayer), teamId),
+        assist: e.outPlayer ? resolveTsEventPlayerName(e.outPlayer, null, tr(e.outPlayer), teamId) : null,
         type: meta.type, label: meta.label,
       });
     } else {
       out.push({
         minute: e.minute, extra: null, teamId, team,
-        player: arById(e.playerId) ?? tr(e.player), assist: e.assist ? tr(e.assist) : null,
+        player: resolveTsEventPlayerName(e.player, arById(e.playerId), tr(e.player), teamId),
+        assist: e.assist ? resolveTsEventPlayerName(e.assist, null, tr(e.assist), teamId) : null,
         type: meta.type, label: tsEventLabel(e, meta),
       });
     }
