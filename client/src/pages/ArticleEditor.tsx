@@ -273,6 +273,7 @@ export default function ArticleEditor() {
   // Video Template fields
   const [videoSourceType, setVideoSourceType] = useState<"url" | "upload">("url");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [isResolvingVideo, setIsResolvingVideo] = useState(false);
   const [isVideoTemplate, setIsVideoTemplate] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
   const [videoThumbnailUrl, setVideoThumbnailUrl] = useState("");
@@ -4339,18 +4340,73 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
                     {videoSourceType === "url" ? (
                       <div className="space-y-2">
-                        <Label htmlFor="videoUrl" className="text-sm">رابط الفيديو</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="videoUrl" className="text-sm">رابط الفيديو</Label>
+                          {videoUrl && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={isResolvingVideo}
+                              onClick={async () => {
+                                if (!videoUrl.trim()) return;
+                                setIsResolvingVideo(true);
+                                try {
+                                  const csrfToken = getCsrfToken();
+                                  const res = await fetch(apiUrl('/api/video/resolve'), {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+                                    },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ url: videoUrl.trim() }),
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    if (data.thumbnailUrl) {
+                                      setVideoThumbnailUrl(data.thumbnailUrl);
+                                    }
+                                    toast({
+                                      title: "تم التعرف على الفيديو بنجاح",
+                                      description: data.platform === 'twitter' 
+                                        ? "تم استخراج فيديو وصورة منصة X بنجاح" 
+                                        : "تم استخراج معلومات الفيديو بنجاح",
+                                    });
+                                  } else {
+                                    toast({
+                                      title: "تنبيه",
+                                      description: "تعذر استخراج معلومات إضافية عن الفيديو",
+                                    });
+                                  }
+                                } catch (err: any) {
+                                  console.error('[ArticleEditor] Resolve video err:', err);
+                                } finally {
+                                  setIsResolvingVideo(false);
+                                }
+                              }}
+                              className="h-7 text-xs gap-1 text-primary hover:text-primary"
+                            >
+                              {isResolvingVideo ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-3 w-3" />
+                              )}
+                              <span>جلب معلومات وصورة الفيديو</span>
+                            </Button>
+                          )}
+                        </div>
                         <Input
                           id="videoUrl"
                           value={videoUrl}
                           onChange={(e) => setVideoUrl(e.target.value)}
-                          placeholder="رابط YouTube أو Dailymotion أو رابط مباشر للفيديو"
+                          placeholder="رابط YouTube أو Dailymotion أو منصة X (تويتر) أو رابط مباشر"
                           className="text-sm"
                           dir="ltr"
                           data-testid="input-video-url"
                         />
                         <p className="text-xs text-muted-foreground">
-                          يدعم: YouTube, Dailymotion, أو رابط مباشر (mp4)
+                          يدعم: YouTube, Dailymotion, منصة X (تويتر), أو رابط مباشر (mp4)
                         </p>
                       </div>
                     ) : (
@@ -4427,7 +4483,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         <div className="flex items-center gap-1.5">
                           <RadioGroupItem value="auto" id="thumb-auto" data-testid="radio-thumb-auto" />
                           <Label htmlFor="thumb-auto" className="text-xs cursor-pointer">
-                            تلقائي (YouTube/Dailymotion)
+                            تلقائي (YouTube/Dailymotion/منصة X)
                           </Label>
                         </div>
                         <div className="flex items-center gap-1.5">
