@@ -893,13 +893,13 @@ function Router() {
             </ProtectedRoute>
           )}
         </Route>
+        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
         <Route path="/dashboard/articles/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/edit">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/articles/:id">{() => <LazyRoute component={ArticleEditor} />}</Route>
-        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
         {/* النشر الاجتماعي (X) — social_publish.view */}
         <Route path="/dashboard/social-publishing">
           {() => (

@@ -189,11 +189,12 @@ export default function ArticleEditor() {
   const [location, navigate] = useLocation();
   
   // Extract pathname without query string
-  const pathname = location.split('?')[0];
-  const isNewArticle = pathname.endsWith('/article/new') || pathname.endsWith('/articles/new');
+  const pathname = location.split('?')[0].replace(/\/+$/, '');
+  const isNewArticle = pathname.endsWith('/article/new') || pathname.endsWith('/articles/new') || pathname === '/dashboard/articles' || !params.id || params.id === 'new' || params.id === 'articles';
   
-  // Extract id from params or pathname
-  const id = params.id || pathname.split('/').pop();
+  // Extract id strictly from params or edit path, preventing fallback to "articles"
+  const rawId = params.id || (pathname.endsWith('/edit') ? pathname.split('/').slice(-2)[0] : pathname.split('/').pop());
+  const id = (!isNewArticle && rawId && rawId !== 'new' && rawId !== 'articles') ? rawId : undefined;
   
   // Extract query parameters from URL
   const queryParams = new URLSearchParams(location.split('?')[1] || '');
