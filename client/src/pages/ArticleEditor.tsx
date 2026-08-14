@@ -91,6 +91,7 @@ import {
   SpellCheck,
   Frame,
   MoreHorizontal,
+  BookOpen,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -262,6 +263,7 @@ export default function ArticleEditor() {
   // New fields
   const [newsType, setNewsType] = useState<"breaking" | "regular">("regular");
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isReading, setIsReading] = useState(false);
   const [publishType, setPublishType] = useState<"instant" | "scheduled">("instant");
   const [scheduledAt, setScheduledAt] = useState("");
   const [customPublishedAt, setCustomPublishedAt] = useState(""); // For admin backdating
@@ -393,6 +395,7 @@ export default function ArticleEditor() {
     setKeywords([]);
     setNewsType("regular");
     setIsFeatured(false);
+    setIsReading(false);
     setPublishType("instant");
     setScheduledAt("");
     setCustomPublishedAt("");
@@ -814,6 +817,8 @@ export default function ArticleEditor() {
       setNewsType(loadedNewsType === "featured" ? "regular" : loadedNewsType);
       // Load isFeatured separately
       setIsFeatured(article.isFeatured || false);
+      // Load isReading
+      setIsReading(article.isReading || false);
       // For published articles, always reset publishType to "instant" to avoid re-scheduling
       // Only keep "scheduled" for articles that are still in scheduled status
       const savedPublishType = (article.publishType as any) || "instant";
@@ -895,6 +900,7 @@ export default function ArticleEditor() {
       keywords,
       newsType,
       isFeatured,
+      isReading,
       publishType,
       scheduledAt,
       hideFromHomepage,
@@ -917,7 +923,7 @@ export default function ArticleEditor() {
   }, [
     autoSaveKey, title, subtitle, slug, content, excerpt, categoryId, 
     reporterId, opinionAuthorId, articleType, imageUrl, thumbnailUrl, 
-    albumImages, imageFocalPoint, keywords, newsType, isFeatured, publishType, scheduledAt, 
+    albumImages, imageFocalPoint, keywords, newsType, isFeatured, isReading, publishType, scheduledAt, 
     hideFromHomepage, isVideoTemplate, videoUrl, videoThumbnailUrl, metaTitle, metaDescription
   ]);
 
@@ -949,6 +955,7 @@ export default function ArticleEditor() {
     if (draft.keywords) setKeywords(draft.keywords);
     if (draft.newsType) setNewsType(draft.newsType === "featured" ? "regular" : draft.newsType);
     if (draft.isFeatured !== undefined) setIsFeatured(draft.isFeatured);
+    if (draft.isReading !== undefined) setIsReading(draft.isReading);
     if (draft.publishType) setPublishType(draft.publishType);
     if (draft.scheduledAt) setScheduledAt(draft.scheduledAt);
     if (draft.hideFromHomepage !== undefined) setHideFromHomepage(draft.hideFromHomepage);
@@ -1574,10 +1581,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.reporterId = validReporterId;
         articleData.newsType = newsType;
         articleData.isFeatured = isFeatured;
+        articleData.isReading = isReading;
       } else {
         // Opinion articles always use regular newsType
         articleData.newsType = "regular";
         articleData.isFeatured = false;
+        articleData.isReading = isReading;
         // Add opinionAuthorId for opinion articles
         if (!isOpinionAuthor && opinionAuthorId) {
           articleData.opinionAuthorId = opinionAuthorId;
@@ -4793,6 +4802,27 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           <div className="font-medium">خبر مميز</div>
                           <div className="text-xs text-muted-foreground">
                             سيظهر المقال في قسم الأخبار المميزة
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
+
+                  {/* Reading / Sabq Long-form Read Checkbox */}
+                  <div className="pt-4 border-t mt-4">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Checkbox 
+                        id="isReading"
+                        checked={isReading}
+                        onCheckedChange={(checked) => setIsReading(checked as boolean)}
+                        data-testid="checkbox-is-reading"
+                      />
+                      <Label htmlFor="isReading" className="flex items-center gap-2 cursor-pointer text-sm">
+                        <BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <div>
+                          <div className="font-medium">قراءة من سبق</div>
+                          <div className="text-xs text-muted-foreground">
+                            تمييز المادة كوسم «قراءة» يظهر للقارئ أعلى الخبر وفي البطاقات
                           </div>
                         </div>
                       </Label>

@@ -62,6 +62,7 @@ import {
   Zap,
   Lock,
   User,
+  BookOpen,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -1211,6 +1212,16 @@ export default function ArticleDetail() {
                   language="ar"
                   className="!min-h-0 !h-auto !py-0.5 !px-2.5 !text-xs !font-semibold !gap-1 !rounded-md [&_svg]:!size-3 !shadow-none"
                 />
+                {article.isReading && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/15 gap-1 font-bold text-xs px-2.5 py-0.5 rounded-md"
+                    data-testid="badge-article-reading"
+                  >
+                    <BookOpen className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    قراءة
+                  </Badge>
+                )}
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
                     <Zap className="h-3 w-3" />

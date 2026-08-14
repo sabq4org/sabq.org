@@ -116,6 +116,8 @@ data class ApiArticle(
 
     @JsonNames("is_featured", "isFeatured", "featured")
     val isFeatured: Boolean? = null,
+    @JsonNames("is_reading", "isReading")
+    val isReading: Boolean? = null,
     @JsonNames("is_breaking", "isBreaking")
     val isBreaking: Boolean? = null,
 

@@ -20,6 +20,7 @@ data class Article(
     val dateFormatted: String,
     val isBreaking: Boolean = false,
     val isFeatured: Boolean = false,
+    val isReading: Boolean = false,
     val slug: String? = null,
     val authorName: String? = null,
     /** صورة كاتب الرأي (رابط مطلق) — تُعرض في قائمة «الرأي» بالرئيسية. */

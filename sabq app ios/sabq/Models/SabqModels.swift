@@ -421,6 +421,7 @@ struct Article: Identifiable, Equatable, Hashable {
     let publishDate: Date
     let isBreaking: Bool
     let isFeatured: Bool
+    var isReading: Bool = false
     var tags: [String]
     let imageURL: String?
     /// Editorial focal point (percentages from top-left) shipped by the
@@ -524,6 +525,7 @@ struct Article: Identifiable, Equatable, Hashable {
             publishDate: Self.parsePublishedAt(api.publishedAt),
             isBreaking: api.newsType == "breaking",
             isFeatured: api.isFeatured ?? false,
+            isReading: api.isReading ?? false,
             tags: api.keywords ?? [],
             imageURL: api.imageUrl,
             imageFocalPoint: api.imageFocalPoint,

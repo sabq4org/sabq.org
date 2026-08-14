@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -77,6 +77,7 @@ type Article = {
   articleType: string;
   newsType: string;
   isFeatured: boolean;
+  isReading?: boolean;
   views: number;
   publishedAt: string | null;
   createdAt: string;
@@ -1520,6 +1521,12 @@ export default function ArticlesManagement() {
                         <Badge variant="secondary" className="text-xs">
                           <Star className="h-3 w-3 ml-1 fill-current" />
                           مميز
+                        </Badge>
+                      )}
+                      {article.isReading && (
+                        <Badge variant="outline" className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                          <BookOpen className="h-3 w-3 ml-1" />
+                          قراءة
                         </Badge>
                       )}
                       {(article.isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
