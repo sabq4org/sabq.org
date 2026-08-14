@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ArticleWithDetails } from "@shared/schema";
 import { OptimizedImage } from "./OptimizedImage";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 
 interface ContinueReadingArticle extends ArticleWithDetails {
   progress: number;
@@ -46,7 +46,7 @@ function ContinueReadingCardSkeleton() {
 function ContinueReadingCard({ article, index }: { article: ContinueReadingArticle; index: number }) {
   if (!article) return null;
 
-  const imageSource = article.infographicBannerUrl || article.imageUrl || article.thumbnailUrl;
+  const imageSource = getArticleDisplayImageUrl(article);
   const timeAgo = article.lastReadAt
     ? formatDistanceToNow(new Date(article.lastReadAt), {
         addSuffix: true,
@@ -237,7 +237,7 @@ export function ContinueReadingWidget() {
             <Card className="lg:hidden border-0 shadow-sm overflow-hidden">
               <CardContent className="p-0 divide-y divide-border/50 bg-card">
                 {articles.slice(0, 5).map((article, index) => {
-                  const imageSource = article.infographicBannerUrl || article.imageUrl || article.thumbnailUrl;
+                  const imageSource = getArticleDisplayImageUrl(article);
                   const timeAgo = article.lastReadAt
                     ? formatDistanceToNow(new Date(article.lastReadAt), {
                         addSuffix: true,

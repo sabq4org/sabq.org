@@ -6,7 +6,7 @@ import { Sparkles, Clock, Brain, Zap, Flame, BookOpen } from "lucide-react";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   if (!publishedAt) return false;
@@ -91,19 +91,22 @@ export function PersonalizedRecommendationCard({
           }`}
           data-testid={`card-recommendation-${article.id}`}
         >
-          {(article.imageUrl || (article as any).thumbnailUrl) && (
-            <div className="relative h-48 overflow-hidden">
-              <img
-                src={article.imageUrl || (article as any).thumbnailUrl || ''}
-                alt={article.title}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                style={{
-                  objectPosition: getObjectPosition(article)
-                }}
-              />
-            </div>
-          )}
+          {(() => {
+            const displayImg = getArticleDisplayImageUrl(article);
+            return displayImg ? (
+              <div className="relative h-48 overflow-hidden">
+                <img
+                  src={displayImg}
+                  alt={article.title}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  style={{
+                    objectPosition: getObjectPosition(article)
+                  }}
+                />
+              </div>
+            ) : null;
+          })()}
           
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-2 flex-wrap">

@@ -1476,7 +1476,21 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const albumSource = Array.isArray(albumImages) ? albumImages : [];
       const safeAlbumImages = albumSource.filter(url => typeof url === 'string' && url.trim().length > 0);
       const normalizedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
-      const normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
+      let normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
+      
+      if (isVideoTemplate && normalizedVideoUrl && !normalizedVideoThumbnailUrl) {
+        const ytMatch = normalizedVideoUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i);
+        if (ytMatch && ytMatch[1]) {
+          normalizedVideoThumbnailUrl = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+        } else {
+          const dmMatch = normalizedVideoUrl.match(/(?:dailymotion\.com\/video\/|dai\.ly\/|dailymotion\.com\/embed\/video\/)([^_\n?#\/]+)/i);
+          if (dmMatch && dmMatch[1]) {
+            normalizedVideoThumbnailUrl = `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+          }
+        }
+      }
+
+      const effectiveImageUrl = imageUrl?.trim() || (isVideoTemplate ? normalizedVideoThumbnailUrl : "") || "";
       const effectiveSlug = slug?.trim() || generateSlug(title) || `opinion-${Date.now()}`;
       console.log('[Save Article] Album images count:', safeAlbumImages.length, 'original:', albumImages?.length);
       
@@ -1486,7 +1500,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         content,
         excerpt,
         categoryId: categoryId || null,
-        imageUrl: imageUrl || "",
+        imageUrl: effectiveImageUrl,
         isAiGeneratedImage: isAiGeneratedImage,
         thumbnailUrl: thumbnailUrl || "",
         thumbnailManuallyDeleted: thumbnailManuallyDeleted,

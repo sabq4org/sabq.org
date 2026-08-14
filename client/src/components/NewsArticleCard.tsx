@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
+import { getCacheBustedImageUrl, getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 import type { ArticleWithDetails } from "@shared/schema";
 import { useState } from "react";
 import { InfographicBadgeIcon } from "./InfographicBadge";
@@ -72,9 +72,9 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
   const categoryName = article.category?.nameAr || 'أخبار';
   const ariaLabel = `مقال: ${article.title}${article.newsType === "breaking" ? ' - عاجل' : ''} - ${categoryName}${timeAgo ? ` - ${timeAgo}` : ''}`;
   
-  // Prefer imageUrl for better focal point cropping, fallback to thumbnailUrl
+  // Prefer imageUrl, fallback to videoThumbnailUrl, auto-derived video thumbnail, thumbnailUrl
   const imageUrl = getCacheBustedImageUrl(
-    article.imageUrl || article.thumbnailUrl,
+    getArticleDisplayImageUrl(article),
     article.updatedAt
   );
 

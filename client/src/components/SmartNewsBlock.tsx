@@ -37,6 +37,9 @@ interface ArticleResult {
   isAiGeneratedThumbnail?: boolean | null;
   articleType?: string | null;
   isReading?: boolean | null;
+  isVideoTemplate?: boolean | null;
+  videoUrl?: string | null;
+  videoThumbnailUrl?: string | null;
   imageFocalPoint?: { x: number; y: number } | null;
   category?: {
     nameAr: string;
@@ -53,14 +56,28 @@ interface ProcessedArticle extends ArticleResult {
   displayImageUrl: string | null;
 }
 
-// Helper function to get display image URL for articles
-// If infographicBannerUrl exists, always use it - it's the 16:9 horizontal banner
 const getArticleDisplayImageUrl = (article: ArticleResult): string | null => {
-  // Prioritize banner URL - if it exists, it's specifically made for card display
   if (article.infographicBannerUrl) {
     return article.infographicBannerUrl;
   }
-  return article.imageUrl || article.thumbnailUrl || null;
+  if (article.imageUrl) return article.imageUrl;
+  if (article.videoThumbnailUrl) return article.videoThumbnailUrl;
+  if (article.thumbnailUrl) return article.thumbnailUrl;
+
+  const vUrl = article.videoUrl;
+  if (typeof vUrl === 'string' && vUrl.trim()) {
+    const trimmed = vUrl.trim();
+    const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+      return `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+    }
+    const dmMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/|dailymotion\.com\/embed\/video\/)([^_\n?#\/]+)/i);
+    if (dmMatch && dmMatch[1]) {
+      return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+    }
+  }
+
+  return null;
 };
 
 type SmartBlockView = Pick<SmartBlock, "id" | "title" | "color"> &

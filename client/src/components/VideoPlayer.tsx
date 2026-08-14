@@ -12,12 +12,6 @@ interface VideoPlayerProps {
 
 type VideoType = "youtube" | "dailymotion" | "twitter" | "direct";
 
-declare global {
-  interface Window {
-    twttr?: any;
-  }
-}
-
 function getVideoType(url: string): VideoType {
   const clean = (url || "").trim().toLowerCase();
   if (clean.includes("youtube.com") || clean.includes("youtu.be")) {
@@ -80,11 +74,12 @@ function TwitterVideoFallback({ tweetId }: { tweetId: string }) {
     let mounted = true;
 
     const renderTweet = () => {
-      if (!containerRef.current || !window.twttr?.widgets) return;
+      const twttr = (window as any).twttr;
+      if (!containerRef.current || !twttr?.widgets?.createTweet) return;
       containerRef.current.innerHTML = "";
       const isDark = document.documentElement.classList.contains("dark");
 
-      window.twttr.widgets.createTweet(tweetId, containerRef.current, {
+      twttr.widgets.createTweet(tweetId, containerRef.current, {
         theme: isDark ? "dark" : "light",
         align: "center",
         conversation: "none",
@@ -102,7 +97,7 @@ function TwitterVideoFallback({ tweetId }: { tweetId: string }) {
         });
     };
 
-    if (window.twttr?.widgets) {
+    if ((window as any).twttr?.widgets) {
       renderTweet();
     } else {
       const existing = document.querySelector('script[src="https://platform.twitter.com/widgets.js"]');

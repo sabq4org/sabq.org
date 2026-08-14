@@ -90,6 +90,9 @@ export type SmartBlockArticle = {
   isAiGeneratedThumbnail?: boolean | null;
   articleType?: string | null;
   isReading?: boolean | null;
+  isVideoTemplate?: boolean | null;
+  videoUrl?: string | null;
+  videoThumbnailUrl?: string | null;
   imageFocalPoint?: { x: number; y: number } | null;
   category?: {
     nameAr?: string | null;
@@ -183,6 +186,9 @@ const articleSelect = {
   isAiGeneratedThumbnail: articles.isAiGeneratedThumbnail,
   articleType: articles.articleType,
   isReading: articles.isReading,
+  isVideoTemplate: articles.isVideoTemplate,
+  videoUrl: articles.videoUrl,
+  videoThumbnailUrl: articles.videoThumbnailUrl,
   imageFocalPoint: articles.imageFocalPoint,
   category: {
     nameAr: categories.nameAr,
