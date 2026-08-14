@@ -4345,6 +4345,7 @@ export const updateArticleSchema = z.object({
   aiBullets: z.union([z.array(z.string()), z.null()]).optional(),
   aiBulletsGeneratedAt: z.union([z.string().datetime(), z.null()]).optional(),
   isFeatured: z.boolean().optional(),
+  isReading: z.boolean().optional(),
   hideFromHomepage: z.boolean().optional(),
   publishedAt: z.union([
     z.string().datetime(),

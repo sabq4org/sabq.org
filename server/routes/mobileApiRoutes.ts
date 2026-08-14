@@ -7701,6 +7701,7 @@ const adminArticleDetailColumns = {
   categoryId: articles.categoryId,
   reporterId: articles.reporterId,
   isFeatured: articles.isFeatured,
+  isReading: articles.isReading,
   hideFromHomepage: articles.hideFromHomepage,
   aiSummary: articles.aiSummary,
   imageUrl: articles.imageUrl,
@@ -7740,6 +7741,7 @@ function mapAdminArticleDetail(r: any) {
     authorId: r.authorId || null,
     authorName: authorName || null,
     isFeatured: !!r.isFeatured,
+    isReading: !!r.isReading,
     hideFromHomepage: !!r.hideFromHomepage,
     aiSummary: r.aiSummary || "",
     imageUrl: r.imageUrl || "",
@@ -7978,6 +7980,7 @@ router.post("/admin/articles", async (req: Request, res: Response) => {
       authorId,
       submitterId: admin.userId,
       isFeatured: typeof b.isFeatured === "boolean" ? b.isFeatured : false,
+      isReading: typeof b.isReading === "boolean" ? b.isReading : false,
       hideFromHomepage: typeof b.hideFromHomepage === "boolean" ? b.hideFromHomepage : false,
       aiSummary: typeof b.aiSummary === "string" ? b.aiSummary : null,
       imageUrl: typeof b.imageUrl === "string" && b.imageUrl ? b.imageUrl : null,
@@ -8124,6 +8127,7 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
       // الكروسيل — بدون الختم هنا يبقى صفرًا ويغرق المقال تحت كل المختومين
       updates.displayOrder = b.isFeatured ? Math.floor(Date.now() / 1000) : 0;
     }
+    if (typeof b.isReading === "boolean") updates.isReading = b.isReading;
     if (typeof b.hideFromHomepage === "boolean") updates.hideFromHomepage = b.hideFromHomepage;
 
     // Scheduling
