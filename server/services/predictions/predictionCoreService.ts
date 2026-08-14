@@ -587,7 +587,7 @@ export async function getLeaderboard(params: {
   offset?: number;
   limit?: number;
 }) {
-  const limit = Math.min(params.limit ?? 20, 100);
+  const limit = Math.min(params.limit ?? 50, 100);
   const offset = Math.max(params.offset ?? 0, 0);
 
   const [competition] = await db
@@ -612,22 +612,30 @@ export async function getLeaderboard(params: {
       .groupBy(predictionPointsLedger.userId),
   );
 
-  const rows = await db
-    .with(totals)
-    .select({
-      userId: totals.userId,
-      points: totals.points,
-      exactCount: totals.exactCount,
-      rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(totals)
-    .innerJoin(users, eq(users.id, totals.userId))
-    .orderBy(desc(totals.points), desc(totals.exactCount), asc(totals.userId))
-    .limit(limit)
-    .offset(offset);
+  const [countResult, rows] = await Promise.all([
+    db
+      .with(totals)
+      .select({ total: sql<number>`count(*)::int` })
+      .from(totals),
+    db
+      .with(totals)
+      .select({
+        userId: totals.userId,
+        points: totals.points,
+        exactCount: totals.exactCount,
+        rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+      })
+      .from(totals)
+      .innerJoin(users, eq(users.id, totals.userId))
+      .orderBy(desc(totals.points), desc(totals.exactCount), asc(totals.userId))
+      .limit(limit)
+      .offset(offset),
+  ]);
+
+  const totalCount = countResult[0]?.total ?? rows.length;
 
   // ترتيب المستخدم الحالي حتى لو لم يظهر في الصفحة
   let myRank: { rank: number; points: number } | null = null;
@@ -658,6 +666,7 @@ export async function getLeaderboard(params: {
       points: row.points,
       exactCount: row.exactCount,
     })),
+    totalCount,
     myRank,
     offset,
     limit,
