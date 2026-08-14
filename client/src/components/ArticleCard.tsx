@@ -164,6 +164,15 @@ export function ArticleCard({
                   رأي
                 </Badge>
               )}
+              {article.isReading && (
+                <Badge 
+                  className="bg-emerald-600/90 backdrop-blur-sm text-white border-0 text-xs sm:text-sm shadow-md gap-1 font-medium"
+                  data-testid={`badge-reading-${article.id}`}
+                >
+                  <BookOpen className="h-3 w-3" />
+                  قراءة
+                </Badge>
+              )}
               {article.category && (
                 <Badge 
                   className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-700/50 text-xs sm:text-sm shadow-lg font-semibold" 
@@ -279,6 +288,15 @@ export function ArticleCard({
                 >
                   <BookOpen className="h-2.5 w-2.5" />
                   رأي
+                </Badge>
+              )}
+              {article.isReading && (
+                <Badge 
+                  className="bg-emerald-600 text-white border-0 text-[10px] px-1.5 py-0.5 gap-1 font-medium"
+                  data-testid={`badge-reading-${article.id}`}
+                >
+                  <BookOpen className="h-2.5 w-2.5" />
+                  قراءة
                 </Badge>
               )}
               {article.category && (
@@ -409,6 +427,15 @@ export function ArticleCard({
                   >
                     <BookOpen className="h-3 w-3" />
                     رأي
+                  </Badge>
+                )}
+                {article.isReading && (
+                  <Badge 
+                    className="bg-emerald-600 text-white border-0 text-xs gap-1 font-medium"
+                    data-testid={`badge-reading-${article.id}`}
+                  >
+                    <BookOpen className="h-3 w-3" />
+                    قراءة
                   </Badge>
                 )}
                 {aiInsight && (

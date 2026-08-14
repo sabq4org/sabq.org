@@ -92,6 +92,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         dateFormatted = formatRelativeDate(parsedDate),
         isBreaking = breaking,
         isFeatured = isFeatured == true,
+        isReading = isReading == true,
         slug = slug,
         authorName = resolvedAuthor,
         authorImageUrl = absoluteAuthorImage,

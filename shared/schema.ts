@@ -947,6 +947,7 @@ export const articles = pgTable("articles", {
   categorySuggestionReason: text("category_suggestion_reason"), // سبب الاقتراح
   
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(), // تمييز المادة بأنها قراءة / قراءة من سبق
   views: integer("views").default(0).notNull(),
   /** Manual override for avg read time (seconds); when set, ai-insights uses this instead of reading_history AVG */
   avgReadTimeOverride: integer("avg_read_time_override"),
@@ -6700,6 +6701,7 @@ export const enArticles = pgTable("en_articles", {
   smartSummary: text("smart_summary"),
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(),
   views: integer("views").default(0).notNull(),
   avgReadTimeOverride: integer("avg_read_time_override"),
   completionRateOverride: integer("completion_rate_override"),
@@ -6924,6 +6926,7 @@ export const urArticles = pgTable("ur_articles", {
   smartSummary: text("smart_summary"),
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(),
   views: integer("views").default(0).notNull(),
   avgReadTimeOverride: integer("avg_read_time_override"),
   completionRateOverride: integer("completion_rate_override"),

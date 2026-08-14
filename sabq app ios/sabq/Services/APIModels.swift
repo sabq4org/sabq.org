@@ -123,6 +123,7 @@ nonisolated struct APIArticle: Decodable {
     let articleType: String?
     let newsType: String?
     let isFeatured: Bool?
+    let isReading: Bool?
     var keywords: [String]?
     let imageUrl: String?
     /// Editorial focal point shipped by the backend as
@@ -212,6 +213,10 @@ nonisolated struct APIArticle: Decodable {
         if let v = try? c.decode(Bool.self, forKey: FlexKey("isFeatured")) { isFeatured = v }
         else if let v = try? c.decode(Bool.self, forKey: FlexKey("is_featured")) { isFeatured = v }
         else { isFeatured = try? c.decode(Bool.self, forKey: FlexKey("featured")) }
+
+        if let v = try? c.decode(Bool.self, forKey: FlexKey("isReading")) { isReading = v }
+        else if let v = try? c.decode(Bool.self, forKey: FlexKey("is_reading")) { isReading = v }
+        else { isReading = nil }
 
         do {
             var resolvedKeywords: [String]?
