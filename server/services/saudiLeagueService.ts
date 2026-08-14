@@ -1155,16 +1155,219 @@ async function raceBoardCache(
   const hot = (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
   return {
     cacheKey: `${baseKey}:${comp.id}:${season}${hot ? ":live" : ""}`,
-    ttl: hot ? CACHE_TTL.SHORT : CACHE_TTL.LONG,
+    ttl: hot ? CACHE_TTL.SHORT : 5 * 60_000,
   };
+}
+
+interface EventRaceTally {
+  id: number;
+  name: string;
+  photo: string;
+  team: SplTeam;
+  goals: number;
+  assists: number;
+  penalties: number;
+  yellow: number;
+  red: number;
+  matchIds: Set<number>;
+}
+
+async function getFixtureEventsRaw(fixtureId: number): Promise<any[]> {
+  return withSWR(`spl:rawEvents:v1:${fixtureId}`, 60_000, 300_000, async () => {
+    return apiGet("fixtures/events", { fixture: fixtureId }).catch(() => []);
+  });
+}
+
+/**
+ * تجميع سباقات الموسم (هدّافون/صنّاع/بطاقات) لحظياً من أحداث المباريات التي لُعبت.
+ * يضمن ظهور الهدّافين والبطاقات من أول هدف/كارت في الجولة الأولى قبل تحديث جداول المزود players/top*.
+ */
+async function aggregateSeasonRacesFromEvents(
+  comp: SaudiCompetition,
+  season: number,
+): Promise<{
+  scorers: SplScorer[];
+  assists: SplAssister[];
+  yellow: SplCardLeader[];
+  red: SplCardLeader[];
+}> {
+  return withSWR(
+    `spl:racesFromEvents:v1:${comp.id}:${season}`,
+    60_000,
+    180_000,
+    async () => {
+      const fixtures = await getFixtures(comp, season).catch(() => []);
+      const started = fixtures.filter((f) => f.status.live || f.status.finished);
+      if (!started.length) {
+        return { scorers: [], assists: [], yellow: [], red: [] };
+      }
+
+      const teamById = new Map<number, SplTeam>();
+      for (const f of started) {
+        teamById.set(f.home.id, f.home);
+        teamById.set(f.away.id, f.away);
+      }
+
+      const tallies = new Map<string, EventRaceTally>();
+
+      const getOrCreateTally = (
+        pId: number | null | undefined,
+        pName: string | null | undefined,
+        teamId: number,
+        fixtureId: number,
+      ): EventRaceTally | null => {
+        if (!pName && !pId) return null;
+        const key = pId ? `id:${pId}` : `name:${teamId}:${pName}`;
+        let t = tallies.get(key);
+        if (!t) {
+          const team = teamById.get(teamId) ?? { id: teamId, name: "", logo: "", winner: null };
+          const photo = pId ? `https://media.api-sports.io/football/players/${pId}.png` : "";
+          t = {
+            id: pId ?? 0,
+            name: pName ?? "",
+            photo,
+            team,
+            goals: 0,
+            assists: 0,
+            penalties: 0,
+            yellow: 0,
+            red: 0,
+            matchIds: new Set<number>([fixtureId]),
+          };
+          tallies.set(key, t);
+        } else {
+          t.matchIds.add(fixtureId);
+          if (!t.photo && pId) {
+            t.id = pId;
+            t.photo = `https://media.api-sports.io/football/players/${pId}.png`;
+          }
+        }
+        return t;
+      };
+
+      const limit = pLimit(4);
+      const fixtureEvents = await Promise.all(
+        started.map((f) =>
+          limit(async () => {
+            const events = await getFixtureEventsRaw(f.id);
+            return { fixture: f, events };
+          }),
+        ),
+      );
+
+      for (const { fixture, events } of fixtureEvents) {
+        for (const ev of events) {
+          const teamId = ev.team?.id ?? 0;
+          const evType = String(ev.type || "").toLowerCase();
+          const evDetail = String(ev.detail || "").toLowerCase();
+
+          if (evType === "goal" && !evDetail.includes("missed") && !evDetail.includes("own goal")) {
+            const scorer = getOrCreateTally(ev.player?.id, ev.player?.name, teamId, fixture.id);
+            if (scorer) {
+              scorer.goals += 1;
+              if (evDetail.includes("penalty")) scorer.penalties += 1;
+            }
+            if (ev.assist?.id || ev.assist?.name) {
+              const assister = getOrCreateTally(ev.assist?.id, ev.assist?.name, teamId, fixture.id);
+              if (assister) {
+                assister.assists += 1;
+              }
+            }
+          } else if (evType === "card") {
+            const carded = getOrCreateTally(ev.player?.id, ev.player?.name, teamId, fixture.id);
+            if (carded) {
+              if (evDetail.includes("yellow card")) {
+                carded.yellow += 1;
+              } else if (evDetail.includes("red") || evDetail.includes("second yellow")) {
+                carded.red += 1;
+              }
+            }
+          }
+        }
+      }
+
+      const allTallies = Array.from(tallies.values());
+      const rawNames = allTallies.map((t) => t.name);
+      const tr = await resolveNames(rawNames, { skipAi: true });
+
+      const scorers: SplScorer[] = allTallies
+        .filter((t) => t.goals > 0)
+        .sort((a, b) => b.goals - a.goals || a.penalties - b.penalties || a.matchIds.size - b.matchIds.size)
+        .slice(0, 15)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: t.team,
+          goals: t.goals,
+          assists: t.assists,
+          penalties: t.penalties,
+          matches: t.matchIds.size,
+        }));
+
+      const assists: SplAssister[] = allTallies
+        .filter((t) => t.assists > 0)
+        .sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.matchIds.size - b.matchIds.size)
+        .slice(0, 15)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: t.team,
+          goals: t.goals,
+          assists: t.assists,
+          matches: t.matchIds.size,
+        }));
+
+      const yellow: SplCardLeader[] = allTallies
+        .filter((t) => t.yellow > 0)
+        .sort((a, b) => b.yellow - a.yellow || a.matchIds.size - b.matchIds.size)
+        .slice(0, 10)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: localizeSplTeamName(t.team.id, t.team.name),
+          teamLogo: t.team.logo,
+          yellow: t.yellow,
+          red: t.red,
+          matches: t.matchIds.size,
+        }));
+
+      const red: SplCardLeader[] = allTallies
+        .filter((t) => t.red > 0)
+        .sort((a, b) => b.red - a.red || a.matchIds.size - b.matchIds.size)
+        .slice(0, 10)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: localizeSplTeamName(t.team.id, t.team.name),
+          teamLogo: t.team.logo,
+          yellow: t.yellow,
+          red: t.red,
+          matches: t.matchIds.size,
+        }));
+
+      return { scorers, assists, yellow, red };
+    },
+  );
 }
 
 export async function getTopScorers(comp: SaudiCompetition, seasonOverride?: number): Promise<SplScorer[]> {
   if (!comp.hasScorers) return [];
-  const season = seasonOverride ?? await seasonFor(comp);
-  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:scorers");
+  const season = seasonOverride ?? (await seasonFor(comp));
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:scorers:v4");
   return withSWR(cacheKey, ttl, ttl * 2, async () => {
-    const rows = await apiGet("players/topscorers", { league: comp.id, season });
+    const rows = await apiGet("players/topscorers", { league: comp.id, season }).catch(() => []);
+    if (!rows.length) {
+      const fromEvents = await aggregateSeasonRacesFromEvents(comp, season);
+      if (fromEvents.scorers.length > 0) return fromEvents.scorers;
+    }
     const nameList = rows.map((r: any) => r.player?.name);
     // لا نحبس على ترجمة AI داخل الطلب — كانت تضيف ثواني فوق طابور API-Football
     // عند فتح لوحة الهدّافين (خصوصًا مع /assists بالتوازي).
@@ -3220,10 +3423,14 @@ export interface SplAssister {
  */
 export async function getTopAssists(comp: SaudiCompetition, seasonOverride?: number): Promise<SplAssister[]> {
   if (!comp.hasScorers) return [];
-  const season = seasonOverride ?? await seasonFor(comp);
-  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:assists");
+  const season = seasonOverride ?? (await seasonFor(comp));
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:assists:v4");
   return withSWR(cacheKey, ttl, ttl * 2, async () => {
-    const rows = await apiGet("players/topassists", { league: comp.id, season });
+    const rows = await apiGet("players/topassists", { league: comp.id, season }).catch(() => []);
+    if (!rows.length) {
+      const fromEvents = await aggregateSeasonRacesFromEvents(comp, season);
+      if (fromEvents.assists.length > 0) return fromEvents.assists;
+    }
     const nameList = rows.map((r: any) => r.player?.name);
     const tr = await resolveNames(nameList, { skipAi: true });
     const mapRows = (translator: typeof tr): SplAssister[] =>
@@ -4339,11 +4546,16 @@ export interface SplCardLeader {
 }
 
 async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red", seasonOverride?: number): Promise<SplCardLeader[]> {
-  const season = seasonOverride ?? await seasonFor(comp);
+  const season = seasonOverride ?? (await seasonFor(comp));
   const path = kind === "yellow" ? "players/topyellowcards" : "players/topredcards";
-  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, `spl:${path}`);
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, `spl:${path}:v4`);
   return withSWR(cacheKey, ttl, ttl * 2, async () => {
-    const rows = await apiGet(path, { league: comp.id, season });
+    const rows = await apiGet(path, { league: comp.id, season }).catch(() => []);
+    if (!rows.length) {
+      const fromEvents = await aggregateSeasonRacesFromEvents(comp, season);
+      const list = kind === "yellow" ? fromEvents.yellow : fromEvents.red;
+      if (list.length > 0) return list;
+    }
     const nameList = rows.map((r: any) => r.player?.name);
     const tr = await resolveNames(nameList, { skipAi: true });
     const mapRows = (translator: typeof tr): SplCardLeader[] =>

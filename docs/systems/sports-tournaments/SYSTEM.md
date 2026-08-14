@@ -170,7 +170,7 @@
 | مركز المباراة `/api/sports/match/:id` | `overlayLiveMatchDetail` (نتيجة+أحداث+إحصاء) | 8ث live |
 | هدّافون / صناعة / بطاقات | كاش `:live` بـ SHORT (2د) أثناء وجود مباراة جارية | استطلاع 2د على `/roshn` |
 
-**Gotcha:** لوحات السباق الموسمية تتبع مزود `players/top*` (ليست دمج أحداث المباراة ككأس آسيا). الكروت/الأهداف **داخل** مركز المباراة لحظية عبر TheSports.
+**Gotcha:** لوحات السباق الموسمية تستخدم `players/top*` مع احتياطي تجميع أحداث المباريات الملعوبة (`aggregateSeasonRacesFromEvents`) عند غياب بيانات المزود في بداية الموسم/الجولة الأولى. تشكيلة الجولة (`totw`) تتحقق من موسم SportMonks الحالي وتختفي تلقائياً عند غياب تشكيلة للموسم الجاري.
 
 ## لحظية كأس الملك (`/kings-cup` + `/api/kings-cup/*`)
 الطبقة الأساسية كانت جاهزة (`overlayLiveFixturesForComp` / `overlayLiveMatchDetail` على fixtures/live/overview/match). فجوات أُغلقت لتطابق روشن:
