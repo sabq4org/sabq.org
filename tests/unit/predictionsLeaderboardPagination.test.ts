@@ -32,6 +32,17 @@ describe("getLeaderboard — عقود الخدمة والترقيم", () => {
   it("تدعم الإزاحة (offset) للتنقل بين الصفحات", () => {
     expect(fnBody).toContain(".offset(offset)");
   });
+
+  // حارس انحدار: rank() تُحسب بعد WHERE، ففلترة totals على المستخدم قبل الترتيب
+  // كانت تعيد #1 لكل مستخدم. الترتيب يجب أن يُحسب في CTE على كامل المشاركين
+  // ثم تأتي فلترة المستخدم فوق الـCTE لا قبله.
+  it("ترتيبي (myRank) يُحسب على كامل المشاركين قبل فلترة المستخدم", () => {
+    expect(fnBody).toContain('db.$with("ranked")');
+    expect(fnBody).toContain(".from(ranked)");
+    expect(fnBody).toContain("eq(ranked.userId, params.userId)");
+    // لا فلترة مباشرة على totals بالمستخدم قبل حساب النافذة
+    expect(fnBody).not.toMatch(/from\(totals\)\s*\.where\([^)]*userId/);
+  });
 });
 
 describe("تبويب المتصدرين في الويب — PredictionCenter", () => {
