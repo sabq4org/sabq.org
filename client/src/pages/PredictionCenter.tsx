@@ -116,12 +116,41 @@ export default function PredictionCenter() {
   const contests = Array.isArray(detailRaw?.contests) ? detailRaw.contests : [];
   const rules = Array.isArray(detailRaw?.rules) ? detailRaw.rules : [];
 
-  // اللوحة (تُستخدم أيضًا لترتيبي في البطاقة)
+  // اللوحة (تُستخدم أيضًا لترتيبي في البطاقة) — الصفحة الأولى + تحميل المزيد
   const { data: boardRaw } = useQuery<PredLeaderboardResponse>({
-    queryKey: ["/api/predictions/leaderboards", { competition: selected?.slug ?? "" }],
+    queryKey: ["/api/predictions/leaderboards", { competition: selected?.slug ?? "", limit: 50 }],
     enabled: Boolean(selected),
     staleTime: 60_000,
   });
+  const [boardPages, setBoardPages] = useState<PredLeaderEntry[][]>([]);
+  const [boardLoadingMore, setBoardLoadingMore] = useState(false);
+  useEffect(() => {
+    setBoardPages([]);
+  }, [selected?.slug]);
+
+  const boardEntries = useMemo(
+    () => [...(Array.isArray(boardRaw?.entries) ? boardRaw.entries : []), ...boardPages.flat()],
+    [boardRaw?.entries, boardPages],
+  );
+
+  const totalBoardCount = boardRaw?.totalCount ?? boardRaw?.entries?.length ?? 0;
+  const hasMoreLeaders = boardEntries.length < totalBoardCount;
+
+  const loadMoreLeaders = async () => {
+    if (!selected?.slug || boardLoadingMore || !hasMoreLeaders) return;
+    setBoardLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        competition: selected.slug,
+        offset: String(boardEntries.length),
+        limit: "50",
+      });
+      const page = await apiRequest<PredLeaderboardResponse>(`/api/predictions/leaderboards?${params}`);
+      setBoardPages((pages) => [...pages, Array.isArray(page.entries) ? page.entries : []]);
+    } finally {
+      setBoardLoadingMore(false);
+    }
+  };
 
   // توقعاتي — الصفحة الأولى عبر useQuery، والتالية تُلحق يدويًا بالكيرسور
   const { data: mineRaw, isLoading: mineLoading } = useQuery<PredMyEntriesResponse>({
@@ -312,7 +341,16 @@ export default function PredictionCenter() {
                 ) : (
                   <SignInPrompt onLogin={goLogin} />
                 ))}
-              {tab === "leaders" && <LeadersTab board={boardRaw ?? null} />}
+              {tab === "leaders" && (
+                <LeadersTab
+                  board={boardRaw ?? null}
+                  entries={boardEntries}
+                  totalCount={totalBoardCount}
+                  hasMore={hasMoreLeaders}
+                  loadingMore={boardLoadingMore}
+                  onLoadMore={loadMoreLeaders}
+                />
+              )}
             </div>
           </>
         )}
@@ -577,8 +615,22 @@ function MyEntriesTab({
 // تبويب المتصدرين — الرأس يعلن النطاق وما تشمله النقاط
 // ---------------------------------------------------------------------------
 
-function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
-  if (!board || board.entries.length === 0) {
+function LeadersTab({
+  board,
+  entries,
+  totalCount,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+}: {
+  board: PredLeaderboardResponse | null;
+  entries: PredLeaderEntry[];
+  totalCount?: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+}) {
+  if (!board || entries.length === 0) {
     return (
       <EmptyBlock
         icon={<Trophy className="h-8 w-8" />}
@@ -590,7 +642,14 @@ function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
   return (
     <div className="space-y-2">
       <div className="rounded-xl border border-border bg-card px-4 py-3">
-        <div className="text-[13px] font-extrabold text-foreground">{board.nameAr}</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[13px] font-extrabold text-foreground">{board.nameAr}</div>
+          {totalCount != null && totalCount > 0 && (
+            <span className="text-[11px] font-bold text-muted-foreground tabular-nums">
+              {formatNumber(totalCount)} مشارك
+            </span>
+          )}
+        </div>
         <div className="text-[10.5px] text-muted-foreground">
           توقّعات المباريات · النقاط الأساسية دون مضاعف العضوية
         </div>
@@ -605,7 +664,7 @@ function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
         </div>
       )}
 
-      {board.entries.map((entry) => (
+      {entries.map((entry) => (
         <div
           key={entry.userId}
           className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5"
@@ -635,6 +694,17 @@ function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
           </span>
         </div>
       ))}
+
+      {hasMore && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full rounded-xl bg-muted py-2.5 text-[13px] font-bold text-muted-foreground transition hover:bg-muted/70 disabled:opacity-60 mt-3"
+        >
+          {loadingMore ? "جارٍ التحميل…" : "عرض المزيد من المتصدرين"}
+        </button>
+      )}
     </div>
   );
 }

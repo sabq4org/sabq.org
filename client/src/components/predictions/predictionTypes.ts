@@ -95,7 +95,10 @@ export type PredLeaderboardResponse = {
   nameAr: string;
   seasonKey?: string;
   entries: PredLeaderEntry[];
+  totalCount?: number;
   myRank: { rank: number; points: number } | null;
+  offset?: number;
+  limit?: number;
 };
 
 /** جائزة واحدة من دفتر النقاط داخل عنصر «توقعاتي» — المبرر مع النقاط. */
