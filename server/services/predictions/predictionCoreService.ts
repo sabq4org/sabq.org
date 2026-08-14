@@ -637,18 +637,25 @@ export async function getLeaderboard(params: {
 
   const totalCount = countResult[0]?.total ?? rows.length;
 
-  // ترتيب المستخدم الحالي حتى لو لم يظهر في الصفحة
+  // ترتيب المستخدم الحالي حتى لو لم يظهر في الصفحة.
+  // rank() نافذة تُحسب بعد WHERE، ففلترة totals على المستخدم مباشرة تترك صفًا
+  // واحدًا وتعيد #1 دائمًا — الترتيب يُحسب على كامل المشاركين ثم تأتي الفلترة فوقه.
   let myRank: { rank: number; points: number } | null = null;
   if (params.userId) {
+    const ranked = db.$with("ranked").as(
+      db
+        .select({
+          userId: totals.userId,
+          points: totals.points,
+          rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`.as("rank"),
+        })
+        .from(totals),
+    );
     const [mine] = await db
-      .with(totals)
-      .select({
-        userId: totals.userId,
-        points: totals.points,
-        rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`,
-      })
-      .from(totals)
-      .where(sql`${totals.userId} = ${params.userId}`);
+      .with(totals, ranked)
+      .select({ points: ranked.points, rank: ranked.rank })
+      .from(ranked)
+      .where(eq(ranked.userId, params.userId));
     if (mine) myRank = { rank: mine.rank, points: mine.points };
   }
 
