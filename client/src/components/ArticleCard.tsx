@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { Link } from "wouter";
-import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
+import { getCacheBustedImageUrl, getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -66,9 +66,9 @@ export function ArticleCard({
     : false;
 
   // Convert gs:// URLs to proxy URLs for display and add cache busting
-  // Use imageUrl if available, fall back to thumbnailUrl
+  // Use getArticleDisplayImageUrl to handle imageUrl, videoThumbnailUrl, videoUrl auto-extract, thumbnailUrl
   const getDisplayImageUrl = () => {
-    const imageSource = article.imageUrl || article.thumbnailUrl;
+    const imageSource = getArticleDisplayImageUrl(article);
     if (!imageSource) return null;
     
     // If it's a gs:// URL, it needs to be proxied
