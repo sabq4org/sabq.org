@@ -89,6 +89,7 @@ export type SmartBlockArticle = {
   aiGenerated?: boolean | null;
   isAiGeneratedThumbnail?: boolean | null;
   articleType?: string | null;
+  isReading?: boolean | null;
   imageFocalPoint?: { x: number; y: number } | null;
   category?: {
     nameAr?: string | null;
@@ -181,6 +182,7 @@ const articleSelect = {
   aiGenerated: articles.aiGenerated,
   isAiGeneratedThumbnail: articles.isAiGeneratedThumbnail,
   articleType: articles.articleType,
+  isReading: articles.isReading,
   imageFocalPoint: articles.imageFocalPoint,
   category: {
     nameAr: categories.nameAr,
@@ -302,6 +304,7 @@ async function searchEnArticles(opts: {
       publishedAt: enArticles.publishedAt,
       imageUrl: enArticles.imageUrl,
       excerpt: enArticles.excerpt,
+      isReading: enArticles.isReading,
       views: enArticles.views,
     })
     .from(enArticles)
@@ -353,6 +356,7 @@ async function searchUrArticles(opts: {
       publishedAt: urArticles.publishedAt,
       imageUrl: urArticles.imageUrl,
       excerpt: urArticles.excerpt,
+      isReading: urArticles.isReading,
       views: urArticles.views,
     })
     .from(urArticles)
