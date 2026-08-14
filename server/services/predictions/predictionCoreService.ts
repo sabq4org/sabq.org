@@ -311,6 +311,17 @@ export async function upsertEntry(params: {
     .limit(1);
   if (!contest) throw new PredictionError(PREDICTION_ERROR_CODES.CONTEST_NOT_FOUND, 404);
 
+  // بطولة موقوفة/مسودة/منتهية لا تقبل توقعات جديدة حتى لو بقيت مسابقاتها open —
+  // بدون هذا الحارس كان الإيقاف التشغيلي (paused) يوقف العرض ولا يوقف الكتابة.
+  const [competition] = await db
+    .select({ status: predictionCompetitions.status })
+    .from(predictionCompetitions)
+    .where(eq(predictionCompetitions.id, contest.competitionId))
+    .limit(1);
+  if (!competition || competition.status !== "active") {
+    throw new PredictionError(PREDICTION_ERROR_CODES.COMPETITION_DISABLED, 409);
+  }
+
   const now = new Date();
   if (contest.status !== "open" || now < contest.opensAt) {
     throw new PredictionError(PREDICTION_ERROR_CODES.CONTEST_NOT_OPEN, 409);
@@ -364,10 +375,15 @@ export async function withdrawEntry(contestId: string, userId: string) {
     throw new PredictionError(PREDICTION_ERROR_CODES.WITHDRAWAL_NOT_ALLOWED, 409);
   }
 
-  await db
+  const withdrawn = await db
     .update(predictionEntries)
     .set({ status: "withdrawn", updatedAt: new Date() })
-    .where(and(eq(predictionEntries.contestId, contestId), eq(predictionEntries.userId, userId)));
+    .where(and(eq(predictionEntries.contestId, contestId), eq(predictionEntries.userId, userId)))
+    .returning({ id: predictionEntries.id });
+  // سحب ما لا وجود له كان يعيد 200 صامتة — الآن 404 صريحة.
+  if (withdrawn.length === 0) {
+    throw new PredictionError(PREDICTION_ERROR_CODES.ENTRY_NOT_FOUND, 404);
+  }
 }
 
 // ---------------------------------------------------------------------------
