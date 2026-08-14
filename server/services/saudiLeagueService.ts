@@ -25,7 +25,7 @@ import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
 import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./asianCupService";
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
-import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
+import { getPlayerForm as smGetPlayerForm, getSmSquad, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
   getTheSportsLiveBoard,
@@ -2649,6 +2649,12 @@ export interface SplSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  captain?: boolean;
+  nationality?: { name: string; flag?: string | null; code?: string | null } | null;
+  height?: number | null;
+  weight?: number | null;
+  contract?: { start?: string | null; end?: string | null } | null;
+  detailedPosition?: string | null;
 }
 
 export interface SplSquad {
@@ -2735,54 +2741,135 @@ async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
   });
 }
 
-/** تشكيلة النادي مرتّبة حسب المركز ثم الرقم */
+/** تشكيلة النادي مرتّبة حسب المركز ثم الرقم ومعززة ببيانات SportMonks عند توفرها */
 export async function getSquad(teamId: number): Promise<SplSquad | null> {
-  const cacheKey = `spl:squad:${teamId}`;
+  const cacheKey = `spl:squad:v2:${teamId}`;
   const squad = await withSWR(cacheKey, SQUAD_TTL, SQUAD_TTL * 2, async () => {
-    const rows = await apiGet("players/squads", { team: teamId });
-    const entry = rows[0];
-    if (!entry) return null;
-    const nameList = (entry.players ?? []).map((p: any) => p.name);
-    const tr = await resolveNames(nameList, { skipAi: true });
-    const mapPlayers = (translator: typeof tr): SplSquadPlayer[] =>
-      (entry.players ?? [])
-        .map((p: any): SplSquadPlayer => ({
-          id: p.id ?? 0,
-          name: localizeSplPlayerName(p.id, p.name ?? "", translator),
-          number: p.number ?? null,
-          position: isEnglishSports() ? (p.position ?? "") : (SPL_POSITION_AR[p.position] ?? p.position ?? ""),
-          positionEn: p.position ?? "",
-          age: p.age ?? null,
-          photo: p.photo ?? "",
+    const [apiFootballResp, smSquad] = await Promise.all([
+      apiGet("players/squads", { team: teamId }).catch(() => []),
+      isSportmonksConfigured() ? getSmSquad(teamId).catch(() => null) : Promise.resolve(null),
+    ]);
+    const entry = apiFootballResp[0];
+    if (!entry && (!smSquad?.available || !smSquad.players.length)) return null;
+
+    // خريطة بمطابقة لاعبي SportMonks (بالرقم أو تطبيع الاسم) لإثراء بيانات الكابتن والجنسية والعقد
+    const smByNumber = new Map<number, any>();
+    const smByName = new Map<string, any>();
+    if (smSquad?.available && smSquad.players.length > 0) {
+      for (const sp of smSquad.players) {
+        if (sp.jerseyNumber != null) smByNumber.set(sp.jerseyNumber, sp);
+        const k = (sp.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (k) smByName.set(k, sp);
+        const ck = (sp.commonName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (ck) smByName.set(ck, sp);
+      }
+    }
+
+    if (entry && Array.isArray(entry.players) && entry.players.length > 0) {
+      const nameList = (entry.players ?? []).map((p: any) => p.name);
+      const tr = await resolveNames(nameList, { skipAi: true });
+      const mapPlayers = (translator: typeof tr): SplSquadPlayer[] =>
+        (entry.players ?? [])
+          .map((p: any): SplSquadPlayer => {
+            const num = p.number ?? null;
+            const norm = (p.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const smMatch = (num != null ? smByNumber.get(num) : null) || smByName.get(norm);
+            return {
+              id: p.id ?? 0,
+              name: localizeSplPlayerName(p.id, p.name ?? "", translator),
+              number: num,
+              position: isEnglishSports() ? (p.position ?? "") : (SPL_POSITION_AR[p.position] ?? p.position ?? ""),
+              positionEn: p.position ?? "",
+              age: p.age ?? smMatch?.age ?? null,
+              photo: p.photo ?? smMatch?.photo ?? "",
+              captain: smMatch?.captain ?? false,
+              nationality: smMatch?.nationality
+                ? {
+                    name: smMatch.nationality.nameAr || smMatch.nationality.name,
+                    flag: smMatch.nationality.flagUrl,
+                    code: smMatch.nationality.fifaName || smMatch.nationality.iso2,
+                  }
+                : null,
+              height: smMatch?.height ?? null,
+              weight: smMatch?.weight ?? null,
+              contract: smMatch?.contractStart || smMatch?.contractEnd
+                ? { start: smMatch.contractStart, end: smMatch.contractEnd }
+                : null,
+              detailedPosition: isEnglishSports()
+                ? smMatch?.position || null
+                : smMatch?.detailedPositionAr || null,
+            };
+          })
+          .sort(
+            (a: SplSquadPlayer, b: SplSquadPlayer) =>
+              (SPL_POSITION_ORDER[a.positionEn] ?? 9) - (SPL_POSITION_ORDER[b.positionEn] ?? 9) ||
+              (a.number ?? 99) - (b.number ?? 99)
+          );
+      const team: SplTeamInfo = {
+        id: entry.team?.id ?? teamId,
+        name: localizeSplTeamName(entry.team?.id, entry.team?.name ?? ""),
+        logo: entry.team?.logo ?? "",
+        country: null,
+        founded: null,
+        venue: null,
+      };
+      const result = { team, players: mapPlayers(tr) };
+      const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
+      const incomplete = !isEnglishSports() && nameList.some((n: string | null | undefined) => n && tr(n) === n);
+      if (incomplete) {
+        void resolveNames(nameList)
+          .then((tr2) => {
+            swrCache.set(storeKey, { team, players: mapPlayers(tr2) }, SQUAD_TTL, SQUAD_TTL * 2);
+          })
+          .catch(() => {});
+      }
+      return result;
+    }
+
+    // احتياطي SportMonks الكامل إن غاب مزود API-Football
+    if (smSquad?.available && smSquad.players.length > 0) {
+      const smMapped: SplSquadPlayer[] = smSquad.players
+        .map((sp: any) => ({
+          id: sp.playerId,
+          name: sp.displayName || sp.name,
+          number: sp.jerseyNumber,
+          position: isEnglishSports() ? sp.position : sp.positionAr,
+          positionEn: sp.position,
+          age: sp.age,
+          photo: sp.photo,
+          captain: sp.captain,
+          nationality: sp.nationality
+            ? {
+                name: sp.nationality.nameAr || sp.nationality.name,
+                flag: sp.nationality.flagUrl,
+                code: sp.nationality.fifaName || sp.nationality.iso2,
+              }
+            : null,
+          height: sp.height,
+          weight: sp.weight,
+          contract: { start: sp.contractStart, end: sp.contractEnd },
+          detailedPosition: isEnglishSports() ? sp.position : sp.detailedPositionAr,
         }))
         .sort(
           (a: SplSquadPlayer, b: SplSquadPlayer) =>
             (SPL_POSITION_ORDER[a.positionEn] ?? 9) - (SPL_POSITION_ORDER[b.positionEn] ?? 9) ||
             (a.number ?? 99) - (b.number ?? 99)
         );
-    const team: SplTeamInfo = {
-      id: entry.team?.id ?? teamId,
-      name: localizeSplTeamName(entry.team?.id, entry.team?.name ?? ""),
-      logo: entry.team?.logo ?? "",
-      country: null,
-      founded: null,
-      venue: null,
-    };
-    const result = { team, players: mapPlayers(tr) };
-    const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
-    const incomplete = !isEnglishSports() && nameList.some((n: string | null | undefined) => n && tr(n) === n);
-    if (incomplete) {
-      void resolveNames(nameList)
-        .then((tr2) => {
-          swrCache.set(storeKey, { team, players: mapPlayers(tr2) }, SQUAD_TTL, SQUAD_TTL * 2);
-        })
-        .catch(() => {});
+      return {
+        team: {
+          id: teamId,
+          name: localizeSplTeamName(teamId, smSquad.teamName),
+          logo: smSquad.teamLogo,
+          country: null,
+          founded: null,
+          venue: null,
+        },
+        players: smMapped,
+      };
     }
-    return result;
+
+    return null;
   });
-  // تسخين بطاقات اللاعبين بعد كل جلب للتشكيلة (طازجة كانت أو مجدَّدة) —
-  // كاش البطاقة (ساعة) أقصر من كاش التشكيلة (يوم) فالزيارات اللاحقة تجد
-  // بطاقات منتهية؛ النداءات الطازجة رخيصة (فحص ذاكرة) والمنتهية وحدها تجلب.
   if (squad?.players?.length) warmSquadPlayerCards(squad.players);
   return squad;
 }

@@ -24,6 +24,7 @@ import {
   type PredCompetitionDetail,
   type PredCompetitionSummary,
   type PredContest,
+  type PredLeaderEntry,
   type PredLeaderboardResponse,
   type PredMyEntriesResponse,
   type PredMyEntryItem,
