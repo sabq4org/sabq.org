@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Play, Loader2, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/queryClient";
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -70,7 +71,7 @@ function getDailymotionThumbnail(videoId: string): string {
   return `https://www.dailymotion.com/thumbnail/video/${videoId}`;
 }
 
-function TwitterVideoEmbed({ tweetId, title }: { tweetId: string; title: string }) {
+function TwitterVideoFallback({ tweetId }: { tweetId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -83,8 +84,7 @@ function TwitterVideoEmbed({ tweetId, title }: { tweetId: string; title: string 
       containerRef.current.innerHTML = "";
       const isDark = document.documentElement.classList.contains("dark");
 
-      const createMethod = window.twttr.widgets.createVideo || window.twttr.widgets.createTweet;
-      createMethod(tweetId, containerRef.current, {
+      window.twttr.widgets.createTweet(tweetId, containerRef.current, {
         theme: isDark ? "dark" : "light",
         align: "center",
         conversation: "none",
@@ -92,30 +92,8 @@ function TwitterVideoEmbed({ tweetId, title }: { tweetId: string; title: string 
       })
         .then((el: HTMLElement | null) => {
           if (!mounted) return;
-          if (el) {
-            setLoading(false);
-          } else {
-            // Fallback to createTweet if createVideo was not applicable
-            if (createMethod !== window.twttr.widgets.createTweet) {
-              window.twttr.widgets.createTweet(tweetId, containerRef.current, {
-                theme: isDark ? "dark" : "light",
-                align: "center",
-                conversation: "none",
-                dnt: true,
-              }).then((tweetEl: HTMLElement | null) => {
-                if (!mounted) return;
-                setLoading(false);
-                if (!tweetEl) setFailed(true);
-              }).catch(() => {
-                if (!mounted) return;
-                setLoading(false);
-                setFailed(true);
-              });
-            } else {
-              setLoading(false);
-              setFailed(true);
-            }
-          }
+          setLoading(false);
+          if (!el) setFailed(true);
         })
         .catch(() => {
           if (!mounted) return;
@@ -168,7 +146,7 @@ function TwitterVideoEmbed({ tweetId, title }: { tweetId: string; title: string 
   return (
     <div className="relative w-full min-h-[300px] flex flex-col items-center justify-center bg-black/5 dark:bg-black/20 rounded-lg p-2 sm:p-4">
       {loading && (
-        <div className="flex flex-col items-center gap-2 text-muted-foreground py-12" data-testid="twitter-video-loading">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground py-12">
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
           <span className="text-xs font-medium">جاري تحميل الفيديو من منصة X...</span>
         </div>
@@ -176,7 +154,6 @@ function TwitterVideoEmbed({ tweetId, title }: { tweetId: string; title: string 
       <div
         ref={containerRef}
         className={cn("w-full max-w-[550px] flex justify-center", loading && "hidden")}
-        data-testid="twitter-video-container"
       />
       {failed && !loading && (
         <div className="py-8 text-center text-sm space-y-2">
@@ -198,6 +175,7 @@ function TwitterVideoEmbed({ tweetId, title }: { tweetId: string; title: string 
 
 export function VideoPlayer({ videoUrl, thumbnailUrl, title, className }: VideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [streamError, setStreamError] = useState(false);
   
   const videoType = getVideoType(videoUrl);
   
@@ -229,9 +207,29 @@ export function VideoPlayer({ videoUrl, thumbnailUrl, title, className }: VideoP
   
   if (isPlaying) {
     if (videoType === "twitter" && twitterTweetId) {
+      if (streamError) {
+        return (
+          <div className={cn("relative w-full rounded-lg overflow-hidden", className)}>
+            <TwitterVideoFallback tweetId={twitterTweetId} />
+          </div>
+        );
+      }
+
       return (
-        <div className={cn("relative w-full rounded-lg overflow-hidden", className)}>
-          <TwitterVideoEmbed tweetId={twitterTweetId} title={title} />
+        <div className={cn("relative w-full rounded-lg overflow-hidden bg-black", className)}>
+          <video
+            src={apiUrl(`/api/video/stream/${twitterTweetId}`)}
+            poster={displayThumbnail}
+            controls
+            autoPlay
+            playsInline
+            onError={() => setStreamError(true)}
+            className="w-full aspect-video"
+            data-testid="video-player-twitter"
+          >
+            <track kind="captions" />
+            المتصفح لا يدعم تشغيل الفيديو
+          </video>
         </div>
       );
     }
