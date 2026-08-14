@@ -1855,3 +1855,161 @@ export async function getSmLeaguesByDate(
   const key = `sm:leagues-date:${day}:${includeAll ? "all" : "top"}`;
   return withSWR(key, SM_TODAY_TTL, SM_TODAY_SWR, () => fetchLeaguesByDate(day, includeAll));
 }
+
+// ---------- قوائم التشكيلة الرسمية للأندية (Squads) ----------
+
+export interface SmSquadPlayer {
+  id: number;
+  playerId: number;
+  teamId: number;
+  jerseyNumber: number | null;
+  positionId: number | null;
+  detailedPositionId: number | null;
+  detailedPositionAr: string | null;
+  position: string;
+  positionAr: string;
+  captain: boolean;
+  contractStart: string | null;
+  contractEnd: string | null;
+  name: string;
+  displayName: string;
+  commonName: string;
+  photo: string;
+  height: number | null;
+  weight: number | null;
+  dateOfBirth: string | null;
+  age: number | null;
+  nationality: {
+    id: number;
+    name: string;
+    nameAr: string;
+    fifaName: string | null;
+    iso2: string | null;
+    flagUrl: string | null;
+  } | null;
+}
+
+export interface SmTeamSquad {
+  available: boolean;
+  teamId: number;
+  teamName: string;
+  teamLogo: string;
+  players: SmSquadPlayer[];
+}
+
+const SM_DETAILED_POSITIONS: Record<number, { en: string; ar: string }> = {
+  24: { en: "Goalkeeper", ar: "حارس مرمى" },
+  148: { en: "Centre Back", ar: "قلب دفاع" },
+  149: { en: "Defensive Midfield", ar: "وسط دفاعي" },
+  150: { en: "Central Midfield", ar: "وسط مركزي" },
+  151: { en: "Centre Forward", ar: "رأس حربة" },
+  152: { en: "Left Winger", ar: "جناح أيسر" },
+  153: { en: "Attacking Midfield", ar: "وسط هجومي" },
+  154: { en: "Right Back", ar: "ظهير أيمن" },
+  155: { en: "Left Back", ar: "ظهير أيسر" },
+  156: { en: "Right Winger", ar: "جناح أيمن" },
+  157: { en: "Secondary Striker", ar: "مهاجم ثانٍ" },
+};
+
+/**
+ * جلب قائمة تشكيلة الفريق من SportMonks (v3) مع بيانات اللاعبين والجنسيات وعقودهم.
+ */
+export async function getSmSquad(teamId: number, seasonId?: number): Promise<SmTeamSquad> {
+  if (!isSportmonksConfigured() || !Number.isFinite(teamId) || teamId <= 0) {
+    return { available: false, teamId, teamName: "", teamLogo: "", players: [] };
+  }
+  const key = `sm:squad:v1:${teamId}:${seasonId ?? "current"}`;
+  return withSWR(key, 24 * 60 * 60 * 1000, 48 * 60 * 60 * 1000, async () => {
+    try {
+      const params: Record<string, string> = {
+        include: "team;player.nationality;player.statistics.details.type;player.position",
+      };
+      if (seasonId) params.filters = `playerstatisticSeasons:${seasonId}`;
+      const resp = await smGet(`squads/teams/${teamId}`, params);
+      const list: any[] = Array.isArray(resp?.data) ? resp.data : [];
+      if (list.length === 0) {
+        return { available: false, teamId, teamName: "", teamLogo: "", players: [] };
+      }
+      const first = list[0];
+      const teamName = first?.team?.name || "";
+      const teamLogo = first?.team?.image_path || "";
+      const players: SmSquadPlayer[] = list.map((item: any) => {
+        const p = item.player || {};
+        const posInfo = item.detailed_position_id ? SM_DETAILED_POSITIONS[item.detailed_position_id] : null;
+        const posName =
+          p.position?.name ||
+          (item.position_id === 24
+            ? "Goalkeeper"
+            : item.position_id === 25
+            ? "Defender"
+            : item.position_id === 26
+            ? "Midfielder"
+            : "Attacker");
+        const posAr =
+          item.position_id === 24
+            ? "حارس مرمى"
+            : item.position_id === 25
+            ? "مدافع"
+            : item.position_id === 26
+            ? "لاعب وسط"
+            : "مهاجم";
+
+        let age: number | null = null;
+        if (p.date_of_birth) {
+          const birth = new Date(p.date_of_birth);
+          if (!isNaN(birth.getTime())) {
+            const ageDiffMs = Date.now() - birth.getTime();
+            const ageDate = new Date(ageDiffMs);
+            age = Math.abs(ageDate.getUTCFullYear() - 1970);
+          }
+        }
+
+        const nat = p.nationality
+          ? {
+              id: Number(p.nationality.id || 0),
+              name: String(p.nationality.name || ""),
+              nameAr: String(p.nationality.name || ""),
+              fifaName: p.nationality.fifa_name || null,
+              iso2: p.nationality.iso2 || null,
+              flagUrl: p.nationality.image_path || null,
+            }
+          : null;
+
+        return {
+          id: Number(item.id || 0),
+          playerId: Number(item.player_id || p.id || 0),
+          teamId: Number(item.team_id || teamId),
+          jerseyNumber: item.jersey_number != null ? Number(item.jersey_number) : null,
+          positionId: item.position_id != null ? Number(item.position_id) : null,
+          detailedPositionId: item.detailed_position_id != null ? Number(item.detailed_position_id) : null,
+          detailedPositionAr: posInfo?.ar || null,
+          position: posName,
+          positionAr: posAr,
+          captain: Boolean(item.captain),
+          contractStart: item.start || null,
+          contractEnd: item.end || null,
+          name: p.display_name || p.name || p.common_name || "",
+          displayName: p.display_name || p.name || "",
+          commonName: p.common_name || "",
+          photo: p.image_path || "",
+          height: p.height ? Number(p.height) : null,
+          weight: p.weight ? Number(p.weight) : null,
+          dateOfBirth: p.date_of_birth || null,
+          age,
+          nationality: nat,
+        };
+      });
+
+      return {
+        available: true,
+        teamId,
+        teamName,
+        teamLogo,
+        players,
+      };
+    } catch {
+      return { available: false, teamId, teamName: "", teamLogo: "", players: [] };
+    }
+  });
+}
+

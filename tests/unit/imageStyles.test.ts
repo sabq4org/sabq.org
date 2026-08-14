@@ -45,7 +45,7 @@ describe("normalizeImageStyleSettings — تطبيع الإعدادات المح
 
   it("الافتراضيات المزروعة نفسها صالحة وتمر من التطبيع كما هي", () => {
     const normalized = normalizeImageStyleSettings(DEFAULT_IMAGE_STYLE_SETTINGS);
-    expect(normalized.styles.map((s) => s.slug)).toEqual(["realistic", "graphic", "illustration"]);
+    expect(normalized.styles.map((s) => s.slug)).toEqual(["realistic", "graphic", "illustration", "infographic"]);
     expect(normalized.styles.filter((s) => s.isDefault).length).toBe(1);
   });
 

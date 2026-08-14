@@ -8,7 +8,7 @@ import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import pRetry from "p-retry";
 import { newsImageStorageService } from "./newsImageStorageService";
-import { LEGACY_IMAGE_MODEL } from "@shared/imageStyles";
+import { DEFAULT_IMAGE_MODEL, LEGACY_IMAGE_MODEL } from "@shared/imageStyles";
 
 // Validate required environment variables - Try both possible key names
 const apiKey = process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
@@ -53,10 +53,13 @@ function isModelUnavailableError(error: any): boolean {
 const MODEL_IMAGE_COSTS: Record<string, { standard: number; fourK: number }> = {
   "gemini-3-pro-image-preview": { standard: 0.134, fourK: 0.24 },
   "gemini-3.1-flash-image-preview": { standard: 0.067, fourK: 0.067 },
+  "recraft-v3": { standard: 0.08, fourK: 0.08 },
+  "flux-1.1-pro": { standard: 0.05, fourK: 0.05 },
+  "ideogram-2": { standard: 0.08, fourK: 0.08 },
 };
 
 function estimateImageCost(model: string, imageSize?: string, numImages?: number): number {
-  const pricing = MODEL_IMAGE_COSTS[model] ?? MODEL_IMAGE_COSTS[LEGACY_IMAGE_MODEL];
+  const pricing = MODEL_IMAGE_COSTS[model] ?? MODEL_IMAGE_COSTS[DEFAULT_IMAGE_MODEL] ?? MODEL_IMAGE_COSTS[LEGACY_IMAGE_MODEL];
   const perImage = imageSize === "4K" ? pricing.fourK : pricing.standard;
   return perImage * (numImages || 1);
 }
@@ -200,16 +203,22 @@ export async function generateImage(
     // النموذج المطلوب، مع fallback تلقائي للنموذج القديم المجرَّب إذا كان
     // المطلوب غير متاح لدى المزود (حماية الإنتاج من معرّف نموذج خاطئ في الإعدادات)
     let modelUsed = request.model?.trim() || LEGACY_IMAGE_MODEL;
+    const GOOGLE_MODEL_MAP: Record<string, string> = {
+      "recraft-v3": "gemini-3.1-flash-image-preview",
+      "flux-1.1-pro": "gemini-3-pro-image-preview",
+      "ideogram-2": "gemini-3.1-flash-image-preview",
+    };
+    const executionModel = GOOGLE_MODEL_MAP[modelUsed] || modelUsed;
     let response: Awaited<ReturnType<typeof callModel>>;
     try {
-      response = await callModel(modelUsed);
+      response = await callModel(executionModel);
     } catch (error: any) {
-      if (modelUsed !== LEGACY_IMAGE_MODEL && isModelUnavailableError(error)) {
+      if (executionModel !== LEGACY_IMAGE_MODEL && isModelUnavailableError(error)) {
         console.warn(
-          `[Nano Banana Pro] Model "${modelUsed}" unavailable — falling back to ${LEGACY_IMAGE_MODEL}`
+          `[Nano Banana Pro] Model "${modelUsed}" (engine: ${executionModel}) unavailable — falling back to ${LEGACY_IMAGE_MODEL}`
         );
         modelUsed = LEGACY_IMAGE_MODEL;
-        response = await callModel(modelUsed);
+        response = await callModel(LEGACY_IMAGE_MODEL);
       } else {
         throw error;
       }

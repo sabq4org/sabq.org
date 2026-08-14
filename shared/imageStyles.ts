@@ -21,16 +21,49 @@ export const IMAGE_STYLE_SETTINGS_KEY = "image_generation_styles";
  * defaultModel في الإعدادات يقبل أي معرّف نصي — هذه القائمة للعرض في اللوحة
  * ولتقدير التكلفة فقط، وليست قيدًا.
  */
+/**
+ * النماذج المعروفة لتوليد الصور ومجالات تخصصها المثلى.
+ */
 export const KNOWN_IMAGE_MODELS = [
   {
     id: "gemini-3.1-flash-image-preview",
-    label: "Nano Banana 2 — Gemini 3.1 Flash Image (أسرع وأرخص)",
+    label: "Nano Banana 2 — Gemini 3.1 Flash Image (سريع ومتوازن)",
+    provider: "google",
+    specialty: "general_fast",
+    recommendedFor: "الأخبار العامة والتوليد التلقائي السريع",
   },
   {
     id: "gemini-3-pro-image-preview",
-    label: "Nano Banana Pro — Gemini 3 Pro Image",
+    label: "Nano Banana Pro — Gemini 3 Pro Image (واقعية وبحث متقدم)",
+    provider: "google",
+    specialty: "realistic_grounded",
+    recommendedFor: "التحقيقات والتقارير الميدانية ذات التحقق الجغرافي",
+  },
+  {
+    id: "recraft-v3",
+    label: "Recraft v3 Engine (إنفوجرافيك وفيكتور ورسوم المقالات)",
+    provider: "recraft",
+    specialty: "infographic_vector",
+    recommendedFor: "الإنفوجرافيك والبيانات الإحصائية ورسوم مقالات الرأي",
+  },
+  {
+    id: "flux-1.1-pro",
+    label: "FLUX.1.1 Pro (أعلى واقعية فوتوغرافية وإضاءة صحفية)",
+    provider: "bfl",
+    specialty: "ultra_photorealistic",
+    recommendedFor: "الصور الفوتوغرافية الميدانية والبورتريه الصحفي عالي التفاصيل",
+  },
+  {
+    id: "ideogram-2",
+    label: "Ideogram 2.0 (تصاميم تيبوغرافية ولافتات)",
+    provider: "ideogram",
+    specialty: "typography_design",
+    recommendedFor: "الملصقات والأغلفة واللافتات التعبيرية",
   },
 ] as const;
+
+/** نوع المهمة البصرية لتوجيه النموذج الأمثل */
+export type ImageTaskIntent = "infographic" | "photo" | "opinion_art" | "breaking_banner" | "custom";
 
 /** النموذج الافتراضي للتوليد (قرار المالك 2026-08-08: Nano Banana 2) */
 export const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
@@ -197,6 +230,26 @@ export const DEFAULT_IMAGE_STYLES: ImageStyle[] = [
       "photorealistic, photograph, childish cartoon, clip-art, low quality, distorted anatomy",
     contextVariants: [],
   },
+  {
+    slug: "infographic",
+    nameAr: "إنفوجرافيك وبيانات",
+    nameEn: "Infographic & Data",
+    description: "تصميم بياني وإحصائي متزن ومناسب للأرقام والبيانات",
+    icon: "bar-chart-3",
+    enabled: true,
+    sortOrder: 4,
+    isDefault: false,
+    stylePrompt:
+      "clean professional data infographic, modern flat vector design, statistical charts layout, " +
+      "distinct visual data blocks, elegant contemporary color palette, minimalist iconography, " +
+      "high contrast, clean light background, no clutter, no distorted pseudo-text",
+    negativePrompt:
+      "photorealistic, photograph, messy typography, distorted text, 3d clutter, blurry charts, childish drawings",
+    params: {
+      model: "recraft-v3",
+    },
+    contextVariants: [],
+  },
 ];
 
 export const DEFAULT_IMAGE_STYLE_SETTINGS: ImageStyleSettings = {
@@ -216,8 +269,57 @@ export const LEGACY_STYLE_SLUG_MAP: Record<string, string> = {
   minimalist: "graphic",
   modern: "graphic",
   graphic: "graphic",
-  infographic: "graphic",
+  infographic: "infographic",
 };
+
+/**
+ * اقتراح النموذج الأمثل تلقائياً بناءً على النية البصرية وتصنيف الخبر
+ */
+export function suggestOptimalModel(
+  intent?: ImageTaskIntent | null,
+  styleSlug?: string | null,
+  category?: string | null
+): { model: string; reasonAr: string; provider: string } {
+  const cat = (category || "").toLowerCase();
+  
+  if (intent === "infographic" || styleSlug === "infographic" || cat.includes("اقتصاد") || cat.includes("أرقام") || cat.includes("إحصاء")) {
+    return {
+      model: "recraft-v3",
+      reasonAr: "موصى به للإنفوجرافيك والرسوم البيانية وتنسيق عناصر البيانات الفيكتور",
+      provider: "recraft",
+    };
+  }
+
+  if (intent === "opinion_art" || styleSlug === "illustration" || cat.includes("رأي") || cat.includes("مقال") || cat.includes("عمود")) {
+    return {
+      model: "recraft-v3",
+      reasonAr: "موصى به للرسوم التوضيحية الفنية والمعاني الرمزية لمقالات الرأي",
+      provider: "recraft",
+    };
+  }
+
+  if (intent === "breaking_banner") {
+    return {
+      model: "gemini-3.1-flash-image-preview",
+      reasonAr: "موصى به لسرعة الاستجابة وتوليد خلفيات الأخبار العاجلة الفورية",
+      provider: "google",
+    };
+  }
+
+  if (intent === "photo" || styleSlug === "realistic") {
+    return {
+      model: "gemini-3-pro-image-preview",
+      reasonAr: "موصى به للواقعية الفوتوغرافية الميدانية والتحقق الجغرافي للخبر",
+      provider: "google",
+    };
+  }
+
+  return {
+    model: DEFAULT_IMAGE_MODEL,
+    reasonAr: "النموذج الافتراضي المتوازن للسرعة والجودة",
+    provider: "google",
+  };
+}
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;

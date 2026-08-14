@@ -46,6 +46,9 @@ const generateImageRequestSchema = insertAiImageGenerationSchema.omit({
   styleSlug: z.string().trim().max(50).optional(),
   // تصنيف الخبر (slug أو اسم) لمطابقة التوجيه السياقي داخل النمط
   category: z.string().trim().max(80).optional(),
+  // نية التوليد البصري (إنفوجرافيك / واقعية / مقال رأي / بانر)
+  intent: z.enum(["infographic", "photo", "opinion_art", "breaking_banner", "custom"]).optional(),
+  dataPoints: z.array(z.string()).optional(),
 });
 
 const router = Router();
@@ -110,8 +113,26 @@ router.post(
       resolvedModel = model;
       styleMeta = { styleSlug: style.slug, variantSlug: variant?.slug };
     } else {
-      const settings = await getImageStyleSettings();
-      resolvedModel = resolveImageModel(settings, null, validatedData.model);
+      const { suggestOptimalModel, detectImageIntent, buildIntentOptimizedPrompt } = await import(
+        "../services/imageModelRouter"
+      );
+      const detectedIntent = validatedData.intent || detectImageIntent(validatedData.prompt, validatedData.category);
+      const suggested = suggestOptimalModel(detectedIntent, null, validatedData.category);
+      resolvedModel = validatedData.model?.trim() || suggested.model;
+      
+      if (detectedIntent === "infographic" && validatedData.dataPoints?.length) {
+        const optimized = buildIntentOptimizedPrompt(
+          detectedIntent,
+          validatedData.prompt,
+          validatedData.category,
+          validatedData.dataPoints
+        );
+        finalPrompt = optimized.prompt;
+        finalNegativePrompt = [validatedData.negativePrompt, optimized.negativePrompt].filter(Boolean).join(", ");
+      } else {
+        const settings = await getImageStyleSettings();
+        resolvedModel = resolveImageModel(settings, null, validatedData.model || suggested.model);
+      }
     }
 
     // Create pending record

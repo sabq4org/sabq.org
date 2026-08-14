@@ -192,9 +192,12 @@ private fun statText(e: JsonElement?): String = when {
     val id: Int = 0, val name: String = "", val logo: String = "",
     val country: String? = null, val founded: Int? = null, val venue: RsTeamVenue? = null,
 )
+@Serializable data class RsPlayerNationality(val name: String? = null, val flag: String? = null, val code: String? = null)
 @Serializable data class RsSquadPlayer(
     val id: Int = 0, val name: String = "", val number: Int? = null,
     val position: String = "", val positionEn: String = "", val age: Int? = null, val photo: String = "",
+    val captain: Boolean? = null, val nationality: RsPlayerNationality? = null,
+    val height: Int? = null, val weight: Int? = null, val detailedPosition: String? = null,
 )
 @Serializable data class RsStatTriple(val total: Int = 0, val home: Int = 0, val away: Int = 0)
 @Serializable data class RsTeamStatFixtures(

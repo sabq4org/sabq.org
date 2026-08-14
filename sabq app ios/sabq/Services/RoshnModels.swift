@@ -377,6 +377,12 @@ nonisolated struct RsTeamInfo: Decodable, Hashable {
     let venue: RsTeamVenue?
 }
 
+nonisolated struct RsPlayerNationality: Decodable, Hashable {
+    let name: String?
+    let flag: String?
+    let code: String?
+}
+
 nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -385,6 +391,11 @@ nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
     let positionEn: String
     let age: Int?
     let photo: String
+    let captain: Bool?
+    let nationality: RsPlayerNationality?
+    let height: Int?
+    let weight: Int?
+    let detailedPosition: String?
 }
 
 nonisolated struct RsStatTriple: Decodable, Hashable {

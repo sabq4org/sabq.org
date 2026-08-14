@@ -1132,6 +1132,12 @@ nonisolated struct SpTeamInfo: Decodable, Hashable {
     let venue: SpVenueInfo?
 }
 
+nonisolated struct SpPlayerNationality: Decodable, Hashable {
+    let name: String?
+    let flag: String?
+    let code: String?
+}
+
 nonisolated struct SpSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -1140,6 +1146,11 @@ nonisolated struct SpSquadPlayer: Decodable, Identifiable, Hashable {
     let positionEn: String
     let age: Int?
     let photo: String
+    let captain: Bool?
+    let nationality: SpPlayerNationality?
+    let height: Int?
+    let weight: Int?
+    let detailedPosition: String?
 }
 
 nonisolated struct SpStatTriple: Decodable, Hashable {

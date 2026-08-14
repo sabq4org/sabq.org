@@ -370,13 +370,36 @@ private fun SquadSection(squad: List<RsSquadPlayer>) {
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(RoshnColors.canvas).padding(10.dp),
                         ) {
-                            AsyncImage(
-                                model = player.photo, contentDescription = null, contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(38.dp).clip(CircleShape).background(RoshnColors.skySoft),
-                            )
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                AsyncImage(
+                                    model = player.photo, contentDescription = null, contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(38.dp).clip(CircleShape).background(RoshnColors.skySoft),
+                                )
+                                if (player.captain == true) {
+                                    Box(
+                                        modifier = Modifier.offset(x = 2.dp, y = (-2).dp).size(14.dp).clip(CircleShape).background(RoshnColors.gold),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text("C", color = androidx.compose.ui.graphics.Color.Black, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                    }
+                                }
+                            }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(player.name, color = RoshnColors.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                player.age?.let { Text("$it سنة", color = RoshnColors.inkSoft, fontSize = 9.sp) }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    player.nationality?.flag?.let { flagUrl ->
+                                        AsyncImage(
+                                            model = flagUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                                            modifier = Modifier.size(width = 14.dp, height = 10.dp).clip(RoundedCornerShape(1.5.dp)),
+                                        )
+                                    }
+                                    Text(player.name, color = RoshnColors.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (!player.detailedPosition.isNullOrEmpty() && player.detailedPosition != player.position) {
+                                        Text(player.detailedPosition, color = RoshnColors.inkSoft, fontSize = 9.sp)
+                                    }
+                                    player.age?.let { Text("$it سنة", color = RoshnColors.inkSoft, fontSize = 9.sp) }
+                                }
                             }
                             Text(player.number?.toString() ?: "—", color = RoshnColors.inkSoft, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         }

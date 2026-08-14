@@ -391,10 +391,13 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
     let styleParams: { aspectRatio?: string; imageSize?: string } = {};
     try {
       const { resolveGenerationStyle } = await import("./imageStyleService");
+      const { suggestOptimalModel, detectImageIntent } = await import("./imageModelRouter");
       const resolved = await resolveGenerationStyle(requestedStyle, request.category);
       styleText = resolved.variant?.stylePrompt ?? resolved.style.stylePrompt;
       styleNegativePrompt = resolved.variant?.negativePrompt ?? resolved.style.negativePrompt;
-      styleModel = resolved.model;
+      const detectedIntent = detectImageIntent(request.articleTitle, request.category);
+      const suggested = suggestOptimalModel(detectedIntent, resolved.style.slug, request.category);
+      styleModel = resolved.model || suggested.model;
       styleSlugUsed = resolved.style.slug;
       variantSlugUsed = resolved.variant?.slug;
       styleParams = resolved.style.params || {};

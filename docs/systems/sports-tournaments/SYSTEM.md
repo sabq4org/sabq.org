@@ -185,6 +185,18 @@
 
 **Gotcha:** `raceBoardCache` كان يعامل أي `seasonOverride` كأرشيف (TTL طويل بلا `:live`). كأس الملك يمرّر `KC_SEASON` دائمًا عند ضبطه — الأرشيف فقط عندما يختلف الموسم عن `current` للمنافسة.
 
+## قوائم التشكيلة الرسمية معززة بـ SportMonks (2026-08-14)
+- **الهدف:** إثراء قوائم أندية روشن والبطولات الرياضية بالبيانات الدقيقة من SportMonks: شارة الكابتن (`captain`), علم واسم وجنسية اللاعب (`nationality`), رقم القميص الدقيق, العقد (`contract`), والمركز الدقيق (`detailedPosition`).
+- **الباك إند (`server/services/sportmonksService.ts` و `saudiLeagueService.ts`):**
+  - نقطة `getSmSquad(teamId, seasonId?)` تستعلم `squads/teams/{team_id}?include=team;player.nationality;player.statistics.details.type;player.position`.
+  - دمج `getSquad(teamId)` يطابق اللاعبين بالرقم أو تطبيع الاسم ويعزز كائن `SplSquadPlayer` تلقائياً مع كاش SWR 24 ساعة.
+- **التوافق والتكامل عبر المنصات الـ 5:**
+  - **Web (`client/src/pages/SportsTeam.tsx` و `KingsCupTeam.tsx`):** عرض شارة القائد C الذهبية، علم الدولة بجانب الاسم، وتفاصيل المركز الدقيق والعمر.
+  - **Sabq iOS (`sabq app ios/`):** دعم `RsPlayerNationality` وشارة الكابتن C في `RoshnTeamView.swift`.
+  - **Sabq Android (`android-native/app/`):** دعم `RsPlayerNationality` وشارة الكابتن C في `RoshnTeamScreen.kt`.
+  - **VARA iOS (`sports app ios/`):** دعم `SpPlayerNationality` وشارة الكابتن C في `TeamPlayerPages.swift`.
+  - **VARA Android (`android-native/vara/`):** دعم `TpPlayerNationality` وشارة الكابتن C في `TeamPlayerScreens.kt`.
+
 ## عند التعديل
 - [ ] قرأت هذا الملف
 - [ ] إن لمس التوقعات: اقرأ أيضاً `predictions-core/SYSTEM.md`
@@ -192,3 +204,4 @@
 - [ ] إن لمس كأس الملك: اختبر overview/fixtures/bracket + مركز مباراة + سباقات أثناء مباراة حية (ومع `KC_SEASON` مضبوط)
 - [ ] حافظ على الأرقام اللاتينية وروابط `/roshn` و`/sports/team/*`
 - [ ] أسماء اللاعبين: لا تعتمد على `name_aa` من TheSports ولا على كاش AI وحدهما لأسماء سعودية متشابهة — التصحيح التحريري في `sportsPlayerNameFixes.ts` يتقدّم (حادثة الضويحي/البيشي 2026-08-13)
+
