@@ -90,6 +90,7 @@ import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
 import editorialAiRouter from "./editorialAi";
 import imageStylesRouter from "./imageStyles";
+import videoResolverRouter from "./videoResolver";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -193,4 +194,6 @@ export function registerSplitRoutes(app: Express) {
   app.use(editorialAiRouter);
   // أنماط توليد الصور (editorial)
   app.use(imageStylesRouter);
+  // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
+  app.use(videoResolverRouter);
 }
