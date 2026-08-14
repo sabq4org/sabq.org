@@ -439,6 +439,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                 </Badge>
                               ) : null}
 
+                              {(article as any).isReading && (
+                                <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0">
+                                  <BookOpen className="h-2 w-2" aria-hidden="true" />
+                                  قراءة
+                                </Badge>
+                              )}
+
                               {isNewArticle(article.publishedAt) && (
                                 <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
                                   <Flame className="h-2 w-2" aria-hidden="true" />
@@ -567,6 +574,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {(article as any).isReading && (
+                      <Badge className="text-xs h-5 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0">
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        قراءة
+                      </Badge>
+                    )}
 
                     {isNewArticle(article.publishedAt) && (
                       <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
