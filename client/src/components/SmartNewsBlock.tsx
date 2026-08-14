@@ -36,6 +36,7 @@ interface ArticleResult {
   aiGenerated?: boolean | null;
   isAiGeneratedThumbnail?: boolean | null;
   articleType?: string | null;
+  isReading?: boolean | null;
   imageFocalPoint?: { x: number; y: number } | null;
   category?: {
     nameAr: string;
@@ -262,6 +263,16 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                               </Badge>
                             ) : null}
 
+                            {article.isReading && (
+                              <Badge 
+                                className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shrink-0 font-medium"
+                                data-testid={`badge-smart-mobile-reading-${article.id}`}
+                              >
+                                <BookOpen className="h-2 w-2" aria-hidden="true" />
+                                قراءة
+                              </Badge>
+                            )}
+
                             {article.isNew && (
                               <Badge 
                                 className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0 animate-pulse"
@@ -377,6 +388,16 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {article.isReading && (
+                      <Badge 
+                        className="text-xs h-5 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shrink-0 font-medium" 
+                        data-testid={`badge-smart-reading-${article.id}`}
+                      >
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        قراءة
+                      </Badge>
+                    )}
 
                     {article.isNew && (
                       <Badge 
@@ -498,6 +519,16 @@ function ListLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                       </Badge>
                     ) : null}
 
+                    {article.isReading && (
+                      <Badge 
+                        className="text-xs font-medium px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1.5 shadow-sm font-semibold shrink-0"
+                        data-testid={`badge-smart-article-list-reading-${article.id}`}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                        قراءة
+                      </Badge>
+                    )}
+
                     {article.isNew && (
                       <Badge 
                         className="text-xs font-medium px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 gap-1 shadow-sm font-semibold animate-pulse"
@@ -602,6 +633,16 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
                   </Badge>
                 ) : null}
 
+                {featured.isReading && (
+                  <Badge 
+                    className="text-xs text-white bg-emerald-600 hover:bg-emerald-700 border-0 gap-1.5 shadow-sm font-semibold shrink-0"
+                    data-testid={`badge-smart-article-featured-reading-${featured.id}`}
+                  >
+                    <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    قراءة
+                  </Badge>
+                )}
+
                 {featured.isNew && (
                   <Badge 
                     className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 gap-1 shadow-sm font-semibold animate-pulse"
@@ -696,6 +737,16 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
                           </Badge>
                         ) : null}
 
+                        {article.isReading && (
+                          <Badge 
+                            className="text-[9px] h-4 text-white bg-emerald-600 hover:bg-emerald-700 border-0 font-medium shrink-0 gap-0.5"
+                            data-testid={`badge-featured-side-reading-${article.id}`}
+                          >
+                            <BookOpen className="h-2 w-2" aria-hidden="true" />
+                            قراءة
+                          </Badge>
+                        )}
+
                         {article.isNew && (
                           <Badge 
                             className="text-[9px] h-4 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 font-medium animate-pulse"
@@ -775,6 +826,16 @@ function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArti
                           {article.category.nameAr}
                         </Badge>
                       ) : null}
+
+                      {article.isReading && (
+                        <Badge 
+                          className="text-[10px] shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 border-0 font-medium shrink-0 gap-0.5"
+                          data-testid={`badge-carousel-reading-${article.id}`}
+                        >
+                          <BookOpen className="h-2 w-2" aria-hidden="true" />
+                          قراءة
+                        </Badge>
+                      )}
 
                       {article.isNew && (
                         <Badge 
