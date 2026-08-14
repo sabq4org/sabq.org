@@ -964,12 +964,28 @@ function totwRowOfSlot(slot: number, formation: string | null): number {
  */
 export async function getTeamOfTheWeek(leagueId: number): Promise<WcTeamOfTheWeek> {
   if (!isSportmonksConfigured()) return EMPTY_TOTW;
-  return withSWR(`sm:totw:${leagueId}`, CACHE_TTL.VERY_LONG, CACHE_TTL.VERY_LONG * 6, async () => {
+  return withSWR(`sm:totw:v3:${leagueId}`, CACHE_TTL.VERY_LONG, CACHE_TTL.VERY_LONG * 6, async () => {
+    // جلب معلومات الدوري للتحقق من أن التشكيلة تتبع الموسم الحالي
+    const leagueRes = await smGet(`leagues/${leagueId}`, { include: "currentSeason" }).catch(() => null);
+    const currentSeasonId = Number(
+      leagueRes?.data?.currentseason?.id ??
+      leagueRes?.data?.current_season_id ??
+      leagueRes?.data?.season_id ??
+      0,
+    );
+
     const data = await smGet(`team-of-the-week/leagues/${leagueId}/latest`, {
       include: "player;team",
-    });
+    }).catch(() => null);
     const rows: any[] = Array.isArray(data?.data) ? data.data : [];
     if (!rows.length) return EMPTY_TOTW;
+
+    // إن كانت التشكيلة لموسم سابق غير الحالي → لا نعرضها
+    const totwSeasonId = Number(rows[0]?.season_id || 0);
+    if (currentSeasonId && totwSeasonId && totwSeasonId !== currentSeasonId) {
+      return EMPTY_TOTW;
+    }
+
     const formation = typeof rows[0]?.formation === "string" ? rows[0].formation : null;
     const players: WcTotwPlayer[] = rows
       .map((r: any) => {
