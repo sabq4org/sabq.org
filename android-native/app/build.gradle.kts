@@ -33,6 +33,8 @@ android {
         //     predictions win celebration + live polling fixes
         //   • 10.1.5 (146) — Play production (targetSdk 35) — last API-35 build
         //   • 10.1.6 (147) — Play target API 36 compliance (Android 16)
+        //   • 10.2.0 (148) — Play production (2026-08-03): KC+Roshn sections
+        //   • 10.2.1 (149) — KC predictions fix + opinion redesign + widget
         // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
