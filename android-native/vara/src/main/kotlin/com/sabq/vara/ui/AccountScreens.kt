@@ -2429,9 +2429,15 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                     PredScoreStepper(contest.away.name, awayScore) { awayScore = it }
                                 }
                                 Spacer(Modifier.height(14.dp))
+                                // ثلاث حالات ثابتة: «توقّعك محفوظ ✓» (الأرقام تطابق المحفوظ —
+                                // معطّل بلون النجاح)، «حفظ التعديل»، «تأكيد التوقّع». الوميض
+                                // المؤقت وحده كان يوهم أن الحفظ لم يتم (بلاغ 2026-08-15).
+                                val savedMatches = contest.hasEntry &&
+                                    contest.predHome == homeScore && contest.predAway == awayScore
                                 Button(
                                     {
                                         if (!vm.isLoggedIn) { nav.navigate(Routes.Login); return@Button }
+                                        if (savedMatches) return@Button
                                         submitting = true; submitError = null
                                         scope.launch {
                                             runCatching {
@@ -2447,18 +2453,29 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                             submitting = false
                                         }
                                     },
-                                    Modifier.fillMaxWidth(), enabled = !submitting,
+                                    Modifier.fillMaxWidth(), enabled = !submitting && !(savedMatches && !justSaved),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = c.accent),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = c.accent,
+                                        // المحفوظ يبقى بلون مؤكِّد لا رماديًا — حالة اطمئنان لا تعطيل
+                                        disabledContainerColor = if (savedMatches) c.accentDeep else c.accent.copy(.5f),
+                                        disabledContentColor = Color.White,
+                                    ),
                                 ) {
                                     Text(
                                         when {
                                             submitting -> "جارٍ الحفظ…"
-                                            justSaved -> "تم الحفظ ✓"
+                                            justSaved -> "تم حفظ توقّعك ✓"
+                                            savedMatches -> "توقّعك محفوظ ✓ \u2066$awayScore–$homeScore\u2069"
+                                            contest.hasEntry -> "حفظ التعديل \u2066$awayScore–$homeScore\u2069"
                                             else -> "تأكيد التوقّع \u2066$awayScore–$homeScore\u2069"
                                         },
                                         modifier = Modifier.padding(vertical = 4.dp), fontWeight = FontWeight.Bold,
                                     )
+                                }
+                                if (savedMatches) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("حرّك الأرقام لتعديل توقّعك", color = c.textDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                 }
                                 submitError?.let {
                                     Spacer(Modifier.height(8.dp))
