@@ -163,6 +163,8 @@ android {
 dependencies {
     // Core
     implementation(libs.androidx.core.ktx)
+    // ترقية صريحة فوق fragment القديمة التي تجرّها play-services/appcompat
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
