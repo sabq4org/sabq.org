@@ -673,9 +673,11 @@ fun ForYouScreen(nav: NavHostController, vm: VaraViewModel) {
                 if (fresh.isNotEmpty()) vm.updateFollowedSnapshots(fresh)
             }
             val mine = async {
+                // المنصة المركزية — المسار القديم /sports/predictions/mine حُذف
+                // في #938 فكانت القائمة فارغة للأبد وتوحي بأن الحفظ لا يعمل.
                 predictions = if (!vm.isLoggedIn) emptyList()
-                else runCatching { vm.api.memberGet("/sports/predictions/mine", ignoreCache = true) }.getOrNull()
-                    ?.let { findArray(it, "predictions", "items").filterIsInstance<JsonObject>() } ?: emptyList()
+                else runCatching { vm.api.memberGet("/predictions/me/entries", mapOf("limit" to "6"), ignoreCache = true) }.getOrNull()
+                    ?.let { findArray(it, "items").filterIsInstance<JsonObject>() } ?: emptyList()
             }
             snapshots.await(); mine.await()
         }
@@ -725,8 +727,8 @@ fun ForYouScreen(nav: NavHostController, vm: VaraViewModel) {
                     when (val mine = predictions) {
                         null -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.accent) } }
                         else ->
-                            if (mine.isEmpty()) item { EmptyState("لم تتوقّع بعد", "ابدأ من تبويب «روشن» ← التوقّعات") }
-                            else items(mine.take(6)) { row -> ForYouPredictionRow(row) }
+                            if (mine.isEmpty()) item { EmptyState("لم تتوقّع بعد", "ابدأ من «حسابي» ← توقّعات VARA") }
+                            else items(mine.take(6)) { row -> ForYouPredictionRow(row, nav) }
                     }
                 } else {
                     item { Box(Modifier.padding(horizontal = 16.dp)) { SectionHeader("آخر توقّعاتك", icon = Icons.Default.AutoAwesome) } }
@@ -738,8 +740,9 @@ fun ForYouScreen(nav: NavHostController, vm: VaraViewModel) {
 }
 
 /// صف توقّع أغنى: شعارا الفريقين + التوقّع + الحالة + النقاط.
+/// ينقل لتفاصيل المسابقة نفسها عند وجود contestId (شكل me/entries المركزي).
 @Composable
-private fun ForYouPredictionRow(row: JsonObject) {
+private fun ForYouPredictionRow(row: JsonObject, nav: NavHostController) {
     val c = LocalVaraColors.current
     val meta = row.obj("fixture", "match", "metadata")
     val home = parseTeam(meta?.get("home") ?: row["home"], row.string("homeName") ?: "المضيف")
@@ -748,8 +751,12 @@ private fun ForYouPredictionRow(row: JsonObject) {
     val predHome = payload?.int("predHome", "home")
     val predAway = payload?.int("predAway", "away")
     val status = row.string("status") ?: ""
-    val points = row.int("points", "awardedPoints", "pointsAwarded")
-    VaraCard(Modifier.padding(horizontal = 16.dp)) {
+    val points = row.int("totalPoints", "points", "awardedPoints", "pointsAwarded")
+    val contestId = row.string("contestId")
+    VaraCard(
+        Modifier.padding(horizontal = 16.dp)
+            .then(if (contestId != null) Modifier.clickable { nav.navigate("prediction-contest/$contestId") } else Modifier)
+    ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             RemoteLogo(home.logo, home.name, 26)
             Spacer(Modifier.width(6.dp))
@@ -1966,15 +1973,21 @@ private fun predCountdown(targetMs: Long?, nowMs: Long = System.currentTimeMilli
 
 private fun predFmtMultiplier(value: Double): String = String.format(Locale.US, "%.1f", value)
 
-/// ترجمة أخطاء إرسال التوقّع إلى نصوص ودّية.
+/// ترجمة أخطاء إرسال التوقّع إلى نصوص ودّية — كل رموز predictions-core،
+/// لا يتسرب رمز إنجليزي خام للمستخدم أبدًا.
 private fun predSubmitError(t: Throwable): String {
     val failure = t as? ApiFailure
     val raw = failure?.message.orEmpty()
     return when {
         raw.contains("DRAW_NOT_ALLOWED") -> "التعادل غير متاح لهذه المباراة"
-        raw.contains("LOCKED") -> "أُقفل التوقّع"
+        raw.contains("PREDICTION_LOCKED") || raw.contains("LOCKED") -> "أُقفل التوقّع — انطلقت المباراة"
+        raw.contains("COMPETITION_DISABLED") -> "التوقّعات غير مفعّلة لهذه البطولة حاليًا"
+        raw.contains("CONTEST_NOT_OPEN") -> "لم تُفتح التوقّعات لهذه المباراة بعد"
+        raw.contains("INVALID_PREDICTION_PAYLOAD") -> "نتيجة غير صالحة — تحقق من الأرقام"
+        failure?.status == 401 -> "سجّل دخولك للمشاركة في التوقّعات"
+        failure?.status == 503 -> "التوقّعات متوقفة مؤقتًا — عُد قريبًا"
         failure?.status == 409 -> "تعذّر حفظ التوقّع — حدّث الشاشة وحاول مجددًا"
-        else -> raw.ifBlank { "تعذّر حفظ التوقّع" }
+        else -> "تعذّر حفظ التوقّع — تحقق من اتصالك وحاول مجددًا"
     }
 }
 
@@ -2023,7 +2036,17 @@ private fun PredCompetitionCard(comp: PredCompetitionSummary, open: () -> Unit) 
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(comp.nameAr, color = c.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(comp.nameAr, color = c.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    // موقوفة تشغيليًا: تُعرض للاطلاع لكن الخادم يرفض حفظ توقّع جديد.
+                    if (comp.status != "active") {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "متوقفة مؤقتًا", color = c.textDim, fontSize = 9.5.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(CircleShape).background(c.textFaint.copy(.15f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
                 Text(
                     listOf(comp.seasonKey.takeIf { it.isNotBlank() }, "${comp.openContests} توقّعات مفتوحة").filterNotNull().joinToString(" · "),
                     color = c.textDim, fontSize = 11.sp,
@@ -2341,6 +2364,8 @@ private data class PredContestDetailData(
     val contest: PredContest,
     val ruleSummary: String,
     val awards: List<PredAward>,
+    /** فشل جلب التسوية شبكةً — لا يعني «لم تُصب» فلا نعرضها ظلمًا. */
+    val settlementFailed: Boolean = false,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2361,11 +2386,13 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
         state = runCatching {
             val root = vm.api.memberGet("/predictions/contests/$contestId", ignoreCache = true).jsonObject
             val contest = parsePredContest(root) ?: error("تعذّر تحميل المسابقة")
+            var settlementFailed = false
             val awards = if (contest.status == "settled") {
-                runCatching { vm.api.memberGet("/predictions/contests/$contestId/settlement", ignoreCache = true).jsonObject }.getOrNull()
-                    ?.let { findArray(it, "myAwards", "awards").mapNotNull(::parsePredAward) }.orEmpty()
+                val settlement = runCatching { vm.api.memberGet("/predictions/contests/$contestId/settlement", ignoreCache = true).jsonObject }
+                    .onFailure { settlementFailed = true }.getOrNull()
+                settlement?.let { findArray(it, "myAwards", "awards").mapNotNull(::parsePredAward) }.orEmpty()
             } else emptyList()
-            PredContestDetailData(contest, predRuleSummary(root.obj("rule")), awards)
+            PredContestDetailData(contest, predRuleSummary(root.obj("rule")), awards, settlementFailed)
         }.fold({ data ->
             homeScore = data.contest.predHome ?: 0
             awayScore = data.contest.predAway ?: 0
@@ -2413,7 +2440,9 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                                     buildJsonObject { put("prediction", buildJsonObject { put("predHome", homeScore); put("predAway", awayScore) }) },
                                                 )
                                             }
-                                                .onSuccess { justSaved = true; scope.launch { delay(1800); justSaved = false } }
+                                                // إعادة الجلب تُثبت «توقّعك» من الخادم — بدونها يرتد
+                                                // الزر بعد 1.8ث فيبدو أن الحفظ فشل.
+                                                .onSuccess { justSaved = true; revision++; scope.launch { delay(1800); justSaved = false } }
                                                 .onFailure { submitError = predSubmitError(it) }
                                             submitting = false
                                         }
@@ -2468,6 +2497,9 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                             color = c.gold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold,
                                             modifier = Modifier.clip(CircleShape).background(c.gold.copy(.15f)).padding(horizontal = 11.dp, vertical = 5.dp),
                                         )
+                                    } else if (detail.settlementFailed) {
+                                        // فشل شبكة ≠ خسارة — لا نحكم على المستخدم ظلمًا.
+                                        Text("تعذّر جلب التسوية — حدّث الشاشة", color = c.textDim, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     } else {
                                         Text("لم تُصب هذه المرة", color = c.textFaint, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }

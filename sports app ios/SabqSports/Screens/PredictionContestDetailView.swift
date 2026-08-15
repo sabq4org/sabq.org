@@ -7,6 +7,7 @@ import SwiftUI
 struct PredictionContestDetailView: View {
     let contestId: String
 
+    @Environment(SpAuthStore.self) private var auth
     @State private var detail: PredContestDetailResponse?
     @State private var settlement: PredSettlementResponse?
     @State private var predHome = 0
@@ -94,7 +95,7 @@ struct PredictionContestDetailView: View {
     private func centerScore(_ detail: PredContestDetailResponse) -> some View {
         if detail.status == "settled", let result = detail.result,
            let home = result.finalHome, let away = result.finalAway {
-            Text("\u{2066}\(home)–\(away)\u{2069}")
+            Text(PredFormat.scorePair(home: home, away: away))
                 .font(SportsFonts.app(size: 26, weight: .heavy))
                 .foregroundStyle(SpTheme.onDark)
                 .monospacedDigit()
@@ -152,12 +153,16 @@ struct PredictionContestDetailView: View {
                 stepper($predAway, teamName: detail.metadata?.away?.name)
             }
 
-            Button { Task { await submit() } } label: {
+            Button {
+                // بوابة الدخول قبل الإرسال — 401 كان يظهر كأن «المباراة أُقفلت».
+                guard auth.isLoggedIn else { SpAppRouter.shared.requestLogin(); return }
+                Task { await submit() }
+            } label: {
                 HStack(spacing: 8) {
                     if submitting { ProgressView().tint(.white) }
                     Text(justSaved
                          ? L("تم الحفظ ✓")
-                         : Lf("تأكيد التوقّع %d–%d", predHome, predAway))
+                         : L("تأكيد التوقّع") + " " + PredFormat.scorePair(home: predHome, away: predAway))
                         .font(SportsFonts.app(size: 14, weight: .bold))
                 }
                 .foregroundStyle(.white)
@@ -170,6 +175,12 @@ struct PredictionContestDetailView: View {
             }
             .buttonStyle(.plain)
             .disabled(submitting)
+
+            if !auth.isLoggedIn {
+                Text(L("سجّل دخولك ليُحفظ توقّعك باسمك وتنافس على الجائزة"))
+                    .font(SportsFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+            }
 
             if let submitError {
                 Text(submitError)
@@ -232,7 +243,7 @@ struct PredictionContestDetailView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(SpTheme.onDarkDim)
             if let payload = detail.myEntry?.payload, let h = payload.predHome, let a = payload.predAway {
-                Text(Lf("توقّعك %d–%d مقفل — بانتظار صافرة النهاية", h, a))
+                Text(L("توقّعك") + " " + PredFormat.scorePair(home: h, away: a) + " " + L("مقفل — بانتظار صافرة النهاية"))
                     .font(SportsFonts.app(size: 12.5, weight: .bold))
                     .foregroundStyle(SpTheme.onDark)
             } else {
@@ -257,7 +268,7 @@ struct PredictionContestDetailView: View {
 
         if let payload = detail.myEntry?.payload, let h = payload.predHome, let a = payload.predAway {
             HStack {
-                Text(Lf("توقّعتَ %d–%d", h, a))
+                Text(L("توقّعتَ") + " " + PredFormat.scorePair(home: h, away: a))
                     .font(SportsFonts.app(size: 12.5, weight: .bold))
                     .foregroundStyle(SpTheme.onDarkDim)
                 Spacer()
@@ -329,7 +340,8 @@ struct PredictionContestDetailView: View {
     // MARK: - التحميل والإرسال
 
     private func load() async {
-        loading = true
+        // لا وميض عند إعادة التحميل بعد الحفظ — البطاقة القائمة تبقى معروضة.
+        loading = detail == nil
         do {
             let response = try await APIClient.shared.fetchPredContest(id: contestId)
             detail = response
@@ -351,11 +363,24 @@ struct PredictionContestDetailView: View {
         submitError = nil
         do {
             _ = try await APIClient.shared.submitPredEntry(contestId: contestId, predHome: predHome, predAway: predAway)
+            // إعادة التحميل تُثبت «توقّعك» من الخادم — النجاح كان يختفي بعد
+            // 1.8 ثانية فيبدو كأن الحفظ فشل (جوهر بلاغ «لا يتم الحفظ»).
+            await load()
             justSaved = true
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             justSaved = false
+        } catch APIError.unauthorized {
+            submitError = L("سجّل دخولك للمشاركة في التوقّعات")
+            SpAppRouter.shared.requestLogin()
+        } catch let APIError.server(status, _) {
+            submitError = switch status {
+            case 422: L("نتيجة غير صالحة — تحقق من الأرقام")
+            case 503: L("التوقّعات متوقفة مؤقتًا — عُد قريبًا")
+            default: L("تعذّر الحفظ — أُقفلت المباراة أو أن مسابقتها غير متاحة حاليًا")
+            }
+            await load() // اعرض الحالة الفعلية من الخادم بدل التخمين
         } catch {
-            submitError = L("تعذّر حفظ التوقّع — ربما أُقفلت المباراة، حدّث الشاشة")
+            submitError = L("تعذّر حفظ التوقّع — تحقق من اتصالك وحاول مجددًا")
         }
         submitting = false
     }

@@ -6,6 +6,7 @@ import SwiftUI
 // واضحة لكل مباراة. الهوية هوية التطبيق نفسه (SpTheme) — لا ألوان مستقلة.
 
 struct PredictionCenterView: View {
+    @Environment(SpAuthStore.self) private var auth
     @State private var competitions: [PredCompetitionSummary] = []
     @State private var selectedSlug: String?
     @State private var contests: [PredContest] = []
@@ -14,6 +15,7 @@ struct PredictionCenterView: View {
     @State private var tab: CenterTab = .matches
     @State private var loading = true
     @State private var loadFailed = false
+    @State private var reloadFailed = false
 
     private enum CenterTab: CaseIterable {
         case matches, ledger, leaderboard
@@ -46,6 +48,7 @@ struct PredictionCenterView: View {
                 } else {
                     if competitions.count > 1 { competitionChips }
                     if let comp = selected { PredHeroCard(competition: comp, myRank: leaderboard?.myRank) }
+                    if reloadFailed { reloadBanner }
                     tabsBar
                     tabContent
                 }
@@ -57,7 +60,29 @@ struct PredictionCenterView: View {
         .navigationTitle(L("التوقّعات"))
         .navigationBarTitleDisplayMode(.large)
         .task { await initialLoad() }
+        // العودة من تفاصيل مسابقة تُحدّث القائمة — بدونها يبقى صف المباراة على
+        // «توقّع الآن» بعد حفظ ناجح فيبدو أن التوقّع لم يُحفظ.
+        .onAppear {
+            if !competitions.isEmpty { Task { await reloadSelected() } }
+        }
         .refreshable { await reloadSelected() }
+    }
+
+    private var reloadBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(SpTheme.crimson)
+            Text(L("تعذّر تحديث المباريات — البيانات المعروضة قد تكون قديمة"))
+                .font(SportsFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkDim)
+            Spacer(minLength: 0)
+            Button(L("إعادة")) { Task { await reloadSelected() } }
+                .font(SportsFonts.app(size: 11.5, weight: .bold))
+                .foregroundStyle(SpTheme.green)
+        }
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: SpTheme.chipRadius, style: .continuous).fill(SpTheme.crimson.opacity(0.10)))
     }
 
     // MARK: - اختيار البطولة
@@ -112,7 +137,25 @@ struct PredictionCenterView: View {
     private var tabContent: some View {
         switch tab {
         case .matches: matchesList
-        case .ledger: PredLedgerListView(items: ledgerItems)
+        case .ledger:
+            if auth.isLoggedIn {
+                PredLedgerListView(items: ledgerItems)
+            } else {
+                VStack(spacing: 12) {
+                    SpEmptyState(icon: "person.crop.circle.badge.questionmark",
+                                 title: L("سجّل دخولك لعرض سجلّك"),
+                                 subtitle: L("نقاطك وتسوياتك تُحفظ بحسابك في سبق"))
+                    Button { SpAppRouter.shared.requestLogin() } label: {
+                        Text(L("تسجيل الدخول"))
+                            .font(SportsFonts.app(size: 13.5, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 26).padding(.vertical, 10)
+                            .background(Capsule().fill(SpTheme.green))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                }
+            }
         case .leaderboard: PredLeaderboardListView(board: leaderboard)
         }
     }
@@ -180,10 +223,16 @@ struct PredictionCenterView: View {
 
     private func reloadSelected() async {
         guard let slug = selected?.slug else { return }
-        async let detail = APIClient.shared.fetchPredCompetition(slug: slug)
-        async let board = APIClient.shared.fetchPredLeaderboard(competitionSlug: slug)
-        contests = (try? await detail)?.contests ?? []
-        leaderboard = try? await board
+        async let detailTask = APIClient.shared.fetchPredCompetition(slug: slug)
+        async let boardTask = APIClient.shared.fetchPredLeaderboard(competitionSlug: slug)
+        do {
+            // فشل التحديث كان يُفرّغ القائمة بصمت — الآن نُبقي المعروض ونُعلن الخلل.
+            contests = try await detailTask.contests
+            reloadFailed = false
+        } catch {
+            reloadFailed = true
+        }
+        leaderboard = try? await boardTask
         if tab == .ledger { await loadTabIfNeeded(.ledger) }
     }
 
@@ -320,8 +369,8 @@ struct PredMatchRowView: View {
     private var centerBlock: some View {
         if contest.status == "settled", let result = contest.result,
            let home = result.finalHome, let away = result.finalAway {
-            // عزل الأرقام كي تثبت «مضيف–ضيف» في سياق RTL
-            Text("\u{2066}\(home)–\(away)\u{2069}")
+            // زوج معزول LTR بالضيف أولًا — رقم المضيف يثبت تحت عموده الأيمن.
+            Text(PredFormat.scorePair(home: home, away: away))
                 .font(SportsFonts.app(size: 17, weight: .heavy))
                 .foregroundStyle(SpTheme.onDark)
                 .monospacedDigit()
@@ -350,7 +399,7 @@ struct PredMatchRowView: View {
         switch contest.status {
         case "open":
             if let payload = contest.myEntry?.payload, let h = payload.predHome, let a = payload.predAway {
-                chip(text: Lf("توقّعتَ %d–%d", h, a), color: SpTheme.green)
+                chip(text: L("توقّعتَ") + " " + PredFormat.scorePair(home: h, away: a), color: SpTheme.green)
             } else {
                 chip(text: L("توقّع الآن"), color: SpTheme.green, filled: true)
             }
@@ -440,7 +489,7 @@ private struct PredLeaderboardListView: View {
                             .font(SportsFonts.app(size: 12.5, weight: .bold))
                             .foregroundStyle(.white)
                         Spacer()
-                        Text("#\(mine.rank) · \(mine.points)")
+                        Text("\u{2066}#\(mine.rank) · \(mine.points)\u{2069}")
                             .font(SportsFonts.app(size: 14, weight: .heavy))
                             .foregroundStyle(.white)
                             .monospacedDigit()

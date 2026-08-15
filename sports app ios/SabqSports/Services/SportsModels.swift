@@ -903,72 +903,6 @@ nonisolated struct SpEngagementBody: Encodable {
     let competitionSlug: String?
 }
 
-// MARK: - المجتمع — لوحة المتصدّرين (عامّة)
-
-nonisolated struct SpLeaderboardEntry: Decodable, Identifiable, Hashable {
-    let userId: String
-    let name: String
-    let avatar: String?
-    let totalPoints: Int
-    let predictions: Int
-    let exact: Int
-    let correct: Int
-    let rank: Int
-    var id: String { userId }
-}
-
-nonisolated struct SpLeaderboardResponse: Decodable {
-    let period: String?
-    let leaderboard: [SpLeaderboardEntry]
-}
-
-// توقّع المستخدم لمباراة (المجتمع) — مطابق صفّ sports_predictions (camelCase).
-nonisolated struct SpPrediction: Decodable, Hashable {
-    let fixtureId: Int
-    let homeName: String
-    let awayName: String
-    let homeLogo: String?
-    let awayLogo: String?
-    let predHome: Int
-    let predAway: Int
-    let actualHome: Int?
-    let actualAway: Int?
-    let points: Int?
-    let kickoffTs: Int?
-    let competitionSlug: String?
-}
-
-nonisolated struct SpPredictionResponse: Decodable {
-    let success: Bool?
-    let prediction: SpPrediction?
-}
-
-nonisolated struct SpUserStats: Decodable, Hashable {
-    let totalPoints: Int
-    let predictions: Int
-    let exact: Int
-    let correct: Int
-}
-
-nonisolated struct SpMyPredictionsResponse: Decodable {
-    let success: Bool?
-    let predictions: [SpPrediction]
-    let stats: SpUserStats?
-}
-
-nonisolated struct SpPredictBody: Encodable {
-    let predHome: Int
-    let predAway: Int
-    let kickoffTs: Int
-    let competitionSlug: String?
-    let homeId: Int?
-    let awayId: Int?
-    let homeName: String
-    let awayName: String
-    let homeLogo: String?
-    let awayLogo: String?
-}
-
 /// تسجيل رمز جهاز APNs — /api/v1/devices/register (userId من الجسم، tokenProvider=apns).
 nonisolated struct SpDeviceRegisterBody: Encodable {
     let deviceToken: String
@@ -1688,26 +1622,6 @@ extension APIClient {
     }
     func fetchExpectedLineup(matchId: Int, ignoreCache: Bool = false) async throws -> SpExpectedLineups {
         try await get(SpExpectedLineups.self, path: "/sports/match/\(matchId)/expected-lineup", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
-    }
-
-    /// لوحة المتصدّرين (عامّة) — period: all | month | week.
-    func fetchLeaderboard(period: String = "all", ignoreCache: Bool = false) async throws -> [SpLeaderboardEntry] {
-        try await get(SpLeaderboardResponse.self, path: "/sports/leaderboard",
-                      query: ["period": period], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).leaderboard
-    }
-
-    // توقّعات المباريات (جلسة عضو، عبر mobileAPI).
-    func fetchMyPrediction(matchId: Int) async throws -> SpPrediction? {
-        try await get(SpPredictionResponse.self, path: "/sports/match/\(matchId)/predict",
-                      ignoreCache: true, apiRoot: URLConstants.mobileAPI).prediction
-    }
-    func submitPrediction(_ body: SpPredictBody, matchId: Int) async throws -> SpPrediction? {
-        try await post(SpPredictionResponse.self, path: "/sports/match/\(matchId)/predict",
-                       body: body, apiRoot: URLConstants.mobileAPI).prediction
-    }
-    func fetchMyPredictions() async throws -> SpMyPredictionsResponse {
-        try await get(SpMyPredictionsResponse.self, path: "/sports/predictions/me",
-                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
     }
 
     /// تسجيل رمز جهاز APNs ليصله بثّ التنبيهات (يلزم userId لربط الجهاز بالعضو).

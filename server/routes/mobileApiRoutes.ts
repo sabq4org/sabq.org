@@ -6272,17 +6272,7 @@ router.post("/sports/intel/ask", async (req: Request, res: Response) => {
   }
 });
 
-// ==========================================
-// توقّعات المباريات (المجتمع) — نظائر الموبايل لمسارات /api/sports/*/predict
-// المحميّة بـrequireAuth (Passport)؛ هنا بجلسة العضو (Bearer) عبر verifyMemberSession.
-//   GET  /api/v1/sports/match/:id/predict   توقّعي لمباراة
-//   POST /api/v1/sports/match/:id/predict   إرسال/تعديل (يُقفل عند الانطلاق)
-//   GET  /api/v1/sports/predictions/me       توقّعاتي + إحصاءاتي
-// ==========================================
-const clampPredGoals = (v: unknown): number | null => {
-  const n = Math.trunc(Number(v));
-  return Number.isFinite(n) && n >= 0 && n <= 30 ? n : null;
-};
+// توقّعات المباريات حصريًا في predictionsMobile.ts — sports_pool حُذفت في #938.
 
 // ==========================================
 // Live Activity push tokens (iOS lock-screen live match)

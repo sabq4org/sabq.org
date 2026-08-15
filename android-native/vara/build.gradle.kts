@@ -95,6 +95,8 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // ترقية صريحة فوق fragment:1.1.0 التي يجرّها play-services (تنبيه Play Console 2026-08-08)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
