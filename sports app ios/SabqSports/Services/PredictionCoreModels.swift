@@ -73,6 +73,8 @@ nonisolated struct PredContest: Decodable, Hashable, Identifiable {
     let opensAt: String?
     let locksAt: String
     let settledAt: String?
+    /// معرّف المباراة عند المصدر (API-Football) — جسر الربط بمركز المباراة.
+    let externalRef: String?
     let metadata: PredContestMeta?
     let result: PredScoreResult?
     /// عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين).
@@ -274,6 +276,24 @@ nonisolated struct PredSettlementResponse: Decodable {
     let result: PredScoreResult?
     let settledAt: String?
     let myAwards: [PredMyAward]
+}
+
+// MARK: - جسر بطولات الرياضة → بطولات المنصة
+
+/// بادئة slug بطولة التوقعات المقابلة لبطولة الرياضة (المزروع: rsl-2026،
+/// kings-cup-2026…). البادئة تُطابَق على قائمة /competitions الحية — لا slug
+/// مزروع في التطبيق، فتنجو من تبدّل المواسم (نهج أندرويد المعتمد).
+nonisolated enum PredCompetitionBridge {
+    static func prefix(forSportsSlug slug: String?) -> String? {
+        switch slug {
+        case "pro-league": "rsl"
+        case "kings-cup": "kings-cup"
+        case "super-cup": "super-cup"
+        case "gulf-cup": "gulf-cup"
+        case "asian-cup": "asian-cup"
+        default: nil
+        }
+    }
 }
 
 // MARK: - عرض الأرقام في سياق RTL

@@ -76,6 +76,11 @@ struct SpMatchCenter: View {
     @State private var segment: Segment = .events
     @State private var selectedTeam: IDBox?
 
+    // بطاقة «توقّع النتيجة» — مسابقة المنصة المركزية المقابلة لهذه المباراة
+    // (اكتشاف بالبادئة + مطابقة externalRef). تظهر قبل الانطلاق فقط.
+    @State private var predContest: PredContest?
+    @State private var predSheet: PredSheetBox?
+
     // إثراء SportMonks (أفضل جهد) — يُفعّل تبويب «التحليل» عند توفّره.
     @State private var xg: SpXg?
     @State private var momentum: SpMomentum?
@@ -244,6 +249,7 @@ struct SpMatchCenter: View {
                 if let f = fixture { header(f) }
 
                 preMatchCard
+                predictionCard
                 // حكم المباراة للقادمة يظهر مباشرةً تحت «الوقت المتبقّي» (قرار 2026-07-09).
                 // للمباريات التي انطلقت يبقى ضمن تبويب التشكيلة (أدناه) بلا تكرار.
                 if fixture?.started == false { refereeCard }
@@ -262,6 +268,13 @@ struct SpMatchCenter: View {
         .background(SpAmbientBackground())
         .navigationTitle(L("مركز المباراة"))
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: fixture?.id) { await resolvePredContest() }
+        .sheet(item: $predSheet, onDismiss: {
+            // تحديث «توقّعتَ …» بعد العودة من النموذج.
+            Task { predContest = nil; await resolvePredContest() }
+        }) { box in
+            NavigationStack { PredictionContestDetailView(contestId: box.id) }
+        }
         .toolbar {
             if let f = fixture {
                 // زرّان في ToolbarItem واحد (HStack) بدل ToolbarItemَين منفصلين —
@@ -490,6 +503,59 @@ struct SpMatchCenter: View {
             )
             .padding(.horizontal, 16)
         }
+    }
+
+    // MARK: - بطاقة «توقّع النتيجة» (المنصة المركزية — تظهر قبل الانطلاق فقط)
+
+    @ViewBuilder private var predictionCard: some View {
+        if let contest = predContest, fixture?.started == false {
+            Button { predSheet = PredSheetBox(id: contest.id) } label: {
+                HStack(spacing: 11) {
+                    Image(systemName: "target")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(acc)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(acc.opacity(0.13)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let p = contest.myEntry?.payload, let h = p.predHome, let a = p.predAway {
+                            Text(L("توقّعتَ") + " " + PredFormat.scorePair(home: h, away: a) + " — " + L("عدّل توقّعك"))
+                                .font(SportsFonts.app(size: 13.5, weight: .bold))
+                                .foregroundStyle(SpTheme.onDark)
+                        } else {
+                            Text(L("توقّع النتيجة ونافس على الجائزة"))
+                                .font(SportsFonts.app(size: 13.5, weight: .bold))
+                                .foregroundStyle(SpTheme.onDark)
+                        }
+                        Text(L("مسابقة مجانية — يُقفل التوقّع عند ضربة البداية"))
+                            .font(SportsFonts.app(size: 10.5))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(acc)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+                        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(acc.opacity(0.35), lineWidth: 1))
+                )
+                .padding(.horizontal, 16)
+            }
+            .buttonStyle(SpPressStyle())
+        }
+    }
+
+    /// اكتشاف مسابقة هذه المباراة: بادئة slug من الجسر ← بطولة المنصة الحية
+    /// ← مطابقة externalRef بمعرّف المباراة. صفر نداءات لبطولات خارج المنصة.
+    private func resolvePredContest() async {
+        guard predContest == nil, let f = fixture, !f.started,
+              let prefix = PredCompetitionBridge.prefix(forSportsSlug: f.competitionSlug) else { return }
+        guard let comps = try? await APIClient.shared.fetchPredCompetitions().competitions,
+              let slug = comps.first(where: { $0.slug.hasPrefix(prefix) })?.slug else { return }
+        let contests: [PredContest] = (try? await APIClient.shared.fetchPredCompetition(slug: slug))?.contests ?? []
+        let ref = String(fixtureId)
+        predContest = contests.first(where: { $0.externalRef == ref && $0.status == "open" && $0.isMatchScore })
     }
 
     // MARK: - حكم المباراة (كما في ويب المونديال — أعداد صحيحة لا متوسطات كسرية)
@@ -2223,4 +2289,9 @@ private struct SpVisionFullHeightKey: PreferenceKey {
 private struct SpVisionClampHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// غلاف معرّف مسابقة للتقديم كـsheet (المعرّف نص UUID).
+private struct PredSheetBox: Identifiable {
+    let id: String
 }
