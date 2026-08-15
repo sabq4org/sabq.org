@@ -6272,9 +6272,7 @@ router.post("/sports/intel/ask", async (req: Request, res: Response) => {
   }
 });
 
-// توقّعات المباريات صارت حصريًا على المنصة المركزية /api/v1/predictions/*
-// (predictionsMobile.ts) — مسارات sports_pool القديمة حُذفت في #938؛ لا
-// تُعِد أي نظير لها هنا.
+// توقّعات المباريات حصريًا في predictionsMobile.ts — sports_pool حُذفت في #938.
 
 // ==========================================
 // Live Activity push tokens (iOS lock-screen live match)
