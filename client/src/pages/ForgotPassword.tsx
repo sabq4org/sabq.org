@@ -116,6 +116,16 @@ export default function ForgotPassword() {
             </form>
           </Form>
 
+      <div className="mt-5 rounded-lg bg-muted/50 p-3 text-center text-sm text-muted-foreground">
+        سجلت برقم الجوال فقط؟ لا حاجة لكلمة المرور —{" "}
+        <Link to="/login" className="font-medium text-primary hover:underline" data-testid="link-phone-login">
+          ادخل برمز تحقق يصل جوالك
+        </Link>
+        <p className="mt-1 text-xs">
+          إن لم تصلك رسالة خلال دقائق، تحقق من مجلد الرسائل غير المرغوبة أو جرّب الدخول بالجوال.
+        </p>
+      </div>
+
       {resetLink && (
         <Alert className="mt-4">
           <AlertDescription className="space-y-2">

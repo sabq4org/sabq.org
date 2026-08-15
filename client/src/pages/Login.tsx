@@ -141,6 +141,17 @@ export default function Login() {
 
   const phoneValid = /^5\d{8}$/.test(phoneNumber);
 
+  // يقبل الكتابة واللصق بكل الصيغ الشائعة (05XXXXXXXX / 9665XXXXXXXX / +966...)
+  // ويحذف البادئات — الخادم يطبّعها أصلًا، لكن الواجهة كانت تقص إلى 9 خانات
+  // قبل حذف الصفر فيبقى الزر معطلًا بصمت لمن يكتب رقمه بالصيغة المحلية المعتادة.
+  const normalizeSaudiInput = (raw: string) => {
+    let d = raw.replace(/\D/g, "");
+    if (d.startsWith("00966")) d = d.slice(5);
+    else if (d.startsWith("966")) d = d.slice(3);
+    if (d.startsWith("0")) d = d.slice(1);
+    return d.slice(0, 9);
+  };
+
   const startResend = () => {
     setResend(60);
     const t = setInterval(() => {
@@ -310,6 +321,13 @@ export default function Login() {
               <div className="rounded-lg bg-muted/50 px-3 py-2 text-center text-sm" dir="ltr">
                 ✓ +966 {phoneNumber}
               </div>
+              <p className="text-center text-xs text-muted-foreground">
+                هذا الرقم غير مربوط بأي حساب سابق. إن كان لديك حساب بالبريد الإلكتروني،{" "}
+                <Link href="/forgot-password" className="font-medium text-primary hover:underline">
+                  استعد كلمة مروره من هنا
+                </Link>{" "}
+                بدل إنشاء حساب جديد.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={registerForm.control}
@@ -415,9 +433,9 @@ export default function Login() {
                   dir="ltr"
                   inputMode="numeric"
                   autoComplete="tel-national"
-                  maxLength={9}
+                  maxLength={18}
                   value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                  onChange={(e) => setPhoneNumber(normalizeSaudiInput(e.target.value))}
                   onKeyDown={(e) => { if (e.key === "Enter" && phoneValid) sendPhoneCode(); }}
                   placeholder="5XXXXXXXX"
                   disabled={phoneLoading}
