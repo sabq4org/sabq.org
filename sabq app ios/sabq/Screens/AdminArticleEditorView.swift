@@ -716,7 +716,7 @@ struct AdminArticleEditorView: View {
             Toggle("خبر مميّز", isOn: $vm.isFeatured)
                 .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.gold)
             Toggle("قراءة من سبق", isOn: $vm.isReading)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.emerald)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.teal)
             Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
                 .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.coral)
         }
