@@ -20,16 +20,11 @@
 		5B00000B /* CompetitionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000B /* CompetitionsView.swift */; };
 		5B00000C /* CompetitionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000C /* CompetitionDetailView.swift */; };
 		5B00000D /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000D /* LiveView.swift */; };
-		5B00000E /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000E /* CommunityView.swift */; };
 		5B00000F /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000F /* AccountView.swift */; };
 		5B000010 /* MatchCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000010 /* MatchCenterView.swift */; };
 		5B000011 /* TeamPlayerPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000011 /* TeamPlayerPages.swift */; };
 		5B000012 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000012 /* AuthStore.swift */; };
 		5B000014 /* MatchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000014 /* MatchesView.swift */; };
-		5B000015 /* SportsPredictionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000015 /* SportsPredictionModels.swift */; };
-		5B000016 /* PredictionsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000016 /* PredictionsHubView.swift */; };
-		5B000017 /* SpPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000017 /* SpPredictionMatchCard.swift */; };
-		5B000018 /* PredictionExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000018 /* PredictionExtras.swift */; };
 		5B000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C000020 /* Assets.xcassets */; };
 		5B000021 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5C000021 /* InfoPlist.strings */; };
 		5B000032 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5C000032 /* PrivacyInfo.xcprivacy */; };
@@ -104,16 +99,11 @@
 		5C00000B /* CompetitionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompetitionsView.swift; sourceTree = "<group>"; };
 		5C00000C /* CompetitionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompetitionDetailView.swift; sourceTree = "<group>"; };
 		5C00000D /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveView.swift; sourceTree = "<group>"; };
-		5C00000E /* CommunityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityView.swift; sourceTree = "<group>"; };
 		5C00000F /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		5C000010 /* MatchCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchCenterView.swift; sourceTree = "<group>"; };
 		5C000011 /* TeamPlayerPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamPlayerPages.swift; sourceTree = "<group>"; };
 		5C000012 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		5C000014 /* MatchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchesView.swift; sourceTree = "<group>"; };
-		5C000015 /* SportsPredictionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsPredictionModels.swift; sourceTree = "<group>"; };
-		5C000016 /* PredictionsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionsHubView.swift; sourceTree = "<group>"; };
-		5C000017 /* SpPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPredictionMatchCard.swift; sourceTree = "<group>"; };
-		5C000018 /* PredictionExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionExtras.swift; sourceTree = "<group>"; };
 		5C000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5C000021 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
 		5C000022 /* IBMPlexSansArabic-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.ttf"; sourceTree = "<group>"; };
@@ -202,7 +192,6 @@
 				5C00000B /* CompetitionsView.swift */,
 				5C00000C /* CompetitionDetailView.swift */,
 				5C00000D /* LiveView.swift */,
-				5C00000E /* CommunityView.swift */,
 				5C00000F /* AccountView.swift */,
 				5C0000D0 /* EditProfileView.swift */,
 				5C0000D2 /* NotificationsSettingsView.swift */,
@@ -211,9 +200,6 @@
 				5C000010 /* MatchCenterView.swift */,
 				5C000011 /* TeamPlayerPages.swift */,
 				5C0000A3 /* LegalPages.swift */,
-				5C000016 /* PredictionsHubView.swift */,
-				5C000017 /* SpPredictionMatchCard.swift */,
-				5C000018 /* PredictionExtras.swift */,
 				5C0000E2 /* PredictionCenterView.swift */,
 				5C0000E3 /* PredictionContestDetailView.swift */,
 				5C0000B1 /* TransferCenterView.swift */,
@@ -239,7 +225,6 @@
 				5C000004 /* FontRegistration.swift */,
 				5C000003 /* URLConstants.swift */,
 				5C000012 /* AuthStore.swift */,
-				5C000015 /* SportsPredictionModels.swift */,
 				5C0000E1 /* PredictionCoreModels.swift */,
 				5C000102 /* SpMatchActivity.swift */,
 				5C000103 /* SpLiveActivityManager.swift */,
@@ -424,7 +409,6 @@
 				5B00000B /* CompetitionsView.swift in Sources */,
 				5B00000C /* CompetitionDetailView.swift in Sources */,
 				5B00000D /* LiveView.swift in Sources */,
-				5B00000E /* CommunityView.swift in Sources */,
 				5B00000F /* AccountView.swift in Sources */,
 				5B0000D0 /* EditProfileView.swift in Sources */,
 				5B0000D2 /* NotificationsSettingsView.swift in Sources */,
@@ -437,10 +421,6 @@
 				5B0000C1 /* Localization.swift in Sources */,
 				5B0000C2 /* EnglishStrings.swift in Sources */,
 				5B0000A3 /* LegalPages.swift in Sources */,
-				5B000015 /* SportsPredictionModels.swift in Sources */,
-				5B000016 /* PredictionsHubView.swift in Sources */,
-				5B000017 /* SpPredictionMatchCard.swift in Sources */,
-				5B000018 /* PredictionExtras.swift in Sources */,
 				5B0000E1 /* PredictionCoreModels.swift in Sources */,
 				5B0000E2 /* PredictionCenterView.swift in Sources */,
 				5B0000E3 /* PredictionContestDetailView.swift in Sources */,

@@ -159,6 +159,28 @@ nonisolated struct PredEntrySaveResponse: Decodable {
     let entry: PredEntrySaved
 }
 
+// MARK: - «توقعاتي» (me/entries — نظير تبويب الويب #1413)
+
+nonisolated struct PredMyEntryItem: Decodable, Hashable, Identifiable {
+    let contestId: String
+    let contestType: String
+    let status: String
+    let locksAt: String?
+    let settledAt: String?
+    let metadata: PredContestMeta?
+    let result: PredScoreResult?
+    let payload: PredScorePayload?
+    let totalPoints: Int?
+
+    var id: String { contestId }
+    var locksAtDate: Date? { PredDates.parse(locksAt) }
+}
+
+nonisolated struct PredMyEntriesResponse: Decodable {
+    let items: [PredMyEntryItem]
+    let nextCursor: String?
+}
+
 // MARK: - سجل النقاط
 
 nonisolated struct PredLedgerItem: Decodable, Hashable, Identifiable {
@@ -254,6 +276,16 @@ nonisolated struct PredSettlementResponse: Decodable {
     let myAwards: [PredMyAward]
 }
 
+// MARK: - عرض الأرقام في سياق RTL
+
+/// زوج نتيجة داخل عزل LTR **بالضيف أولًا**: في صف RTL (المضيف يمينًا) يثبت
+/// رقم كل فريق تحت عموده — قلب الترتيب داخل العزل هو درع الانقلاب المعتمد.
+nonisolated enum PredFormat {
+    static func scorePair(home: Int, away: Int) -> String {
+        "\u{2066}\(away)–\(home)\u{2069}"
+    }
+}
+
 // MARK: - تواريخ ISO من الخادم
 
 nonisolated enum PredDates {
@@ -324,6 +356,18 @@ extension APIClient {
         if let cursor { query["cursor"] = cursor }
         return try await get(PredLedgerResponse.self,
                              path: "/predictions/me/ledger",
+                             query: query,
+                             ignoreCache: true,
+                             apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// «توقعاتي» عبر البطولات — يتطلب جلسة عضو (401 بلا Bearer).
+    func fetchPredMyEntries(competitionSlug: String? = nil, limit: Int? = nil) async throws -> PredMyEntriesResponse {
+        var query: [String: String] = [:]
+        if let competitionSlug { query["competition"] = competitionSlug }
+        if let limit { query["limit"] = String(limit) }
+        return try await get(PredMyEntriesResponse.self,
+                             path: "/predictions/me/entries",
                              query: query,
                              ignoreCache: true,
                              apiRoot: URLConstants.mobileAPI)
