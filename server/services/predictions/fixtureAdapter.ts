@@ -22,6 +22,7 @@ import {
   type NormalizedFixture,
 } from "./fixtureSyncLogic";
 import { getCompetition, getFixtures, type SplFixture } from "../saudiLeagueService";
+import { getKcFixtures } from "../kingsCupService";
 import { getGcFixtures, type GcFixture } from "../gulfCupService";
 import { getAcFixtures, type AcFixture } from "../asianCupService";
 
@@ -99,7 +100,9 @@ async function splSource(registrySlug: string): Promise<NormalizedFixture[]> {
 /** مفتاح المحوّل = slug بطولة المنصة (prediction_competitions.slug). */
 const FIXTURE_SOURCES: Record<string, () => Promise<NormalizedFixture[]>> = {
   "rsl-2026": () => splSource("pro-league"),
-  "kings-cup-2026": () => splSource("kings-cup"),
+  // كأس الملك عبر خدمته المخصصة لا splSource المباشر: نفس موسم KC_SEASON الذي
+  // تقرؤه كل أسطح الكأس (fallbackSeason وحده قد ينحرف) + التركيب اللحظي الموحّد.
+  "kings-cup-2026": async () => (await getKcFixtures()).map(normalizeSpl),
   "super-cup-2026": () => splSource("super-cup"),
   "gulf-cup-27": async () => (await getGcFixtures()).map(normalizeGc),
   "asian-cup-2027": async () => (await getAcFixtures()).map(normalizeAc),

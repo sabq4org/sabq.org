@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PenaltyResult } from "../worldcup/PenaltyResult";
 import { LiveMinute } from "../worldcup/LiveMinute";
+import { KcPredictionsMatchPromo } from "./KcPredictionsPromo";
 import { KcProbabilityBar } from "./KcProbabilityBar";
 import {
   elapsedLabel,
@@ -349,6 +350,15 @@ export function KcMatchDialog({
 
         {fx && (
           <div className="p-4 space-y-4">
+            {/* دعوة التوقع — قبل صافرة البداية فقط، وتختفي ما دامت البطولة غير مفعّلة */}
+            {!fx.status.live && !fx.status.finished && (
+              <KcPredictionsMatchPromo
+                fixtureId={fx.id}
+                homeName={fx.home?.name}
+                awayName={fx.away?.name}
+              />
+            )}
+
             {/* شريط الاحتمالات — قبل المباراة وأثناءها */}
             {prediction && !fx.status.finished && (
               <div className="rounded-2xl bg-muted/40 px-3 py-3">

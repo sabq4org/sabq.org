@@ -9,6 +9,7 @@ import {
   getContest,
   getContestSettlement,
   getLeaderboard,
+  getUserEntries,
   getUserLedger,
   getUserPoints,
   isPredictionCoreEnabled,
@@ -133,6 +134,21 @@ router.get("/api/v1/predictions/me/ledger", async (req, res) => {
     const session = await verifyMemberBearer(req);
     if (!session) return res.status(401).json({ error: "UNAUTHORIZED" });
     res.json(await getUserLedger(session.userId, {
+      competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
+      cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    }));
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// «توقعاتي» — نظير مسار الويب (PR #1413) الذي كان بلا مقابل موبايل
+router.get("/api/v1/predictions/me/entries", async (req, res) => {
+  try {
+    const session = await verifyMemberBearer(req);
+    if (!session) return res.status(401).json({ error: "UNAUTHORIZED" });
+    res.json(await getUserEntries(session.userId, {
       competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
       cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
