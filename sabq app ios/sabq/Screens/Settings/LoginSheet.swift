@@ -499,7 +499,15 @@ private struct PhoneLoginFlow: View {
     @State private var resend = 0
     @FocusState private var phoneFocused: Bool
 
-    private var normalized: String { String(number.filter(\.isNumber).prefix(9)) }
+    // يحذف بادئات 00966/966/0 قبل القص — من يكتب رقمه بالصيغة المحلية المعتادة
+    // (05XXXXXXXX) كان يُقص إلى 9 خانات بصفره فيبقى الزر معطلًا بصمت.
+    private var normalized: String {
+        var d = number.filter(\.isNumber)
+        if d.hasPrefix("00966") { d.removeFirst(5) }
+        else if d.hasPrefix("966") { d.removeFirst(3) }
+        if d.hasPrefix("0") { d.removeFirst() }
+        return String(d.prefix(9))
+    }
     private var phoneValid: Bool { normalized.count == 9 && normalized.first == "5" }
     private var e164Display: String { "+966 " + normalized }
 
@@ -531,7 +539,9 @@ private struct PhoneLoginFlow: View {
                     .tint(SabqTheme.primaryEnd)
                     .multilineTextAlignment(.leading)
                     .focused($phoneFocused)
-                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
+                    // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized —
+                    // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
+                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(14)) }
             }
             .environment(\.layoutDirection, .leftToRight)
             .padding(.horizontal, 14)

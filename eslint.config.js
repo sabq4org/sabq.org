@@ -134,8 +134,10 @@ export default tseslint.config(
     // adjusting it). PR #1430 then REMOVED the dead sports_pool comment block —
     // net shrink — and re-baselines to the shrunk size. Ratchet intent unchanged:
     // the next extraction must lower this.
+    // Re-baselined again (password-recovery P0): the reset-code email template
+    // moved to services/passwordResetService.ts (ADR-001) — net -76 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10130 }] },
+    rules: { "max-lines": ["error", { max: 10054 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

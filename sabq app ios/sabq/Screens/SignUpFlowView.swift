@@ -529,7 +529,7 @@ struct SignUpFlowView: View {
         switch step {
         case .askName: return !input.trimmingCharacters(in: .whitespaces).isEmpty
         case .askEmail: return input.contains("@") && input.contains(".")
-        case .askPassword: return input.count >= 6
+        case .askPassword: return input.count >= 8 // حد الخادم الموحد (passwordPolicy)
         case .askInterests: return true
         default: return false
         }

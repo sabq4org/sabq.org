@@ -16,7 +16,7 @@ import { consumePostAuthReturn } from "@/lib/postAuthRedirect";
 
 const setPasswordSchema = z.object({
   currentPassword: z.string().min(1, "كلمة المرور الحالية مطلوبة"),
-  newPassword: z.string().min(6, "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل"),
+  newPassword: z.string().min(8, "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل"),
   confirmPassword: z.string(),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "كلمات المرور غير متطابقة",

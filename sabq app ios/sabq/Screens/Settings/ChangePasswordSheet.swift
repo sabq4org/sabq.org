@@ -16,7 +16,7 @@ struct ChangePasswordSheet: View {
     @State private var success = false
 
     private var isValid: Bool {
-        !currentPassword.isEmpty && newPassword.count >= 6 && newPassword == confirmPassword
+        !currentPassword.isEmpty && newPassword.count >= 8 && newPassword == confirmPassword
     }
 
     var body: some View {
@@ -52,7 +52,7 @@ struct ChangePasswordSheet: View {
                     } else {
                         VStack(spacing: 16) {
                             secureField(label: "كلمة المرور الحالية", placeholder: "أدخل كلمة المرور الحالية", text: $currentPassword)
-                            secureField(label: "كلمة المرور الجديدة", placeholder: "6 أحرف على الأقل", text: $newPassword)
+                            secureField(label: "كلمة المرور الجديدة", placeholder: "8 أحرف على الأقل", text: $newPassword)
                             secureField(label: "تأكيد كلمة المرور", placeholder: "أعد إدخال كلمة المرور الجديدة", text: $confirmPassword)
 
                             if !newPassword.isEmpty && !confirmPassword.isEmpty && newPassword != confirmPassword {

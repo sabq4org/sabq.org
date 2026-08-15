@@ -1208,11 +1208,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ passwordHash })
         .where(eq(users.id, matchedToken.userId));
 
-      // Mark token as used
+      // إبطال كل رموز/روابط الاستعادة غير المستهلكة للمستخدم — مسار الموبايل
+      // يرسل رمزًا ورابطًا معًا؛ استهلاك أحدهما يجب أن يُبطل الآخر.
       await db
         .update(passwordResetTokens)
         .set({ used: true })
-        .where(eq(passwordResetTokens.id, matchedToken.id));
+        .where(and(
+          eq(passwordResetTokens.userId, matchedToken.userId),
+          eq(passwordResetTokens.used, false)
+        ));
 
       await invalidateAllUserSessions(matchedToken.userId); // kill all sessions so a stolen cookie can't survive the reset (audit #8)
 

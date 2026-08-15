@@ -16,7 +16,7 @@ import sabqLogo from "@assets/sabq-logo.png";
 
 const registerSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
-  password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   confirmPassword: z.string(),
   firstName: z.string().min(2, "الاسم الأول مطلوب"),
   lastName: z.string().min(2, "الاسم الأخير مطلوب"),
