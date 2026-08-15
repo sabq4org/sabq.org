@@ -537,8 +537,9 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
     // نافذة انتظار التشكيلة: نُظهر التبويب بحالة فارغة بدل إخفائه قبيل الانطلاق.
     val hasOfficialLineup = st.detail?.lineups?.any { it.startXI.isNotEmpty() } == true
     val awaitingLineups = fixture?.let { f ->
+        val ts = f.timestamp ?: return@let false // بلا موعد معلوم لا نافذة انتظار
         !f.status.finished && !hasOfficialLineup && !hasExpected && run {
-            val secs = f.timestamp - System.currentTimeMillis() / 1000
+            val secs = ts - System.currentTimeMillis() / 1000
             secs <= 2 * 3600 && secs > -3 * 3600
         }
     } == true
