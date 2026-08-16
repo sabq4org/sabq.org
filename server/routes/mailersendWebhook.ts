@@ -57,17 +57,23 @@ function suppressionReasonFor(eventType: string): SuppressionReason | null {
 }
 
 router.post("/api/webhooks/mailersend", async (req: Request, res: Response) => {
+  // ALWAYS respond 2xx. MailerSend sends a test request when the webhook is
+  // CREATED/UPDATED and refuses to save it unless the endpoint returns 2xx — but
+  // at creation time the signing secret it just generated isn't on our server
+  // yet (chicken-and-egg), so a strict 401 made webhook creation fail silently.
+  // Security is preserved by gating the only side effect (addEmailSuppression)
+  // behind a successful signature check: an unverified request gets 200 but does
+  // NOTHING. This also stops MailerSend retry-storms on events we ignore.
   try {
     const rawBody: Buffer | undefined = (req as any).rawBody;
-    if (!rawBody) {
-      // The global express.json verify callback populates req.rawBody; without it
-      // we cannot verify the signature, so refuse rather than trust the body.
-      return res.status(400).json({ error: "raw body unavailable" });
-    }
-
     const signature = (req.headers["signature"] || req.headers["Signature"]) as string | undefined;
-    if (!verifyMailerSendSignature(rawBody, signature)) {
-      return res.status(401).json({ error: "invalid webhook signature" });
+    const verified = !!rawBody && verifyMailerSendSignature(rawBody, signature);
+
+    if (!verified) {
+      // Setup verification test, missing secret, or a forged/unsigned request:
+      // acknowledge so the webhook can be saved, but take no action.
+      log.warn("[MailerSend Webhook] unverified request acknowledged (no action taken)");
+      return res.json({ ok: true, verified: false });
     }
 
     // MailerSend delivers a single event: { type, data: { email: { recipient: { email } } } }.
@@ -86,8 +92,7 @@ router.post("/api/webhooks/mailersend", async (req: Request, res: Response) => {
       log.warn(`[MailerSend Webhook] suppressed a recipient (${eventType})`); // no PII
     }
 
-    // Always 200 so MailerSend doesn't retry indefinitely on events we ignore.
-    return res.json({ ok: true });
+    return res.json({ ok: true, verified: true });
   } catch (err) {
     console.error("[MailerSend Webhook] handler error:", err);
     // Still 200 — a handler error must not make MailerSend hammer retries.
