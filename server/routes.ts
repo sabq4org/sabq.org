@@ -71,7 +71,9 @@ import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
 import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
-import { PERMISSION_CODES, ROLE_NAMES } from "@shared/rbac-constants";
+import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
+import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
+import { inferStaffRolesFromWork } from "./services/staffRoleInference";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
 // Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
@@ -1497,33 +1499,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Get all roles as array
-      const rolesArray = userRolesResult.map(r => r.roleName);
-
-      // Prefer the first non-reader RBAC role so writers/reporters/editors
-      // surface their actual title instead of getting overridden by a
-      // stray "reader" assignment (matches Mobile API logic in
-      // mobileApiRoutes.ts:buildUserRolePayload).
-      const nonReaderRole = userRolesResult.find(
-        (r) => r.roleName && r.roleName !== "reader",
+      // Union RBAC + users.role and drop leftover "reader" when a staff
+      // role exists — same helper as Mobile API / getUserRoleNames so a
+      // correspondent never surfaces as «قارئ» from a stale layer.
+      let allRoles = mergeRoleSignals(
+        userRolesResult.map((r) => r.roleName),
+        user.role,
       );
-
-      // For backward compatibility, keep 'role' as first role, add 'roles' array
-      const role = nonReaderRole?.roleName
-        || rolesArray[0]
-        || user.role
-        || "reader";
-      const allRoles = rolesArray.length > 0
-        ? rolesArray
-        : [user.role || "reader"];
-      // `roleLabel` is the Arabic display name pulled straight from the
-      // `roles` table — single source of truth, no client-side
-      // translation map needed. Falls back to the job title (e.g.
-      // "كاتب رأي في علم النفس والمجتمع") and finally a hard-coded
-      // "قارئ" so writers without an explicit job title still show
-      // something meaningful.
-      const roleLabel = nonReaderRole?.roleNameAr
-        || userRolesResult[0]?.roleNameAr
+      if (
+        allRoles.every((name) => isReaderLikeRole(name)) &&
+        (user.jobTitle || user.hasPressCard)
+      ) {
+        const inferred = await inferStaffRolesFromWork(userId);
+        if (inferred.length > 0) {
+          allRoles = mergeRoleSignals(
+            [...userRolesResult.map((r) => r.roleName), ...inferred],
+            user.role,
+          );
+        }
+      }
+      const role = primaryRoleKey(allRoles);
+      const primaryRbac = userRolesResult.find((r) => r.roleName === role);
+      const roleLabel = primaryRbac?.roleNameAr
+        || ROLE_LABELS_AR[role as keyof typeof ROLE_LABELS_AR]
         || user.jobTitle
         || "قارئ";
 

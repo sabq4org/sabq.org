@@ -69,6 +69,7 @@ import {
   canUserLogin,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
+import { buildUserRolePayload } from "../services/mobileUserRolePayload";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -149,77 +150,6 @@ const router = Router();
 
 // Mount OAuth mobile endpoints (POST /auth/google, /auth/apple)
 router.use(oauthMobileRouter);
-
-// ==========================================
-// Mobile role payload helper
-// ==========================================
-//
-// Build the role/roles/roleLabel/jobTitle bundle the iOS APIUser
-// decoder expects, so /auth/login, /auth/register, AND /members/profile
-// can ALL return it. Previously only /members/profile returned RBAC
-// roles — the login response shipped a bare user object without `role`,
-// `roles`, `roleLabel`, or `jobTitle`, which meant the freshly-logged-in
-// iOS user saw "قارئ" until the async /members/profile call returned
-// (and "قارئ" stayed permanently if that call ever failed transiently).
-// Surfacing the full role bundle on login + register fixes the
-// "writer shows as reader in the iOS app" bug.
-//
-// Returns the same shape used in the /members/profile response so the
-// three endpoints stay in lockstep.
-const MOBILE_ROLE_LABELS: Record<string, string> = {
-  system_admin: "مدير النظام",
-  admin: "مسؤول",
-  editor: "محرر",
-  editor_in_chief: "رئيس التحرير",
-  senior_editor: "محرر أول",
-  reporter: "مراسل",
-  correspondent: "مراسل",
-  journalist: "صحفي",
-  writer: "كاتب",
-  author: "كاتب",
-  article_writer: "كاتب مقال",
-  article_author: "كاتب مقال",
-  opinion_author: "كاتب مقال رأي",
-  columnist: "كاتب عمود",
-  managing_editor: "مدير تحرير",
-  editorial_manager: "مدير تحرير",
-  content_manager: "مدير محتوى",
-  comments_moderator: "مشرف تعليقات",
-  moderator: "مشرف",
-  media_manager: "مدير وسائط",
-  publisher: "ناشر",
-  photographer: "مصور",
-  contributor: "مساهم",
-  reader: "قارئ",
-};
-
-const normalizeRoleKey = (value?: string | null) =>
-  value?.trim().toLowerCase().replace(/\s+/g, "_") || "";
-
-async function buildUserRolePayload(userId: string, legacyRole?: string | null, jobTitle?: string | null) {
-  const rbacRoles = await db
-    .select({ name: roles.name, nameAr: roles.nameAr })
-    .from(userRoles)
-    .innerJoin(roles, eq(userRoles.roleId, roles.id))
-    .where(eq(userRoles.userId, userId));
-
-  const nonReaderRbacRole = rbacRoles.find((r) => normalizeRoleKey(r.name) !== "reader");
-  const legacyKey = normalizeRoleKey(legacyRole);
-  const effectiveRoleKey = normalizeRoleKey(nonReaderRbacRole?.name) || legacyKey || "reader";
-  const explicitRoleLabel =
-    nonReaderRbacRole?.nameAr ||
-    (jobTitle?.trim() ? jobTitle.trim() : null) ||
-    MOBILE_ROLE_LABELS[effectiveRoleKey] ||
-    legacyRole ||
-    "قارئ";
-
-  return {
-    role: effectiveRoleKey,
-    roleLabel: explicitRoleLabel,
-    membershipLabel: explicitRoleLabel,
-    roles: rbacRoles.map((r) => ({ key: r.name, displayName: r.nameAr })),
-  };
-}
 
 // ==========================================
 // Helper: Send Mobile Activation Email

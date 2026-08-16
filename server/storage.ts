@@ -7,6 +7,7 @@ import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSe
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
+import { assignRbacRoleByName, resolvePrimaryRoleName, syncLegacyRoleFromRoleIds } from "./services/userRoleSync";
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
@@ -2979,12 +2980,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserRole(userId: string, role: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ role })
-      .where(eq(users.id, userId))
-      .returning();
-
+    const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
+    await assignRbacRoleByName(userId, role);
+    if (role === "reporter") {
+      try { await this.ensureReporterStaffRecord(userId); } catch (err) {
+        console.error("[updateUserRole] ensureReporterStaffRecord failed:", err);
+      }
+    }
     return user;
   }
 
@@ -3571,6 +3573,7 @@ export class DatabaseStorage implements IStorage {
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const user = await db.transaction(async (tx) => {
+      const primaryRole = await resolvePrimaryRoleName(tx, userData.roleIds);
       const [user] = await tx.insert(users).values({
         id: userId,
         email: userData.email.trim().toLowerCase(),
@@ -3584,7 +3587,7 @@ export class DatabaseStorage implements IStorage {
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
-        role: 'reader',
+        role: primaryRole,
         isProfileComplete: true,
         mustChangePassword: true, // Require password change on first login
       }).returning();
@@ -3667,13 +3670,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const newRoles = await tx
-        .select({
-          id: roles.id,
-          name: roles.name,
-        })
-        .from(roles)
-        .where(inArray(roles.id, roleIds));
+      const newRoles = await syncLegacyRoleFromRoleIds(tx, userId, roleIds);
 
       await tx.insert(activityLogs).values({
         id: nanoid(),

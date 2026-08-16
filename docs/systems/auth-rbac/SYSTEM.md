@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-07-31 | المالك: platform
+> آخر مراجعة: 2026-08-16 | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -27,6 +27,7 @@
   - **الحسابات القديمة ذات البريد الاصطناعي:** لا تُحذف ولا تُعدل آليًا؛ الويب يجبر الاستكمال عبر حارس `needsAccountCompletion` → `/complete-name` (بريد حقيقي + كلمة مرور + الاسم الناقص). لوحة المستخدمين تعرض «لم يُضف بريد» بدل الاصطناعي ولا تُظهر علامة توثيق البريد إلا لبريد حقيقي، والبحث يشمل رقم الجوال (regexp على الأرقام).
   - **استعادة كلمة المرور:** forgot-password (ويب + v1) لا يرسل إلى بريد اصطناعي/مفقود ولا إلى بريد غير موثق إلا لحسابات `authProvider=local` (بريدها هويتها التاريخية)، والاستجابة عامة موحدة. مسارات كلمة المرور في v1 (register/reset/change) توحدت على `validatePassword`.
   - `findOrCreatePhoneUser`/`findExistingPhoneUser` يفضّلان حساب المنسوب على القارئ لنفس الرقم، ويُلغيان عضوية القارئ المكررة (`status=deleted` + تفريغ `phoneNumber`). عند قبول مراسل/كاتب رأي يُنسخ الجوال إلى `users.phoneNumber` بصيغة E.164؛ وإلا يفشل OTP في إيجاد المنسوب وينشئ قارئاً جديداً. التسجيل/التحديث يرفض الجوال الموجود مسبقاً عبر `assertPhoneAvailable` (كل الصيغ).
+- **دور العرض والبوابات (`shared/effectiveRoles.ts`):** `getUserRoleNames` و`/api/auth/user` و`buildUserRolePayload` يدمجون `user_roles` مع `users.role` ويسقطون `reader` إن وُجد دور منسوب. سابقاً صف RBAC `reader` كان يحجب عمود `users.role=reporter` فيظهر المراسل «قارئ» ويُرفض `/api/staff-profiles/me`. `updateUserRole` يضيف صف RBAC، و`updateUserRoles`/`createUserWithRoles` يزامنان العمود. ترقية صريحة: `POST /api/admin/users/:id/promote-reporter` (صلاحية `users.change_role` أو `users.update`) + زر في `/dashboard/users` + `scripts/promote-correspondent.ts`. إن بقيت الطبقتان قارئاً يُستنتج المراسل من `staff.staffType` أو وجود خبر بـ`articles.reporter_id`.
 - `ROLE_PERMISSIONS_MAP` للأدمن يحمل `"*"` حرفياً — لا تستبدله بتوسيع `PERMISSION_CODES`.
 - فلاتر التنقل يجب أن short-circuit على `permissions.includes("*")`.
 - `hasRole(..., "admin")` يقبل أيضاً `system_admin` / `system.admin` / `superadmin` / `super_admin`. أي بوابة أدوار في الواجهة (`ProtectedRoute`, `useRoleProtection`) يجب أن تمر عبر `hasRole` — مطابقة نصية لـ `role === "admin"` تطرد مسؤول النظام من صفحات مثل `/dashboard/admin/publishers` وiFox.
