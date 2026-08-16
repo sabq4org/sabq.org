@@ -112,8 +112,14 @@ export default tseslint.config(
     // phone-number normalisation, token invalidation, and web-fallback link
     // inside EXISTING handlers. Zero new endpoints; extractable logic went to
     // server/services/passwordResetService.ts. File is now 36381 lines.
+    // Re-baselined 2026-08-16 (membership-hardening backend, PR #1433): auth
+    // security guards inside EXISTING handlers — per-account login lockout,
+    // dedicated forgot/register rate limiters, 409-on-duplicate via
+    // extractPgError, nanoid ids. Zero new endpoints; extractable logic reuses
+    // authAttemptGuard / pgError. File is now 36445 lines. Next extraction of
+    // the inline auth routes into an auth router MUST ratchet this back down.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36381 }] },
+    rules: { "max-lines": ["error", { max: 36445 }] },
   },
   {
     files: ["server/storage.ts"],
@@ -140,8 +146,15 @@ export default tseslint.config(
     // the next extraction must lower this.
     // Re-baselined again (password-recovery P0): the reset-code email template
     // moved to services/passwordResetService.ts (ADR-001) — net -76 lines.
+    // Re-baselined 2026-08-16 (membership-hardening backend, PR #1433): guards
+    // inside EXISTING handlers — E.164 phone normalisation on v1 login/forgot/
+    // reset, activate/resend gated on emailVerified (F-08), 409-on-duplicate,
+    // interests validation, at-rest code hashing (hashMobileCode), notification-
+    // prefs seeding. Zero new endpoints (the MailerSend webhook is its OWN file,
+    // routes/mailersendWebhook.ts). File is now 10133 lines; next extraction
+    // must ratchet down.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10054 }] },
+    rules: { "max-lines": ["error", { max: 10133 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through
