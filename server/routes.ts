@@ -911,8 +911,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ? role 
         : "reader";
 
-      // Create user
-      const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Create user — nanoid like every other creation path (F-21); the old
+      // `user-${Date.now()}-${Math.random()}` was timestamp-prefixed/guessable.
+      const { nanoid } = await import("nanoid");
+      const userId = `user-${nanoid()}`;
       const [newUser] = await db
         .insert(users)
         .values({

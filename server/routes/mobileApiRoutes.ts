@@ -20,6 +20,7 @@ import { recordFailure, isLockedOut, clearFailures } from "../services/authAttem
 import { createWebResetLink, sendPasswordResetCodeEmail } from "../services/passwordResetService";
 import { normalizePhone } from "../services/phoneAuth";
 import { isUniqueViolation } from "../utils/pgError";
+import { EMAIL_FORMAT_REGEX } from "../services/phoneRegistrationService";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -38,6 +39,7 @@ import { log } from "../utils/logger";
 import {
   categories,
   articles,
+  userNotificationPrefs,
   pushDevices,
   pushCampaigns,
   pushCampaignEvents,
@@ -1042,9 +1044,18 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     }
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مطلوب" 
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني مطلوب"
+      });
+    }
+
+    // Validate email format — the web register schema does this but v1 only
+    // checked presence, so any non-empty string became an account email (F-27).
+    if (!EMAIL_FORMAT_REGEX.test(String(email).trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "صيغة البريد الإلكتروني غير صحيحة"
       });
     }
 
@@ -1104,6 +1115,24 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       authProvider: "local",
       emailVerified: false,
     });
+
+    // Seed default notification preferences, at parity with web register — v1
+    // previously skipped this so mobile signups had no defaults (F-27).
+    await db
+      .insert(userNotificationPrefs)
+      .values({
+        userId,
+        breaking: true,
+        interest: true,
+        likedUpdates: true,
+        mostRead: true,
+        webPush: false,
+        dailyDigest: false,
+      })
+      .catch((error) => {
+        console.error("[Mobile API] Error creating notification preferences:", error);
+        // Don't fail registration if notification prefs fail.
+      });
 
     // Generate verification token + send activation email (best-effort —
     // failures are logged but don't abort the flow now that status='active').
@@ -1212,10 +1241,12 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
         .limit(1);
     }
 
+    // Unknown user → same generic error as a bad/expired code, so this doesn't
+    // become an account-existence oracle (F-19).
     if (!user) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: "المستخدم غير موجود"
+        message: "رمز التفعيل غير صحيح أو منتهي الصلاحية"
       });
     }
 
@@ -1299,20 +1330,21 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
         .limit(1);
     }
 
+    // Generic response used for unknown-user and already-verified so this
+    // endpoint isn't an account-existence/state oracle (F-19).
+    const genericResendResponse = {
+      success: true,
+      message: "إن كان الحساب بحاجة إلى تفعيل فقد أُرسل رمز جديد إلى بريده.",
+    };
+
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "المستخدم غير موجود"
-      });
+      return res.json(genericResendResponse);
     }
 
     // Gate on emailVerified, not status — accounts are auto-activated so the
     // status check made resend permanently reject everyone (F-08).
     if (user.emailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "البريد الإلكتروني موثق مسبقاً"
-      });
+      return res.json(genericResendResponse);
     }
 
     // Invalidate old tokens

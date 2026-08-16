@@ -65,9 +65,6 @@ const EXEMPT_PATHS = [
   "/api/auth/google/callback",
   "/api/auth/apple",
   "/api/auth/apple/callback",
-  "/api/forgot-password",
-  "/api/reset-password",
-  "/api/verify-email",
   "/api/csrf-token",
   // 2FA login-flow endpoints — user is mid-login (pending2FAUserId in session),
   // not yet authenticated, so no CSRF token is available yet. These are

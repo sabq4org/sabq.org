@@ -117,7 +117,8 @@ export async function sendEmailNotification(options: {
 }): Promise<{ success: boolean; error?: string }> {
   try {
     await sendTransactionalEmail(options);
-    console.log(`✅ Email sent to ${options.to}: ${options.subject}`);
+    // لا نسجل عنوان المستلم (PII) — الموضوع يكفي للتشخيص (F-18).
+    console.log(`✅ Email sent: ${options.subject}`);
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending email:', error);
@@ -252,7 +253,7 @@ If you didn't sign up, please ignore this email.
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Verification email sent to ${email}`);
+    console.log(`✅ Verification email sent`); // لا نسجل العنوان (PII) — F-18
     
     return { success: true };
   } catch (error) {
@@ -493,7 +494,7 @@ If you didn't request a password reset, please ignore this email.
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Password reset email sent to ${email}`);
+    console.log(`✅ Password reset email sent`); // لا نسجل العنوان (PII) — F-18
     
     return { success: true };
   } catch (error) {
