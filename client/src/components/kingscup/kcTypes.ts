@@ -164,6 +164,7 @@ export interface KcMatchEvent {
   teamId: number;
   team: string;
   player: string;
+  playerId?: number;
   assist: string | null;
   type: string;
   label: string;

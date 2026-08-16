@@ -107,10 +107,21 @@ export function PredictionMatchCard({
         <TeamSide name={home?.name} logo={home?.logo} />
         <div className="min-w-[72px] text-center">
           {contest.status === "settled" && contest.result ? (
-            // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم فريقه
-            <span className="text-xl font-extrabold tabular-nums text-foreground" dir="ltr">
-              {contest.result.finalAway}–{contest.result.finalHome}
-            </span>
+            <div>
+              {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم فريقه */}
+              <span className="text-xl font-extrabold tabular-nums text-foreground block" dir="ltr">
+                {contest.result.finalAway}–{contest.result.finalHome}
+              </span>
+              {(() => {
+                const pen = contest.result?.penalties ?? contest.metadata?.penalties;
+                if (!pen || (pen.home == null && pen.away == null)) return null;
+                return (
+                  <span className="text-[10.5px] font-bold tabular-nums text-muted-foreground block" dir="ltr">
+                    ({pen.away ?? 0}–{pen.home ?? 0} ر.ت)
+                  </span>
+                );
+              })()}
+            </div>
           ) : (
             <span className="text-sm font-bold tabular-nums text-muted-foreground">
               {kickoffTimeAr(contest.locksAt)}

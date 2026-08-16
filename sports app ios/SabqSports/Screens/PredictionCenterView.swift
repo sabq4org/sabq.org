@@ -369,11 +369,20 @@ struct PredMatchRowView: View {
     private var centerBlock: some View {
         if contest.status == "settled", let result = contest.result,
            let home = result.finalHome, let away = result.finalAway {
-            // زوج معزول LTR بالضيف أولًا — رقم المضيف يثبت تحت عموده الأيمن.
-            Text(PredFormat.scorePair(home: home, away: away))
-                .font(SportsFonts.app(size: 17, weight: .heavy))
-                .foregroundStyle(SpTheme.onDark)
-                .monospacedDigit()
+            let pen = result.penalties ?? contest.metadata?.penalties
+            VStack(spacing: 2) {
+                // زوج معزول LTR بالضيف أولًا — رقم المضيف يثبت تحت عموده الأيمن.
+                Text(PredFormat.scorePair(home: home, away: away))
+                    .font(SportsFonts.app(size: 17, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                    .monospacedDigit()
+                if let pen = pen, let ph = pen.home, let pa = pen.away {
+                    Text("(\(pa)–\(ph) " + L("ر.ت") + ")")
+                        .font(SportsFonts.app(size: 9.5, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .monospacedDigit()
+                }
+            }
         } else if let date = contest.locksAtDate {
             Text(date, format: .dateTime.hour().minute())
                 .font(SportsFonts.app(size: 13, weight: .bold))

@@ -18,6 +18,8 @@ export type PredTeamMeta = { name?: string | null; logo?: string | null };
 /** خيار اختيار جاهز لمسابقات الموسم (بطل/هدّاف) — يُدمج في metadata عند الإنشاء. */
 export type PredPickOption = { id: string; name: string; logo?: string | null };
 
+export type PredPenalties = { home?: number | null; away?: number | null } | null;
+
 export type PredContestMeta = {
   home?: PredTeamMeta | null;
   away?: PredTeamMeta | null;
@@ -25,6 +27,7 @@ export type PredContestMeta = {
   venue?: string | null;
   title?: string | null;
   options?: PredPickOption[] | null;
+  penalties?: PredPenalties;
 };
 
 export type PredScorePayload = { predHome?: number; predAway?: number };
@@ -42,7 +45,7 @@ export type PredContest = {
   locksAt: string;
   settledAt?: string | null;
   metadata?: PredContestMeta | null;
-  result?: { finalHome?: number; finalAway?: number; winningPickIds?: string[] } | null;
+  result?: { finalHome?: number; finalAway?: number; penalties?: PredPenalties; winningPickIds?: string[] } | null;
   /** عدد المشاركين النشطين في توقّع هذه المسابقة. */
   entriesCount?: number;
   myEntry?: { id: string; payload?: PredEntryPayload | null } | null;
@@ -147,7 +150,7 @@ export type PredMyAward = {
 
 export type PredSettlementResponse = {
   contestId: string;
-  result?: { finalHome?: number; finalAway?: number } | null;
+  result?: { finalHome?: number; finalAway?: number; penalties?: PredPenalties } | null;
   settledAt?: string | null;
   myAwards: PredMyAward[];
 };

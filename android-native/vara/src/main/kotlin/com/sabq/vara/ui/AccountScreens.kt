@@ -1803,6 +1803,8 @@ private data class PredContest(
     val predAway: Int?,
     val finalHome: Int?,
     val finalAway: Int?,
+    val penHome: Int? = null,
+    val penAway: Int? = null,
     /** عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين). */
     val entriesCount: Int = 0,
 ) {
@@ -1846,6 +1848,7 @@ private fun parsePredContest(e: JsonElement): PredContest? {
     val meta = o.obj("metadata")
     val entry = o.obj("myEntry")?.obj("payload")
     val result = o.obj("result")
+    val penObj = result?.obj("penalties") ?: meta?.obj("penalties")
     return PredContest(
         id = o.string("id") ?: return null,
         contestType = o.string("contestType") ?: "match_score",
@@ -1860,6 +1863,8 @@ private fun parsePredContest(e: JsonElement): PredContest? {
         predAway = entry?.int("predAway"),
         finalHome = result?.int("finalHome"),
         finalAway = result?.int("finalAway"),
+        penHome = penObj?.int("home"),
+        penAway = penObj?.int("away"),
         entriesCount = o.int("entriesCount") ?: 0,
     )
 }
@@ -2258,7 +2263,12 @@ private fun PredContestRow(contest: PredContest, open: () -> Unit) {
             Box(Modifier.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
                 when {
                     contest.status == "settled" && contest.finalHome != null && contest.finalAway != null ->
-                        ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                            if (contest.penHome != null && contest.penAway != null) {
+                                ForceLtr { Text("(${contest.penAway}–${contest.penHome} ر.ت)", color = c.textDim, fontSize = 9.5.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
                     predParseMs(contest.locksAt) != null ->
                         ForceLtr { Text(VaraFormat.time(Instant.ofEpochMilli(predParseMs(contest.locksAt)!!)), color = c.textDim, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                     else -> Text("—", color = c.textFaint)
@@ -2570,7 +2580,12 @@ private fun PredDetailHero(contest: PredContest) {
                 val lockMs = predParseMs(contest.locksAt)
                 when {
                     contest.status == "settled" && contest.finalHome != null && contest.finalAway != null ->
-                        ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                            if (contest.penHome != null && contest.penAway != null) {
+                                ForceLtr { Text("(${contest.penAway}–${contest.penHome} ر.ت)", color = c.textDim, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
                     lockMs != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         ForceLtr { Text(VaraFormat.time(Instant.ofEpochMilli(lockMs)), color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
                         Text(VaraFormat.dayMonthLabel(Instant.ofEpochMilli(lockMs)), color = c.textFaint, fontSize = 10.5.sp)

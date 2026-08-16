@@ -235,6 +235,13 @@ export const ENTRY_PAYLOAD_SCHEMAS: Record<ContestType, z.ZodTypeAny> = {
 export const matchScoreResultSchema = z.object({
   finalHome: z.number().int().min(0),
   finalAway: z.number().int().min(0),
+  penalties: z
+    .object({
+      home: z.number().int().min(0).nullable(),
+      away: z.number().int().min(0).nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type MatchScoreResult = z.infer<typeof matchScoreResultSchema>;
 
