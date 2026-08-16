@@ -17,7 +17,8 @@ import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
 import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
-import { extractPgError } from "./utils/pgError";
+import { extractPgError, isUniqueViolation } from "./utils/pgError";
+import { isLockedOut, recordFailure, clearFailures } from "./services/authAttemptGuard";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
@@ -180,6 +181,41 @@ const phoneOtpSendLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => normalizePhone(req.body?.phone) || cfKeyGenerator(req),
+  validate: cfValidate,
+});
+
+// authLimiter above uses skipSuccessfulRequests so repeated *successful* logins
+// don't lock out a legitimate user — correct for login/2FA where only failures
+// matter. But that same flag makes forgot-password (always 200 for anti-
+// enumeration), resend-verification (200 on success) and register (201) count
+// NOTHING, leaving them effectively unlimited: email-bombing + unbounded
+// account creation. These flows need a limiter that counts EVERY request.
+// Keyed by email/phone when present so one IP can't be shared-bucketed and one
+// victim address can't be flooded regardless of source IP.
+function authTargetKey(req: any): string {
+  const raw = (req.body?.email || req.body?.phone || "").toString().trim().toLowerCase();
+  return raw ? `t:${raw}` : cfKeyGenerator(req);
+}
+
+// Reset/verify email dispatch: 5 per hour per target address (or IP fallback).
+const emailDispatchLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { message: "تجاوزت الحد المسموح لطلبات البريد. حاول بعد قليل." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: authTargetKey,
+  validate: cfValidate,
+});
+
+// Account creation: 10 per hour per IP, counting successes (unlike authLimiter).
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { message: "تم تجاوز حد إنشاء الحسابات. يرجى المحاولة لاحقاً." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
   validate: cfValidate,
 });
 
@@ -600,11 +636,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ============================================================
 
   // Login
-  app.post("/api/login", authLimiter, (req, res, next) => {
+  app.post("/api/login", authLimiter, async (req, res, next) => {
     if (process.env.NODE_ENV !== 'production') {
       console.log("🔐 Login attempt received");
     }
-    
+
+    // Per-ACCOUNT lockout (audit F-16). The IP-keyed authLimiter is spoofable
+    // and, behind the edge worker, shared — so bound password guessing per
+    // account too, as the mobile login already does. Keyed by the submitted
+    // identifier (lowercased email or phone) since we don't yet have a userId.
+    const loginIdentifier = (req.body?.email || req.body?.username || req.body?.phone || "")
+      .toString().trim().toLowerCase();
+    const attemptKey = loginIdentifier ? `login:web:${loginIdentifier}` : null;
+    const LOGIN_MAX_FAILURES = 10;
+    if (attemptKey && (await isLockedOut(attemptKey, LOGIN_MAX_FAILURES))) {
+      return res.status(429).json({
+        message: "تم قفل الحساب مؤقتاً بسبب محاولات دخول فاشلة متعددة. حاول بعد قليل.",
+      });
+    }
+
     passport.authenticate("local", async (err: any, user: any, info: any) => {
       if (err) {
         console.error("❌ Login error:", err);
@@ -612,8 +662,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       if (!user) {
         console.log("❌ Login failed:", info?.message);
+        if (attemptKey) { try { await recordFailure(attemptKey); } catch { /* best-effort */ } }
         return res.status(401).json({ message: info?.message || "فشل تسجيل الدخول" });
       }
+
+      // Successful credential match — clear the failure counter.
+      if (attemptKey) { try { await clearFailures(attemptKey); } catch { /* best-effort */ } }
 
       // Check if 2FA is enabled
       if (user.twoFactorEnabled) {
@@ -820,7 +874,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     role: z.string().max(40).optional(),
   });
 
-  app.post("/api/register", authLimiter, async (req, res) => {
+  app.post("/api/register", registerLimiter, async (req, res) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -834,11 +888,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: pwCheck.message });
       }
 
-      // Check if user exists
+      // Check if user exists — case-insensitive to match the DB guard
+      // (users_email_lower_unique). A case-sensitive precheck let a legacy
+      // mixed-case row slip through and blow up as a raw 500 on insert (F-11).
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.email, email.toLowerCase()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
         .limit(1);
 
       if (existingUser) {
@@ -918,6 +974,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
     } catch (error) {
       console.error("Registration error:", error);
+      // A concurrent signup (TOCTOU) or a legacy mixed-case row races the
+      // precheck and hits the unique index — surface it as 409, not 500 (F-11).
+      if (isUniqueViolation(error, 'users_email_unique') ||
+          isUniqueViolation(error, 'users_email_lower_unique')) {
+        return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل" });
+      }
       res.status(500).json({ message: "خطأ في إنشاء الحساب" });
     }
   });
@@ -1048,7 +1110,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Resend Verification Email
-  app.post("/api/auth/resend-verification", isAuthenticated, authLimiter, async (req, res) => {
+  app.post("/api/auth/resend-verification", isAuthenticated, emailDispatchLimiter, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
@@ -1071,7 +1133,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Forgot Password - Request reset token
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", emailDispatchLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -1230,7 +1292,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Set Password - For users with temporary password who must change it
-  app.post("/api/auth/set-password", isAuthenticated, async (req: any, res) => {
+  app.post("/api/auth/set-password", isAuthenticated, authLimiter, async (req: any, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
       const userId = req.user.id;

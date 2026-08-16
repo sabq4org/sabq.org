@@ -18,6 +18,8 @@ import { verifyToken, verifyBackupCode } from "../twoFactor";
 import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
 import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 import { createWebResetLink, sendPasswordResetCodeEmail } from "../services/passwordResetService";
+import { normalizePhone } from "../services/phoneAuth";
+import { isUniqueViolation } from "../utils/pgError";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -287,12 +289,13 @@ ${code}
 
     const result = await sendEmailNotification({
       to: email,
-      subject: `رمز تفعيل حسابك في سبق: ${code}`,
+      // الرمز لا يوضع في العنوان — يظهر في معاينات الإشعارات على شاشة القفل (F-20).
+      subject: "رمز تفعيل حسابك في سبق",
       html: htmlContent,
       text: textContent,
     });
 
-    console.log(`[Mobile API] Activation email sent to ${email}: ${result.success}`);
+    console.log(`[Mobile API] Activation email sent: ${result.success}`);
     return result.success;
   } catch (error) {
     console.error('[Mobile API] Failed to send activation email:', error);
@@ -1045,17 +1048,19 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       });
     }
 
-    // Check if email already exists
+    // Check if email already exists — case-insensitive to match the DB guard
+    // (users_email_lower_unique); a case-sensitive precheck let a mixed-case
+    // row slip through to a raw 500 on insert (F-11).
     const [existingEmail] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
       .limit(1);
-    
+
     if (existingEmail) {
-      return res.status(409).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مسجل مسبقاً" 
+      return res.status(409).json({
+        success: false,
+        message: "البريد الإلكتروني مسجل مسبقاً"
       });
     }
 
@@ -1167,6 +1172,11 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Mobile API] auth/register error:", error);
+    // Concurrent signup / legacy mixed-case row hits the unique index → 409 (F-11).
+    if (isUniqueViolation(error, 'users_email_unique') ||
+        isUniqueViolation(error, 'users_email_lower_unique')) {
+      return res.status(409).json({ success: false, message: "البريد الإلكتروني مسجل مسبقاً" });
+    }
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
   }
 });
@@ -1190,29 +1200,34 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      return res.status(404).json({
+        success: false,
+        message: "المستخدم غير موجود"
       });
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
+    // Accounts are auto-activated at registration (status="active"), so gating
+    // on status made this endpoint permanently reject everyone and no emailed
+    // code could ever be redeemed (F-08). The thing this verifies is the EMAIL,
+    // so gate on emailVerified instead — keeps auto-activation, makes the flag
+    // resolvable/consistent.
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني موثق مسبقاً"
       });
     }
 
@@ -1272,29 +1287,31 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      return res.status(404).json({
+        success: false,
+        message: "المستخدم غير موجود"
       });
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
+    // Gate on emailVerified, not status — accounts are auto-activated so the
+    // status check made resend permanently reject everyone (F-08).
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني موثق مسبقاً"
       });
     }
 
@@ -1439,15 +1456,19 @@ router.post("/auth/login", mobileAuthLimiter, async (req: Request, res: Response
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     } else {
+      // Phone rows are stored E.164 (+9665…). Normalize the client input
+      // (05…/9665…/00966…) before matching — a raw compare silently 401'd
+      // valid accounts (server-side residue of «فخ الصفر»; F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false, 
         message: "بيانات الدخول غير صحيحة" 
       });
@@ -1702,6 +1723,8 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
         .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({
           id: users.id,
@@ -1710,7 +1733,7 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
           authProvider: users.authProvider,
         })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
@@ -1807,10 +1830,12 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
         .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else if (phone) {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 

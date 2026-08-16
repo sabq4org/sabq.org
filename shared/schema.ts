@@ -4994,7 +4994,20 @@ export function canUserInteract(user: User): boolean {
 
 export function canUserLogin(user: User): boolean {
   const status = getUserEffectiveStatus(user);
-  return status !== "banned" && status !== "deleted";
+  // Block hard-negative states everywhere this gate runs (web LocalStrategy,
+  // deserializeUser, mobile verifyMemberSession, OAuth/phone). "pending"
+  // (email not yet verified) stays allowed on purpose — accounts are
+  // auto-activated and unverified users may browse. Previously only
+  // banned/deleted were blocked, so an admin "suspend" / a security "lock"
+  // had NO effect on web login or on existing sessions (mobile already
+  // rejected suspended explicitly). Now suspension/lock take effect on the
+  // next request across all surfaces.
+  return (
+    status !== "banned" &&
+    status !== "deleted" &&
+    status !== "suspended" &&
+    status !== "locked"
+  );
 }
 
 export function getUserStatusMessage(user: User): string | null {
