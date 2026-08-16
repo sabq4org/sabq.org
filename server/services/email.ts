@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { db } from '../db';
 import { emailVerificationTokens, users } from '@shared/schema';
 import { and, eq } from 'drizzle-orm';
+import { isEmailSuppressed } from './emailSuppressionService';
 
 const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY;
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -63,6 +64,14 @@ async function sendTransactionalEmail(options: {
   text?: string;
   html?: string;
 }): Promise<void> {
+  // Deliverability guard (F-05): never (re)send to an address that hard-bounced
+  // or filed a spam complaint — that's how a sending domain's reputation rots.
+  // Single chokepoint for every transactional send.
+  if (await isEmailSuppressed(options.to)) {
+    console.warn(`⚠️ Email skipped — recipient suppressed (${options.subject})`); // no PII
+    throw new Error('EMAIL_SUPPRESSED');
+  }
+
   if (mailerSend && MAILERSEND_API_KEY) {
     try {
       const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);

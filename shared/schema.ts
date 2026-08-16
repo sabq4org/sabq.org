@@ -731,6 +731,21 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Email deliverability suppression list (F-05). Populated by the MailerSend
+// bounce/spam-complaint webhook; checked before sending any transactional mail
+// so a hard-bounced/complained address isn't retried forever (which silently
+// degrades sender reputation). email is stored lowercased for exact matching.
+export const emailSuppressions = pgTable("email_suppressions", {
+  email: text("email").primaryKey(),
+  // 'hard_bounce' | 'spam_complaint' | 'unsubscribe' | 'manual'
+  reason: text("reason").notNull(),
+  // 'mailersend_webhook' | 'admin' | ...
+  source: text("source").notNull(),
+  detail: text("detail"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type EmailSuppression = typeof emailSuppressions.$inferSelect;
+
 // إثبات توثيق الجوال بين نجاح OTP وإكمال بيانات التسجيل (اسم/بريد/كلمة مرور).
 // قصير العمر وأحادي الاستخدام: usedAt يُقفل ذريًا عند إنشاء الحساب، فلا يُنشئ
 // نفس الإثبات أكثر من حساب مهما تكررت الطلبات أو تزامنت.
