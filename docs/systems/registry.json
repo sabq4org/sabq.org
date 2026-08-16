@@ -671,6 +671,8 @@
         "tests/unit/effectiveRoles.test.ts",
         "server/services/staffRoleInference.ts",
         "server/services/promoteCorrespondentService.ts",
+        "server/services/mobileUserRolePayload.ts",
+        "server/services/userRoleSync.ts",
         "server/routes/promoteCorrespondent.ts",
         "scripts/promote-correspondent.ts"
       ],
