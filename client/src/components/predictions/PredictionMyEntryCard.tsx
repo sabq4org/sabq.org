@@ -54,14 +54,22 @@ function MatchHeader({ item }: { item: PredMyEntryItem }) {
   const home = item.metadata?.home;
   const away = item.metadata?.away;
   const settled = item.status === "settled" && item.result;
+  const penalties = item.result?.penalties ?? item.metadata?.penalties;
   return (
     <div className="flex items-center gap-2">
       <TeamSide name={home?.name} logo={home?.logo} />
       <div className="min-w-[72px] text-center">
         {settled ? (
-          <span className="text-xl font-extrabold tabular-nums text-foreground" dir="ltr">
-            {item.result?.finalAway}–{item.result?.finalHome}
-          </span>
+          <div>
+            <span className="text-xl font-extrabold tabular-nums text-foreground block" dir="ltr">
+              {item.result?.finalAway}–{item.result?.finalHome}
+            </span>
+            {penalties && (penalties.home != null || penalties.away != null) && (
+              <span className="text-[10.5px] font-bold tabular-nums text-muted-foreground block" dir="ltr">
+                ({penalties.away ?? 0}–{penalties.home ?? 0} ر.ت)
+              </span>
+            )}
+          </div>
         ) : (
           <span className="text-sm font-bold tabular-nums text-muted-foreground">
             {kickoffTimeAr(item.locksAt)}

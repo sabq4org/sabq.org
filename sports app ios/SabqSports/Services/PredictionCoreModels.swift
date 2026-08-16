@@ -41,11 +41,17 @@ nonisolated struct PredTeamMeta: Decodable, Hashable {
     let logo: String?
 }
 
+nonisolated struct PredPenaltiesMeta: Decodable, Hashable {
+    let home: Int?
+    let away: Int?
+}
+
 nonisolated struct PredContestMeta: Decodable, Hashable {
     let home: PredTeamMeta?
     let away: PredTeamMeta?
     let round: String?
     let venue: String?
+    let penalties: PredPenaltiesMeta?
 }
 
 /// حمولة توقّع نتيجة مباراة — كل الحقول اختيارية كي يمرّ فكّ الترميز
@@ -63,6 +69,7 @@ nonisolated struct PredMyEntry: Decodable, Hashable {
 nonisolated struct PredScoreResult: Decodable, Hashable {
     let finalHome: Int?
     let finalAway: Int?
+    let penalties: PredPenaltiesMeta?
 }
 
 nonisolated struct PredContest: Decodable, Hashable, Identifiable {

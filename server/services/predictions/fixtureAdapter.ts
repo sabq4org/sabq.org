@@ -198,9 +198,21 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
             break;
           }
           case "set_result": {
+            const penalties =
+              fixture.penaltiesHome != null || fixture.penaltiesAway != null
+                ? { home: fixture.penaltiesHome, away: fixture.penaltiesAway }
+                : null;
+            await db
+              .update(predictionContests)
+              .set({
+                metadata: fixtureMetadata(fixture),
+                updatedAt: now,
+              })
+              .where(eq(predictionContests.id, contest!.id));
             await setContestResult(contest!.id, {
               finalHome: action.finalHome,
               finalAway: action.finalAway,
+              penalties,
             });
             summary.resultsSet++;
             break;
@@ -237,5 +249,9 @@ function fixtureMetadata(fixture: NormalizedFixture): Record<string, unknown> {
     round: fixture.round,
     venue: fixture.venue,
     kickoffAt: fixture.kickoff.toISOString(),
+    penalties:
+      fixture.penaltiesHome != null || fixture.penaltiesAway != null
+        ? { home: fixture.penaltiesHome, away: fixture.penaltiesAway }
+        : null,
   };
 }
