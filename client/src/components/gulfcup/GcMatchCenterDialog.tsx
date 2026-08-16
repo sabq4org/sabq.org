@@ -17,6 +17,7 @@ import {
   type GcRichLineupPlayer,
   type GcTrend,
 } from "./gcTypes";
+import { toBinaryPlayerName } from "@shared/sportsNames";
 
 /**
  * مركز مباراة خليجي 27 — نافذة تفاصيل تفتح من أي بطاقة مباراة:
@@ -83,7 +84,7 @@ function EventsTimeline({ events, fixture }: { events: GcMatchEvent[]; fixture: 
             </span>
             <span className="shrink-0">{eventGlyph(e.type)}</span>
             <span className="min-w-0 truncate">
-              <span className="font-bold text-foreground">{e.player ?? ""}</span>{" "}
+              <span className="font-bold text-foreground">{toBinaryPlayerName(e.player ?? "")}</span>{" "}
               <span className="text-muted-foreground">{e.label}</span>
             </span>
           </li>
@@ -100,7 +101,7 @@ function LineupColumn({ lineup }: { lineup: GcLineup }) {
         <p className="font-black text-foreground text-sm truncate">{lineup.teamName}</p>
         <p className="text-[11px] text-muted-foreground">
           {lineup.formation ? `الخطة ${lineup.formation}` : ""}
-          {lineup.coach ? `${lineup.formation ? " · " : ""}المدرب: ${lineup.coach}` : ""}
+          {lineup.coach ? `${lineup.formation ? " · " : ""}المدرب: ${toBinaryPlayerName(lineup.coach)}` : ""}
         </p>
       </div>
       <ul className="space-y-1">
@@ -109,7 +110,7 @@ function LineupColumn({ lineup }: { lineup: GcLineup }) {
             <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-[10px] font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
               {p.number ?? "–"}
             </span>
-            <span className="truncate text-foreground">{p.name}</span>
+            <span className="truncate text-foreground">{toBinaryPlayerName(p.name)}</span>
           </li>
         ))}
       </ul>
@@ -122,7 +123,7 @@ function LineupColumn({ lineup }: { lineup: GcLineup }) {
             {lineup.substitutes.map((p) => (
               <li key={`${p.id}-${p.number}`} className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="tabular-nums w-5 text-center">{p.number ?? "–"}</span>
-                <span className="truncate">{p.name}</span>
+                <span className="truncate">{toBinaryPlayerName(p.name)}</span>
               </li>
             ))}
           </ul>

@@ -8,6 +8,7 @@
 import { localizePlayerName, WC_TEAM_AR } from "./worldCupNames";
 import { isEnglishSports } from "./sportsLang";
 import { correctSportsPlayerName } from "./sportsPlayerNameFixes";
+import { toBinaryPlayerName } from "../../shared/sportsNames";
 export const SPL_TEAM_AR: Record<number, string> = {
   2928: "الخليج", // Al Khaleej Saihat
   2929: "الأهلي", // Al-Ahli Jeddah
@@ -766,9 +767,10 @@ export function localizeSplPlayerName(
   tr?: NameTranslator,
 ): string {
   if (isEnglishSports()) return fallback; // اسم اللاعب الأصلي (إنجليزي)
-  if (id != null && SPL_PLAYER_AR[id]) return SPL_PLAYER_AR[id];
+  if (id != null && SPL_PLAYER_AR[id]) return toBinaryPlayerName(SPL_PLAYER_AR[id]);
   const raw = tr ? tr(fallback) : localizePlayerName(fallback) || fallback || "";
-  return rejectMixedScript(correctSportsPlayerName(fallback, raw) || "", fallback) || fallback || "";
+  const candidate = rejectMixedScript(correctSportsPlayerName(fallback, raw) || "", fallback) || fallback || "";
+  return toBinaryPlayerName(candidate);
 }
 
 export function localizeSplCoachName(
