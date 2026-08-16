@@ -5,6 +5,7 @@ import { users, roles, permissions, rolePermissions, userRoles, userPermissionOv
 import { eq, and, inArray } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
+import { mergeRoleSignals } from "@shared/effectiveRoles";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
@@ -95,22 +96,23 @@ export async function getEffectiveUserPermissions(userId: string): Promise<strin
 // userHasPermission() which already short-circuits superusers.
 /** All role names for a user (RBAC user_roles, falling back to users.role). */
 export async function getUserRoleNames(userId: string): Promise<string[]> {
-  const rbacRoles = await db
-    .select({ roleName: roles.name })
-    .from(userRoles)
-    .innerJoin(roles, eq(userRoles.roleId, roles.id))
-    .where(eq(userRoles.userId, userId));
+  const [rbacRoles, [user]] = await Promise.all([
+    db
+      .select({ roleName: roles.name })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId)),
+    db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+  ]);
 
-  const names = rbacRoles.map((r) => r.roleName);
-  if (names.length > 0) return names;
-
-  const [user] = await db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  return user?.role ? [user.role] : [];
+  return mergeRoleSignals(
+    rbacRoles.map((r) => r.roleName),
+    user?.role,
+  );
 }
 
 export async function userHasAnyRole(

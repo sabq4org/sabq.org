@@ -69,6 +69,8 @@ import {
   canUserLogin,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
+import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
+import { inferStaffRolesFromWork } from "../services/staffRoleInference";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -203,13 +205,23 @@ async function buildUserRolePayload(userId: string, legacyRole?: string | null, 
     .innerJoin(roles, eq(userRoles.roleId, roles.id))
     .where(eq(userRoles.userId, userId));
 
-  const nonReaderRbacRole = rbacRoles.find((r) => normalizeRoleKey(r.name) !== "reader");
-  const legacyKey = normalizeRoleKey(legacyRole);
-  const effectiveRoleKey = normalizeRoleKey(nonReaderRbacRole?.name) || legacyKey || "reader";
+  let merged = mergeRoleSignals(
+    rbacRoles.map((r) => r.name),
+    legacyRole,
+  );
+  if (merged.every((role) => isReaderLikeRole(role)) && jobTitle?.trim()) {
+    const inferred = await inferStaffRolesFromWork(userId);
+    if (inferred.length > 0) {
+      merged = mergeRoleSignals([...rbacRoles.map((r) => r.name), ...inferred], legacyRole);
+    }
+  }
+
+  const effectiveRoleKey = primaryRoleKey(merged);
+  const matchingRbac = rbacRoles.find((r) => normalizeRoleKey(r.name) === effectiveRoleKey);
   const explicitRoleLabel =
-    nonReaderRbacRole?.nameAr ||
-    (jobTitle?.trim() ? jobTitle.trim() : null) ||
+    matchingRbac?.nameAr ||
     MOBILE_ROLE_LABELS[effectiveRoleKey] ||
+    (jobTitle?.trim() ? jobTitle.trim() : null) ||
     legacyRole ||
     "قارئ";
 

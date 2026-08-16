@@ -161,6 +161,7 @@
         "client/src/pages/dashboard/MyServicesPage.tsx",
         "server/routes/staffProfiles.ts",
         "server/services/staffProfileService.ts",
+        "server/services/staffRoleInference.ts",
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
@@ -293,7 +294,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-13"
+      "lastReviewed": "2026-08-16"
     },
     {
       "id": "ifox",
@@ -664,14 +665,21 @@
         "server/services/phoneRegistrationService.ts",
         "server/routes/phoneRegistration.ts",
         "tests/unit/phoneRegistration.test.ts",
-        "client/src/pages/CompleteName.tsx"
+        "client/src/pages/CompleteName.tsx",
+        "client/src/pages/UsersManagement.tsx",
+        "shared/effectiveRoles.ts",
+        "tests/unit/effectiveRoles.test.ts",
+        "server/services/staffRoleInference.ts",
+        "server/services/promoteCorrespondentService.ts",
+        "server/routes/promoteCorrespondent.ts",
+        "scripts/promote-correspondent.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-31"
+      "lastReviewed": "2026-08-16"
     },
     {
       "id": "seo-ssr",

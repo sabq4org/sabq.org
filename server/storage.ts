@@ -7,6 +7,7 @@ import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSe
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
+import { mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
@@ -2985,6 +2986,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
 
+    const [rbacRole] = await db
+      .select()
+      .from(roles)
+      .where(eq(roles.name, role))
+      .limit(1);
+    if (rbacRole) {
+      await db
+        .insert(userRoles)
+        .values({
+          id: nanoid(),
+          userId,
+          roleId: rbacRole.id,
+        })
+        .onConflictDoNothing();
+    }
+    if (role === "reporter") {
+      try {
+        await this.ensureReporterStaffRecord(userId);
+      } catch (err) {
+        console.error("[updateUserRole] ensureReporterStaffRecord failed:", err);
+      }
+    }
+
     return user;
   }
 
@@ -3571,6 +3595,15 @@ export class DatabaseStorage implements IStorage {
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const user = await db.transaction(async (tx) => {
+      let primaryRole = "reader";
+      if (userData.roleIds && userData.roleIds.length > 0) {
+        const assigned = await tx
+          .select({ name: roles.name })
+          .from(roles)
+          .where(inArray(roles.id, userData.roleIds));
+        primaryRole = primaryRoleKey(mergeRoleSignals(assigned.map((r) => r.name)));
+      }
+
       const [user] = await tx.insert(users).values({
         id: userId,
         email: userData.email.trim().toLowerCase(),
@@ -3584,7 +3617,7 @@ export class DatabaseStorage implements IStorage {
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
-        role: 'reader',
+        role: primaryRole,
         isProfileComplete: true,
         mustChangePassword: true, // Require password change on first login
       }).returning();
@@ -3667,13 +3700,18 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const newRoles = await tx
-        .select({
-          id: roles.id,
-          name: roles.name,
-        })
-        .from(roles)
-        .where(inArray(roles.id, roleIds));
+      const newRoles = roleIds.length > 0
+        ? await tx
+            .select({
+              id: roles.id,
+              name: roles.name,
+            })
+            .from(roles)
+            .where(inArray(roles.id, roleIds))
+        : [];
+
+      const syncedRole = primaryRoleKey(mergeRoleSignals(newRoles.map((r) => r.name)));
+      await tx.update(users).set({ role: syncedRole }).where(eq(users.id, userId));
 
       await tx.insert(activityLogs).values({
         id: nanoid(),
