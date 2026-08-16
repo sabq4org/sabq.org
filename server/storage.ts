@@ -9031,17 +9031,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserInterests(userId: string): Promise<InterestWithWeight[]> {
+    // userInterests.categoryId FK → categories (the real catalog; all write
+    // paths store category ids). This previously joined the orphaned `interests`
+    // table, whose ids never match category ids, so it returned EMPTY rows and
+    // /api/user/interests + /api/user/profile/complete served nothing (F-07).
+    // Map category columns onto the Interest shape the callers expect.
     const results = await db
       .select({
-        interest: interests,
+        id: categories.id,
+        nameAr: categories.nameAr,
+        nameEn: categories.nameEn,
+        slug: categories.slug,
+        icon: categories.icon,
+        description: categories.description,
+        createdAt: categories.createdAt,
         weight: userInterests.weight,
       })
       .from(userInterests)
-      .innerJoin(interests, eq(userInterests.categoryId, interests.id))
+      .innerJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, userId));
 
     return results.map((r) => ({
-      ...r.interest,
+      id: r.id,
+      nameAr: r.nameAr,
+      nameEn: r.nameEn,
+      slug: r.slug,
+      icon: r.icon ?? null,
+      description: r.description ?? null,
+      createdAt: r.createdAt,
       weight: r.weight,
     }));
   }

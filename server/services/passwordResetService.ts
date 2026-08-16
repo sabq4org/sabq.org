@@ -117,7 +117,7 @@ ${resetLink}
       text: textContent,
     });
 
-    console.log(`[Mobile API] Password reset email sent to ${email}: ${result.success}`);
+    console.log(`[Mobile API] Password reset email sent: ${result.success}`); // لا نسجل العنوان (PII) — F-18
     return result.success;
   } catch (error) {
     console.error('[Mobile API] Failed to send password reset email:', error);

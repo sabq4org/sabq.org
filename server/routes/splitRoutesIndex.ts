@@ -36,6 +36,7 @@ import meetingMinutesRouter from "./meetingMinutesRoutes";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
+import mailersendWebhookRouter from "./mailersendWebhook";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
@@ -138,6 +139,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(correspondentApplicationsRouter);
   app.use(publisherPortalRouter);
   app.use(deployWebhooksRouter);
+  app.use(mailersendWebhookRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);

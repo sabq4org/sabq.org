@@ -18,6 +18,9 @@ import { verifyToken, verifyBackupCode } from "../twoFactor";
 import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
 import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 import { createWebResetLink, sendPasswordResetCodeEmail } from "../services/passwordResetService";
+import { normalizePhone } from "../services/phoneAuth";
+import { isUniqueViolation } from "../utils/pgError";
+import { EMAIL_FORMAT_REGEX } from "../services/phoneRegistrationService";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -36,6 +39,7 @@ import { log } from "../utils/logger";
 import {
   categories,
   articles,
+  userNotificationPrefs,
   pushDevices,
   pushCampaigns,
   pushCampaignEvents,
@@ -287,12 +291,13 @@ ${code}
 
     const result = await sendEmailNotification({
       to: email,
-      subject: `رمز تفعيل حسابك في سبق: ${code}`,
+      // الرمز لا يوضع في العنوان — يظهر في معاينات الإشعارات على شاشة القفل (F-20).
+      subject: "رمز تفعيل حسابك في سبق",
       html: htmlContent,
       text: textContent,
     });
 
-    console.log(`[Mobile API] Activation email sent to ${email}: ${result.success}`);
+    console.log(`[Mobile API] Activation email sent: ${result.success}`);
     return result.success;
   } catch (error) {
     console.error('[Mobile API] Failed to send activation email:', error);
@@ -875,6 +880,16 @@ function generateVerificationCode(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
 
+// Hash a 6-digit code for storage in email_verification_tokens / password_reset_tokens.
+// The plaintext code is emailed to the user; only this hash is persisted (F-13).
+// The userId is folded into the hash so two users can hold the SAME 6-digit code
+// without colliding on the globally-unique `token` column — which previously
+// turned a birthday-collision into a 500 on a 900k-value space (F-14). Lookups
+// always know the userId, so they recompute the same hash to match.
+function hashMobileCode(userId: string, code: string): string {
+  return crypto.createHash("sha256").update(`${userId}:${code}`).digest("hex");
+}
+
 // Helper: Generate secure session token
 function generateSessionToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -1039,23 +1054,34 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     }
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مطلوب" 
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني مطلوب"
       });
     }
 
-    // Check if email already exists
+    // Validate email format — the web register schema does this but v1 only
+    // checked presence, so any non-empty string became an account email (F-27).
+    if (!EMAIL_FORMAT_REGEX.test(String(email).trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "صيغة البريد الإلكتروني غير صحيحة"
+      });
+    }
+
+    // Check if email already exists — case-insensitive to match the DB guard
+    // (users_email_lower_unique); a case-sensitive precheck let a mixed-case
+    // row slip through to a raw 500 on insert (F-11).
     const [existingEmail] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
       .limit(1);
-    
+
     if (existingEmail) {
-      return res.status(409).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مسجل مسبقاً" 
+      return res.status(409).json({
+        success: false,
+        message: "البريد الإلكتروني مسجل مسبقاً"
       });
     }
 
@@ -1100,6 +1126,24 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       emailVerified: false,
     });
 
+    // Seed default notification preferences, at parity with web register — v1
+    // previously skipped this so mobile signups had no defaults (F-27).
+    await db
+      .insert(userNotificationPrefs)
+      .values({
+        userId,
+        breaking: true,
+        interest: true,
+        likedUpdates: true,
+        mostRead: true,
+        webPush: false,
+        dailyDigest: false,
+      })
+      .catch((error) => {
+        console.error("[Mobile API] Error creating notification preferences:", error);
+        // Don't fail registration if notification prefs fail.
+      });
+
     // Generate verification token + send activation email (best-effort —
     // failures are logged but don't abort the flow now that status='active').
     const verificationToken = generateVerificationCode();
@@ -1107,7 +1151,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
     await db.insert(emailVerificationTokens).values({
       userId,
-      token: verificationToken,
+      token: hashMobileCode(userId, verificationToken), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1167,6 +1211,11 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Mobile API] auth/register error:", error);
+    // Concurrent signup / legacy mixed-case row hits the unique index → 409 (F-11).
+    if (isUniqueViolation(error, 'users_email_unique') ||
+        isUniqueViolation(error, 'users_email_lower_unique')) {
+      return res.status(409).json({ success: false, message: "البريد الإلكتروني مسجل مسبقاً" });
+    }
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
   }
 });
@@ -1190,29 +1239,36 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
+    // Unknown user → same generic error as a bad/expired code, so this doesn't
+    // become an account-existence oracle (F-19).
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      return res.status(400).json({
+        success: false,
+        message: "رمز التفعيل غير صحيح أو منتهي الصلاحية"
       });
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
+    // Accounts are auto-activated at registration (status="active"), so gating
+    // on status made this endpoint permanently reject everyone and no emailed
+    // code could ever be redeemed (F-08). The thing this verifies is the EMAIL,
+    // so gate on emailVerified instead — keeps auto-activation, makes the flag
+    // resolvable/consistent.
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني موثق مسبقاً"
       });
     }
 
@@ -1222,7 +1278,7 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
       .from(emailVerificationTokens)
       .where(and(
         eq(emailVerificationTokens.userId, user.id),
-        eq(emailVerificationTokens.token, code),
+        eq(emailVerificationTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(emailVerificationTokens.used, false),
         gt(emailVerificationTokens.expiresAt, new Date())
       ))
@@ -1272,30 +1328,33 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
+    // Generic response used for unknown-user and already-verified so this
+    // endpoint isn't an account-existence/state oracle (F-19).
+    const genericResendResponse = {
+      success: true,
+      message: "إن كان الحساب بحاجة إلى تفعيل فقد أُرسل رمز جديد إلى بريده.",
+    };
+
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
-      });
+      return res.json(genericResendResponse);
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
-      });
+    // Gate on emailVerified, not status — accounts are auto-activated so the
+    // status check made resend permanently reject everyone (F-08).
+    if (user.emailVerified) {
+      return res.json(genericResendResponse);
     }
 
     // Invalidate old tokens
@@ -1309,7 +1368,7 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
 
     await db.insert(emailVerificationTokens).values({
       userId: user.id,
-      token: verificationCode,
+      token: hashMobileCode(user.id, verificationCode), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1439,15 +1498,19 @@ router.post("/auth/login", mobileAuthLimiter, async (req: Request, res: Response
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     } else {
+      // Phone rows are stored E.164 (+9665…). Normalize the client input
+      // (05…/9665…/00966…) before matching — a raw compare silently 401'd
+      // valid accounts (server-side residue of «فخ الصفر»; F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false, 
         message: "بيانات الدخول غير صحيحة" 
       });
@@ -1702,6 +1765,8 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
         .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({
           id: users.id,
@@ -1710,7 +1775,7 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
           authProvider: users.authProvider,
         })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
@@ -1746,10 +1811,10 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
         eq(passwordResetTokens.used, false)
       ));
 
-    // Store reset token
+    // Store reset token (hashed at rest, per-user scoped — F-13/F-14)
     await db.insert(passwordResetTokens).values({
       userId: user.id,
-      token: resetToken,
+      token: hashMobileCode(user.id, resetToken),
       expiresAt,
     });
 
@@ -1807,10 +1872,12 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
         .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else if (phone) {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
@@ -1834,7 +1901,7 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       .from(passwordResetTokens)
       .where(and(
         eq(passwordResetTokens.userId, user.id),
-        eq(passwordResetTokens.token, code),
+        eq(passwordResetTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(passwordResetTokens.used, false),
         gt(passwordResetTokens.expiresAt, new Date())
       ))
@@ -2510,36 +2577,48 @@ async function updateMemberInterests(req: Request, res: Response) {
     }
 
     // Support both interestIds and categoryIds for backwards compatibility
-    const interestIds = req.body.interestIds || req.body.categoryIds;
+    const rawIds = req.body.interestIds || req.body.categoryIds;
 
-    if (!Array.isArray(interestIds)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)" 
+    if (!Array.isArray(rawIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)"
       });
     }
 
-    // Delete existing interests
-    await db.delete(userInterests)
-      .where(eq(userInterests.userId, session.userId));
+    // Dedupe + keep valid strings, then intersect with the real category
+    // catalog. Previously unchecked IDs hit a FK violation AFTER the delete had
+    // run — wiping the member's interests (F-12).
+    const requested = Array.from(
+      new Set(rawIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)),
+    );
+    const validRows = requested.length
+      ? await db.select({ id: categories.id }).from(categories).where(inArray(categories.id, requested))
+      : [];
+    const validIds = validRows.map((r) => r.id);
 
-    // Add new interests
-    if (interestIds.length > 0) {
-      const interestValues = interestIds.map((categoryId: string, index: number) => ({
-        userId: session.userId,
-        categoryId,
-        weight: 1.0 - (index * 0.1), // Higher weight for earlier items
-      }));
+    // Replace-all inside a transaction so a partial failure can't leave zero
+    // interests. Weight floored at 0.1 so long lists don't go negative (the
+    // GET orders by desc(weight)) — F-12.
+    await db.transaction(async (tx) => {
+      await tx.delete(userInterests).where(eq(userInterests.userId, session.userId));
+      if (validIds.length > 0) {
+        await tx.insert(userInterests).values(
+          validIds.map((categoryId, index) => ({
+            userId: session.userId,
+            categoryId,
+            weight: Math.max(0.1, 1.0 - index * 0.1),
+          })),
+        );
+      }
+    });
 
-      await db.insert(userInterests).values(interestValues);
-    }
+    console.log(`[Mobile API] Updated interests for ${session.userId}: ${validIds.length} interests`);
 
-    console.log(`[Mobile API] Updated interests for ${session.userId}: ${interestIds.length} interests`);
-
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: "تم تحديث الاهتمامات بنجاح",
-      count: interestIds.length
+      count: validIds.length
     });
   } catch (error) {
     console.error("[Mobile API] members/interests update error:", error);

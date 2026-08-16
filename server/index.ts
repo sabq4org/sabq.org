@@ -644,22 +644,9 @@ const generalApiLimiter = rateLimit({
   },
 });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per window
-  message: { message: "تم تجاوز حد محاولات تسجيل الدخول. يرجى المحاولة بعد 15 دقيقة" },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful logins
-});
-
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window for sensitive operations
-  message: { message: "تم تجاوز حد الطلبات للعمليات الحساسة. يرجى المحاولة بعد قليل" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// (F-22) Removed two dead limiter definitions here — `authLimiter` and
+// `strictLimiter` were never applied in this file (the live ones with the same
+// names live in server/routes.ts) and only served to confuse maintenance.
 
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
