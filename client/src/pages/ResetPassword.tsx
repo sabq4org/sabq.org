@@ -153,6 +153,7 @@ export default function ResetPassword() {
                         placeholder="••••••"
                         disabled={isLoading}
                         data-testid="input-new-password"
+                        autoComplete="new-password"
                         dir="ltr"
                       />
                     </FormControl>
@@ -174,6 +175,7 @@ export default function ResetPassword() {
                         placeholder="••••••"
                         disabled={isLoading}
                         data-testid="input-confirm-password"
+                        autoComplete="new-password"
                         dir="ltr"
                       />
                     </FormControl>
