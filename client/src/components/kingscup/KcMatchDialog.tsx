@@ -6,10 +6,24 @@
  * البيانات من /api/kings-cup/match/:id وتوابعها، وتُحدَّث كل 15ث أثناء البث.
  */
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Goal, ListOrdered, MapPin, Radio, RefreshCw, Square, Star, Tv, Users } from "lucide-react";
+import {
+  ArrowLeftRight,
+  BarChart3,
+  Goal,
+  ListOrdered,
+  MapPin,
+  MonitorPlay,
+  Radio,
+  ShieldAlert,
+  Square,
+  Star,
+  Tv,
+  Users,
+} from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toBinaryPlayerName } from "@shared/sportsNames";
 import { PenaltyResult } from "../worldcup/PenaltyResult";
 import { LiveMinute } from "../worldcup/LiveMinute";
 import { KcPredictionsMatchPromo } from "./KcPredictionsPromo";
@@ -27,44 +41,139 @@ import {
   type KcPrediction,
 } from "./kcTypes";
 
-function EventIcon({ type }: { type: string }) {
-  if (type === "goal") return <Goal className="h-4 w-4 text-emerald-600" />;
-  if (type === "yellow-card") return <Square className="h-4 w-4 fill-yellow-400 text-yellow-500" />;
-  if (type === "red-card") return <Square className="h-4 w-4 fill-red-500 text-red-600" />;
-  if (type === "substitution") return <RefreshCw className="h-4 w-4 text-sky-500" />;
-  return <span className="h-4 w-4 inline-block rounded-full bg-muted" />;
+function KcEventIcon({ type }: { type: string }) {
+  if (type === "goal") return <Goal className="h-4 w-4 text-emerald-500" />;
+  if (type === "missed-penalty") return <ShieldAlert className="h-4 w-4 text-red-500" />;
+  if (type === "yellow-card") return <Square className="h-4 w-4 fill-yellow-400 text-yellow-400" />;
+  if (type === "red-card") return <Square className="h-4 w-4 fill-red-500 text-red-500" />;
+  if (type === "substitution") return <ArrowLeftRight className="h-4 w-4 text-sky-500" />;
+  if (/var/i.test(type)) return <MonitorPlay className="h-4 w-4 text-purple-500" />;
+  return <Radio className="h-4 w-4 text-muted-foreground" />;
 }
 
-function EventRow({ ev, homeId }: { ev: KcMatchEvent; homeId: number }) {
-  const isHome = ev.teamId === homeId;
-  const minute = ev.minute != null ? `${ev.minute}${ev.extra ? `+${ev.extra}` : ""}'` : "";
-  return (
-    <div className={`flex items-center gap-2 ${isHome ? "" : "flex-row-reverse text-left"}`}>
-      <span className="text-xs text-muted-foreground tabular-nums w-8 shrink-0">{minute}</span>
-      <EventIcon type={ev.type} />
-      <div className={`min-w-0 ${isHome ? "" : "text-left"}`}>
-        <span className="text-sm font-semibold">{ev.player}</span>
-        {ev.assist && <span className="text-[11px] text-muted-foreground"> ({ev.assist})</span>}
+function KcTimelineChip({
+  ev,
+  side,
+  onOpenPlayer,
+}: {
+  ev: KcMatchEvent;
+  side: "home" | "away";
+  onOpenPlayer?: (id: number) => void;
+}) {
+  const isGoal = ev.type === "goal";
+  const isSub = ev.type === "substitution";
+  const playerName = toBinaryPlayerName(ev.player || ev.label);
+  const assistName = ev.assist ? toBinaryPlayerName(ev.assist) : null;
+  const clickable = (ev.playerId ?? 0) > 0 && onOpenPlayer != null;
+
+  const content = (
+    <div
+      className={`inline-flex items-start gap-2 max-w-full rounded-lg px-2.5 py-1.5 ${
+        isGoal ? "bg-emerald-500/10 ring-1 ring-emerald-500/25" : "bg-muted/40"
+      } ${side === "home" ? "flex-row" : "flex-row-reverse"}`}
+    >
+      <span className="mt-0.5 shrink-0">
+        <KcEventIcon type={ev.type} />
+      </span>
+      <div className="min-w-0" dir="rtl">
+        <p className="text-xs font-bold truncate">{playerName}</p>
+        {assistName && isGoal && (
+          <p className="text-[10px] text-muted-foreground truncate">صناعة: {assistName}</p>
+        )}
+        {assistName && isSub && (
+          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {assistName}</p>
+        )}
+        {!isGoal && !isSub && ev.label && ev.label !== ev.player && (
+          <p className="text-[10px] text-muted-foreground truncate">{ev.label}</p>
+        )}
       </div>
     </div>
   );
+
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenPlayer(ev.playerId!)}
+        className="text-right hover-elevate active-elevate-2 transition-all rounded-lg"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return content;
 }
 
-function EventsTimeline({ events, fixture }: { events: KcMatchEvent[]; fixture: KcFixture }) {
+function EventsTimeline({
+  events,
+  fixture,
+  onOpenPlayer,
+}: {
+  events: KcMatchEvent[];
+  fixture: KcFixture;
+  onOpenPlayer?: (id: number) => void;
+}) {
   if (events.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
         {fixture.status.finished || fixture.status.live
-          ? "لا أحداث مسجّلة لهذه المباراة"
-          : "تظهر أحداث المباراة هنا لحظة بلحظة بعد الانطلاق"}
+          ? "لا توجد أحداث مسجلة لهذه المباراة"
+          : "الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة"}
       </p>
     );
   }
+
+  // ترتيب تنازلي زمنيًا (الأحدث أعلى)، كما في بطولة روشن والمونديال
+  const sorted = [...events].sort(
+    (a, b) => (b.minute ?? 0) - (a.minute ?? 0) || (b.extra ?? 0) - (a.extra ?? 0)
+  );
+
   return (
-    <div className="space-y-2 py-2">
-      {events.map((ev, i) => (
-        <EventRow key={i} ev={ev} homeId={fixture.home.id} />
-      ))}
+    <div className="lg:max-w-2xl lg:mx-auto py-2">
+      {/* رأس الجانبين: المضيف يمينًا، الضيف يسارًا */}
+      <div dir="ltr" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-3 px-1">
+        <div className="flex items-center gap-1.5 justify-end min-w-0">
+          <span className="text-xs font-bold truncate">{fixture.away.name}</span>
+          {fixture.away.logo && (
+            <img src={fixture.away.logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />
+          )}
+        </div>
+        <span className="min-w-[2.75rem]" />
+        <div className="flex items-center gap-1.5 justify-start min-w-0">
+          {fixture.home.logo && (
+            <img src={fixture.home.logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />
+          )}
+          <span className="text-xs font-bold truncate">{fixture.home.name}</span>
+        </div>
+      </div>
+
+      {/* الخط الزمني: عمود مركزي لأقراص الدقائق (مطابق لبطولة روشن) */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-emerald-500/20" />
+        <div className="space-y-1.5">
+          {sorted.map((e, i) => {
+            const isHome = e.teamId === fixture.home.id;
+            return (
+              <div key={i} dir="ltr" className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="flex justify-end min-w-0">
+                  {!isHome && (
+                    <KcTimelineChip ev={e} side="away" onOpenPlayer={onOpenPlayer} />
+                  )}
+                </div>
+                <span className="z-[1] grid place-items-center min-w-[2.75rem] rounded-full bg-emerald-600 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white">
+                  {e.minute ?? 0}&apos;{e.extra ? `+${e.extra}` : ""}
+                </span>
+                <div className="flex justify-start min-w-0">
+                  {isHome && (
+                    <KcTimelineChip ev={e} side="home" onOpenPlayer={onOpenPlayer} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -85,7 +194,7 @@ function LineupColumn({
         </div>
         <p className="text-[11px] text-muted-foreground">
           {lineup.formation ? `الخطة ${lineup.formation}` : ""}
-          {lineup.coach ? `${lineup.formation ? " · " : ""}المدرب: ${lineup.coach}` : ""}
+          {lineup.coach ? `${lineup.formation ? " · " : ""}المدرب: ${toBinaryPlayerName(lineup.coach)}` : ""}
         </p>
       </div>
       <ul className="space-y-1">
@@ -99,7 +208,7 @@ function LineupColumn({
               <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-[10px] font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
                 {p.number ?? "–"}
               </span>
-              <span className="truncate">{p.name}</span>
+              <span className="truncate">{toBinaryPlayerName(p.name)}</span>
             </button>
           </li>
         ))}
@@ -118,7 +227,7 @@ function LineupColumn({
                   className="flex items-center gap-2 text-xs text-muted-foreground hover:text-emerald-600 text-right w-full"
                 >
                   <span className="tabular-nums w-5 text-center shrink-0">{p.number ?? "–"}</span>
-                  <span className="truncate">{p.name}</span>
+                  <span className="truncate">{toBinaryPlayerName(p.name)}</span>
                 </button>
               </li>
             ))}
@@ -181,7 +290,7 @@ function RatingsBlock({
         <div className="flex items-center justify-center gap-2 rounded-2xl bg-amber-400/10 px-3 py-2 text-sm ring-1 ring-amber-400/30">
           <Star className="h-4 w-4 text-amber-500 fill-amber-400" />
           <span className="font-black">رجل المباراة:</span>
-          <span className="font-bold truncate">{motm.name}</span>
+          <span className="font-bold truncate">{toBinaryPlayerName(motm.name)}</span>
           <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-black text-emerald-950 tabular-nums">
             {motm.rating.toFixed(1)}
           </span>
@@ -202,7 +311,7 @@ function RatingsBlock({
                     onClick={() => p.id > 0 && onOpenPlayer?.(p.id)}
                     className="flex w-full items-center justify-between gap-2 text-xs hover:text-emerald-600 text-right"
                   >
-                    <span className="truncate">{p.name}</span>
+                    <span className="truncate">{toBinaryPlayerName(p.name)}</span>
                     <span
                       className={`shrink-0 rounded-md px-1.5 py-0.5 font-black tabular-nums text-white ${
                         (p.rating ?? 0) >= 7.5 ? "bg-emerald-500" : (p.rating ?? 0) >= 6.5 ? "bg-emerald-600/70" : "bg-zinc-400"
@@ -402,7 +511,7 @@ export function KcMatchDialog({
               </TabsList>
 
               <TabsContent value="events">
-                {data && <EventsTimeline events={data.events} fixture={fx} />}
+                {data && <EventsTimeline events={data.events} fixture={fx} onOpenPlayer={onOpenPlayer} />}
               </TabsContent>
 
               <TabsContent value="lineups">

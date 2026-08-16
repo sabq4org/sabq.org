@@ -71,6 +71,7 @@ import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
 import { RslPredictionsMatchPromo } from "@/components/rsl/RslPredictionsPromo";
 import type { RslHero } from "@/components/rsl/rslTypes";
 import type { ArticleWithDetails, Category } from "@shared/schema";
+import { toBinaryPlayerName } from "@shared/sportsNames";
 
 // ============================================================
 // الأنواع (مطابقة لـ /api/sports/*)
@@ -1514,8 +1515,9 @@ function PossessionBar({ row }: { row: SpStatRow }) {
 }
 // اسم لاعب في التشكيلة، يربط لصفحته إن توفّر معرّفه.
 function LineupName({ p, className }: { p: SpLineupPlayer; className?: string }) {
-  if (p.id) return <Link href={`/sports/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{p.name}</Link>;
-  return <span className={className}>{p.name}</span>;
+  const formattedName = toBinaryPlayerName(p.name);
+  if (p.id) return <Link href={`/sports/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{formattedName}</Link>;
+  return <span className={className}>{formattedName}</span>;
 }
 
 // البند 10: عرض التشكيلة على أرض ملعب حسب إحداثيات grid ("صف:عمود").
@@ -1877,6 +1879,8 @@ function SpEventIcon({ type }: { type: string }) {
 // بطاقة حدث على جانب فريقه في الخط الزمني (الأيقونة تلاصق العمود المركزي) — نمط المونديال.
 function SpTimelineChip({ ev, extra, side }: { ev: SpMatchEvent; extra: string | null; side: "home" | "away" }) {
   const isGoal = ev.type === "goal";
+  const playerName = toBinaryPlayerName(ev.player || ev.label);
+  const assistName = ev.assist ? toBinaryPlayerName(ev.assist) : null;
   return (
     <div
       className={`inline-flex items-start gap-2 max-w-full rounded-lg px-2.5 py-1.5 ${
@@ -1887,11 +1891,11 @@ function SpTimelineChip({ ev, extra, side }: { ev: SpMatchEvent; extra: string |
         <SpEventIcon type={ev.type} />
       </span>
       <div className="min-w-0" dir="rtl">
-        <p className="text-xs font-bold truncate">{ev.player || ev.label}</p>
+        <p className="text-xs font-bold truncate">{playerName}</p>
         {extra && <p className="text-[10px] text-emerald-700 dark:text-emerald-300 truncate">{extra}</p>}
-        {ev.assist && isGoal && <p className="text-[10px] text-muted-foreground truncate">صناعة: {ev.assist}</p>}
-        {ev.assist && ev.type === "substitution" && (
-          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {ev.assist}</p>
+        {assistName && isGoal && <p className="text-[10px] text-muted-foreground truncate">صناعة: {assistName}</p>}
+        {assistName && ev.type === "substitution" && (
+          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {assistName}</p>
         )}
         {!isGoal && ev.type !== "substitution" && <p className="text-[10px] text-muted-foreground truncate">{ev.label}</p>}
       </div>
@@ -1930,7 +1934,7 @@ function SpXgCard({ xg, homeLogo, awayLogo }: { xg: SpXg; homeLogo?: string; awa
                 {(p.location === "home" ? homeLogo : awayLogo) && (
                   <img src={p.location === "home" ? homeLogo : awayLogo} alt="" className="w-3.5 h-3.5 object-contain shrink-0" />
                 )}
-                <span className="truncate text-foreground">{p.name}</span>
+                <span className="truncate text-foreground">{toBinaryPlayerName(p.name)}</span>
               </span>
               <span className="font-bold tabular-nums text-foreground" dir="ltr">{p.xg.toFixed(2)}</span>
             </div>
