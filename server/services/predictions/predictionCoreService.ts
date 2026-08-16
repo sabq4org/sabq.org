@@ -260,6 +260,14 @@ async function countActiveEntriesByContest(contestIds: string[]): Promise<Map<st
   return map;
 }
 
+function resultWithPenalties(contest: PredictionContest): unknown {
+  if (contest.status !== "settled" || !contest.resultPayload) return null;
+  const res = contest.resultPayload as Record<string, unknown>;
+  const meta = (contest.metadata ?? {}) as Record<string, unknown>;
+  const penalties = res.penalties ?? meta.penalties ?? null;
+  return { ...res, penalties };
+}
+
 function serializeContest(
   contest: PredictionContest,
   myEntry?: PredictionEntry,
@@ -276,7 +284,7 @@ function serializeContest(
     settledAt: contest.settledAt,
     metadata: contest.metadata,
     // النتيجة تُعرض بعد التسوية فقط — لا تسريب قبل الإغلاق
-    result: contest.status === "settled" ? contest.resultPayload : null,
+    result: resultWithPenalties(contest),
     /** عدد المشاركين النشطين في توقّع هذه المسابقة — لإثبات اجتماعي على البطاقة. */
     entriesCount,
     myEntry: myEntry && myEntry.status === "active"
@@ -566,7 +574,7 @@ export async function getUserEntries(
         settledAt: contest.settledAt,
         metadata: contest.metadata,
         // نفس قاعدة serializeContest: النتيجة بعد التسوية فقط
-        result: contest.status === "settled" ? contest.resultPayload : null,
+        result: resultWithPenalties(contest),
         payload: entry.predictionPayload,
         submittedAt: entry.submittedAt,
         updatedAt: entry.updatedAt,
@@ -766,7 +774,7 @@ export async function getContestSettlement(contestId: string, userId?: string) {
 
   return {
     contestId,
-    result: contest.resultPayload,
+    result: resultWithPenalties(contest),
     settledAt: contest.settledAt,
     summary: settlement?.summary ?? null,
     myAwards,

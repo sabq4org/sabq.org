@@ -33,7 +33,7 @@ describe("getUserEntries — عقود الخدمة", () => {
   });
 
   it("لا تسرّب النتيجة قبل التسوية (نفس قاعدة serializeContest)", () => {
-    expect(fnBody).toContain('contest.status === "settled" ? contest.resultPayload : null');
+    expect(fnBody).toContain("resultWithPenalties(contest)");
   });
 
   it("تقتصر على مدخلات المستخدم النشطة وتستبعد مسودات المسابقات", () => {
