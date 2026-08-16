@@ -76,15 +76,23 @@ router.post("/api/webhooks/mailersend", async (req: Request, res: Response) => {
       return res.json({ ok: true, verified: false });
     }
 
-    // MailerSend delivers a single event: { type, data: { email: { recipient: { email } } } }.
-    // Be tolerant of shape drift; extract event type + recipient defensively.
+    // Extract event type + recipient defensively — MailerSend uses more than one
+    // shape. Real activity events nest it as data.email.recipient.email, while
+    // the "Test webhook" (and some payloads) put it as a PLAIN STRING at
+    // data.recipient. The original code only handled the nested object form, so
+    // recipient came back undefined and NO row was created even on a verified
+    // event. Handle string-or-object at every level.
     const body: any = req.body || {};
     const eventType: string = body.type || body.event || "";
+    const d: any = body.data ?? {};
+    const asEmail = (v: any): string | undefined =>
+      typeof v === "string" ? v : typeof v?.email === "string" ? v.email : undefined;
     const recipient: string | undefined =
-      body?.data?.email?.recipient?.email ||
-      body?.data?.recipient?.email ||
-      body?.data?.email ||
-      body?.email;
+      asEmail(d.recipient) ||
+      asEmail(d?.email?.recipient) ||
+      asEmail(d.email) ||
+      asEmail(body.recipient) ||
+      asEmail(body.email);
 
     const reason = suppressionReasonFor(eventType);
     if (reason && recipient) {
