@@ -504,6 +504,7 @@ export default function Login() {
                       placeholder="example@email.com"
                       disabled={isLoading}
                       data-testid="input-email"
+                      autoComplete="username"
                       className="text-base"
                       dir="ltr"
                     />
@@ -536,6 +537,7 @@ export default function Login() {
                         placeholder="••••••"
                         disabled={isLoading}
                         data-testid="input-password"
+                        autoComplete="current-password"
                         dir="ltr"
                         className="pl-11 text-base"
                       />

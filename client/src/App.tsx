@@ -214,9 +214,7 @@ const MyServicesPage = lazy(() => retryImport(() => import("@/pages/dashboard/My
 const VerifyLetter = lazy(() => retryImport(() => import("@/pages/VerifyLetter")));
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
-const CompleteProfile = lazy(() => retryImport(() => import("@/pages/CompleteProfile")));
 const CompleteName = lazy(() => retryImport(() => import("@/pages/CompleteName")));
-const SelectInterests = lazy(() => retryImport(() => import("@/pages/SelectInterests")));
 const EditInterests = lazy(() => retryImport(() => import("@/pages/EditInterests")));
 const NotificationSettings = lazy(() => retryImport(() => import("@/pages/NotificationSettings")));
 const MyFollows = lazy(() => retryImport(() => import("@/pages/MyFollows")));
@@ -988,9 +986,10 @@ function Router() {
         <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
-        <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
+        {/* F-28: /complete-profile (unreachable, saved nothing) and /select-interests
+            (POSTed to a non-existent route + read the wrong endpoint) removed —
+            onboarding lives at /onboarding/* and interests at /interests/edit. */}
         <Route path="/complete-name">{() => <LazyRoute component={CompleteName} />}</Route>
-        <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>
         <Route path="/notification-settings">{() => <LazyRoute component={NotificationSettings} />}</Route>
         <Route path="/ur/notification-settings">{() => <Redirect to="/settings/notifications" />}</Route>
