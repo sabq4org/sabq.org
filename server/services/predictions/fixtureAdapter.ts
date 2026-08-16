@@ -152,6 +152,8 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
           status: predictionContests.status,
           locksAt: predictionContests.locksAt,
           resultVersion: predictionContests.resultVersion,
+          metadata: predictionContests.metadata,
+          resultPayload: predictionContests.resultPayload,
         })
         .from(predictionContests)
         .where(and(
@@ -166,6 +168,31 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
       const now = new Date();
       for (const fixture of fixtures) {
         const contest = contestByRef.get(fixture.externalRef) ?? null;
+
+        // إثراء المسابقات المسوّاة سابقًا بركلات الترجيح إن توفّرت لدى المزوّد
+        if (
+          contest &&
+          contest.status === "settled" &&
+          (fixture.penaltiesHome != null || fixture.penaltiesAway != null)
+        ) {
+          const pen = { home: fixture.penaltiesHome, away: fixture.penaltiesAway };
+          const meta = (contest.metadata ?? {}) as Record<string, unknown>;
+          const res = (contest.resultPayload ?? {}) as Record<string, unknown>;
+          if (!meta.penalties || !res.penalties) {
+            await db
+              .update(predictionContests)
+              .set({
+                metadata: { ...meta, penalties: pen },
+                resultPayload: { ...res, penalties: pen },
+                updatedAt: now,
+              })
+              .where(eq(predictionContests.id, contest.id));
+            console.log(
+              `[Prediction Adapter] backfilled penalties for settled contest ${competition.slug}#${fixture.externalRef} → ${pen.home}-${pen.away}`,
+            );
+          }
+        }
+
         const action = decideSyncAction(fixture, contest, now);
 
         switch (action.kind) {
