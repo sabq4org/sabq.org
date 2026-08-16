@@ -2535,36 +2535,48 @@ async function updateMemberInterests(req: Request, res: Response) {
     }
 
     // Support both interestIds and categoryIds for backwards compatibility
-    const interestIds = req.body.interestIds || req.body.categoryIds;
+    const rawIds = req.body.interestIds || req.body.categoryIds;
 
-    if (!Array.isArray(interestIds)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)" 
+    if (!Array.isArray(rawIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)"
       });
     }
 
-    // Delete existing interests
-    await db.delete(userInterests)
-      .where(eq(userInterests.userId, session.userId));
+    // Dedupe + keep valid strings, then intersect with the real category
+    // catalog. Previously unchecked IDs hit a FK violation AFTER the delete had
+    // run — wiping the member's interests (F-12).
+    const requested = Array.from(
+      new Set(rawIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)),
+    );
+    const validRows = requested.length
+      ? await db.select({ id: categories.id }).from(categories).where(inArray(categories.id, requested))
+      : [];
+    const validIds = validRows.map((r) => r.id);
 
-    // Add new interests
-    if (interestIds.length > 0) {
-      const interestValues = interestIds.map((categoryId: string, index: number) => ({
-        userId: session.userId,
-        categoryId,
-        weight: 1.0 - (index * 0.1), // Higher weight for earlier items
-      }));
+    // Replace-all inside a transaction so a partial failure can't leave zero
+    // interests. Weight floored at 0.1 so long lists don't go negative (the
+    // GET orders by desc(weight)) — F-12.
+    await db.transaction(async (tx) => {
+      await tx.delete(userInterests).where(eq(userInterests.userId, session.userId));
+      if (validIds.length > 0) {
+        await tx.insert(userInterests).values(
+          validIds.map((categoryId, index) => ({
+            userId: session.userId,
+            categoryId,
+            weight: Math.max(0.1, 1.0 - index * 0.1),
+          })),
+        );
+      }
+    });
 
-      await db.insert(userInterests).values(interestValues);
-    }
+    console.log(`[Mobile API] Updated interests for ${session.userId}: ${validIds.length} interests`);
 
-    console.log(`[Mobile API] Updated interests for ${session.userId}: ${interestIds.length} interests`);
-
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: "تم تحديث الاهتمامات بنجاح",
-      count: interestIds.length
+      count: validIds.length
     });
   } catch (error) {
     console.error("[Mobile API] members/interests update error:", error);
