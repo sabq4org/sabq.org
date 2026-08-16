@@ -880,6 +880,16 @@ function generateVerificationCode(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
 
+// Hash a 6-digit code for storage in email_verification_tokens / password_reset_tokens.
+// The plaintext code is emailed to the user; only this hash is persisted (F-13).
+// The userId is folded into the hash so two users can hold the SAME 6-digit code
+// without colliding on the globally-unique `token` column — which previously
+// turned a birthday-collision into a 500 on a 900k-value space (F-14). Lookups
+// always know the userId, so they recompute the same hash to match.
+function hashMobileCode(userId: string, code: string): string {
+  return crypto.createHash("sha256").update(`${userId}:${code}`).digest("hex");
+}
+
 // Helper: Generate secure session token
 function generateSessionToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -1141,7 +1151,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
     await db.insert(emailVerificationTokens).values({
       userId,
-      token: verificationToken,
+      token: hashMobileCode(userId, verificationToken), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1268,7 +1278,7 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
       .from(emailVerificationTokens)
       .where(and(
         eq(emailVerificationTokens.userId, user.id),
-        eq(emailVerificationTokens.token, code),
+        eq(emailVerificationTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(emailVerificationTokens.used, false),
         gt(emailVerificationTokens.expiresAt, new Date())
       ))
@@ -1358,7 +1368,7 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
 
     await db.insert(emailVerificationTokens).values({
       userId: user.id,
-      token: verificationCode,
+      token: hashMobileCode(user.id, verificationCode), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1801,10 +1811,10 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
         eq(passwordResetTokens.used, false)
       ));
 
-    // Store reset token
+    // Store reset token (hashed at rest, per-user scoped — F-13/F-14)
     await db.insert(passwordResetTokens).values({
       userId: user.id,
-      token: resetToken,
+      token: hashMobileCode(user.id, resetToken),
       expiresAt,
     });
 
@@ -1891,7 +1901,7 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       .from(passwordResetTokens)
       .where(and(
         eq(passwordResetTokens.userId, user.id),
-        eq(passwordResetTokens.token, code),
+        eq(passwordResetTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(passwordResetTokens.used, false),
         gt(passwordResetTokens.expiresAt, new Date())
       ))
