@@ -2056,7 +2056,10 @@ function mapTsStatsToSpl(ts: TsLiveStats, detail: SplMatchDetail): SplMatchDetai
 
 // جوهر مشترك: ركّب نتيجة TheSports الحيّة على أي SplFixture بمعرّف بطولة معروف.
 async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: string): Promise<T> {
-  if (!f.status.live) return f;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const nearKickoff =
+    !f.status.finished && f.timestamp <= nowSec + 600 && f.timestamp >= nowSec - 3 * 3600;
+  if (!f.status.live && !nearKickoff) return f;
   try {
     const ts = await getTheSportsFastScore(f.id, f.timestamp, tsCompId);
     if (!ts || (!ts.live && !ts.finished)) return f;
@@ -2116,7 +2119,10 @@ export async function overlayLiveFixturesForComp<T extends SplFixture>(
  */
 export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<SplMatchDetail> {
   const fx = detail.fixture;
-  if (!fx.status.live) return detail;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const nearKickoff =
+    !fx.status.finished && fx.timestamp <= nowSec + 600 && fx.timestamp >= nowSec - 3 * 3600;
+  if (!fx.status.live && !nearKickoff) return detail;
   const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
   const tsCompId = getTsCompetitionId(comp?.slug);
   if (!tsCompId) return detail;
