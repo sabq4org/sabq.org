@@ -212,7 +212,10 @@ const TS_STATUS_TO_AC: Record<number, { code: string; label: string }> = {
 
 /** تركيب النتيجة الأسرع على مباراة كأس آسيا الجارية، بأفضل جهد. */
 async function overlayAcLiveScore(fixture: AcFixture): Promise<AcFixture> {
-  if (!fixture.status.live || !AC_TS_COMPETITION_ID) return fixture;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const nearKickoff =
+    !fixture.status.finished && fixture.timestamp <= nowSec + 600 && fixture.timestamp >= nowSec - 3 * 3600;
+  if ((!fixture.status.live && !nearKickoff) || !AC_TS_COMPETITION_ID) return fixture;
   try {
     const live = await getTheSportsFastScore(
       fixture.id,
