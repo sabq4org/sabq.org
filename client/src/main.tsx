@@ -81,9 +81,15 @@ if (import.meta.env.PROD) {
       // إضافة «تعبئة تلقائية» في متصفحات أندرويد تستدعي دالة غير معرّفة
       // (بصيغتي Chrome وSafari/WebKit)
       /xbrowser is not defined|Can't find variable: xbrowser/,
-      // fetch محجوب (مانع إعلانات) نحو نطاقات إعلانات/تحليلات خارجية —
-      // منذ SDK v8 تُلحق الرسالة بمضيف الطلب الفاشل فنطابق عليه.
-      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\([^)]*(?:googlesyndication|doubleclick|googletagmanager|google-analytics|analytics\.google|adservice|spadsync)/i,
+      // fetch فاشل نحو مضيف ليس لنا — منذ SDK v8 تُلحق الرسالة بمضيف الطلب
+      // الفاشل فنطابق عليه. كودنا لا ينادي أي مضيف خارجي بـfetch من المتصفح
+      // (تحقُّق 2026-08-17: صفر نداءات خارجية في client/src)، فكل فشل موسوم
+      // بمضيف غير sabq مصدره سكربت محقون: إضافات (frame_ant نحو
+      // www.google.com في JAVASCRIPT-REACT-1C، injectScriptAdjust في 35/37)،
+      // أدواري (utq.vvipquan.com في 36)، ووسوم إعلانات. كانت القاعدة قائمة
+      // بمضيفي الإعلانات المعروفين — لعبة قط وفأر انتهت بقلب المنطق.
+      // الفشل بلا لاحقة "(host)" أو نحو مضيف sabq يمرّ كما هو.
+      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\((?!(?:[a-z0-9-]+\.)*sabq\.(?:org|news)\))/i,
       // polyfill الـmodulepreload من Vite يجلب chunks مسبقًا بـfetch — فشله
       // (شبكة متقطعة، إغلاق الصفحة أثناء الجلب، دوران build بعد النشر) لا
       // يكسر شيئًا: الاستيراد الفعلي له مسار خطئه وdeployRecovery يعالج
@@ -98,11 +104,12 @@ if (import.meta.env.PROD) {
       // vendor-core — سلوك مقصود في المكتبة لا خطأ عندنا. صفر مستخدم متأثر
       // في 157 حدثًا خلال أسبوعين (JAVASCRIPT-REACT-2W و2V).
       "signal is aborted without reason",
-      // سفاري المعرّب يرمي TypeError برسالة «مُلغى» (مكافئ Load failed)
-      // حين يُجهض fetch بمغادرة الصفحة أثناء الجلب — ضجيج شبكة لا خطأ كود
-      // (JAVASCRIPT-REACT-2T). مطابقة تامة حتى لا تُسقط رسالة عربية حقيقية
-      // تحتوي الكلمة.
+      // سفاري/WebKit يرمي TypeError برسالة «مُلغى» (المعرّب) أو "cancelled"
+      // (الإنجليزي) — مكافئ Load failed — حين يُجهض fetch بمغادرة الصفحة
+      // أثناء الجلب. ضجيج شبكة لا خطأ كود (JAVASCRIPT-REACT-2T و38).
+      // مطابقة تامة حتى لا تُسقط رسالة حقيقية تحتوي الكلمة.
       /^مُلغى$/,
+      /^cancelled$/,
     ],
     // الحسم بموضع الرمي: أعلى إطار ذي ملف يجب أن يكون من أصولنا، وإلا أُسقط
     // الحدث قبل الإرسال فلا يستهلك من الحصة أصلًا. والأحداث بلا مكدس التي
