@@ -15,8 +15,10 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
-import { extractPgError } from "./utils/pgError";
+import { extractPgError, isUniqueViolation } from "./utils/pgError";
+import { isLockedOut, recordFailure, clearFailures } from "./services/authAttemptGuard";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
@@ -68,8 +70,10 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
-import { PERMISSION_CODES, ROLE_NAMES } from "@shared/rbac-constants";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
+import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
+import { inferStaffRolesFromWork } from "./services/staffRoleInference";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
 // Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
@@ -179,6 +183,41 @@ const phoneOtpSendLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => normalizePhone(req.body?.phone) || cfKeyGenerator(req),
+  validate: cfValidate,
+});
+
+// authLimiter above uses skipSuccessfulRequests so repeated *successful* logins
+// don't lock out a legitimate user — correct for login/2FA where only failures
+// matter. But that same flag makes forgot-password (always 200 for anti-
+// enumeration), resend-verification (200 on success) and register (201) count
+// NOTHING, leaving them effectively unlimited: email-bombing + unbounded
+// account creation. These flows need a limiter that counts EVERY request.
+// Keyed by email/phone when present so one IP can't be shared-bucketed and one
+// victim address can't be flooded regardless of source IP.
+function authTargetKey(req: any): string {
+  const raw = (req.body?.email || req.body?.phone || "").toString().trim().toLowerCase();
+  return raw ? `t:${raw}` : cfKeyGenerator(req);
+}
+
+// Reset/verify email dispatch: 5 per hour per target address (or IP fallback).
+const emailDispatchLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { message: "تجاوزت الحد المسموح لطلبات البريد. حاول بعد قليل." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: authTargetKey,
+  validate: cfValidate,
+});
+
+// Account creation: 10 per hour per IP, counting successes (unlike authLimiter).
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { message: "تم تجاوز حد إنشاء الحسابات. يرجى المحاولة لاحقاً." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
   validate: cfValidate,
 });
 
@@ -599,11 +638,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ============================================================
 
   // Login
-  app.post("/api/login", authLimiter, (req, res, next) => {
+  app.post("/api/login", authLimiter, async (req, res, next) => {
     if (process.env.NODE_ENV !== 'production') {
       console.log("🔐 Login attempt received");
     }
-    
+
+    // Per-ACCOUNT lockout (audit F-16). The IP-keyed authLimiter is spoofable
+    // and, behind the edge worker, shared — so bound password guessing per
+    // account too, as the mobile login already does. Keyed by the submitted
+    // identifier (lowercased email or phone) since we don't yet have a userId.
+    const loginIdentifier = (req.body?.email || req.body?.username || req.body?.phone || "")
+      .toString().trim().toLowerCase();
+    const attemptKey = loginIdentifier ? `login:web:${loginIdentifier}` : null;
+    const LOGIN_MAX_FAILURES = 10;
+    if (attemptKey && (await isLockedOut(attemptKey, LOGIN_MAX_FAILURES))) {
+      return res.status(429).json({
+        message: "تم قفل الحساب مؤقتاً بسبب محاولات دخول فاشلة متعددة. حاول بعد قليل.",
+      });
+    }
+
     passport.authenticate("local", async (err: any, user: any, info: any) => {
       if (err) {
         console.error("❌ Login error:", err);
@@ -611,8 +664,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       if (!user) {
         console.log("❌ Login failed:", info?.message);
+        if (attemptKey) { try { await recordFailure(attemptKey); } catch { /* best-effort */ } }
         return res.status(401).json({ message: info?.message || "فشل تسجيل الدخول" });
       }
+
+      // Successful credential match — clear the failure counter.
+      if (attemptKey) { try { await clearFailures(attemptKey); } catch { /* best-effort */ } }
 
       // Check if 2FA is enabled
       if (user.twoFactorEnabled) {
@@ -819,7 +876,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     role: z.string().max(40).optional(),
   });
 
-  app.post("/api/register", authLimiter, async (req, res) => {
+  app.post("/api/register", registerLimiter, async (req, res) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -833,11 +890,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: pwCheck.message });
       }
 
-      // Check if user exists
+      // Check if user exists — case-insensitive to match the DB guard
+      // (users_email_lower_unique). A case-sensitive precheck let a legacy
+      // mixed-case row slip through and blow up as a raw 500 on insert (F-11).
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.email, email.toLowerCase()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
         .limit(1);
 
       if (existingUser) {
@@ -854,8 +913,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ? role 
         : "reader";
 
-      // Create user
-      const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Create user — nanoid like every other creation path (F-21); the old
+      // `user-${Date.now()}-${Math.random()}` was timestamp-prefixed/guessable.
+      const { nanoid } = await import("nanoid");
+      const userId = `user-${nanoid()}`;
       const [newUser] = await db
         .insert(users)
         .values({
@@ -917,6 +978,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
     } catch (error) {
       console.error("Registration error:", error);
+      // A concurrent signup (TOCTOU) or a legacy mixed-case row races the
+      // precheck and hits the unique index — surface it as 409, not 500 (F-11).
+      if (isUniqueViolation(error, 'users_email_unique') ||
+          isUniqueViolation(error, 'users_email_lower_unique')) {
+        return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل" });
+      }
       res.status(500).json({ message: "خطأ في إنشاء الحساب" });
     }
   });
@@ -1047,7 +1114,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Resend Verification Email
-  app.post("/api/auth/resend-verification", isAuthenticated, authLimiter, async (req, res) => {
+  app.post("/api/auth/resend-verification", isAuthenticated, emailDispatchLimiter, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
@@ -1070,7 +1137,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Forgot Password - Request reset token
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", emailDispatchLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -1207,11 +1274,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ passwordHash })
         .where(eq(users.id, matchedToken.userId));
 
-      // Mark token as used
+      // إبطال كل رموز/روابط الاستعادة غير المستهلكة للمستخدم — مسار الموبايل
+      // يرسل رمزًا ورابطًا معًا؛ استهلاك أحدهما يجب أن يُبطل الآخر.
       await db
         .update(passwordResetTokens)
         .set({ used: true })
-        .where(eq(passwordResetTokens.id, matchedToken.id));
+        .where(and(
+          eq(passwordResetTokens.userId, matchedToken.userId),
+          eq(passwordResetTokens.used, false)
+        ));
 
       await invalidateAllUserSessions(matchedToken.userId); // kill all sessions so a stolen cookie can't survive the reset (audit #8)
 
@@ -1225,7 +1296,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Set Password - For users with temporary password who must change it
-  app.post("/api/auth/set-password", isAuthenticated, async (req: any, res) => {
+  app.post("/api/auth/set-password", isAuthenticated, authLimiter, async (req: any, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
       const userId = req.user.id;
@@ -1428,33 +1499,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Get all roles as array
-      const rolesArray = userRolesResult.map(r => r.roleName);
-
-      // Prefer the first non-reader RBAC role so writers/reporters/editors
-      // surface their actual title instead of getting overridden by a
-      // stray "reader" assignment (matches Mobile API logic in
-      // mobileApiRoutes.ts:buildUserRolePayload).
-      const nonReaderRole = userRolesResult.find(
-        (r) => r.roleName && r.roleName !== "reader",
+      // Union RBAC + users.role and drop leftover "reader" when a staff
+      // role exists — same helper as Mobile API / getUserRoleNames so a
+      // correspondent never surfaces as «قارئ» from a stale layer.
+      let allRoles = mergeRoleSignals(
+        userRolesResult.map((r) => r.roleName),
+        user.role,
       );
-
-      // For backward compatibility, keep 'role' as first role, add 'roles' array
-      const role = nonReaderRole?.roleName
-        || rolesArray[0]
-        || user.role
-        || "reader";
-      const allRoles = rolesArray.length > 0
-        ? rolesArray
-        : [user.role || "reader"];
-      // `roleLabel` is the Arabic display name pulled straight from the
-      // `roles` table — single source of truth, no client-side
-      // translation map needed. Falls back to the job title (e.g.
-      // "كاتب رأي في علم النفس والمجتمع") and finally a hard-coded
-      // "قارئ" so writers without an explicit job title still show
-      // something meaningful.
-      const roleLabel = nonReaderRole?.roleNameAr
-        || userRolesResult[0]?.roleNameAr
+      if (
+        allRoles.every((name) => isReaderLikeRole(name)) &&
+        (user.jobTitle || user.hasPressCard)
+      ) {
+        const inferred = await inferStaffRolesFromWork(userId);
+        if (inferred.length > 0) {
+          allRoles = mergeRoleSignals(
+            [...userRolesResult.map((r) => r.roleName), ...inferred],
+            user.role,
+          );
+        }
+      }
+      const role = primaryRoleKey(allRoles);
+      const primaryRbac = userRolesResult.find((r) => r.roleName === role);
+      const roleLabel = primaryRbac?.roleNameAr
+        || ROLE_LABELS_AR[role as keyof typeof ROLE_LABELS_AR]
         || user.jobTitle
         || "قارئ";
 
@@ -7256,23 +7323,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Own-only roles (edit_own / opinion.edit_own without broader view/edit)
-      // may only open articles they authored, reported, or submitted.
-      const userPermissions = await getUserPermissions(userId);
-      const canViewAny =
-        userPermissions.includes("articles.view") ||
-        userPermissions.includes("articles.edit") ||
+      // فتح المقال في المحرر سطحُ تحرير لا عرض: «articles.view» ترى القوائم ولا
+      // تفتح مواد الآخرين (حادثة 2026-08-08) — الفتح للمكتب أو للمالك فقط.
+      const userPermissions = await getEffectiveUserPermissions(userId);
+      const isOpinionArticle = result.article.articleType === "opinion";
+      const canOpenAny =
+        userPermissions.includes("*") ||
+        userPermissions.includes("system.admin") ||
         userPermissions.includes("articles.edit_any") ||
-        userPermissions.includes("opinion.view") ||
-        userPermissions.includes("opinion.edit_any") ||
-        userPermissions.includes("system.admin");
-      if (!canViewAny) {
+        userPermissions.includes("articles.publish") ||
+        (isOpinionArticle && userPermissions.includes("opinion.edit_any"));
+      if (!canOpenAny) {
         const isOwner =
           result.article.authorId === userId ||
           result.article.reporterId === userId ||
           result.article.submitterId === userId;
         if (!isOwner) {
-          return res.status(403).json({ message: "Forbidden" });
+          return res.status(403).json({ message: "لا تملك صلاحية فتح هذه المادة — ليست من موادك" });
         }
       }
 
@@ -7843,10 +7910,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Check permissions: edit_own or edit_any
-      const userPermissions = await getUserPermissions(userId);
-      const canEditOwn = userPermissions.includes("articles.edit_own");
-      const canEditAny = userPermissions.includes("articles.edit_any");
+      // Check permissions: edit_own or edit_any — من الصلاحيات الفعلية (نفس
+      // مصدر بوابة requireAnyPermission) بدل getUserPermissions (DB فقط).
+      const userPermissions = await getEffectiveUserPermissions(userId);
+      const { canEditOwn, canEditAny } = resolveArticleEditFlags(
+        userPermissions,
+        existingArticle.articleType,
+      );
 
       // User can edit if they have edit_any, or if they have edit_own AND own the row
       // (author, reporter, or original submitter — matches contributor analytics).
@@ -7887,6 +7957,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           message: "Invalid data",
           errors: parsed.error.flatten(),
         });
+      }
+
+      // حارس الهبوط scheduled/published→draft — القاعدة في publishGateRules.decideStatusDemotion
+      const demotion = decideStatusDemotion({
+        requestedStatus: parsed.data.status,
+        currentStatus: existingArticle.status,
+        confirmed: req.body?.confirmStatusDowngrade === true,
+        permissions: userPermissions,
+        articleType: existingArticle.articleType,
+      });
+      if (demotion.action === "forbid") {
+        return res.status(demotion.httpStatus).json({ message: demotion.message, code: demotion.code });
+      }
+      if (demotion.action === "ignore") {
+        console.warn(`[ARTICLE UPDATE] ignored implicit ${existingArticle.status}→draft demotion for ${articleId} by ${userId} — status preserved`);
+        delete parsed.data.status;
       }
 
       // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
@@ -8014,7 +8100,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           }
         } else if (existingArticle.reviewStatus !== "pending_review") {
           updateData.reviewStatus = "pending_review";
-          updateData.status = "draft";
+          updateData.status = statusAfterSubmitForReview(existingArticle.status);
         }
       }
 
@@ -12193,7 +12279,7 @@ Respond in valid JSON format only:
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: "draft",
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -14261,10 +14347,16 @@ Respond in valid JSON format only:
   });
 
   // News Analytics Endpoint - Smart statistics and insights
-  app.post("/api/articles/:id/analyze-credibility", isAuthenticated, async (req: any, res) => {
+  app.post("/api/articles/:id/analyze-credibility", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const articleId = req.params.id;
-      
+
+      // كانت بلا أي فحص فيكتب أي مسجّل أعمدة المصداقية — نفس إصلاح analyze-seo.
+      const access = await authorizeArticleWrite(req.user.id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const [article] = await db
         .select()
         .from(articles)
@@ -14791,7 +14883,8 @@ Respond in valid JSON format only:
   app.delete("/api/media-assets/:id",
     requireAuth,
     // Was requireRole("editor","admin") — see PATCH note (legacy role-text trap).
-    requireAnyPermission("articles.edit_any", "media.delete"),
+    // edit_own + authorizeArticleWriteByMediaAsset: صاحب المقال يحذف مرفقه اليتيم.
+    requireAnyPermission("articles.edit_any", "articles.edit_own", "media.delete"),
     async (req: any, res) => {
     try {
         const { id } = req.params;
@@ -18234,7 +18327,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const parsed = suspendUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error });
+        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.flatten() });
       }
 
       const { reason, duration } = parsed.data;
@@ -18276,7 +18369,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const parsed = banUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error });
+        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.flatten() });
       }
 
       const { reason, isPermanent, duration } = parsed.data;
@@ -25576,11 +25669,39 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/dashboard/opinion", requireAuth, requireAnyPermission("articles.view", "articles.edit_own"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      const userPermissions = await getUserPermissions(userId);
+      const userPermissions = await getEffectiveUserPermissions(userId);
       const { page = 1, limit = 20, status, reviewStatus, search } = req.query;
       const offset = (Number(page) - 1) * Number(limit);
 
-      let query = db
+      // رؤية كل مواد الرأي للمكتب فقط؛ غيرهم يرى مواده هو. (القديم كان fail-open:
+      // الفلتر كان يُطبَّق فقط على حاملي opinion.edit_own)
+      const canSeeAllOpinion =
+        userPermissions.includes("*") ||
+        userPermissions.includes("system.admin") ||
+        userPermissions.includes("articles.edit_any") ||
+        userPermissions.includes("opinion.edit_any");
+
+      // شرط واحد مركّب — .where() المتسلسلة في Drizzle تستبدل بعضها ولا تتراكم.
+      const conditions = [eq(articles.articleType, "opinion")];
+      if (!canSeeAllOpinion) {
+        conditions.push(eq(articles.authorId, userId));
+      }
+      if (status && status !== "all") {
+        conditions.push(eq(articles.status, status as string));
+      }
+      if (reviewStatus && reviewStatus !== "all") {
+        conditions.push(eq(articles.reviewStatus, reviewStatus as string));
+      }
+      if (search) {
+        conditions.push(
+          or(
+            ilike(articles.title, `%${search}%`),
+            ilike(articles.excerpt, `%${search}%`)
+          )!
+        );
+      }
+
+      const results = await db
         .select({
           article: articleAdminSelect,
           category: categories,
@@ -25595,32 +25716,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(eq(articles.articleType, "opinion"))
-        .$dynamic();
-
-      // If user can only view their own, filter by authorId
-      if (!userPermissions.includes("opinion.edit_any") && userPermissions.includes("opinion.edit_own")) {
-        query = query.where(eq(articles.authorId, userId));
-      }
-
-      if (status && status !== "all") {
-        query = query.where(eq(articles.status, status as string));
-      }
-
-      if (reviewStatus && reviewStatus !== "all") {
-        query = query.where(eq(articles.reviewStatus, reviewStatus as string));
-      }
-
-      if (search) {
-        query = query.where(
-          or(
-            ilike(articles.title, `%${search}%`),
-            ilike(articles.excerpt, `%${search}%`)
-          )
-        );
-      }
-
-      const results = await query
+        .where(and(...conditions))
         .orderBy(desc(articles.createdAt))
         .limit(Number(limit))
         .offset(offset);
@@ -25631,19 +25727,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         author: row.author,
       }));
 
-      // Calculate metrics
-      let metricsQuery = db
+      // Calculate metrics — نفس قاعدة الرؤية أعلاه
+      const metricsConditions = [eq(articles.articleType, "opinion")];
+      if (!canSeeAllOpinion) {
+        metricsConditions.push(eq(articles.authorId, userId));
+      }
+      const allOpinionArticles = await db
         .select({ id: articles.id, status: articles.status, reviewStatus: articles.reviewStatus })
         .from(articles)
-        .where(eq(articles.articleType, "opinion"))
-        .$dynamic();
-
-      // Apply same permission filter for metrics
-      if (!userPermissions.includes("opinion.edit_any") && userPermissions.includes("opinion.edit_own")) {
-        metricsQuery = metricsQuery.where(eq(articles.authorId, userId));
-      }
-
-      const allOpinionArticles = await metricsQuery;
+        .where(and(...metricsConditions));
 
       const metrics = {
         total: allOpinionArticles.length,
@@ -25908,7 +26000,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: "draft",
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -27419,6 +27511,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -27657,6 +27750,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -28922,6 +29016,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -29278,6 +29373,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -29378,6 +29474,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,

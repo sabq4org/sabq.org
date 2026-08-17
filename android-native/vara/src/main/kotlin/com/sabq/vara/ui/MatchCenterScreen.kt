@@ -35,6 +35,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.EventSeat
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.GppMaybe
@@ -87,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.sabq.vara.core.Fixture
 import com.sabq.vara.core.Team
 import com.sabq.vara.core.VaraFormat
@@ -436,7 +439,7 @@ private suspend fun mcLoadAll(vm: VaraViewModel, fixtureId: Int, preview: Fixtur
     if (st.facts == null) st.facts = runCatching { mcParseFacts(vm.api.publicGet("/sports/match/$fixtureId/facts")) }.getOrNull()
 }
 
-/// تحديث لحظي خفيف بلا كاش: التفاصيل + التعليق فقط — استبدال state موضعي بلا وميض.
+/// تحديث لحظي خفيف بلا كاش: التفاصيل + التعليق (+ المتوقعة إن بقيت الرسمية فارغة).
 private suspend fun mcRefreshLive(vm: VaraViewModel, fixtureId: Int, st: McState) {
     if (st.refreshInFlight) return
     st.refreshInFlight = true
@@ -447,6 +450,14 @@ private suspend fun mcRefreshLive(vm: VaraViewModel, fixtureId: Int, st: McState
         }
         // التعليق أفضل جهد دائمًا — قد يبدأ بعد فتح الشاشة فيظهر تبويبه حال توفّره.
         runCatching { mcParseCommentary(vm.api.publicGet("/sports/match/$fixtureId/commentary", ignoreCache = true)) }.getOrNull()?.let { st.commentary = it }
+        // إن بقيت الرسمية فارغة أعد جلب المتوقعة — قد تصدر بعد أول فتح للشاشة.
+        val needExpected = st.detail?.let { d ->
+            !d.fixture.status.finished && d.lineups.none { it.startXI.isNotEmpty() }
+        } == true
+        if (needExpected) {
+            runCatching { mcParseExpected(vm.api.publicGet("/sports/match/$fixtureId/expected-lineup", ignoreCache = true)) }
+                .getOrNull()?.let { st.expected = it }
+        }
     } finally {
         st.refreshInFlight = false
     }
@@ -511,6 +522,34 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
     val following = follows.any { it.id == fixtureId }
     val fixture = st.detail?.fixture ?: preview
 
+    // بطاقة «توقّع النتيجة» — مسابقة المنصة المركزية المقابلة لهذه المباراة:
+    // بادئة slug من الجسر ← بطولة حية من /competitions ← مطابقة externalRef.
+    // تُعاد المحاولة عند العودة من نموذج التوقّع كي يتحدث «توقّعتَ …».
+    var predContest by remember { mutableStateOf<McPredContest?>(null) }
+    val mcBackEntry by nav.currentBackStackEntryAsState()
+    LaunchedEffect(fixture?.id, fixture?.started, mcBackEntry) {
+        val f = fixture ?: return@LaunchedEffect
+        val prefix = predBridgePrefix(f.competitionSlug)
+        if (prefix == null || f.started) { predContest = null; return@LaunchedEffect }
+        predContest = runCatching {
+            val comps = findArray(vm.api.memberGet("/predictions/competitions", ignoreCache = true), "competitions")
+            val slug = comps.filterIsInstance<JsonObject>()
+                .firstOrNull { it.string("slug")?.startsWith(prefix) == true }?.string("slug")
+            if (slug == null) null
+            else findArray(vm.api.memberGet("/predictions/competitions/$slug", ignoreCache = true), "contests")
+                .filterIsInstance<JsonObject>()
+                .firstOrNull {
+                    it.string("externalRef") == f.id.toString() &&
+                        it.string("status") == "open" &&
+                        (it.string("contestType") ?: "match_score") == "match_score"
+                }?.let { row ->
+                    val id = row.string("id")
+                    val payload = row.obj("myEntry")?.obj("payload")
+                    if (id == null) null else McPredContest(id, payload?.int("predHome"), payload?.int("predAway"))
+                }
+        }.getOrNull()
+    }
+
     LaunchedEffect(fixtureId, revision) {
         if (st.detail == null) st.loading = true
         mcLoadAll(vm, fixtureId, preview, st)
@@ -526,6 +565,15 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
     val hasExpected = st.expected?.let { it.available && (it.home != null || it.away != null) } == true
     val hasAnalysis = fixture?.started == true ||
         st.xg?.available == true || st.momentum?.available == true || st.pressure?.available == true || st.facts?.available == true
+    // نافذة انتظار التشكيلة: نُظهر التبويب بحالة فارغة بدل إخفائه قبيل الانطلاق.
+    val hasOfficialLineup = st.detail?.lineups?.any { it.startXI.isNotEmpty() } == true
+    val awaitingLineups = fixture?.let { f ->
+        val ts = f.timestamp ?: return@let false // بلا موعد معلوم لا نافذة انتظار
+        !f.status.finished && !hasOfficialLineup && !hasExpected && run {
+            val secs = ts - System.currentTimeMillis() / 1000
+            secs <= 2 * 3600 && secs > -3 * 3600
+        }
+    } == true
     val segments = buildList {
         val d = st.detail
         if (d != null) {
@@ -535,7 +583,7 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
             if (hasCommentary) add(McSegment.COMMENTARY)
             if (hasAnalysis) add(McSegment.ANALYSIS)
             if (hasRatings) add(McSegment.RATINGS)
-            if (d.lineups.isNotEmpty() || hasExpected) add(McSegment.LINEUPS)
+            if (d.lineups.isNotEmpty() || hasExpected || awaitingLineups) add(McSegment.LINEUPS)
             if (d.statRows.isNotEmpty()) add(McSegment.STATS)
             if (hasH2H) add(McSegment.H2H)
         }
@@ -547,7 +595,7 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
         if (st.detail != null || effective == McSegment.PREVIEW) mcEnsureSegment(vm, fixtureId, st, effective, fixture)
     }
 
-    // استطلاع حي: 10ث أثناء اللعب / 25ث قرب الانطلاق / نوم للبعيدة / توقف عند الانتهاء.
+    // استطلاع حي: 10ث أثناء اللعب / 25ث داخل نافذة التشكيلات (~75د) / نوم للبعيدة.
     // أول نبضة كل عودة للمقدمة = تحديث فوري للمباراة الجارية.
     PollEffect(fixtureId, st.detail?.fixture?.id ?: -1, delayProvider = {
         val f = st.detail?.fixture
@@ -557,7 +605,8 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
             else -> {
                 val kick = f.kickoffMs
                 val secs = if (kick == null) Long.MAX_VALUE / 2000 else (kick - System.currentTimeMillis()) / 1000
-                if (secs > 1800) (secs - 1700).coerceIn(30, 3600) * 1000 else 25_000L
+                // كانت 30د فتفوت صدور التشكيلة (~ساعة قبل الانطلاق).
+                if (secs > 4500) (secs - 4400).coerceIn(30, 3600) * 1000 else 25_000L
             }
         }
     }) { first ->
@@ -587,6 +636,7 @@ fun MatchScreen(nav: NavHostController, vm: VaraViewModel, fixtureId: Int) {
             if (fixture != null) item(key = "header") { McHeader(fixture, nav) }
             if (fixture != null && !fixture.started) {
                 item(key = "prematch") { McPreMatchCard(fixture) }
+                predContest?.let { pc -> item(key = "predict") { McPredictionCard(pc) { nav.navigate("prediction-contest/${pc.contestId}") } } }
                 // حكم المباراة القادمة تحت «الوقت المتبقّي» مباشرة (قرار 2026-07-09).
                 st.referee?.takeIf { it.available && it.name.isNotBlank() }?.let { r -> item(key = "referee") { McRefereeCard(r) } }
             }
@@ -1430,6 +1480,12 @@ private fun McLineupsSection(d: McDetail, st: McState, nav: NavHostController) {
                 McExpectedBadge()
                 McLineupCards(mcExpectedAsLineups(expected, d.fixture), nav)
             }
+            d.lineups.isEmpty() || d.lineups.none { it.startXI.isNotEmpty() } -> {
+                EmptyState(
+                    "لم تُعلَن التشكيلة بعد",
+                    "تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف.",
+                )
+            }
             else -> McLineupCards(d.lineups, nav)
         }
     }
@@ -1878,5 +1934,50 @@ private fun McH2HMeetingRow(m: McH2HMeeting, nav: NavHostController) {
             }
         }
         if (m.competition.isNotBlank()) Text(m.competition, color = c.textFaint, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+// ─── بطاقة «توقّع النتيجة» (المنصة المركزية predictions-core) ───
+
+/// مسابقة التوقّع المقابلة للمباراة + توقّعي إن وُجد (لتحويل النص إلى «عدّل»).
+private data class McPredContest(val contestId: String, val predHome: Int?, val predAway: Int?)
+
+/// جسر بطولات الرياضة → بادئة slug بطولة المنصة (المزروع rsl-2026، kings-cup-2026…).
+/// البادئة تُطابَق على القائمة الحية — لا slug مزروع، فينجو من تبدّل المواسم.
+private fun predBridgePrefix(sportsSlug: String?): String? = when (sportsSlug) {
+    "pro-league" -> "rsl"
+    "kings-cup" -> "kings-cup"
+    "super-cup" -> "super-cup"
+    "gulf-cup" -> "gulf-cup"
+    "asian-cup" -> "asian-cup"
+    else -> null
+}
+
+@Composable
+private fun McPredictionCard(pc: McPredContest, open: () -> Unit) {
+    val c = LocalVaraColors.current
+    Row(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+            .clip(VaraTileShape)
+            .background(c.surface)
+            .border(1.dp, c.accent.copy(.35f), VaraTileShape)
+            .clickable(onClick = open)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(38.dp).background(c.accent.copy(.13f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.EmojiEvents, null, tint = c.accent, modifier = Modifier.size(19.dp))
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (pc.predHome != null && pc.predAway != null)
+                    "توقّعتَ ⁦${pc.predAway}–${pc.predHome}⁩ — عدّل توقّعك"
+                else "توقّع النتيجة ونافس على الجائزة",
+                color = c.text, fontSize = 13.5.sp, fontWeight = FontWeight.Bold,
+            )
+            Text("مسابقة مجانية — يُقفل التوقّع عند ضربة البداية", color = c.textDim, fontSize = 10.5.sp)
+        }
+        Icon(Icons.Default.ChevronLeft, null, tint = c.accent, modifier = Modifier.size(16.dp))
     }
 }

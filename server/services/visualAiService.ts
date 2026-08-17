@@ -329,7 +329,8 @@ export interface NewsImageGenerationRequest {
   articleSummary?: string;
   category: string;
   language: "ar" | "en" | "ur";
-  style?: "photorealistic" | "illustration" | "abstract" | "infographic";
+  /** slug نمط من السجلّ المركزي، أو قيمة قديمة (photorealistic/…) تُترجم تلقائيًا */
+  style?: string;
   mood?: "breaking" | "neutral" | "positive" | "serious" | "dramatic";
 }
 
@@ -341,6 +342,12 @@ export interface NewsImageGenerationResult {
   generationTime?: number;
   cost?: number;
   error?: string;
+  /** البرومبت الفعلي المرسل للنموذج — يُخزَّن كأثر (provenance) لدى المستدعين */
+  finalPrompt?: string;
+  /** النمط والنموذج المستخدمان فعليًا بعد الحسم من السجلّ */
+  styleSlug?: string;
+  variantSlug?: string;
+  model?: string;
 }
 
 /**
@@ -351,8 +358,8 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
   
   try {
     console.log(`[Visual AI] Generating news image for: ${request.articleTitle}`);
-    
-    // Build smart prompt based on article
+
+    // خريطة الأسلوب القديمة — تبقى احتياطًا أخيرًا إن تعذر الوصول لسجلّ الأنماط
     const styleGuide: Record<string, string> = {
       photorealistic:
         "true photorealistic photography, natural lighting, shallow depth of field, " +
@@ -362,7 +369,7 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
       abstract: "abstract artistic representation, contemporary design",
       infographic: "infographic style, data visualization, modern design"
     };
-    
+
     const moodGuide: Record<string, string> = {
       breaking: "dramatic, urgent, attention-grabbing",
       neutral: "balanced, professional, informative",
@@ -370,14 +377,38 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
       serious: "serious tone, professional, authoritative",
       dramatic: "high contrast, dramatic lighting, impactful"
     };
-    
-    const style = request.style || "photorealistic";
+
+    const requestedStyle = request.style || "photorealistic";
     const mood = request.mood || "neutral";
-    
+
+    // حسم الأسلوب من سجلّ الأنماط المركزي (يترجم القيم القديمة تلقائيًا،
+    // ويطابق التوجيه السياقي — مثل الواقعية الغذائية/الطبية — عبر تصنيف الخبر)
+    let styleText = styleGuide[requestedStyle] || styleGuide.photorealistic;
+    let styleNegativePrompt: string | undefined;
+    let styleModel: string | undefined;
+    let styleSlugUsed: string | undefined;
+    let variantSlugUsed: string | undefined;
+    let styleParams: { aspectRatio?: string; imageSize?: string } = {};
+    try {
+      const { resolveGenerationStyle } = await import("./imageStyleService");
+      const { suggestOptimalModel, detectImageIntent } = await import("./imageModelRouter");
+      const resolved = await resolveGenerationStyle(requestedStyle, request.category);
+      styleText = resolved.variant?.stylePrompt ?? resolved.style.stylePrompt;
+      styleNegativePrompt = resolved.variant?.negativePrompt ?? resolved.style.negativePrompt;
+      const detectedIntent = detectImageIntent(request.articleTitle, request.category);
+      const suggested = suggestOptimalModel(detectedIntent, resolved.style.slug, request.category);
+      styleModel = resolved.model || suggested.model;
+      styleSlugUsed = resolved.style.slug;
+      variantSlugUsed = resolved.variant?.slug;
+      styleParams = resolved.style.params || {};
+    } catch (styleError) {
+      console.warn("[Visual AI] Style registry unavailable, using legacy style map:", styleError);
+    }
+
     const languageContext = request.language === "ar" ? "Arabic news context" :
                            request.language === "ur" ? "Urdu news context" :
                            "English news context";
-    
+
     const prompt = `
 Create a professional news image for this article:
 Title: ${request.articleTitle}
@@ -385,7 +416,7 @@ ${request.articleSummary ? `Summary: ${request.articleSummary}` : ''}
 Category: ${request.category}
 Language: ${languageContext}
 
-Style: ${styleGuide[style]}
+Style: ${styleText}
 Mood: ${moodGuide[mood]}
 
 CRITICAL REQUIREMENTS:
@@ -402,13 +433,15 @@ CRITICAL REQUIREMENTS:
 - Clean, modern composition with no textual elements
 `;
     
-    // Use Nano Banana Pro service (reuse existing service)
+    // Use Nano Banana service (reuse existing service)
     const { generateImage } = await import("./nanoBananaService");
-    
+
     const result = await generateImage({
       prompt,
-      aspectRatio: "16:9",
-      imageSize: "2K",
+      negativePrompt: styleNegativePrompt,
+      model: styleModel,
+      aspectRatio: (styleParams.aspectRatio as any) || "16:9",
+      imageSize: (styleParams.imageSize as any) || "2K",
       numImages: 1,
       enableSearchGrounding: true, // Use Google Search for factual accuracy
       enableThinking: true
@@ -430,14 +463,18 @@ CRITICAL REQUIREMENTS:
     const uploaded = await uploadImageToStorage(result.imageData, fileName);
     
     console.log(`[Visual AI] News image generated and optimized in ${generationTime}ms`);
-    
+
     return {
       success: true,
       imageUrl: uploaded.url,
       thumbnailUrl: uploaded.thumbnailUrl,
       blurDataUrl: uploaded.blurDataUrl,
       generationTime,
-      cost: result.cost
+      cost: result.cost,
+      finalPrompt: prompt,
+      styleSlug: styleSlugUsed,
+      variantSlug: variantSlugUsed,
+      model: result.metadata?.model || styleModel
     };
     
   } catch (error: any) {

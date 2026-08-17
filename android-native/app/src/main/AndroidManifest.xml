@@ -80,6 +80,20 @@
 
         </activity>
 
+        <!-- ودجت «آخر الأخبار» (Glance). exported=true مطلوب ليستطيع
+             مشغّل النظام (AppWidgetHost) إرسال APPWIDGET_UPDATE. -->
+        <receiver
+            android:name="com.sabq.smart.widget.SabqNewsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/sabq_news_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/sabq_news_widget_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

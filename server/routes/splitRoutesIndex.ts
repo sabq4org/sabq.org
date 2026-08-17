@@ -36,6 +36,7 @@ import meetingMinutesRouter from "./meetingMinutesRoutes";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
+import mailersendWebhookRouter from "./mailersendWebhook";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
@@ -68,6 +69,7 @@ import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
+import socialPublishingRouter from "./socialPublishing";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
 import articleResurfaceRouter from "./articleResurface";
@@ -79,6 +81,7 @@ import adminToolsRouter from "./adminToolsRoutes";
 import { systemsCatalogRouter } from "./systemsCatalog";
 import surveysRouter from "./surveys";
 import correspondentApplicationsRouter from "./correspondentApplications";
+import promoteCorrespondentRouter from "./promoteCorrespondent";
 import publisherPortalRouter from "./publisherPortal";
 import smartBlocksRouter from "./smartBlocks";
 import sahraaTvBlockRouter from "./sahraaTvBlock";
@@ -87,6 +90,9 @@ import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
 import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
+import editorialAiRouter from "./editorialAi";
+import imageStylesRouter from "./imageStyles";
+import videoResolverRouter from "./videoResolver";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -132,8 +138,10 @@ export function registerSplitRoutes(app: Express) {
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);
+  app.use(promoteCorrespondentRouter);
   app.use(publisherPortalRouter);
   app.use(deployWebhooksRouter);
+  app.use(mailersendWebhookRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);
@@ -166,6 +174,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(gcFantasyRouter);
   app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
+  app.use(socialPublishingRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
   app.use(articleResurfaceRouter);
@@ -185,4 +194,10 @@ export function registerSplitRoutes(app: Express) {
   // إكمال تسجيل عضوية الجوال + استكمال الحسابات القديمة (auth-rbac)
   app.use(phoneRegistrationRouter);
   app.use(audioNewsletterCompatibilityRouter);
+  // نظام التحرير الموحد «محرر سبق» (docs/editorial-ai-unified-system-plan-2026-08-03.md)
+  app.use(editorialAiRouter);
+  // أنماط توليد الصور (editorial)
+  app.use(imageStylesRouter);
+  // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
+  app.use(videoResolverRouter);
 }

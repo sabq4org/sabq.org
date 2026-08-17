@@ -7,6 +7,8 @@
  */
 import { localizePlayerName, WC_TEAM_AR } from "./worldCupNames";
 import { isEnglishSports } from "./sportsLang";
+import { correctSportsPlayerName } from "./sportsPlayerNameFixes";
+import { toBinaryPlayerName } from "../../shared/sportsNames";
 export const SPL_TEAM_AR: Record<number, string> = {
   2928: "الخليج", // Al Khaleej Saihat
   2929: "الأهلي", // Al-Ahli Jeddah
@@ -731,6 +733,12 @@ export const SPL_PLAYER_AR: Record<number, string> = {
   44586: "عبدالرحمن العبود",
   // القادسية
   415049: "جابرييل كارفالو",
+  44449: "أحمد الكسار", // كان يتسرب إنجليزيًا خامًا في التشكيلة (افتتاح روشن 2026-08-13)
+  // الشباب — حادثة «ح. الحمامي/حمام الحمامي» (افتتاح روشن 2026-08-13): حرف H
+  // ملتبس (هاء/حاء) والمعرّف مزدوج عند المزوّد (التشكيلة والأحداث بهويتين).
+  463864: "همام الهمامي",
+  543065: "همام الهمامي",
+  465786: "مامادو باري", // الأحداث كانت تختصره «م. ت. باري» بينما التشكيلة «مامادو باري»
 };
 
 export const SPL_COACH_AR: Record<number, string> = {
@@ -759,9 +767,10 @@ export function localizeSplPlayerName(
   tr?: NameTranslator,
 ): string {
   if (isEnglishSports()) return fallback; // اسم اللاعب الأصلي (إنجليزي)
-  if (id != null && SPL_PLAYER_AR[id]) return SPL_PLAYER_AR[id];
-  if (tr) return rejectMixedScript(tr(fallback) || "", fallback) || fallback || "";
-  return rejectMixedScript(localizePlayerName(fallback) || "", fallback) || fallback || "";
+  if (id != null && SPL_PLAYER_AR[id]) return toBinaryPlayerName(SPL_PLAYER_AR[id]);
+  const raw = tr ? tr(fallback) : localizePlayerName(fallback) || fallback || "";
+  const candidate = rejectMixedScript(correctSportsPlayerName(fallback, raw) || "", fallback) || fallback || "";
+  return toBinaryPlayerName(candidate);
 }
 
 export function localizeSplCoachName(

@@ -224,6 +224,7 @@ export default function UsersManagement() {
   const [newPassword, setNewPassword] = useState("");
   const [permanentDeletingUser, setPermanentDeletingUser] = useState<UserListItem | null>(null);
   const [viewingDetails, setViewingDetails] = useState<UserListItem | null>(null);
+  const [promotingUser, setPromotingUser] = useState<UserListItem | null>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(adminUpdateUserSchema),
@@ -395,6 +396,29 @@ export default function UsersManagement() {
       toast({
         title: "خطأ",
         description: error.message || "فشل في إعادة تعيين كلمة المرور",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const promoteReporterMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest(`/api/admin/users/${id}/promote-reporter`, {
+        method: "POST",
+      });
+    },
+    onSuccess: (data: { message?: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setPromotingUser(null);
+      toast({
+        title: "تمت الترقية إلى مراسل",
+        description: data?.message || "ستظهر العضوية مراسل في التطبيق واستكمال الملف",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "تعذر الترقية",
+        description: error.message || "فشل في ترقية العضوية إلى مراسل",
         variant: "destructive",
       });
     },
@@ -813,6 +837,16 @@ export default function UsersManagement() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => setPromotingUser(user)}
+                              disabled={user.id === (globalThis as any).__currentUserId}
+                              data-testid={`button-promote-reporter-${user.id}`}
+                              title="ترقية إلى مراسل"
+                            >
+                              <UserCheck className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleEditRoles(user)}
                               disabled={user.id === (globalThis as any).__currentUserId}
                               data-testid={`button-edit-roles-${user.id}`}
@@ -958,6 +992,28 @@ export default function UsersManagement() {
         onOpenChange={(open) => !open && setEditingUser(null)}
         userId={editingUser?.id || null}
       />
+
+      <AlertDialog open={!!promotingUser} onOpenChange={(open) => !open && setPromotingUser(null)}>
+        <AlertDialogContent data-testid="dialog-promote-reporter">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ترقية إلى مراسل</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم تحويل عضوية "{promotingUser ? adminUserLabel(promotingUser) : ""}" من قارئ إلى مراسل،
+              ومزامنة الدور في الصلاحيات وصفحة المراسل حتى يتمكن من استكمال الملف وإصدار شهادة التعريف.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-promote-reporter">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => promotingUser && promoteReporterMutation.mutate(promotingUser.id)}
+              disabled={promoteReporterMutation.isPending}
+              data-testid="button-confirm-promote-reporter"
+            >
+              {promoteReporterMutation.isPending ? "جاري الترقية..." : "ترقية إلى مراسل"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setDeletingUser(null)}>

@@ -332,7 +332,7 @@ struct AuthorArticlesView: View {
                     subtitle: "لم نجد أي محتوى منشور لهذا الكاتب حالياً."
                 )
             } else {
-                SurfaceCard {
+                SurfaceCard(lazy: true) {
                     ForEach(articles) { article in
                         NavigationLink(value: article) {
                             CompactArticleRow(

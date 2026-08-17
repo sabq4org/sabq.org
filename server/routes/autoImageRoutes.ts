@@ -31,12 +31,13 @@ router.post("/generate", requireAuth, requirePermission(PERMISSION_CODES.ARTICLE
       category,
       language = "ar",
       articleType = "news",
-      forceGeneration = false
+      forceGeneration = false,
+      styleSlug
     } = req.body;
 
     if (!articleId || !title) {
-      return res.status(400).json({ 
-        error: "articleId and title are required" 
+      return res.status(400).json({
+        error: "articleId and title are required"
       });
     }
 
@@ -50,7 +51,9 @@ router.post("/generate", requireAuth, requirePermission(PERMISSION_CODES.ARTICLE
       category,
       language,
       articleType,
-      forceGeneration
+      forceGeneration,
+      // اختيار المحرر لهذه التوليدة فقط — يتقدم على نمط الإعدادات
+      styleSlug: typeof styleSlug === "string" ? styleSlug.slice(0, 50) : undefined
     }, userId);
 
     if (!result.success) {

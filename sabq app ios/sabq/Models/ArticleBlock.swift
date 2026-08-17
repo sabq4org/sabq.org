@@ -11,7 +11,7 @@ import Foundation
 // outer `.font(...)` modifier on a Text(AttributedString) silently
 // overrides per-range font attributes, which was costing us bold/italic.
 
-enum ArticleBlock {
+nonisolated enum ArticleBlock {
     case heading(level: Int, runs: [InlineRun])
     case paragraph(runs: [InlineRun])
     case list(ordered: Bool, items: [[InlineRun]])
@@ -26,7 +26,7 @@ enum ArticleBlock {
     case divider
 }
 
-struct InlineRun: Hashable {
+nonisolated struct InlineRun: Hashable {
     let text: String
     var bold: Bool = false
     var italic: Bool = false
@@ -38,12 +38,12 @@ struct InlineRun: Hashable {
     var link: URL? = nil
 }
 
-struct GalleryImage: Hashable {
+nonisolated struct GalleryImage: Hashable {
     let url: URL
     let caption: String?
 }
 
-enum VideoProvider {
+nonisolated enum VideoProvider {
     case youtube
     case dailymotion
     case other

@@ -3,42 +3,32 @@ import { pool } from "../db";
 /**
  * Buffered article view-count increments.
  *
- * POST /api/articles/:id/view used to run a synchronous
- *   UPDATE articles SET views = views + <boost> WHERE id = ?
- * on the request path. Under load this both (a) added DB latency to every view
- * and (b) serialized concurrent UPDATEs on the same hot article row, which — on
- * a pool starved by slow search queries — showed up as multi-second /view
- * requests in prod logs.
+ * Hot path never locks `articles` rows (that contended with editorial PATCH and
+ * caused statement_timeout 57014 on viral articles — 2026-08-06). Flow:
+ *   1) memory Map per articleId
+ *   2) flush → UPSERT article_view_deltas.pending
+ *   3) merge → articles.views += pending (SKIP LOCKED, short timeouts)
  *
- * Increments are now accumulated in memory per article and flushed in a single
- * batched UPDATE every FLUSH_INTERVAL_MS, collapsing N per-view writes into one
- * write per article per window. Tradeoff: the counter's increase becomes visible
- * on the reader's NEXT load rather than instantly (bounded by the flush window).
+ * Readers still see articles.views; visibility lags by one flush+merge window.
  */
 
 const FLUSH_INTERVAL_MS = 10_000;
-/**
- * عدد المقالات في عبارة UPDATE واحدة.
- *
- * كانت الدفعة كلها تُرسَل في عبارة واحدة مهما بلغ حجمها. على موقع أخبار
- * تُشاهَد فيه آلاف المقالات في نافذة العشر ثوانٍ، تصير العبارة آلاف صفوف
- * VALUES تحتجز اتصال المسبح وأقفال صفوف على `articles` طوال تنفيذها. ومع
- * سقف statement_timeout المضاف 2026-07-25 صارت تُلغى بـ57014 وتُعاد الدفعة
- * كاملة إلى الانتظار — فتكبر بمشاهدات الفترة التالية وتفشل ثانيةً. حلقة
- * لا تتقارب. التقسيم يجعل كل عبارة قصيرة ومستقلة.
- */
-const CHUNK_SIZE = Number(process.env.VIEW_COUNTER_CHUNK_SIZE) || 500;
-/**
- * سقف المخزن المؤقت. المفتاح هو معرّف المقال فالحجم محدود بعدد المقالات
- * المتميّزة لا بعدد المشاهدات، لكن لو تعذّر التفريغ طويلًا فلا داعي لنموّ
- * بلا حد: عدّاد مشاهدات ليس سببًا كافيًا لخنق العملية.
- */
+const MERGE_INTERVAL_MS = 10_000;
+/** صغر الدفعة — عبارات قصيرة تحت ضغط الذروة. */
+const CHUNK_SIZE = Number(process.env.VIEW_COUNTER_CHUNK_SIZE) || 50;
+const MERGE_CHUNK_SIZE = Number(process.env.VIEW_COUNTER_MERGE_CHUNK_SIZE) || 50;
 const MAX_PENDING = Number(process.env.VIEW_COUNTER_MAX_PENDING) || 50_000;
+const FLUSH_LOCK_TIMEOUT_MS = Number(process.env.VIEW_COUNTER_LOCK_TIMEOUT_MS) || 1_000;
+const FLUSH_STATEMENT_TIMEOUT_MS = Number(process.env.VIEW_COUNTER_STATEMENT_TIMEOUT_MS) || 3_000;
+const MERGE_LOCK_TIMEOUT_MS = Number(process.env.VIEW_COUNTER_MERGE_LOCK_TIMEOUT_MS) || 1_000;
+const MERGE_STATEMENT_TIMEOUT_MS = Number(process.env.VIEW_COUNTER_MERGE_STATEMENT_TIMEOUT_MS) || 3_000;
 
 const pending = new Map<string, number>();
 let flushing = false;
+let merging = false;
 let droppedSinceWarn = 0;
-let timer: NodeJS.Timeout | null = null;
+let flushTimer: NodeJS.Timeout | null = null;
+let mergeTimer: NodeJS.Timeout | null = null;
 
 /** Queue a view-count increment for an article (cheap, non-blocking). */
 export function bufferArticleViewIncrement(articleId: string, increment: number): void {
@@ -50,63 +40,49 @@ export function bufferArticleViewIncrement(articleId: string, increment: number)
   pending.set(articleId, (pending.get(articleId) || 0) + Math.floor(increment));
 }
 
-type ViewUpdateStatus = {
-  id: string;
-  article_exists: boolean;
-  updated: boolean;
-};
+async function withLocalTimeouts<T>(
+  lockMs: number,
+  statementMs: number,
+  fn: (client: import("pg").PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL lock_timeout = '${lockMs}ms'`);
+    await client.query(`SET LOCAL statement_timeout = '${statementMs}ms'`);
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 /**
- * تحديث دفعة واحدة دون انتظار صفوف المقالات المقفلة.
- *
- * محرر المقال قد يحتفظ بقفل على صف ساخن. UPDATE جماعي عادي ينتظر ذلك الصف
- * ويحبس معه بقية الدفعة حتى statement_timeout. نقفل فقط الصفوف المتاحة عبر
- * SKIP LOCKED، ثم نعيد وحدها الزيادات التي لم تحصل على القفل للمحاولة التالية.
+ * تفريغ الذاكرة إلى article_view_deltas فقط — بلا قفل على articles.
  */
-async function flushChunk(chunk: [string, number][]): Promise<[string, number][]> {
-  const params: any[] = [];
+async function flushChunk(chunk: [string, number][]): Promise<void> {
+  const params: unknown[] = [];
   const values = chunk
     .map(([id, inc], i) => {
       const o = i * 2;
       params.push(id, inc);
-      return `($${o + 1}::text, $${o + 2}::int)`;
+      return `($${o + 1}::text, $${o + 2}::int, now())`;
     })
     .join(", ");
 
-  const result = await pool.query(
-    `WITH input(id, inc) AS (
+  await withLocalTimeouts(FLUSH_LOCK_TIMEOUT_MS, FLUSH_STATEMENT_TIMEOUT_MS, async (client) => {
+    await client.query(
+      `INSERT INTO article_view_deltas (article_id, pending, updated_at)
        VALUES ${values}
-     ),
-     locked AS MATERIALIZED (
-       SELECT a.id
-         FROM articles AS a
-         JOIN input AS i ON i.id = a.id
-          FOR UPDATE OF a SKIP LOCKED
-     ),
-     updated AS (
-       UPDATE articles AS a
-          SET views = COALESCE(a.views, 0) + i.inc
-         FROM input AS i
-         JOIN locked AS l ON l.id = i.id
-        WHERE a.id = i.id
-        RETURNING a.id
-     )
-     SELECT i.id,
-            EXISTS (SELECT 1 FROM articles AS existing WHERE existing.id = i.id) AS article_exists,
-            (u.id IS NOT NULL) AS updated
-       FROM input AS i
-       LEFT JOIN updated AS u ON u.id = i.id`,
-    params,
-  ) as { rows: ViewUpdateStatus[] };
-
-  const statuses = new Map(result.rows.map((row) => [row.id, row]));
-  return chunk.filter(([id]) => {
-    const status = statuses.get(id);
-    if (status?.updated) return false;
-    // المقال المحذوف لا يمكن تحديثه ولا ينبغي إبقاؤه في طابور أبدي.
-    if (status && !status.article_exists) return false;
-    // غياب نتيجة غير متوقع؛ إعادة الصف أكثر أمانًا من إسقاط العدّاد بصمت.
-    return true;
+       ON CONFLICT (article_id) DO UPDATE SET
+         pending = article_view_deltas.pending + EXCLUDED.pending,
+         updated_at = now()`,
+      params,
+    );
   });
 }
 
@@ -117,35 +93,34 @@ export async function flushArticleViewCounters(): Promise<void> {
   pending.clear();
   const startedAt = Date.now();
   let failedRows = 0;
-  let deferredRows = 0;
 
   try {
     for (let i = 0; i < batch.length; i += CHUNK_SIZE) {
       const chunk = batch.slice(i, i + CHUNK_SIZE);
       try {
-        const deferred = await flushChunk(chunk);
-        deferredRows += deferred.length;
-        for (const [id, inc] of deferred) {
-          pending.set(id, (pending.get(id) || 0) + inc);
-        }
+        await flushChunk(chunk);
       } catch (err: any) {
-        // فشل دفعة واحدة لا يُسقط الباقي — تُعاد وحدها إلى الانتظار.
         failedRows += chunk.length;
         for (const [id, inc] of chunk) {
           pending.set(id, (pending.get(id) || 0) + inc);
         }
         console.error(
-          `[ArticleViewCounter] فشلت دفعة (${chunk.length} مقالًا، code=${err?.code ?? "?"}) — أُعيدت للانتظار: ${err?.message ?? err}`,
+          `[ArticleViewCounter] فشلت دفعة deltas (${chunk.length} مقالًا، code=${err?.code ?? "?"}) — أُعيدت للانتظار: ${err?.message ?? err}`,
         );
+        if (err?.code !== "55P03" && err?.code !== "57014") {
+          for (const [id, inc] of batch.slice(i + CHUNK_SIZE)) {
+            pending.set(id, (pending.get(id) || 0) + inc);
+          }
+          break;
+        }
       }
     }
   } finally {
     flushing = false;
     const elapsed = Date.now() - startedAt;
-    // سطر مرئي فقط عند وجود ما يستحق النظر — الحجم هو ما كان مجهولًا.
-    if (elapsed > 1_000 || failedRows > 0 || deferredRows > 0) {
+    if (elapsed > 1_000 || failedRows > 0) {
       console.warn(
-        `[ArticleViewCounter] دفق ${batch.length} مقالًا في ${elapsed}ms (فشل ${failedRows}، مؤجل بقفل ${deferredRows}، متبقٍ ${pending.size})`,
+        `[ArticleViewCounter] دفق deltas ${batch.length} مقالًا في ${elapsed}ms (فشل ${failedRows}، متبقٍ ذاكرة ${pending.size})`,
       );
     }
     if (droppedSinceWarn > 0) {
@@ -157,12 +132,107 @@ export async function flushArticleViewCounters(): Promise<void> {
   }
 }
 
-/** Start the periodic flush + flush-on-shutdown. Idempotent. */
+/**
+ * دمج دفعة من article_view_deltas إلى articles.views.
+ * SKIP LOCKED: صف تحت تحرير المحرر يُؤجَّل دون حبس PATCH.
+ */
+export async function mergeArticleViewDeltas(): Promise<void> {
+  if (merging) return;
+  merging = true;
+  const startedAt = Date.now();
+  let merged = 0;
+  let deferred = 0;
+
+  try {
+    const outcome = await withLocalTimeouts(
+      MERGE_LOCK_TIMEOUT_MS,
+      MERGE_STATEMENT_TIMEOUT_MS,
+      async (client) => {
+        const result = await client.query(
+          `WITH picked AS (
+             SELECT d.article_id, d.pending
+               FROM article_view_deltas AS d
+              WHERE d.pending > 0
+              ORDER BY d.updated_at ASC
+              LIMIT $1
+                FOR UPDATE OF d SKIP LOCKED
+           ),
+           locked_articles AS MATERIALIZED (
+             SELECT a.id, p.pending
+               FROM articles AS a
+               JOIN picked AS p ON p.article_id = a.id
+                FOR UPDATE OF a SKIP LOCKED
+           ),
+           applied AS (
+             UPDATE articles AS a
+                SET views = COALESCE(a.views, 0) + l.pending
+               FROM locked_articles AS l
+              WHERE a.id = l.id
+              RETURNING a.id, l.pending
+           ),
+           cleared AS (
+             DELETE FROM article_view_deltas AS d
+              USING applied AS ap
+              WHERE d.article_id = ap.id
+              RETURNING d.article_id
+           ),
+           orphaned AS (
+             DELETE FROM article_view_deltas AS d
+              USING picked AS p
+              WHERE d.article_id = p.article_id
+                AND NOT EXISTS (SELECT 1 FROM articles AS a WHERE a.id = p.article_id)
+              RETURNING d.article_id
+           )
+           SELECT
+             (SELECT count(*)::int FROM applied) AS merged,
+             (SELECT count(*)::int FROM picked)
+               - (SELECT count(*)::int FROM applied)
+               - (SELECT count(*)::int FROM orphaned) AS deferred`,
+          [MERGE_CHUNK_SIZE],
+        );
+        const row = result.rows[0] as { merged: number; deferred: number } | undefined;
+        return {
+          merged: Number(row?.merged ?? 0),
+          deferred: Number(row?.deferred ?? 0),
+        };
+      },
+    );
+    merged = outcome.merged;
+    deferred = outcome.deferred;
+  } catch (err: any) {
+    console.error(
+      `[ArticleViewCounter] فشل دمج deltas (code=${err?.code ?? "?"}): ${err?.message ?? err}`,
+    );
+  } finally {
+    merging = false;
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > 1_000 || merged > 0 || deferred > 0) {
+      console.warn(
+        `[ArticleViewCounter] دمج ${merged} مقالًا في ${elapsed}ms (مؤجل بقفل ${deferred})`,
+      );
+    }
+  }
+}
+
+/** Start periodic flush + merge + flush-on-shutdown. Idempotent. */
 export function initArticleViewCounters(): void {
-  if (timer) return;
-  timer = setInterval(flushArticleViewCounters, FLUSH_INTERVAL_MS);
-  timer.unref?.();
-  const onExit = () => { void flushArticleViewCounters(); };
+  if (flushTimer) return;
+  flushTimer = setInterval(() => {
+    void flushArticleViewCounters();
+  }, FLUSH_INTERVAL_MS);
+  flushTimer.unref?.();
+
+  mergeTimer = setInterval(() => {
+    void mergeArticleViewDeltas();
+  }, MERGE_INTERVAL_MS);
+  mergeTimer.unref?.();
+
+  const onExit = () => {
+    void (async () => {
+      await flushArticleViewCounters();
+      await mergeArticleViewDeltas();
+    })();
+  };
   process.on("SIGTERM", onExit);
   process.on("SIGINT", onExit);
 }

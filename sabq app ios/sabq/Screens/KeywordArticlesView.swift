@@ -29,7 +29,7 @@ struct KeywordArticlesView: View {
                         subtitle: "لم نجد أخبارًا أو مقالات رأي تحمل هذا الوسم حاليًا"
                     )
                 } else {
-                    SurfaceCard {
+                    SurfaceCard(lazy: true) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
                                 Divider()

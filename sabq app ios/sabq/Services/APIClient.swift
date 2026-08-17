@@ -191,20 +191,18 @@ actor APIClient {
         ignoreCache: Bool = false,
         apiRoot: String? = nil
     ) async throws -> T {
-        var finalQuery = query
-        if ignoreCache {
-            finalQuery["_t"] = String(Int(Date().timeIntervalSince1970 * 1000))
-            finalQuery["_nc"] = UUID().uuidString.prefix(8).lowercased()
-        }
-        let url = try buildURL(path: path, query: finalQuery, apiRoot: apiRoot)
+        let url = try buildURL(path: path, query: query, apiRoot: apiRoot)
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         applyHeaders(&request)
         if ignoreCache {
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("no-cache, no-store, must-revalidate", forHTTPHeaderField: "Cache-Control")
-            request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-            return try await decode(type, from: ephemeralSession, request: request)
+            // كانت تُلحق _t/_nc بالرابط وتمر عبر ephemeralSession — رابط فريد
+            // في كل نداء يبطل CDN وURLCache ويفتح اتصال TLS جديدًا، والمسارات
+            // الدورية (فاحص التحديث/الشريط العاجل/أشرطة البطولات) كانت تفعل
+            // ذلك كل 30-60ث فترفع حمل الخادم على المنصتين (تدقيق 2026-08-02).
+            // يكفي تجاوز الكاش المحلي عبر الجلسة المجمّعة نفسها.
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         }
         return try await perform(request, as: type)
     }

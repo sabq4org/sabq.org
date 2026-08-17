@@ -88,6 +88,8 @@ export interface AutoImageGenerationRequest {
   language: "ar" | "en" | "ur";
   articleType?: string;
   forceGeneration?: boolean;
+  /** اختيار المحرر لنمط هذه التوليدة — يتقدم على نمط الإعدادات (newsStyle/articleStyle) */
+  styleSlug?: string;
 }
 
 export interface AutoImageGenerationResult {
@@ -252,7 +254,7 @@ export async function autoGenerateImage(
       articleSummary: request.excerpt || extractSummary(request.content || ""),
       category: request.category || "عام",
       language: request.language,
-      style: resolveStyleForArticleType(request.articleType, settings) as any,
+      style: request.styleSlug || resolveStyleForArticleType(request.articleType, settings),
       mood: "neutral"
     });
     
@@ -282,8 +284,10 @@ export async function autoGenerateImage(
       caption: AI_DISCLAIMER[request.language],
       keywords: extractKeywords(request.title),
       isAiGenerated: true,
-      aiGenerationModel: settings.provider,
-      aiGenerationPrompt: smartPrompt,
+      // النموذج والبرومبت الفعليان من نتيجة التوليد (كان يُخزَّن smartPrompt
+      // بينما النموذج يستلم برومبتًا آخر — أثر مضلل)
+      aiGenerationModel: generationResult.model || settings.provider,
+      aiGenerationPrompt: generationResult.finalPrompt || smartPrompt,
       category: "articles",
       usedIn: [request.articleId],
       usageCount: 1,
@@ -295,8 +299,8 @@ export async function autoGenerateImage(
         imageUrl: generationResult.imageUrl,
         thumbnailUrl: generationResult.thumbnailUrl || generationResult.imageUrl, // Also set thumbnail
         isAiGeneratedImage: true,
-        aiImageModel: settings.provider,
-        aiImagePrompt: smartPrompt,
+        aiImageModel: generationResult.model || settings.provider,
+        aiImagePrompt: generationResult.finalPrompt || smartPrompt,
         updatedAt: new Date()
       })
       .where(eq(articles.id, request.articleId));

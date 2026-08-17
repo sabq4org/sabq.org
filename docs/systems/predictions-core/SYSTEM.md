@@ -1,6 +1,6 @@
 # نظام التوقعات المركزي (`predictions-core`)
 
-> آخر مراجعة: 2026-07-31 | المالك: sports
+> آخر مراجعة: 2026-08-16 (عرض ركلات الترجيح للمباريات المحسومة بها وتوضيح قواعد مباريات الكؤوس) | المالك: sports
 
 ## الغرض
 محرك توقعات موحّد + ملفات نقاط versioned + دفتر append-only يخدم البطولات — **عدا** كأس العالم 2026 الذي يبقى على محرك `wc*` القديم حتى نهاية البطولة.
@@ -15,6 +15,7 @@
 |--------|--------|
 | Backend | `server/services/predictions/`, `server/routes/predictionsCore.ts` |
 | Web مركز | `client/src/pages/PredictionCenter.tsx` + `client/src/components/predictions/` |
+| Web روشن | ترويج دائم في `RslHero` + شريط قبل الانطلاق في `MatchCenter` (`theme=roshn`) عبر `RslPredictionsPromo` |
 | Web رئيسية | `PredictionPromoStrip` تحت هيرو `Home.tsx` ← `GET /api/predictions/promo-feed` |
 | iOS VARA | `sports app ios/SabqSports/Screens/PredictionCenterView.swift` + `PredictionCoreModels.swift` |
 | Android VARA | `android-native/vara/.../AccountScreens.kt` |
@@ -31,6 +32,8 @@
 - **`entriesCount`:** كل مسابقة في ردود `listContests` / `getContest` / تفصيل البطولة تحمل عدد التوقعات النشطة (`prediction_entries.status = active`). يُعرض أسفل يمين بطاقة المباراة على الويب وVARA iOS وAndroid — **رقم فقط** بلا أسماء أشخاص (الأسماء في المتصدرين فقط). حقل إضافي — العملاء القدامى يتجاهلونه.
 - **التسمية:** واجهة المستخدم تقول «جائزة» لا «بركة» (نصوص القواعد والتسوية في Prediction Core).
 - **`GET /api/predictions/promo-feed`:** عامة، Cache-Control قصير، بلا جلسة. تُرجع سطور إثبات اجتماعي (عدد متوقّعين + أسماء الفرق) دون أسماء مستخدمين. تختفي الواجهة إن تعطّل المحرك أو كانت القائمة فارغة.
+- **ترويج روشن (ويب):** عند `predictionsEnabled` تظهر بطاقة دائمة في هيرو `/roshn` (`RslPredictionsHeroPromo`) وشريط في مركز المباراة للمباريات القادمة فقط (`RslPredictionsMatchPromo`). مشاركة عبر `navigator.share` أو نسخ للحافظة. ليس من نظام `ads`.
+- **رابط عميق للمباراة:** `/predictions?competition=rsl-2026&fixture=<apiFootballId>` أو `&contest=<contestId>`. الصفحة تختار البطولة وتمرّر لبطاقة `match_score` ذات `externalRef` المطابق وتُميّزها مؤقتاً.
 - Android VARA يستهلك النظائر تحت `/api/v1/predictions/*` بنماذج typed مطابقة لعقود `PredictionCoreModels` في iOS: يقرأ `contestType` (بطاقات النتيجة لـ`match_score` فقط)، و`myRank` من رد leaderboards (لا حقل `isMe` — غير موجود في العقد)، ويعرض التسوية ببطاقة مزدوجة (نقاط البطولة / محفظة ×N من `award.wallet`) وتفكيك «كيف حُسبت نقاطي؟» بأربع خطوات من `breakdown`. صفحة «لك» تقرأ `/api/v1/sports/predictions/mine` الموحدة (لا مسار `/world-cup/predictions/mine` القديم).
 
 ## صحة وتشغيل

@@ -17,6 +17,10 @@ import { invalidateAllUserSessions } from "../auth";
 import { verifyToken, verifyBackupCode } from "../twoFactor";
 import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
 import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
+import { createWebResetLink, sendPasswordResetCodeEmail } from "../services/passwordResetService";
+import { normalizePhone } from "../services/phoneAuth";
+import { isUniqueViolation } from "../utils/pgError";
+import { EMAIL_FORMAT_REGEX } from "../services/phoneRegistrationService";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -35,6 +39,7 @@ import { log } from "../utils/logger";
 import {
   categories,
   articles,
+  userNotificationPrefs,
   pushDevices,
   pushCampaigns,
   pushCampaignEvents,
@@ -64,6 +69,7 @@ import {
   canUserLogin,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
+import { buildUserRolePayload } from "../services/mobileUserRolePayload";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -146,77 +152,6 @@ const router = Router();
 router.use(oauthMobileRouter);
 
 // ==========================================
-// Mobile role payload helper
-// ==========================================
-//
-// Build the role/roles/roleLabel/jobTitle bundle the iOS APIUser
-// decoder expects, so /auth/login, /auth/register, AND /members/profile
-// can ALL return it. Previously only /members/profile returned RBAC
-// roles — the login response shipped a bare user object without `role`,
-// `roles`, `roleLabel`, or `jobTitle`, which meant the freshly-logged-in
-// iOS user saw "قارئ" until the async /members/profile call returned
-// (and "قارئ" stayed permanently if that call ever failed transiently).
-// Surfacing the full role bundle on login + register fixes the
-// "writer shows as reader in the iOS app" bug.
-//
-// Returns the same shape used in the /members/profile response so the
-// three endpoints stay in lockstep.
-const MOBILE_ROLE_LABELS: Record<string, string> = {
-  system_admin: "مدير النظام",
-  admin: "مسؤول",
-  editor: "محرر",
-  editor_in_chief: "رئيس التحرير",
-  senior_editor: "محرر أول",
-  reporter: "مراسل",
-  correspondent: "مراسل",
-  journalist: "صحفي",
-  writer: "كاتب",
-  author: "كاتب",
-  article_writer: "كاتب مقال",
-  article_author: "كاتب مقال",
-  opinion_author: "كاتب مقال رأي",
-  columnist: "كاتب عمود",
-  managing_editor: "مدير تحرير",
-  editorial_manager: "مدير تحرير",
-  content_manager: "مدير محتوى",
-  comments_moderator: "مشرف تعليقات",
-  moderator: "مشرف",
-  media_manager: "مدير وسائط",
-  publisher: "ناشر",
-  photographer: "مصور",
-  contributor: "مساهم",
-  reader: "قارئ",
-};
-
-const normalizeRoleKey = (value?: string | null) =>
-  value?.trim().toLowerCase().replace(/\s+/g, "_") || "";
-
-async function buildUserRolePayload(userId: string, legacyRole?: string | null, jobTitle?: string | null) {
-  const rbacRoles = await db
-    .select({ name: roles.name, nameAr: roles.nameAr })
-    .from(userRoles)
-    .innerJoin(roles, eq(userRoles.roleId, roles.id))
-    .where(eq(userRoles.userId, userId));
-
-  const nonReaderRbacRole = rbacRoles.find((r) => normalizeRoleKey(r.name) !== "reader");
-  const legacyKey = normalizeRoleKey(legacyRole);
-  const effectiveRoleKey = normalizeRoleKey(nonReaderRbacRole?.name) || legacyKey || "reader";
-  const explicitRoleLabel =
-    nonReaderRbacRole?.nameAr ||
-    (jobTitle?.trim() ? jobTitle.trim() : null) ||
-    MOBILE_ROLE_LABELS[effectiveRoleKey] ||
-    legacyRole ||
-    "قارئ";
-
-  return {
-    role: effectiveRoleKey,
-    roleLabel: explicitRoleLabel,
-    membershipLabel: explicitRoleLabel,
-    roles: rbacRoles.map((r) => ({ key: r.name, displayName: r.nameAr })),
-  };
-}
-
-// ==========================================
 // Helper: Send Mobile Activation Email
 // ==========================================
 async function sendMobileActivationEmail(email: string, code: string, firstName?: string): Promise<boolean> {
@@ -286,101 +221,16 @@ ${code}
 
     const result = await sendEmailNotification({
       to: email,
-      subject: `رمز تفعيل حسابك في سبق: ${code}`,
+      // الرمز لا يوضع في العنوان — يظهر في معاينات الإشعارات على شاشة القفل (F-20).
+      subject: "رمز تفعيل حسابك في سبق",
       html: htmlContent,
       text: textContent,
     });
 
-    console.log(`[Mobile API] Activation email sent to ${email}: ${result.success}`);
+    console.log(`[Mobile API] Activation email sent: ${result.success}`);
     return result.success;
   } catch (error) {
     console.error('[Mobile API] Failed to send activation email:', error);
-    return false;
-  }
-}
-
-// ==========================================
-// Helper: Send Password Reset Email
-// ==========================================
-async function sendPasswordResetEmail(email: string, code: string): Promise<boolean> {
-  try {
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
-          .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-          .header { background: linear-gradient(135deg, #e53935 0%, #c62828 100%); padding: 30px; text-align: center; }
-          .header h1 { color: white; margin: 0; font-size: 24px; }
-          .content { padding: 40px 30px; text-align: center; }
-          .greeting { font-size: 20px; color: #333; margin-bottom: 20px; }
-          .message { font-size: 16px; color: #666; line-height: 1.8; margin-bottom: 30px; }
-          .code-box { background: #fff3f3; border: 2px dashed #e53935; border-radius: 12px; padding: 20px; margin: 20px 0; }
-          .code { font-size: 36px; font-weight: bold; color: #e53935; letter-spacing: 8px; font-family: monospace; }
-          .warning { font-size: 14px; color: #e53935; margin-top: 20px; font-weight: bold; }
-          .note { font-size: 14px; color: #999; margin-top: 10px; }
-          .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #999; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>استعادة كلمة المرور</h1>
-          </div>
-          <div class="content">
-            <p class="greeting">مرحباً! 🔐</p>
-            <p class="message">
-              تلقينا طلباً لاستعادة كلمة المرور الخاصة بحسابك.<br>
-              استخدم الرمز التالي لإعادة تعيين كلمة المرور:
-            </p>
-            <div class="code-box">
-              <div class="code">${code}</div>
-            </div>
-            <p class="warning">
-              هذا الرمز صالح لمدة 30 دقيقة فقط.
-            </p>
-            <p class="note">
-              إذا لم تطلب استعادة كلمة المرور، يرجى تجاهل هذه الرسالة.<br>
-              حسابك آمن ولم يتم إجراء أي تغييرات.
-            </p>
-          </div>
-          <div class="footer">
-            <p>© ${new Date().getFullYear()} صحيفة سبق الإلكترونية - جميع الحقوق محفوظة</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const textContent = `
-مرحباً!
-
-تلقينا طلباً لاستعادة كلمة المرور الخاصة بحسابك.
-استخدم الرمز التالي لإعادة تعيين كلمة المرور:
-
-${code}
-
-هذا الرمز صالح لمدة 30 دقيقة فقط.
-
-إذا لم تطلب استعادة كلمة المرور، يرجى تجاهل هذه الرسالة.
-
-صحيفة سبق الإلكترونية
-    `;
-
-    const result = await sendEmailNotification({
-      to: email,
-      subject: `رمز استعادة كلمة المرور: ${code}`,
-      html: htmlContent,
-      text: textContent,
-    });
-
-    console.log(`[Mobile API] Password reset email sent to ${email}: ${result.success}`);
-    return result.success;
-  } catch (error) {
-    console.error('[Mobile API] Failed to send password reset email:', error);
     return false;
   }
 }
@@ -960,6 +810,16 @@ function generateVerificationCode(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
 
+// Hash a 6-digit code for storage in email_verification_tokens / password_reset_tokens.
+// The plaintext code is emailed to the user; only this hash is persisted (F-13).
+// The userId is folded into the hash so two users can hold the SAME 6-digit code
+// without colliding on the globally-unique `token` column — which previously
+// turned a birthday-collision into a 500 on a 900k-value space (F-14). Lookups
+// always know the userId, so they recompute the same hash to match.
+function hashMobileCode(userId: string, code: string): string {
+  return crypto.createHash("sha256").update(`${userId}:${code}`).digest("hex");
+}
+
 // Helper: Generate secure session token
 function generateSessionToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -1124,23 +984,34 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     }
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مطلوب" 
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني مطلوب"
       });
     }
 
-    // Check if email already exists
+    // Validate email format — the web register schema does this but v1 only
+    // checked presence, so any non-empty string became an account email (F-27).
+    if (!EMAIL_FORMAT_REGEX.test(String(email).trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "صيغة البريد الإلكتروني غير صحيحة"
+      });
+    }
+
+    // Check if email already exists — case-insensitive to match the DB guard
+    // (users_email_lower_unique); a case-sensitive precheck let a mixed-case
+    // row slip through to a raw 500 on insert (F-11).
     const [existingEmail] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
       .limit(1);
-    
+
     if (existingEmail) {
-      return res.status(409).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مسجل مسبقاً" 
+      return res.status(409).json({
+        success: false,
+        message: "البريد الإلكتروني مسجل مسبقاً"
       });
     }
 
@@ -1185,6 +1056,24 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       emailVerified: false,
     });
 
+    // Seed default notification preferences, at parity with web register — v1
+    // previously skipped this so mobile signups had no defaults (F-27).
+    await db
+      .insert(userNotificationPrefs)
+      .values({
+        userId,
+        breaking: true,
+        interest: true,
+        likedUpdates: true,
+        mostRead: true,
+        webPush: false,
+        dailyDigest: false,
+      })
+      .catch((error) => {
+        console.error("[Mobile API] Error creating notification preferences:", error);
+        // Don't fail registration if notification prefs fail.
+      });
+
     // Generate verification token + send activation email (best-effort —
     // failures are logged but don't abort the flow now that status='active').
     const verificationToken = generateVerificationCode();
@@ -1192,7 +1081,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
     await db.insert(emailVerificationTokens).values({
       userId,
-      token: verificationToken,
+      token: hashMobileCode(userId, verificationToken), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1252,6 +1141,11 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Mobile API] auth/register error:", error);
+    // Concurrent signup / legacy mixed-case row hits the unique index → 409 (F-11).
+    if (isUniqueViolation(error, 'users_email_unique') ||
+        isUniqueViolation(error, 'users_email_lower_unique')) {
+      return res.status(409).json({ success: false, message: "البريد الإلكتروني مسجل مسبقاً" });
+    }
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
   }
 });
@@ -1275,29 +1169,36 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
+    // Unknown user → same generic error as a bad/expired code, so this doesn't
+    // become an account-existence oracle (F-19).
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      return res.status(400).json({
+        success: false,
+        message: "رمز التفعيل غير صحيح أو منتهي الصلاحية"
       });
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
+    // Accounts are auto-activated at registration (status="active"), so gating
+    // on status made this endpoint permanently reject everyone and no emailed
+    // code could ever be redeemed (F-08). The thing this verifies is the EMAIL,
+    // so gate on emailVerified instead — keeps auto-activation, makes the flag
+    // resolvable/consistent.
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني موثق مسبقاً"
       });
     }
 
@@ -1307,7 +1208,7 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
       .from(emailVerificationTokens)
       .where(and(
         eq(emailVerificationTokens.userId, user.id),
-        eq(emailVerificationTokens.token, code),
+        eq(emailVerificationTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(emailVerificationTokens.used, false),
         gt(emailVerificationTokens.expiresAt, new Date())
       ))
@@ -1357,30 +1258,33 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
+    // Generic response used for unknown-user and already-verified so this
+    // endpoint isn't an account-existence/state oracle (F-19).
+    const genericResendResponse = {
+      success: true,
+      message: "إن كان الحساب بحاجة إلى تفعيل فقد أُرسل رمز جديد إلى بريده.",
+    };
+
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
-      });
+      return res.json(genericResendResponse);
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
-      });
+    // Gate on emailVerified, not status — accounts are auto-activated so the
+    // status check made resend permanently reject everyone (F-08).
+    if (user.emailVerified) {
+      return res.json(genericResendResponse);
     }
 
     // Invalidate old tokens
@@ -1394,7 +1298,7 @@ router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Requ
 
     await db.insert(emailVerificationTokens).values({
       userId: user.id,
-      token: verificationCode,
+      token: hashMobileCode(user.id, verificationCode), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1524,15 +1428,19 @@ router.post("/auth/login", mobileAuthLimiter, async (req: Request, res: Response
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     } else {
+      // Phone rows are stored E.164 (+9665…). Normalize the client input
+      // (05…/9665…/00966…) before matching — a raw compare silently 401'd
+      // valid accounts (server-side residue of «فخ الصفر»; F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false, 
         message: "بيانات الدخول غير صحيحة" 
       });
@@ -1787,6 +1695,8 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
         .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({
           id: users.id,
@@ -1795,7 +1705,7 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
           authProvider: users.authProvider,
         })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
@@ -1831,15 +1741,20 @@ router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res
         eq(passwordResetTokens.used, false)
       ));
 
-    // Store reset token
+    // Store reset token (hashed at rest, per-user scoped — F-13/F-14)
     await db.insert(passwordResetTokens).values({
       userId: user.id,
-      token: resetToken,
+      token: hashMobileCode(user.id, resetToken),
       expiresAt,
     });
 
+    // رابط ويب مرافق للرمز: بعض الإصدارات المنتشرة (أندرويد قبل شاشة إدخال
+    // الرمز) لا تملك مكانًا لإدخاله، فالرابط يفتح صفحة /reset-password في
+    // المتصفح ويكمل المستخدم من هناك.
+    const resetLink = await createWebResetLink(user.id);
+
     // Send password reset email
-    const emailSent = await sendPasswordResetEmail(user.email!, resetToken);
+    const emailSent = await sendPasswordResetCodeEmail(user.email!, resetToken, resetLink);
 
     console.log(`[Mobile API] Password reset for ${user.id}, email sent: ${emailSent}`);
 
@@ -1887,10 +1802,12 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
         .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else if (phone) {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
@@ -1914,7 +1831,7 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       .from(passwordResetTokens)
       .where(and(
         eq(passwordResetTokens.userId, user.id),
-        eq(passwordResetTokens.token, code),
+        eq(passwordResetTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(passwordResetTokens.used, false),
         gt(passwordResetTokens.expiresAt, new Date())
       ))
@@ -1934,10 +1851,14 @@ router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res:
       .set({ passwordHash })
       .where(eq(users.id, user.id));
 
-    // Mark token as used
+    // إبطال كل رموز/روابط الاستعادة غير المستهلكة للمستخدم — البريد الواحد
+    // يحمل رمزًا ورابطًا معًا؛ استهلاك أحدهما يجب أن يُبطل الآخر.
     await db.update(passwordResetTokens)
       .set({ used: true })
-      .where(eq(passwordResetTokens.id, resetRecord.id));
+      .where(and(
+        eq(passwordResetTokens.userId, user.id),
+        eq(passwordResetTokens.used, false)
+      ));
 
     // Kill ALL sessions (web + mobile) so a stolen session can't survive the
     // reset — previously only mobile appMemberSessions were invalidated (audit #8).
@@ -2586,36 +2507,48 @@ async function updateMemberInterests(req: Request, res: Response) {
     }
 
     // Support both interestIds and categoryIds for backwards compatibility
-    const interestIds = req.body.interestIds || req.body.categoryIds;
+    const rawIds = req.body.interestIds || req.body.categoryIds;
 
-    if (!Array.isArray(interestIds)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)" 
+    if (!Array.isArray(rawIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)"
       });
     }
 
-    // Delete existing interests
-    await db.delete(userInterests)
-      .where(eq(userInterests.userId, session.userId));
+    // Dedupe + keep valid strings, then intersect with the real category
+    // catalog. Previously unchecked IDs hit a FK violation AFTER the delete had
+    // run — wiping the member's interests (F-12).
+    const requested = Array.from(
+      new Set(rawIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)),
+    );
+    const validRows = requested.length
+      ? await db.select({ id: categories.id }).from(categories).where(inArray(categories.id, requested))
+      : [];
+    const validIds = validRows.map((r) => r.id);
 
-    // Add new interests
-    if (interestIds.length > 0) {
-      const interestValues = interestIds.map((categoryId: string, index: number) => ({
-        userId: session.userId,
-        categoryId,
-        weight: 1.0 - (index * 0.1), // Higher weight for earlier items
-      }));
+    // Replace-all inside a transaction so a partial failure can't leave zero
+    // interests. Weight floored at 0.1 so long lists don't go negative (the
+    // GET orders by desc(weight)) — F-12.
+    await db.transaction(async (tx) => {
+      await tx.delete(userInterests).where(eq(userInterests.userId, session.userId));
+      if (validIds.length > 0) {
+        await tx.insert(userInterests).values(
+          validIds.map((categoryId, index) => ({
+            userId: session.userId,
+            categoryId,
+            weight: Math.max(0.1, 1.0 - index * 0.1),
+          })),
+        );
+      }
+    });
 
-      await db.insert(userInterests).values(interestValues);
-    }
+    console.log(`[Mobile API] Updated interests for ${session.userId}: ${validIds.length} interests`);
 
-    console.log(`[Mobile API] Updated interests for ${session.userId}: ${interestIds.length} interests`);
-
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: "تم تحديث الاهتمامات بنجاح",
-      count: interestIds.length
+      count: validIds.length
     });
   } catch (error) {
     console.error("[Mobile API] members/interests update error:", error);
@@ -6272,17 +6205,7 @@ router.post("/sports/intel/ask", async (req: Request, res: Response) => {
   }
 });
 
-// ==========================================
-// توقّعات المباريات (المجتمع) — نظائر الموبايل لمسارات /api/sports/*/predict
-// المحميّة بـrequireAuth (Passport)؛ هنا بجلسة العضو (Bearer) عبر verifyMemberSession.
-//   GET  /api/v1/sports/match/:id/predict   توقّعي لمباراة
-//   POST /api/v1/sports/match/:id/predict   إرسال/تعديل (يُقفل عند الانطلاق)
-//   GET  /api/v1/sports/predictions/me       توقّعاتي + إحصاءاتي
-// ==========================================
-const clampPredGoals = (v: unknown): number | null => {
-  const n = Math.trunc(Number(v));
-  return Number.isFinite(n) && n >= 0 && n <= 30 ? n : null;
-};
+// توقّعات المباريات حصريًا في predictionsMobile.ts — sports_pool حُذفت في #938.
 
 // ==========================================
 // Live Activity push tokens (iOS lock-screen live match)
@@ -7701,6 +7624,7 @@ const adminArticleDetailColumns = {
   categoryId: articles.categoryId,
   reporterId: articles.reporterId,
   isFeatured: articles.isFeatured,
+  isReading: articles.isReading,
   hideFromHomepage: articles.hideFromHomepage,
   aiSummary: articles.aiSummary,
   imageUrl: articles.imageUrl,
@@ -7740,6 +7664,7 @@ function mapAdminArticleDetail(r: any) {
     authorId: r.authorId || null,
     authorName: authorName || null,
     isFeatured: !!r.isFeatured,
+    isReading: !!r.isReading,
     hideFromHomepage: !!r.hideFromHomepage,
     aiSummary: r.aiSummary || "",
     imageUrl: r.imageUrl || "",
@@ -7978,6 +7903,7 @@ router.post("/admin/articles", async (req: Request, res: Response) => {
       authorId,
       submitterId: admin.userId,
       isFeatured: typeof b.isFeatured === "boolean" ? b.isFeatured : false,
+      isReading: typeof b.isReading === "boolean" ? b.isReading : false,
       hideFromHomepage: typeof b.hideFromHomepage === "boolean" ? b.hideFromHomepage : false,
       aiSummary: typeof b.aiSummary === "string" ? b.aiSummary : null,
       imageUrl: typeof b.imageUrl === "string" && b.imageUrl ? b.imageUrl : null,
@@ -8124,6 +8050,7 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
       // الكروسيل — بدون الختم هنا يبقى صفرًا ويغرق المقال تحت كل المختومين
       updates.displayOrder = b.isFeatured ? Math.floor(Date.now() / 1000) : 0;
     }
+    if (typeof b.isReading === "boolean") updates.isReading = b.isReading;
     if (typeof b.hideFromHomepage === "boolean") updates.hideFromHomepage = b.hideFromHomepage;
 
     // Scheduling

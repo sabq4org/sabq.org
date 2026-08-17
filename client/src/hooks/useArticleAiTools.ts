@@ -55,7 +55,7 @@ interface UseArticleAiToolsArgs {
   newsletterExcerpt: string;
   imageUrl: string;
   thumbnailUrl: string;
-  status: "draft" | "published";
+  status: "draft" | "published" | "scheduled" | "archived";
   generatedSocialCards: SocialCards | null;
   // State setters (written by the mutations)
   setTitle: Dispatch<SetStateAction<string>>;

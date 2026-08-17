@@ -30,6 +30,11 @@ import { useCanonical } from "@/hooks/useCanonical";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { VaraMembershipBadge } from "@/components/sports/VaraMembershipBadge";
 import { VaraAppPromo } from "@/components/sports/VaraAppPromo";
+import {
+  FLAGSHIP_COMPETITION_SLUG,
+  pickPortalDefaultCompetition,
+  competitionPortalRank,
+} from "@/components/sports/pickPortalDefaultCompetition";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
 import type { ArticleWithDetails, Category } from "@shared/schema";
@@ -69,8 +74,6 @@ const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.
 // زمن الخبر للترتيب — نعتمد النشر ثم الإنشاء حتى لا يتصدّر خبر قديم مثبّت يدويًا (displayOrder).
 const articleTime = (a: ArticleWithDetails) => new Date(a.publishedAt || (a as any).createdAt || 0).getTime();
 const byRecency = (a: ArticleWithDetails, b: ArticleWithDetails) => articleTime(b) - articleTime(a);
-const DEFAULT_COMPETITION_SLUG = "kings-cup";
-const FALLBACK_COMPETITION_SLUG = "pro-league";
 
 // البطولات التي يحقّ لها تصدّر «الغلاف الذكي» (الهيرو): السعودية كلها (عبر الفئة)
 // + الكبرى عالميًا/قاريًا/أوروبيًا + كؤوس الخليج. غيرها (الدوريات العربية والدرجات
@@ -106,21 +109,12 @@ function competitionSeasonLabel(c: SpCompetition, firstFixtureTs?: number | null
   return c.season != null ? `${c.season}/${c.season + 1}` : "";
 }
 
-function competitionRank(c: SpCompetition, selectedSlug: string): number {
-  if (c.slug === selectedSlug) return -10;
-  if (c.slug === DEFAULT_COMPETITION_SLUG) return -5;
-  if (c.status === "ongoing") return 0;
-  if (c.status === "upcoming") return 1;
-  if (c.status === "unknown") return 2;
-  return 3;
-}
-
 function sortCompetitionsForPortal(rows: SpCompetition[], selectedSlug: string): SpCompetition[] {
   return rows
     .map((c, i) => ({ c, i }))
     .sort((a, b) => {
-      const ra = competitionRank(a.c, selectedSlug);
-      const rb = competitionRank(b.c, selectedSlug);
+      const ra = competitionPortalRank(a.c, selectedSlug);
+      const rb = competitionPortalRank(b.c, selectedSlug);
       if (ra !== rb) return ra - rb;
       const sa = competitionStartTs(a.c);
       const sb = competitionStartTs(b.c);
@@ -1043,7 +1037,8 @@ function SmartSpotlight({
 // ============================================================
 export default function SportsDashboard() {
   const { user } = useAuth();
-  const [compSlug, setCompSlug] = useState(DEFAULT_COMPETITION_SLUG);
+  const [compSlug, setCompSlug] = useState(FLAGSHIP_COMPETITION_SLUG);
+  const userPickedComp = useRef(false);
   const [openMatch, setOpenMatch] = useState<number | null>(null);
   const [scorersTab, setScorersTab] = useState<"scorers" | "assists" | "cards">("scorers");
 
@@ -1063,12 +1058,14 @@ export default function SportsDashboard() {
   const hasScorers = comp?.hasScorers ?? compSlug === "pro-league";
 
   useEffect(() => {
-    if (competitions.length === 0 || competitions.some((c) => c.slug === compSlug)) return;
-    const fallback =
-      competitions.find((c) => c.slug === DEFAULT_COMPETITION_SLUG) ??
-      competitions.find((c) => c.slug === FALLBACK_COMPETITION_SLUG) ??
-      competitions[0];
-    if (fallback) setCompSlug(fallback.slug);
+    if (competitions.length === 0) return;
+    if (userPickedComp.current) {
+      if (competitions.some((c) => c.slug === compSlug)) return;
+      setCompSlug(pickPortalDefaultCompetition(competitions));
+      return;
+    }
+    const next = pickPortalDefaultCompetition(competitions);
+    if (next !== compSlug) setCompSlug(next);
   }, [competitions, compSlug]);
 
   const catOf = categoryOf;
@@ -1172,10 +1169,16 @@ export default function SportsDashboard() {
     () => summaries
       .filter((c) => c.category === summaryCat)
       .sort(
-        (a, b) =>
-          summaryStatusRank(a) - summaryStatusRank(b) ||
-          summaryKickoffRank(a) - summaryKickoffRank(b) ||
-          a.name.localeCompare(b.name, "ar"),
+        (a, b) => {
+          const aRoshn = a.slug === "pro-league" ? 0 : 1;
+          const bRoshn = b.slug === "pro-league" ? 0 : 1;
+          if (aRoshn !== bRoshn) return aRoshn - bRoshn;
+          return (
+            summaryStatusRank(a) - summaryStatusRank(b) ||
+            summaryKickoffRank(a) - summaryKickoffRank(b) ||
+            a.name.localeCompare(b.name, "ar")
+          );
+        },
       ),
     // summaryStatusRank/summaryKickoffRank تعتمدان على وقت الآن وملخّص اليوم،
     // لذا نُحدّث cache عند تغيّر المُدخلات الجوهرية.
@@ -1478,10 +1481,12 @@ export default function SportsDashboard() {
                       {presentCats.map((cat) => (
                         <button key={cat}
                           onClick={() => {
+                            const inCat = competitions.filter((c) => catOf(c) === cat);
                             const first = sortCompetitionsForPortal(
-                              competitions.filter((c) => catOf(c) === cat),
-                              DEFAULT_COMPETITION_SLUG,
+                              inCat,
+                              pickPortalDefaultCompetition(inCat),
                             )[0];
+                            userPickedComp.current = true;
                             if (first) setCompSlug(first.slug);
                           }}
                           className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-bold transition-colors sm:text-sm ${activeCat === cat ? "bg-primary text-white" : "border border-border bg-background text-foreground hover:border-primary/35 hover:bg-primary/10 hover:text-primary"}`}>
@@ -1492,7 +1497,7 @@ export default function SportsDashboard() {
                   )}
                   <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-2">
                     {compsInActiveCat.map((c) => (
-                      <button key={c.slug} onClick={() => setCompSlug(c.slug)}
+                      <button key={c.slug} onClick={() => { userPickedComp.current = true; setCompSlug(c.slug); }}
                         title={c.status ? COMP_STATUS_LABELS[c.status] : undefined}
                         className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-bold transition-colors sm:px-4 sm:py-2 sm:text-sm ${compSlug === c.slug ? "bg-primary text-white" : "border border-border bg-background text-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
                         {c.status === "ongoing" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />}

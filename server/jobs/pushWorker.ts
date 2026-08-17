@@ -108,6 +108,18 @@ async function processPendingCampaigns(): Promise<void> {
 }
 
 /**
+ * يستخرج slug المقال من deeplink بأي صيغة (`/article/x`، رابط كامل،
+ * `sabq://article/x`). المفتاح الصريح `article_slug`/`articleSlug` هو ما
+ * تقرؤه التطبيقات مباشرة — الاعتماد على تحليل العميل للرابط وحده كان
+ * يُسقط فتح الخبر من نقرة الإشعار على المنصتين (إصلاح 2026-08-02).
+ */
+function articleSlugFromDeeplink(deeplink?: string | null): string | undefined {
+  if (!deeplink) return undefined;
+  const match = deeplink.match(/(?:^|\/)article\/([^/?#]+)/);
+  return match ? match[1] : undefined;
+}
+
+/**
  * Process a single campaign
  */
 async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Promise<void> {
@@ -120,6 +132,8 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
       .set({ status: "sending", updatedAt: new Date() })
       .where(eq(pushCampaigns.id, campaign.id));
 
+    const campaignArticleSlug = articleSlugFromDeeplink(campaign.deeplink);
+
     // Create FCM message - Arabic only
     const message: FCMMessage = {
       title: campaign.title,
@@ -129,6 +143,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         campaignId: campaign.id,
         type: campaign.type || "general",
         deeplink: campaign.deeplink || "",
+        ...(campaignArticleSlug ? { article_slug: campaignArticleSlug } : {}),
       },
     };
 
@@ -182,6 +197,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
             {
               imageUrl: campaign.imageUrl || campaign.richMediaUrl || undefined,
               deeplink: campaign.deeplink || undefined,
+              articleSlug: campaignArticleSlug,
               campaignId: campaign.id,
               type: campaign.type || "general",
             }
@@ -258,6 +274,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
             {
               imageUrl: campaign.imageUrl || campaign.richMediaUrl || undefined,
               deeplink: campaign.deeplink || undefined,
+              articleSlug: campaignArticleSlug,
               campaignId: campaign.id,
               type: campaign.type || "general",
             }
@@ -358,6 +375,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         {
           imageUrl: campaign.imageUrl || campaign.richMediaUrl || undefined,
           deeplink: campaign.deeplink || undefined,
+          articleSlug: campaignArticleSlug,
           campaignId: campaign.id,
           type: campaign.type || "general",
         }
@@ -576,6 +594,7 @@ export async function sendImmediatePush(
     return { success: 0, failed: 0, errors: ["No target devices found"] };
   }
 
+  const immediateArticleSlug = articleSlugFromDeeplink(options.deeplink);
   const message: FCMMessage = {
     title,
     body,
@@ -583,6 +602,7 @@ export async function sendImmediatePush(
     data: {
       type: options.type || "general",
       deeplink: options.deeplink || "",
+      ...(immediateArticleSlug ? { article_slug: immediateArticleSlug } : {}),
     },
   };
 
@@ -639,6 +659,7 @@ export async function sendBreakingNewsPush(
     data: {
       type: "breaking_news",
       articleId: article.id,
+      article_slug: article.slug,
       deeplink: `/article/${article.slug}`,
     },
   };

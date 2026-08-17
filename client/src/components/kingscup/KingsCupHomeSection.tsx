@@ -17,6 +17,7 @@ import CupHomeStrip, {
 interface KcOverviewLite {
   started: boolean;
   nextMatch: CupFixture | null;
+  live?: CupFixture[];
   champion?: CupChampion | null;
   matchday?: CupMatchday | null;
   blockHidden?: boolean;
@@ -35,8 +36,14 @@ const KINGS_CUP_THEME: CupStripTheme = {
 export default function KingsCupHomeSection() {
   const { data } = useQuery<KcOverviewLite>({
     queryKey: ["/api/kings-cup/overview"],
-    refetchInterval: (query) =>
-      query.state.data?.nextMatch?.status.live ? 15_000 : 5 * 60_000,
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      const live =
+        (d?.live?.length ?? 0) > 0 ||
+        Boolean(d?.nextMatch?.status.live) ||
+        (d?.matchday?.liveCount ?? 0) > 0;
+      return live ? 15_000 : 5 * 60_000;
+    },
     refetchIntervalInBackground: false,
     staleTime: 30_000,
   });

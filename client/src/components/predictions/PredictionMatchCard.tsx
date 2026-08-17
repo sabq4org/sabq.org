@@ -22,6 +22,8 @@ type Props = {
   isAuthenticated: boolean;
   onLoginNeeded: () => void;
   onOpenSettlement: (contestId: string) => void;
+  /** تمييز من رابط عميق (?fixture= / ?contest=) */
+  highlighted?: boolean;
 };
 
 export function PredictionMatchCard({
@@ -30,6 +32,7 @@ export function PredictionMatchCard({
   isAuthenticated,
   onLoginNeeded,
   onOpenSettlement,
+  highlighted = false,
 }: Props) {
   const { toast } = useToast();
   const mine = contest.myEntry?.payload;
@@ -64,6 +67,7 @@ export function PredictionMatchCard({
       toast({ title: "تم حفظ توقّعك ✅", description: "يمكنك تعديله حتى ضربة البداية" });
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
     },
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "";
@@ -78,6 +82,7 @@ export function PredictionMatchCard({
       if (locked) {
         setEditing(false);
         queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
       }
     },
   });
@@ -87,16 +92,36 @@ export function PredictionMatchCard({
   const countdown = isOpen ? lockCountdownAr(contest.locksAt, now) : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div
+      id={`pred-contest-${contest.id}`}
+      data-fixture-ref={contest.externalRef ?? undefined}
+      data-testid={`prediction-match-card-${contest.id}`}
+      className={`rounded-2xl border bg-card p-4 shadow-sm scroll-mt-24 transition ring-offset-2 ${
+        highlighted
+          ? "border-sky-500 ring-2 ring-sky-400/70"
+          : "border-border"
+      }`}
+    >
       {/* الفريقان والوسط */}
       <div className="flex items-center gap-2">
         <TeamSide name={home?.name} logo={home?.logo} />
         <div className="min-w-[72px] text-center">
           {contest.status === "settled" && contest.result ? (
-            // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم فريقه
-            <span className="text-xl font-extrabold tabular-nums text-foreground" dir="ltr">
-              {contest.result.finalAway}–{contest.result.finalHome}
-            </span>
+            <div>
+              {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم فريقه */}
+              <span className="text-xl font-extrabold tabular-nums text-foreground block" dir="ltr">
+                {contest.result.finalAway}–{contest.result.finalHome}
+              </span>
+              {(() => {
+                const pen = contest.result?.penalties ?? contest.metadata?.penalties;
+                if (!pen || (pen.home == null && pen.away == null)) return null;
+                return (
+                  <span className="text-[10.5px] font-bold tabular-nums text-muted-foreground block" dir="ltr">
+                    ({pen.away ?? 0}–{pen.home ?? 0} ر.ت)
+                  </span>
+                );
+              })()}
+            </div>
           ) : (
             <span className="text-sm font-bold tabular-nums text-muted-foreground">
               {kickoffTimeAr(contest.locksAt)}

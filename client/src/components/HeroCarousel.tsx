@@ -3,7 +3,7 @@ import useEmblaCarousel from "embla-carousel-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Volume2, TrendingUp, Bell, Zap, Star, Flame, Brain, Camera, Clock } from "lucide-react";
+import { Volume2, TrendingUp, Bell, Zap, Star, Flame, Brain, Camera, Clock, BookOpen } from "lucide-react";
 import { OptimizedImage } from "./OptimizedImage";
 import { HERO_SIZES_ATTR } from "@/lib/cdnImage";
 import type { ArticleWithDetails } from "@shared/schema";
@@ -15,7 +15,7 @@ import type { ArticleWithDetails } from "@shared/schema";
 // light without a visible drop on the gradient-overlaid hero.
 const HERO_QUALITY = 72;
 import { formatArticleTimestamp, formatDateOnly } from "@/lib/formatTime";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 // Detect iOS Safari to use simplified carousel (prevents zoom bug)
@@ -67,7 +67,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
       isNew: isNewArticle(article.publishedAt),
       formattedDate: formatPublishedDate(article.publishedAt),
       objectPosition: getObjectPosition(article),
-      displayImage: article.imageUrl || article.thumbnailUrl || null,
+      displayImage: getArticleDisplayImageUrl(article),
     }));
     
     // Sort so breaking news comes first (hero position)
@@ -148,6 +148,14 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                       {heroArticle.category.nameAr}
                     </Badge>
                   )}
+                  {heroArticle.isReading && (
+                    <Badge 
+                      className="text-[10px] px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1 font-medium shadow-sm"
+                    >
+                      <BookOpen className="h-2.5 w-2.5" />
+                      قراءة
+                    </Badge>
+                  )}
                   {heroArticle.formattedDate && (
                     <span className="flex items-center gap-1 text-[10px] text-white/80">
                       <Clock className="h-3 w-3" />
@@ -214,6 +222,15 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                               {art.category.nameAr}
                             </Badge>
                           ) : null}
+
+                          {art.isReading && (
+                            <Badge 
+                              className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0"
+                            >
+                              <BookOpen className="h-2 w-2" />
+                              قراءة
+                            </Badge>
+                          )}
                         </div>
 
                         {/* Title */}
@@ -300,6 +317,14 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                       {heroArticle.category.nameAr}
                     </Badge>
                   )}
+                  {heroArticle.isReading && (
+                    <Badge 
+                      className="text-xs px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1.5 font-medium shadow-sm"
+                    >
+                      <BookOpen className="h-3 w-3" />
+                      قراءة
+                    </Badge>
+                  )}
                   {heroArticle.formattedDate && (
                     <span className="flex items-center gap-1 text-xs text-white/80">
                       <Clock className="h-3 w-3" />
@@ -365,6 +390,15 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                               {article.category.nameAr}
                             </Badge>
                           ) : null}
+
+                          {article.isReading && (
+                            <Badge 
+                              className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0"
+                            >
+                              <BookOpen className="h-2 w-2" />
+                              قراءة
+                            </Badge>
+                          )}
                         </div>
 
                         {/* Title */}
@@ -446,7 +480,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
       isNew: isNewArticle(article.publishedAt),
       formattedDate: formatPublishedDate(article.publishedAt),
       objectPosition: getObjectPosition(article),
-      displayImage: article.imageUrl || article.thumbnailUrl || null,
+      displayImage: getArticleDisplayImageUrl(article),
     }));
     
     // Sort so breaking news comes first (hero position)
@@ -529,6 +563,14 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                       {heroArticle.category.nameAr}
                     </Badge>
                   )}
+                  {heroArticle.isReading && (
+                    <Badge 
+                      className="text-[10px] px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1 font-medium shadow-sm"
+                    >
+                      <BookOpen className="h-2.5 w-2.5" />
+                      قراءة
+                    </Badge>
+                  )}
                   {heroArticle.formattedDate && (
                     <span className="flex items-center gap-1 text-[10px] text-white/80">
                       <Clock className="h-3 w-3" />
@@ -595,6 +637,15 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                               {article.category.nameAr}
                             </Badge>
                           ) : null}
+
+                          {article.isReading && (
+                            <Badge 
+                              className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0"
+                            >
+                              <BookOpen className="h-2 w-2" />
+                              قراءة
+                            </Badge>
+                          )}
                         </div>
 
                         {/* Title */}
@@ -702,6 +753,14 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                       {heroArticle.category.nameAr}
                     </Badge>
                   )}
+                  {heroArticle.isReading && (
+                    <Badge 
+                      className="text-xs px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1.5 font-medium shadow-sm"
+                    >
+                      <BookOpen className="h-3 w-3" />
+                      قراءة
+                    </Badge>
+                  )}
                   {heroArticle.formattedDate && (
                     <span className="flex items-center gap-1 text-xs text-white/70">
                       <Clock className="h-3 w-3" />
@@ -767,6 +826,15 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                               {article.category.nameAr}
                             </Badge>
                           ) : null}
+
+                          {article.isReading && (
+                            <Badge 
+                              className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0"
+                            >
+                              <BookOpen className="h-2 w-2" />
+                              قراءة
+                            </Badge>
+                          )}
                         </div>
 
                         {/* Title */}

@@ -106,16 +106,13 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
   }
 }
 
-/** Format `scheduled_at` as a short Arabic date+time. Uses the
- *  `ar-SA-u-nu-latn` locale extension so digits render as 1234 instead of
- *  ١٢٣٤ — matches the editorial team's product-wide convention. Pinned
- *  to `Asia/Riyadh` because the server runs on UTC; without the
- *  explicit timezone, a 7:25 AM Riyadh schedule was being shown to
- *  authors as 4:25 AM. */
+/** Format `scheduled_at` as a short Arabic date+time.
+ *  Gregorian calendar + Latin digits (`ar-SA-u-ca-gregory-nu-latn`).
+ *  Pinned to `Asia/Riyadh` because the server runs on UTC. */
 function formatArabicDateTime(d?: Date | null): string {
   if (!d) return "";
   try {
-    const date = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+    return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
       timeZone: "Asia/Riyadh",
       weekday: "short",
       day: "numeric",
@@ -124,9 +121,8 @@ function formatArabicDateTime(d?: Date | null): string {
       minute: "2-digit",
       hour12: true,
     }).format(d);
-    return date;
   } catch {
-    return d.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" });
+    return d.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh" });
   }
 }
 

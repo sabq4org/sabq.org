@@ -8,7 +8,7 @@ import { Newspaper, Clock, MessageSquare, Sparkles, Zap, Star, Flame, Loader2, C
 import { useAuth } from "@/hooks/useAuth";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatArticleTimestamp } from "@/lib/formatTime";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 import { prefetchArticle } from "@/lib/prefetchRoute";
 import { getReadingHistory, type ReadingEntry } from "@/lib/readingHistory";
 import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
@@ -366,21 +366,24 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                         <div className="flex gap-3">
                           {/* Image - Same dimensions as QuadCategoriesBlock */}
                           <div className="relative flex-shrink-0 w-28 h-20 rounded-lg overflow-hidden">
-                            {(article.imageUrl || article.thumbnailUrl || (article as any).infographicBannerUrl) ? (
-                              <OptimizedImage
-                                src={(article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
-                                alt={article.title}
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                wrapperClassName="w-full h-full"
-                                objectPosition={getObjectPosition(article, "center")}
-                                preferSize="small"
-                                aspectRatio="16/9"
-                                sizes="112px"
-                                eager={index < 3}
-                              />
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
-                            )}
+                            {(() => {
+                              const displayImg = getArticleDisplayImageUrl(article);
+                              return displayImg ? (
+                                <OptimizedImage
+                                  src={displayImg}
+                                  alt={article.title}
+                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                  wrapperClassName="w-full h-full"
+                                  objectPosition={getObjectPosition(article, "center")}
+                                  preferSize="small"
+                                  aspectRatio="16/9"
+                                  sizes="112px"
+                                  eager={index < 3}
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
+                              );
+                            })()}
                           </div>
 
                           {/* Content */}
@@ -438,6 +441,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                   {article.category.nameAr}
                                 </Badge>
                               ) : null}
+
+                              {(article as any).isReading && (
+                                <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0">
+                                  <BookOpen className="h-2 w-2" aria-hidden="true" />
+                                  قراءة
+                                </Badge>
+                              )}
 
                               {isNewArticle(article.publishedAt) && (
                                 <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
@@ -499,21 +509,24 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                 onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)}
                 onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}
               >
-                {(article.imageUrl || article.thumbnailUrl || (article as any).infographicBannerUrl) && (
-                  <div className="relative aspect-[16/9] overflow-hidden">
-                    <OptimizedImage
-                      src={(article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
-                      alt={article.title}
-                      className="w-full h-full object-cover"
-                      wrapperClassName="w-full h-full"
-                      objectPosition={getObjectPosition(article)}
-                      preferSize="small"
-                      aspectRatio="16/9"
-                      sizes="(max-width: 1279px) 100vw, 25vw"
-                      eager={index < 4}
-                    />
-                  </div>
-                )}
+                {(() => {
+                  const displayImg = getArticleDisplayImageUrl(article);
+                  return displayImg ? (
+                    <div className="relative aspect-[16/9] overflow-hidden">
+                      <OptimizedImage
+                        src={displayImg}
+                        alt={article.title}
+                        className="w-full h-full object-cover"
+                        wrapperClassName="w-full h-full"
+                        objectPosition={getObjectPosition(article)}
+                        preferSize="small"
+                        aspectRatio="16/9"
+                        sizes="(max-width: 1279px) 100vw, 25vw"
+                        eager={index < 4}
+                      />
+                    </div>
+                  ) : null;
+                })()}
                 
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -567,6 +580,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {(article as any).isReading && (
+                      <Badge className="text-xs h-5 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0">
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        قراءة
+                      </Badge>
+                    )}
 
                     {isNewArticle(article.publishedAt) && (
                       <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>

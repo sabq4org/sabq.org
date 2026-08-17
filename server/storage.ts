@@ -7,6 +7,7 @@ import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSe
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
+import { assignRbacRoleByName, resolvePrimaryRoleName, syncLegacyRoleFromRoleIds } from "./services/userRoleSync";
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
@@ -962,7 +963,7 @@ export interface IStorage {
   publishTopic(id: string, userId: string): Promise<Topic>;
   unpublishTopic(id: string, userId: string): Promise<Topic>;
   getPublishedTopicsByAngle(angleSlug: string, limit?: number): Promise<Topic[]>;
-  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>>;
+  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>>;
   
   // Angle Submissions operations - طلبات كتابة الزوايا
   createAngleSubmission(data: InsertAngleSubmission): Promise<AngleSubmission>;
@@ -2979,12 +2980,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserRole(userId: string, role: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ role })
-      .where(eq(users.id, userId))
-      .returning();
-
+    const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
+    await assignRbacRoleByName(userId, role);
+    if (role === "reporter") {
+      try { await this.ensureReporterStaffRecord(userId); } catch (err) {
+        console.error("[updateUserRole] ensureReporterStaffRecord failed:", err);
+      }
+    }
     return user;
   }
 
@@ -3571,6 +3573,7 @@ export class DatabaseStorage implements IStorage {
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const user = await db.transaction(async (tx) => {
+      const primaryRole = await resolvePrimaryRoleName(tx, userData.roleIds);
       const [user] = await tx.insert(users).values({
         id: userId,
         email: userData.email.trim().toLowerCase(),
@@ -3584,7 +3587,7 @@ export class DatabaseStorage implements IStorage {
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
-        role: 'reader',
+        role: primaryRole,
         isProfileComplete: true,
         mustChangePassword: true, // Require password change on first login
       }).returning();
@@ -3667,13 +3670,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const newRoles = await tx
-        .select({
-          id: roles.id,
-          name: roles.name,
-        })
-        .from(roles)
-        .where(inArray(roles.id, roleIds));
+      const newRoles = await syncLegacyRoleFromRoleIds(tx, userId, roleIds);
 
       await tx.insert(activityLogs).values({
         id: nanoid(),
@@ -4124,6 +4121,7 @@ export class DatabaseStorage implements IStorage {
       displayOrder: row.display_order,
       isBreaking: row.is_breaking,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
       isEditorPick: row.is_editor_pick,
       isDeepDive: row.is_deep_dive,
       readingTime: row.reading_time,
@@ -6459,6 +6457,10 @@ export class DatabaseStorage implements IStorage {
           a.ai_summary,
           a.ai_generated,
           a.is_featured,
+          a.is_reading,
+          a.is_video_template,
+          a.video_url,
+          a.video_thumbnail_url,
           a.display_order,
           a.views,
           a.seo,
@@ -6565,6 +6567,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order || 0,
       views: row.views,
       seo: row.seo,
@@ -6713,6 +6719,10 @@ export class DatabaseStorage implements IStorage {
           a.ai_summary,
           a.ai_generated,
           a.is_featured,
+          a.is_reading,
+          a.is_video_template,
+          a.video_url,
+          a.video_thumbnail_url,
           a.display_order,
           a.views,
           a.seo,
@@ -6887,6 +6897,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order || 0,
       views: row.views,
       seo: row.seo,
@@ -7029,7 +7043,7 @@ export class DatabaseStorage implements IStorage {
         a.image_url, a.thumbnail_url, a.infographic_banner_url, a.image_focal_point,
         a.category_id, a.author_id, a.reporter_id, a.article_type, a.news_type,
         a.status, a.hide_from_homepage, a.ai_summary, a.ai_generated,
-        a.is_featured, a.display_order, a.views, a.seo, a.credibility_score,
+        a.is_featured, a.is_reading, a.is_video_template, a.video_url, a.video_thumbnail_url, a.display_order, a.views, a.seo, a.credibility_score,
         a.source, a.source_url, a.is_ai_generated_image, a.is_ai_generated_thumbnail,
         a.is_publisher_content, a.is_publisher_news, a.publisher_id, a.publisher_status,
         a.published_at, a.created_at, a.updated_at,
@@ -7114,6 +7128,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order,
       views: row.views,
       seo: row.seo,
@@ -9010,17 +9028,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserInterests(userId: string): Promise<InterestWithWeight[]> {
+    // userInterests.categoryId FK → categories (the real catalog; all write
+    // paths store category ids). This previously joined the orphaned `interests`
+    // table, whose ids never match category ids, so it returned EMPTY rows and
+    // /api/user/interests + /api/user/profile/complete served nothing (F-07).
+    // Map category columns onto the Interest shape the callers expect.
     const results = await db
       .select({
-        interest: interests,
+        id: categories.id,
+        nameAr: categories.nameAr,
+        nameEn: categories.nameEn,
+        slug: categories.slug,
+        icon: categories.icon,
+        description: categories.description,
+        createdAt: categories.createdAt,
         weight: userInterests.weight,
       })
       .from(userInterests)
-      .innerJoin(interests, eq(userInterests.categoryId, interests.id))
+      .innerJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, userId));
 
     return results.map((r) => ({
-      ...r.interest,
+      id: r.id,
+      nameAr: r.nameAr,
+      nameEn: r.nameEn,
+      slug: r.slug,
+      icon: r.icon ?? null,
+      description: r.description ?? null,
+      createdAt: r.createdAt,
       weight: r.weight,
     }));
   }
@@ -10575,7 +10610,7 @@ export class DatabaseStorage implements IStorage {
     return results.map((r) => r.topic);
   }
 
-  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>> {
+  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>> {
     const results = await db
       .select({
         topic: topics,
@@ -10586,20 +10621,35 @@ export class DatabaseStorage implements IStorage {
           icon: angles.iconKey,
           colorHex: angles.colorHex,
         },
+        // كاتب الزاوية — نفس أسبقية getAngleWriter: بيانات المنسوب ثم حساب المستخدم
+        writerFirstName: users.firstName,
+        writerLastName: users.lastName,
+        writerProfileImage: users.profileImageUrl,
+        writerStaffName: staff.nameAr,
+        writerStaffImage: staff.profileImage,
       })
       .from(topics)
       .innerJoin(angles, eq(topics.angleId, angles.id))
+      .leftJoin(users, eq(angles.managerUserId, users.id))
+      .leftJoin(staff, eq(staff.userId, users.id))
       .where(and(
         eq(topics.status, 'published'),
         eq(angles.isActive, true)
       ))
       .orderBy(desc(topics.publishedAt))
       .limit(limit);
-    
-    return results.map((r) => ({
-      ...r.topic,
-      angle: r.angle,
-    }));
+
+    return results.map((r) => {
+      const writerName = (r.writerStaffName
+        || [r.writerFirstName, r.writerLastName].filter(Boolean).join(" ").trim()) || null;
+      return {
+        ...r.topic,
+        angle: r.angle,
+        writer: writerName
+          ? { name: writerName, avatar: r.writerStaffImage || r.writerProfileImage || null }
+          : null,
+      };
+    });
   }
 
   // Angle Submissions operations - طلبات كتابة الزوايا

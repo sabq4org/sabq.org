@@ -35,6 +35,7 @@ import {
   User,
   Calendar,
   Heart,
+  Eye,
   Bookmark,
   Share2,
   Sparkles,
@@ -640,10 +641,23 @@ export default function OpinionDetailPage() {
 
                   <Separator orientation="vertical" className="h-12" />
 
+                  {/* مشاهدات + إعجابات — بجانب الكاتب (مثل en/ur article detail) */}
                   <div className="flex items-center gap-4 text-muted-foreground">
-                    <span className="flex items-center gap-1">
+                    <span
+                      className="flex items-center gap-1"
+                      title="المشاهدات"
+                      data-testid="text-views"
+                    >
+                      <Eye className="h-4 w-4" />
+                      {(article.views || 0).toLocaleString("en-US")}
+                    </span>
+                    <span
+                      className="flex items-center gap-1"
+                      title="الإعجابات"
+                      data-testid="text-reactions"
+                    >
                       <Heart className="h-4 w-4" />
-                      {article.reactionsCount || 0}
+                      {(article.reactionsCount || 0).toLocaleString("en-US")}
                     </span>
                   </div>
                 </div>

@@ -377,6 +377,12 @@ nonisolated struct RsTeamInfo: Decodable, Hashable {
     let venue: RsTeamVenue?
 }
 
+nonisolated struct RsPlayerNationality: Decodable, Hashable {
+    let name: String?
+    let flag: String?
+    let code: String?
+}
+
 nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -385,6 +391,11 @@ nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
     let positionEn: String
     let age: Int?
     let photo: String
+    let captain: Bool?
+    let nationality: RsPlayerNationality?
+    let height: Int?
+    let weight: Int?
+    let detailedPosition: String?
 }
 
 nonisolated struct RsStatTriple: Decodable, Hashable {
@@ -595,16 +606,17 @@ extension APIClient {
     }
 }
 
-// MARK: - هوية روشن البصرية — «صباح الملعب» فاتحة + نسخة ليلية متكيفة
+// MARK: - هوية روشن البصرية — «أخضر الملعب» (2026-08-01)
 //
-// قرار المالك: الوضع الفاتح يبقى «صباح الملعب» كما هو حرفيًا — سماوي هادئ +
-// زمرد مُطفأ + ذهب شامبانيا على أرضيات ضبابية، بلا هيرو كحلي قاتم يُرهق العين.
-// الوضع الليلي (2026-07-28): نفس الروح على أسطح داكنة هادئة — ضباب ليلي
-// سماوي-زمردي خافت لا كحلي صارخ — يتبدّل تلقائيًا مع userInterfaceStyle
-// (نفس نمط SabqTheme المعتمد في بقية التطبيق).
+// قرار المالك بعد رفض «صباح الملعب» (أبيض في أبيض بحدود رمادية): ألوان
+// مسطّحة نقية بتشبّع متوسط — صفر تدرّجات، صفر حدود، ولا خلفيات قاتمة.
+// اللون من أرض الملعب: زمردي مشبع للهيرو والنتائج والتفاعل، قماشة
+// فستقية-رملية تُبرز البطاقات البيضاء بالظل الخفيف بدل الحدود، ذهب
+// للتتويج والمراكز، وحبر داكن مخضرّ. الليلي يشتق نفس الروح على أسطح
+// داكنة مخضرّة (userInterfaceStyle — نمط SabqTheme المعتمد).
 
 nonisolated enum RoshnTheme {
-    /// لون متكيف مع نمط الواجهة — قيمة الفاتح ثابتة لا تتغير، والليلي إضافة جديدة.
+    /// لون متكيف مع نمط الواجهة.
     private static func adaptive(
         light: (CGFloat, CGFloat, CGFloat),
         dark: (CGFloat, CGFloat, CGFloat)
@@ -615,77 +627,44 @@ nonisolated enum RoshnTheme {
         })
     }
 
-    /// السماوي الأساسي — هوية روشن (أزرار/روابط/إبراز) بتشبّع أخف.
-    static let sky = adaptive(light: (0.14, 0.48, 0.70), dark: (0.32, 0.60, 0.86))
-    /// أرضية سماوية ناعمة (خلفيات بطاقات/شارات).
-    static let skySoft = adaptive(light: (0.91, 0.96, 0.99), dark: (0.14, 0.20, 0.27))
-    /// زمردي الملعب — ثانوي مُطفأ (فوز/مؤشرات إيجابية).
-    static let pitch = adaptive(light: (0.18, 0.52, 0.42), dark: (0.30, 0.60, 0.48))
-    static let pitchSoft = adaptive(light: (0.93, 0.97, 0.95), dark: (0.12, 0.20, 0.17))
-    /// ذهبي التتويج — شامبانيا دافئ بدل البرتقالي الحاد.
-    static let gold = adaptive(light: (0.78, 0.58, 0.22), dark: (0.85, 0.65, 0.30))
-    static let goldSoft = adaptive(light: (0.99, 0.96, 0.90), dark: (0.24, 0.19, 0.11))
-    /// حبر كحلي للنصوص الأساسية، ورمادي مائل للزرقة للثانوية.
-    static let ink = adaptive(light: (0.14, 0.20, 0.28), dark: (0.92, 0.95, 0.97))
-    static let inkSoft = adaptive(light: (0.45, 0.52, 0.58), dark: (0.60, 0.66, 0.72))
-    /// حدود وفواصل هادئة.
-    static let line = adaptive(light: (0.90, 0.93, 0.95), dark: (0.24, 0.28, 0.32))
-    static let liveRed = Color(red: 0.86, green: 0.32, blue: 0.34)
+    /// الزمردي الأساسي — هوية روشن (هيرو/تفاعل/نتائج). كان سماويًا في
+    /// «صباح الملعب»؛ الاسم بقي لتقليل تغيّر مواضع الاستدعاء.
+    static let sky = adaptive(light: (0.12, 0.62, 0.39), dark: (0.18, 0.71, 0.47))
+    /// أرضية زمردية ناعمة (خلفيات شارات/أقراص أرقام).
+    static let skySoft = adaptive(light: (0.89, 0.95, 0.91), dark: (0.09, 0.15, 0.11))
+    /// زمردي أعمق للمؤشرات الإيجابية (فارق أهداف/أهداف الفريق).
+    static let pitch = adaptive(light: (0.09, 0.48, 0.30), dark: (0.25, 0.64, 0.43))
+    static let pitchSoft = adaptive(light: (0.89, 0.95, 0.91), dark: (0.09, 0.15, 0.11))
+    /// ذهبي التتويج والمراكز الأولى.
+    static let gold = adaptive(light: (0.85, 0.66, 0.25), dark: (0.88, 0.71, 0.33))
+    static let goldSoft = adaptive(light: (0.97, 0.93, 0.85), dark: (0.17, 0.14, 0.07))
+    /// حبر داكن مخضرّ للنصوص الأساسية، ورمادي مخضرّ للثانوية.
+    static let ink = adaptive(light: (0.08, 0.16, 0.13), dark: (0.91, 0.94, 0.91))
+    static let inkSoft = adaptive(light: (0.36, 0.44, 0.40), dark: (0.58, 0.64, 0.60))
+    /// فواصل نادرة الاستخدام — الهوية بلا حدود؛ يبقى للحالات الاضطرارية.
+    static let line = adaptive(light: (0.89, 0.90, 0.85), dark: (0.15, 0.19, 0.16))
+    static let liveRed = Color(red: 0.82, green: 0.31, blue: 0.31)
     /// هبوط (المراكز الثلاثة الأخيرة في الترتيب).
-    static let danger = Color(red: 0.82, green: 0.34, blue: 0.34)
-    /// كحلي للإبراز الداكن الخفيف (شارات/أفاتار) — ليس خلفية هيرو.
-    static let navy = Color(red: 0.16, green: 0.28, blue: 0.38)
-    static let navyDeep = Color(red: 0.10, green: 0.20, blue: 0.28)
-    static let canvas = adaptive(light: (0.97, 0.98, 0.99), dark: (0.07, 0.09, 0.12))
-    static let card = adaptive(light: (1.00, 1.00, 1.00), dark: (0.12, 0.15, 0.19))
+    static let danger = Color(red: 0.82, green: 0.31, blue: 0.31)
+    /// حبر داكن للإبراز (قرص النتيجة/شارات) — نفس عائلة ink الفاتح.
+    static let navy = Color(red: 0.08, green: 0.16, blue: 0.13)
+    static let navyDeep = Color(red: 0.05, green: 0.11, blue: 0.09)
+    /// القماشة الفستقية-الرملية — ليست بيضاء عمدًا كي تتمايز البطاقات بلا حدود.
+    static let canvas = adaptive(light: (0.94, 0.94, 0.90), dark: (0.07, 0.09, 0.07))
+    static let card = adaptive(light: (1.00, 1.00, 1.00), dark: (0.11, 0.14, 0.11))
 
-    /// نص على الهيرو — حبر داكن فوق الضباب الفاتح، وحبر فاتح فوق الليلي.
-    static let heroOn = ink
-    static let heroOnSoft = inkSoft
-    /// حدّ ناعم حول بطاقات الهيرو.
-    static let heroStroke = adaptive(light: (0.82, 0.88, 0.92), dark: (0.27, 0.33, 0.39))
+    /// الهيرو صار زمرديًا صلبًا — النص عليه أبيض دائمًا في النمطين.
+    static let heroOn = Color.white
+    static let heroOnSoft = Color.white.opacity(0.85)
 
-    /// شارة زجاجية فوق الهيرو (عدّاد/مقاييس/حالات) — بيضاء شفافة فاتحًا، دخانية ليليًا.
-    static let heroChip = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.34, green: 0.40, blue: 0.48, alpha: 0.35)
-            : UIColor(white: 1, alpha: 0.72)
-    })
+    /// شارة فوق الهيرو الزمردي (عدّاد/مقاييس/حالات) — بيضاء شفافة.
+    static let heroChip = Color.white.opacity(0.16)
 
-    /// تدرّج بطاقة الشريط — ضباب صباحي فاتحًا (سماوي باهت → أبيض → نسمة زمردية)،
-    /// وضباب ليلي هادئ داكنًا.
-    static var stripGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                adaptive(light: (0.93, 0.97, 0.99), dark: (0.11, 0.16, 0.21)),
-                adaptive(light: (1.00, 1.00, 1.00), dark: (0.12, 0.15, 0.19)),
-                adaptive(light: (0.94, 0.97, 0.95), dark: (0.11, 0.16, 0.16)),
-            ],
-            startPoint: .topTrailing, endPoint: .bottomLeading
-        )
-    }
+    /// سطح الهيرو (المركز/النادي/المباراة) — زمردي مسطّح، لا تدرّج.
+    static let hero = sky
 
-    /// هيرو المركز/النادي/المباراة — فاتحًا: ضباب سماوي-زمردي مريح للعين (لا يُرجَع
-    /// إلى كحلي قاتم). داكنًا: ضباب ليلي خافت بنفس الروح لا كحلي صارخ.
-    static var heroGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                adaptive(light: (0.88, 0.94, 0.98), dark: (0.13, 0.19, 0.26)),
-                adaptive(light: (0.94, 0.97, 0.96), dark: (0.13, 0.17, 0.22)),
-                adaptive(light: (0.90, 0.95, 0.93), dark: (0.12, 0.19, 0.19)),
-            ],
-            startPoint: .topTrailing, endPoint: .bottomLeading
-        )
-    }
-
-    /// شارة الهوية على البنر — تدرّج هادئ بلا تشبّع نيون (مشترك بين النمطين).
-    static let badgeGradient = LinearGradient(
-        colors: [
-            Color(red: 0.22, green: 0.52, blue: 0.68),
-            Color(red: 0.20, green: 0.50, blue: 0.48),
-        ],
-        startPoint: .topTrailing, endPoint: .bottomLeading
-    )
+    /// ظل البطاقات الموحّد — بديل الحدود على القماشة الفستقية.
+    static let cardShadow = Color(red: 0.08, green: 0.24, blue: 0.16).opacity(0.10)
 }
 
 // MARK: - تنسيق التوقيت (يعيد استخدام منسّقات كأس العالم — الرياض/ميلادي/لاتيني)
@@ -734,6 +713,228 @@ nonisolated enum RsFormat {
         formatter.minimumFractionDigits = digits
         formatter.maximumFractionDigits = digits
         return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.*f", digits, value)
+    }
+}
+
+// MARK: - توقعات روشن — المنصة المركزية (/api/v1/predictions/*)
+//
+// نفس عقود predictions-core التي يستهلكها أندرويد (PredictionModels.kt)
+// وVARA — لا محرك خاص بالبطولة (predictions-core/SYSTEM.md). المصادقة
+// Bearer تلقائيًا عبر APIClient؛ القراءة متاحة بلا جلسة وmyEntry يغيب.
+
+nonisolated struct PredTeamMeta: Decodable, Hashable {
+    let name: String?
+    let logo: String?
+}
+
+nonisolated struct PredContestMeta: Decodable, Hashable {
+    let home: PredTeamMeta?
+    let away: PredTeamMeta?
+    let round: String?
+    let venue: String?
+}
+
+nonisolated struct PredScorePayload: Codable, Hashable {
+    let predHome: Int?
+    let predAway: Int?
+}
+
+nonisolated struct PredMyEntry: Decodable, Hashable {
+    let id: String
+    let payload: PredScorePayload?
+}
+
+nonisolated struct PredScoreResult: Decodable, Hashable {
+    let finalHome: Int?
+    let finalAway: Int?
+}
+
+nonisolated struct PredContest: Decodable, Identifiable, Hashable {
+    let id: String
+    let contestType: String
+    /// open | locked | ready | settled | void
+    let status: String
+    let locksAt: String
+    let metadata: PredContestMeta?
+    let result: PredScoreResult?
+    /// عدد المشاركين النشطين — رقم فقط بلا أسماء (عقد #1326).
+    let entriesCount: Int?
+    let myEntry: PredMyEntry?
+
+    var isMatchScore: Bool { contestType == "match_score" }
+    var isOpen: Bool { status == "open" }
+    var locksAtDate: Date? { SabqFormatters.parseISO8601(locksAt) }
+}
+
+nonisolated struct PredCompetitionSummary: Decodable, Hashable {
+    let slug: String
+    let nameAr: String?
+    let openContests: Int?
+    let myPoints: Int?
+}
+
+nonisolated struct PredCompetitionsResponse: Decodable {
+    let competitions: [PredCompetitionSummary]
+}
+
+nonisolated struct PredCompetitionDetailResponse: Decodable {
+    let contests: [PredContest]
+}
+
+nonisolated struct PredLeaderEntry: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let userId: String
+    let name: String
+    let profileImageUrl: String?
+    let points: Int
+    let exactCount: Int?
+
+    var id: String { userId }
+}
+
+nonisolated struct PredMyRank: Decodable, Hashable {
+    let rank: Int
+    let points: Int
+}
+
+nonisolated struct PredLeaderboardResponse: Decodable {
+    let entries: [PredLeaderEntry]
+    let myRank: PredMyRank?
+}
+
+/// تفكيك التسوية داخل سطر الدفتر — الخادم يرسل النتيجة والتوقع نصًا
+/// بصيغة "home-away" (المضيف أولًا)؛ نفكّهما لرقمين ولا نعرض النص الخام
+/// أبدًا (سلاسل LTR داخل جملة عربية تنقلب بصريًا).
+nonisolated struct PredLedgerBreakdown: Decodable, Hashable {
+    let prediction: String?
+    let finalScore: String?
+
+    static func parse(_ raw: String?) -> (home: Int, away: Int)? {
+        guard let raw else { return nil }
+        let parts = raw.split(separator: "-").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    var finalPair: (home: Int, away: Int)? { Self.parse(finalScore) }
+    var predictionPair: (home: Int, away: Int)? { Self.parse(prediction) }
+}
+
+/// سطر دفتر النقاط — «سجلّي»: نقاط كل تسوية بسببها العربي وتاريخها،
+/// مع معرّف المباراة وتفكيكها لعرض النتيجة والتوقع.
+nonisolated struct PredLedgerItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let contestId: String?
+    let points: Int
+    let reasonCode: String
+    let reasonLabelAr: String
+    let createdAt: String
+    let breakdown: PredLedgerBreakdown?
+
+    var createdAtDate: Date? { SabqFormatters.parseISO8601(createdAt) }
+}
+
+nonisolated struct PredLedgerResponse: Decodable {
+    let items: [PredLedgerItem]
+    let nextCursor: String?
+}
+
+nonisolated struct PredRuleTiers: Decodable, Hashable {
+    let exact: Double?
+    let signedMargin: Double?
+    let outcome: Double?
+}
+
+nonisolated struct PredRuleParams: Decodable, Hashable {
+    let basePool: Int?
+    let tiers: PredRuleTiers?
+    let winCriterion: String?
+}
+
+/// ملف الاحتساب الفعّال للمسابقة — نص «طريقة التوقعات» يُولَّد منه لا من
+/// نص ثابت يتقادم. الصياغة بكلمة «جائزة» (قاعدة المالك: ممنوع «بركة»).
+nonisolated struct PredRule: Decodable, Hashable {
+    let strategyKey: String
+    let version: Int?
+    let params: PredRuleParams?
+
+    var summaryAr: String {
+        guard let p = params else { return "تُحتسب النقاط بعد صافرة النهاية" }
+        switch strategyKey {
+        case "tiered_pool":
+            let exact = Int((p.tiers?.exact ?? 0) * 100)
+            let margin = Int((p.tiers?.signedMargin ?? 0) * 100)
+            let outcome = Int((p.tiers?.outcome ?? 0) * 100)
+            return "جائزة المباراة \(p.basePool ?? 0) نقطة: \(exact)٪ للنتيجة الدقيقة، و\(margin)٪ للفارق الصحيح، و\(outcome)٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
+        case "shared_pool":
+            return p.winCriterion == "exact"
+                ? "جائزة \(p.basePool ?? 0) نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
+                : "جائزة \(p.basePool ?? 0) نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
+        case "skill_weighted":
+            return "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك"
+        case "fixed_points":
+            return "نقاط ثابتة حسب دقة التوقّع"
+        default:
+            return "تُحتسب النقاط بعد صافرة النهاية"
+        }
+    }
+}
+
+nonisolated struct PredContestDetailResponse: Decodable {
+    let rule: PredRule?
+}
+
+nonisolated struct PredEntryBody: Encodable {
+    let prediction: PredScorePayload
+}
+
+nonisolated struct PredEntrySaveResponse: Decodable {
+    nonisolated struct Entry: Decodable { let id: String }
+    let entry: Entry
+}
+
+extension APIClient {
+    func fetchPredCompetitions() async throws -> [PredCompetitionSummary] {
+        try await get(PredCompetitionsResponse.self, path: "/predictions/competitions").competitions
+    }
+
+    func fetchPredContests(slug: String, ignoreCache: Bool = false) async throws -> [PredContest] {
+        try await get(
+            PredCompetitionDetailResponse.self,
+            path: "/predictions/competitions/\(slug)",
+            ignoreCache: ignoreCache
+        ).contests
+    }
+
+    func fetchPredLeaderboard(slug: String, ignoreCache: Bool = false) async throws -> PredLeaderboardResponse {
+        try await get(
+            PredLeaderboardResponse.self,
+            path: "/predictions/leaderboards",
+            query: ["competition": slug],
+            ignoreCache: ignoreCache
+        )
+    }
+
+    /// دفتر نقاطي — يتطلب جلسة عضو (401 بلا Bearer).
+    func fetchPredLedger(slug: String, ignoreCache: Bool = false) async throws -> [PredLedgerItem] {
+        try await get(
+            PredLedgerResponse.self,
+            path: "/predictions/me/ledger",
+            query: ["competition": slug],
+            ignoreCache: ignoreCache
+        ).items
+    }
+
+    func fetchPredContestRule(contestId: String) async throws -> PredRule? {
+        try await get(PredContestDetailResponse.self, path: "/predictions/contests/\(contestId)").rule
+    }
+
+    func submitPredEntry(contestId: String, home: Int, away: Int) async throws -> PredEntrySaveResponse {
+        try await put(
+            PredEntrySaveResponse.self,
+            path: "/predictions/contests/\(contestId)/entry",
+            body: PredEntryBody(prediction: PredScorePayload(predHome: home, predAway: away))
+        )
     }
 }
 

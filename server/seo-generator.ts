@@ -67,6 +67,7 @@ ${SABQ_LANGUAGE_STANDARDS_AR}
 - راعِ اللهجات المحلية (خليجية، مصرية، شامية) في اختيار الكلمات
 - تجنب الحشو الزائد للكلمات المفتاحية
 - اجعل المحتوى طبيعياً ومقنعاً للقارئ البشري
+- للاقتباس أو التسمية داخل القيم استخدم «...» — ممنوع علامة التنصيص المزدوجة (") داخل قيم JSON
 
 أجب بصيغة JSON فقط، بدون أي نص إضافي.`,
 
@@ -87,6 +88,7 @@ ${SABQ_LANGUAGE_STANDARDS_AR}
 - Avoid keyword stuffing
 - Make content appealing to both search engines and human readers
 - Optimize for featured snippets and rich results
+- Use curly quotes "…" for any quotation inside values — never straight double quotes (") inside JSON string values
 
 Respond with JSON only, no additional text.`,
 
@@ -106,6 +108,7 @@ Respond with JSON only, no additional text.`,
 - علاقائی اختلافات کا خیال رکھیں
 - keyword stuffing سے بچیں
 - انسانی قاری اور سرچ انجن دونوں کے لیے دلچسپ ہو
+- اقدار کے اندر اقتباس کے لیے «...» استعمال کریں — JSON اقدار میں سیدھی ڈبل کوٹیشن (") کبھی نہیں
 
 صرف JSON format میں جواب دیں، کوئی اضافی text نہیں۔`,
 };

@@ -220,7 +220,8 @@ export async function setupAuth(app: Express) {
 
           if (authDebug) console.log("🔑 LocalStrategy: Password valid? true");
 
-          // Check if user can login (not banned or deleted)
+          // Block hard-negative account states (banned/deleted/suspended/locked;
+          // "pending"/unverified stays allowed) — see canUserLogin in schema.
           if (!canUserLogin(user)) {
             const statusMessage = getUserStatusMessage(user);
             console.log("❌ LocalStrategy: User cannot login:", statusMessage);

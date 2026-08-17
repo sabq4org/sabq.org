@@ -75,11 +75,7 @@ import { useTheme } from "./ThemeProvider";
 // Twitter widgets type declaration
 declare global {
   interface Window {
-    twttr?: {
-      widgets: {
-        load: (element?: HTMLElement) => void;
-      };
-    };
+    twttr?: any;
   }
 }
 
@@ -150,11 +146,8 @@ export function RichTextEditor({
   // Check if user is a reporter - reporters have restricted AI features
   const isReporter = user?.role === 'reporter' || (user?.roles && user.roles.some((r: any) => r.name === 'reporter' || r === 'reporter'));
 
-  // آخر HTML بثّه onUpdate — يميّز صدى تغييراتنا عن محتوى خارجي جديد.
-  // بدونه: مع ألبوم صور، updateHtmlWithGalleryData يعيد كتابة وسم الألبوم
-  // بصيغة تختلف عن editor.getHTML()، فمقارنة أثر المزامنة تفشل دائمًا
-  // ويُعاد ضبط المستند بعد كل حركة — يضيع المؤشر ويُدرج الاقتباس في
-  // نهاية المقال بدل موضع الكتابة.
+  // آخر HTML بثّه onUpdate — يميّز صدى تغييراتنا عن محتوى خارجي جديد،
+  // فلا يُعاد ضبط المستند (وضياع المؤشر) حين يعيد الأب نفس ما بثثناه.
   const lastEmittedHtmlRef = useRef<string | null>(null);
 
   const editor = useEditor({
@@ -198,16 +191,10 @@ export function RichTextEditor({
       },
     },
     onUpdate: ({ editor }) => {
-      let html = editor.getHTML();
-      console.log('[RichTextEditor] onUpdate called, HTML length:', html.length);
-      
-      // Update HTML with gallery data from the store (bypasses TipTap atom node issue)
-      if (html.includes('data-image-gallery')) {
-        console.log('[RichTextEditor] Found image gallery, updating from store');
-        html = galleryStore.updateHtmlWithGalleryData(html);
-        const match = html.match(/data-images="([^"]*)"/);
-        console.log('[RichTextEditor] Gallery data-images after update:', match ? match[1].substring(0, 200) : 'not found');
-      }
+      // getHTML يسلسل الألبوم بصوره مباشرة من node.attrs (أُصلح renderHTML) —
+      // ممنوع تمرير الناتج على updateHtmlWithGalleryData: رقعتها القديمة تقصّ
+      // عند أول </div> متداخل فتفسد ألبومًا يحمل صورًا.
+      const html = editor.getHTML();
       lastEmittedHtmlRef.current = html;
       onChange(html);
     },
@@ -224,7 +211,11 @@ export function RichTextEditor({
   });
 
   useEffect(() => {
-    if (!editor) return;
+    // isDestroyed إلزامي: تحديث حالة من مكوّن شقيق أثناء رندر التركيب (مثل
+    // جلب بيانات عند التحميل) يجعل React 18 يتخلص من محاولة الرندر الأولى،
+    // فيغلق هذا الـeffect على نسخة TipTap مُتلفة — getHTML عليها ينهار
+    // بـ"reading 'cached'" ويُسقط المحرر كاملًا في ErrorBoundary.
+    if (!editor || editor.isDestroyed) return;
     // صدى تغيير صادر من المحرر نفسه — لا تعد ضبط المستند
     if (content === lastEmittedHtmlRef.current) return;
     if (content !== editor.getHTML()) {

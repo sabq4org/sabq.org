@@ -1,5 +1,6 @@
 package com.sabq.smart.data
 
+import androidx.compose.runtime.Immutable
 import com.sabq.smart.ui.components.ImageFocalPoint
 
 /**
@@ -7,6 +8,7 @@ import com.sabq.smart.ui.components.ImageFocalPoint
  * Retrofit `@Serializable` model + `formatArticleForMobile` mapping
  * lands in Pillar 3 (APIClient + APIModels).
  */
+@Immutable
 data class Article(
     val id: String,
     val title: String,
@@ -18,8 +20,11 @@ data class Article(
     val dateFormatted: String,
     val isBreaking: Boolean = false,
     val isFeatured: Boolean = false,
+    val isReading: Boolean = false,
     val slug: String? = null,
     val authorName: String? = null,
+    /** صورة كاتب الرأي (رابط مطلق) — تُعرض في قائمة «الرأي» بالرئيسية. */
+    val authorImageUrl: String? = null,
     val body: String? = null,
     val articleType: String? = null,
     val authorGender: String? = null,
@@ -30,6 +35,9 @@ data class Article(
     val aiSummary: String? = null,
     /** Article tags / keywords. Empty when the backend omits them.
      *  Surfaced as chips under the article body. */
+    /** اسم القسم الحقيقي من الخادم — الشارة كانت تعرض عنوان دلو التصنيف
+     *  الثابت فتُوسم كل المواد غير المطابقة «محلية» (ملاحظة المالك 2026-08-02). */
+    val categoryLabel: String = "",
     val tags: List<String> = emptyList(),
     /** Canonical public article URL (used by the share sheet). When
      *  null we fall back to `${webOrigin}/article/${slug}`. */
@@ -98,6 +106,7 @@ data class Article(
         }
 }
 
+@Immutable
 data class WhatsAppCta(
     val phone: String,
     val phrase: String,
@@ -125,6 +134,7 @@ data class WhatsAppCta(
  * photographer/source credit. Mirrors iOS `APIWeeklyPhoto`. The
  * lightbox identifies entries by [imageUrl].
  */
+@Immutable
 data class WeeklyPhoto(
     val imageUrl: String,
     val caption: String,

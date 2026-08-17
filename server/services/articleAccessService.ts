@@ -45,19 +45,28 @@ export async function authorizeArticleWrite(
 
   const perms = permissions ?? (await getUserPermissions(userId));
   // Desk-wide edit rights need no ownership check — that is what they mean.
-  if (perms.includes("articles.edit_any")) return { ok: true, articleId };
+  // "*" هي صيغة getEffectiveUserPermissions للحساب الإداري.
+  if (perms.includes("articles.edit_any") || perms.includes("*")) {
+    return { ok: true, articleId };
+  }
 
   const [row] = await db
     .select({
       authorId: articles.authorId,
       submitterId: articles.submitterId,
       reporterId: articles.reporterId,
+      articleType: articles.articleType,
     })
     .from(articles)
     .where(eq(articles.id, articleId))
     .limit(1);
 
   if (!row) return NOT_FOUND;
+
+  // مسؤول مكتب الرأي: opinion.edit_any تكافئ edit_any على مواد الرأي فقط.
+  if (row.articleType === "opinion" && perms.includes("opinion.edit_any")) {
+    return { ok: true, articleId };
+  }
 
   const isOwner =
     row.authorId === userId ||

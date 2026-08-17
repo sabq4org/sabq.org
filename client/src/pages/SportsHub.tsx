@@ -18,6 +18,7 @@ import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { defaultMatchCenterTab, isAwaitingLineups } from "@/components/sports/matchCenterTabs";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy,
@@ -67,7 +68,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
+import { RslPredictionsMatchPromo } from "@/components/rsl/RslPredictionsPromo";
+import type { RslHero } from "@/components/rsl/rslTypes";
 import type { ArticleWithDetails, Category } from "@shared/schema";
+import { toBinaryPlayerName } from "@shared/sportsNames";
 
 // ============================================================
 // الأنواع (مطابقة لـ /api/sports/*)
@@ -1052,15 +1056,21 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
 // المختارة. يبدأ من الجولة الحالية تلقائيًا، ويسقط لآخر جولة عند انتهاء الموسم.
 function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: number) => void }) {
   const { data: roundsData } = useQuery<{ rounds: { key: string; label: string }[]; current: string | null }>({
-    queryKey: [`/api/sports/${compSlug}/rounds`], staleTime: 30 * 60_000,
+    queryKey: [`/api/sports/${compSlug}/rounds`],
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
   const rounds = Array.isArray(roundsData?.rounds) ? roundsData!.rounds : [];
+  // null = اتبع current من الخادم بعد انتهاء الجولة؛ النقرة تثبّت الاختيار يدويًا.
   const [selected, setSelected] = useState<string | null>(null);
   const active = selected ?? roundsData?.current ?? rounds[rounds.length - 1]?.key ?? null;
 
   const { data: fxData, isLoading } = useQuery<{ fixtures: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/round`, { name: active }],
-    enabled: !!active, staleTime: 60_000,
+    enabled: !!active,
+    staleTime: 15_000,
+    refetchInterval: (q) =>
+      (q.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
   });
   const fixtures = Array.isArray(fxData?.fixtures) ? fxData!.fixtures : [];
 
@@ -1505,8 +1515,9 @@ function PossessionBar({ row }: { row: SpStatRow }) {
 }
 // اسم لاعب في التشكيلة، يربط لصفحته إن توفّر معرّفه.
 function LineupName({ p, className }: { p: SpLineupPlayer; className?: string }) {
-  if (p.id) return <Link href={`/sports/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{p.name}</Link>;
-  return <span className={className}>{p.name}</span>;
+  const formattedName = toBinaryPlayerName(p.name);
+  if (p.id) return <Link href={`/sports/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{formattedName}</Link>;
+  return <span className={className}>{formattedName}</span>;
 }
 
 // البند 10: عرض التشكيلة على أرض ملعب حسب إحداثيات grid ("صف:عمود").
@@ -1868,6 +1879,8 @@ function SpEventIcon({ type }: { type: string }) {
 // بطاقة حدث على جانب فريقه في الخط الزمني (الأيقونة تلاصق العمود المركزي) — نمط المونديال.
 function SpTimelineChip({ ev, extra, side }: { ev: SpMatchEvent; extra: string | null; side: "home" | "away" }) {
   const isGoal = ev.type === "goal";
+  const playerName = toBinaryPlayerName(ev.player || ev.label);
+  const assistName = ev.assist ? toBinaryPlayerName(ev.assist) : null;
   return (
     <div
       className={`inline-flex items-start gap-2 max-w-full rounded-lg px-2.5 py-1.5 ${
@@ -1878,11 +1891,11 @@ function SpTimelineChip({ ev, extra, side }: { ev: SpMatchEvent; extra: string |
         <SpEventIcon type={ev.type} />
       </span>
       <div className="min-w-0" dir="rtl">
-        <p className="text-xs font-bold truncate">{ev.player || ev.label}</p>
+        <p className="text-xs font-bold truncate">{playerName}</p>
         {extra && <p className="text-[10px] text-emerald-700 dark:text-emerald-300 truncate">{extra}</p>}
-        {ev.assist && isGoal && <p className="text-[10px] text-muted-foreground truncate">صناعة: {ev.assist}</p>}
-        {ev.assist && ev.type === "substitution" && (
-          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {ev.assist}</p>
+        {assistName && isGoal && <p className="text-[10px] text-muted-foreground truncate">صناعة: {assistName}</p>}
+        {assistName && ev.type === "substitution" && (
+          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {assistName}</p>
         )}
         {!isGoal && ev.type !== "substitution" && <p className="text-[10px] text-muted-foreground truncate">{ev.label}</p>}
       </div>
@@ -1921,7 +1934,7 @@ function SpXgCard({ xg, homeLogo, awayLogo }: { xg: SpXg; homeLogo?: string; awa
                 {(p.location === "home" ? homeLogo : awayLogo) && (
                   <img src={p.location === "home" ? homeLogo : awayLogo} alt="" className="w-3.5 h-3.5 object-contain shrink-0" />
                 )}
-                <span className="truncate text-foreground">{p.name}</span>
+                <span className="truncate text-foreground">{toBinaryPlayerName(p.name)}</span>
               </span>
               <span className="font-bold tabular-nums text-foreground" dir="ltr">{p.xg.toFixed(2)}</span>
             </div>
@@ -2185,15 +2198,30 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
     },
   });
   const [tab, setTab] = useState("events");
-  useEffect(() => { setTab("events"); }, [id]);
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
+  const msToKickoff = data?.fixture?.timestamp != null
+    ? data.fixture.timestamp * 1000 - Date.now()
+    : Number.POSITIVE_INFINITY;
+  // للمباراة القادمة التبويب الافتراضي هو «الغيابات»، وقرب الصافرة «التشكيلات»
+  // حتى لا يُفتح المركز على الغيابات بينما التشكيلة هي ما يهم المشاهد.
+  useEffect(() => {
+    setTab(defaultMatchCenterTab(isUpcoming, msToKickoff));
+  }, [id, isUpcoming, msToKickoff <= 15 * 60_000]);
   const { data: prediction } = useQuery<SpPrediction>({
     queryKey: [`/api/sports/match/${id}/prediction`],
     enabled: id != null && isUpcoming,
     staleTime: 5 * 60_000,
   });
+  // ترويج مسابقة Prediction Core في مركز مباراة روشن — قبل الانطلاق فقط.
+  const { data: rslHero } = useQuery<RslHero>({
+    queryKey: ["/api/rsl/hero"],
+    enabled: roshn && isUpcoming,
+    staleTime: 60_000,
+  });
+  const showRslPredictionsPromo =
+    roshn && isUpcoming && id != null && rslHero?.predictionsEnabled === true;
   const homeId = data?.fixture?.home?.id;
   const awayId = data?.fixture?.away?.id;
   const { data: h2hData } = useQuery<SpH2H>({
@@ -2274,7 +2302,12 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
   const { data: expectedData } = useQuery<SpExpectedLineups>({
     queryKey: [`/api/sports/match/${id}/expected-lineup`],
     enabled: id != null && !!data?.fixture && !fixtureFinished && !officialXiReady,
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchInterval: () => {
+      if (officialXiReady) return false;
+      const ms = (data?.fixture?.timestamp ?? 0) * 1000 - Date.now();
+      return ms <= 75 * 60_000 && ms > -2 * 3_600_000 ? 25_000 : false;
+    },
   });
 
   if (id == null) return null;
@@ -2298,6 +2331,12 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
           expectedData.away && expSide(expectedData.away, { id: fx.away.id, name: fx.away.name, logo: fx.away.logo }),
         ].filter(Boolean) as SpLineup[])
       : [];
+  const awaitingLineups = isAwaitingLineups({
+    finished: !!fx?.status.finished,
+    officialXiReady,
+    hasExpected: expectedLineups.length > 0,
+    msToKickoff: fx?.timestamp != null ? fx.timestamp * 1000 - Date.now() : Number.POSITIVE_INFINITY,
+  });
   // إحصاءات بديلة من SportMonks (facts.statistics) حين تغيب إحصاءات API-Football،
   // فيظهر تبويب «نبض الأرقام» لمباريات أكثر بدل أن يُهدَر مصدر جاهز.
   const factStatRows: SpStatRow[] = (facts?.statistics ?? []).map((s) => ({ type: s.key, label: s.label, home: s.home, away: s.away }));
@@ -2315,7 +2354,7 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
     started || hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
-    started || lineups.length > 0 || expectedLineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
+    started || lineups.length > 0 || expectedLineups.length > 0 || awaitingLineups ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
@@ -2437,6 +2476,13 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
               </div>
             )}
           </div>
+        )}
+        {showRslPredictionsPromo && fx && (
+          <RslPredictionsMatchPromo
+            fixtureId={fx.id}
+            homeName={fx.home.name}
+            awayName={fx.away.name}
+          />
         )}
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
         {tabs.length > 0 && (
@@ -2608,7 +2654,7 @@ export function MatchCenter({ id, scrollable = false, theme = "default" }: {
               )}
               {expectedLineups.length === 0 && lineups.length === 0 && (
                 <div className="py-8 text-center text-muted-foreground text-sm">
-                  التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة عادةً
+                  لم تُعلَن التشكيلة بعد
                 </div>
               )}
               <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">

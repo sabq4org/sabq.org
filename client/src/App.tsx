@@ -214,9 +214,7 @@ const MyServicesPage = lazy(() => retryImport(() => import("@/pages/dashboard/My
 const VerifyLetter = lazy(() => retryImport(() => import("@/pages/VerifyLetter")));
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
-const CompleteProfile = lazy(() => retryImport(() => import("@/pages/CompleteProfile")));
 const CompleteName = lazy(() => retryImport(() => import("@/pages/CompleteName")));
-const SelectInterests = lazy(() => retryImport(() => import("@/pages/SelectInterests")));
 const EditInterests = lazy(() => retryImport(() => import("@/pages/EditInterests")));
 const NotificationSettings = lazy(() => retryImport(() => import("@/pages/NotificationSettings")));
 const MyFollows = lazy(() => retryImport(() => import("@/pages/MyFollows")));
@@ -268,6 +266,7 @@ const UserBehavior = lazy(() => retryImport(() => import("@/pages/UserBehavior")
 const AdvancedAnalytics = lazy(() => retryImport(() => import("@/pages/AdvancedAnalytics")));
 const NewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/NewsletterAnalytics")));
 const ArticleAnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/ArticleAnalyticsDashboard")));
+const SocialPublishingPage = lazy(() => retryImport(() => import("@/pages/dashboard/SocialPublishingPage")));
 
 // === LAZY IMPORTS (Notifications) ===
 const Notifications = lazy(() => retryImport(() => import("@/pages/Notifications")));
@@ -892,13 +891,23 @@ function Router() {
             </ProtectedRoute>
           )}
         </Route>
+        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
         <Route path="/dashboard/articles/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/edit">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/articles/:id">{() => <LazyRoute component={ArticleEditor} />}</Route>
-        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* النشر الاجتماعي (X) — social_publish.view */}
+        <Route path="/dashboard/social-publishing">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["social_publish.view"]}>
+              <Suspense fallback={<PageLoader />}>
+                <SocialPublishingPage />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/dashboard/quizzes">{() => <LazyRoute component={QuizManagement} />}</Route>
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
@@ -977,9 +986,10 @@ function Router() {
         <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
-        <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
+        {/* F-28: /complete-profile (unreachable, saved nothing) and /select-interests
+            (POSTed to a non-existent route + read the wrong endpoint) removed —
+            onboarding lives at /onboarding/* and interests at /interests/edit. */}
         <Route path="/complete-name">{() => <LazyRoute component={CompleteName} />}</Route>
-        <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>
         <Route path="/notification-settings">{() => <LazyRoute component={NotificationSettings} />}</Route>
         <Route path="/ur/notification-settings">{() => <Redirect to="/settings/notifications" />}</Route>

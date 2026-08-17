@@ -898,139 +898,90 @@ struct HomeFeedView: View {
 
     // MARK: - Opinions Preview
 
+    // قائمة رأسية بهوية سبق: بطاقة سماوية فاتحة، صورة الكاتب دائرية،
+    // الاسم بأزرق سبق والتاريخ النسبي بجانبه — بلا صور للمقالات
+    // ولا تمرير أفقي.
     @ViewBuilder
     private var opinionsPreviewSection: some View {
         if !articlesStore.opinions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    HStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .fill(SabqTheme.gold.opacity(0.15))
-                                .frame(width: 28, height: 28)
-                            Image(systemName: "quote.opening")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                                .foregroundStyle(SabqTheme.gold)
-                        }
-                        Text("آراء وأقلام")
-                            .font(SabqFonts.app(size: 17, weight: .bold))
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .center) {
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(SabqTheme.brandSky)
+                            .frame(width: 4, height: 22)
+                        Text("الرأي")
+                            .font(SabqFonts.app(size: 20, weight: .bold))
                             .foregroundStyle(SabqTheme.ink)
                     }
 
-                    Spacer()
+                    Spacer(minLength: 0)
 
                     NavigationLink(value: OpinionsRoute()) {
-                        HStack(spacing: 4) {
-                            Text("جميع المقالات")
-                                .font(SabqFonts.app(size: 12, weight: .medium))
-                            Image(systemName: "chevron.left")
-                                .font(SabqFonts.app(size: 11, weight: .regular))
+                        HStack(spacing: 6) {
+                            Text("كل المقالات")
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
+                            Image(systemName: "arrow.left")
+                                .font(SabqFonts.app(size: 12, weight: .semibold))
                         }
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.brandBlue)
                     }
                     .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 4)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        ForEach(articlesStore.opinions.prefix(5)) { opinion in
-                            NavigationLink(value: opinion) {
-                                opinionCard(opinion)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                ForEach(Array(articlesStore.opinions.prefix(5).enumerated()), id: \.element.id) { index, opinion in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(SabqTheme.sectionSeparator)
+                            .frame(height: 0.8)
+                            .padding(.horizontal, 16)
                     }
-                    .padding(.vertical, 2)
+                    NavigationLink(value: opinion) {
+                        opinionListRow(opinion)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.bottom, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(SabqTheme.sectionCard)
+            )
         }
     }
 
-    private func opinionCard(_ opinion: OpinionArticle) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                    FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
-                        opinionCardPlaceholder
-                    }
-                    .frame(width: 200, height: 120)
-                    .clipped()
-                } else {
-                    opinionCardPlaceholder
-                }
-
-                LinearGradient(
-                    colors: [.black.opacity(0.7), .clear],
-                    startPoint: .bottom,
-                    endPoint: .top
-                )
-                .frame(height: 60)
-
-                HStack(spacing: 6) {
-                    opinionAuthorAvatar(opinion, size: 24)
-                    Text(opinion.authorName)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
-                .padding(8)
-            }
-            .frame(width: 200, height: 120)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 12))
-            .aiImageBadgeOverlay(
-                isVisible: opinion.isAiGeneratedImage,
-                model: opinion.aiImageModel,
-                inset: 6,
-                sizeScale: 0.7
-            )
-
+    private func opinionListRow(_ opinion: OpinionArticle) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            opinionAuthorAvatar(opinion, size: 52)
             VStack(alignment: .leading, spacing: 6) {
                 Text(opinion.title)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .frame(height: 36, alignment: .top)
-
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                        Text(opinion.readingTime)
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Spacer()
-
-                    Text(opinion.relativeDate)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    Text(opinion.authorName)
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.brandBlue)
+                        .lineLimit(1)
+                    Text("•")
                         .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
+                    Text(opinion.relativeDate)
+                        .font(SabqFonts.app(size: 13, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .lineLimit(1)
                 }
             }
-            .padding(10)
-            .frame(width: 200)
-            .background(SabqTheme.surface)
+            Spacer(minLength: 0)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-    }
-
-    private var opinionCardPlaceholder: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [SabqTheme.gold.opacity(0.2), SabqTheme.primaryEnd.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 200, height: 120)
-            .overlay {
-                Image(systemName: "text.quote")
-                    .font(SabqFonts.app(size: 32, weight: .light))
-                    .foregroundStyle(SabqTheme.gold.opacity(0.4))
-            }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
 
     private func opinionAuthorAvatar(_ opinion: OpinionArticle, size: CGFloat) -> some View {
@@ -1097,7 +1048,7 @@ struct HomeFeedView: View {
                             let allArticles = articlesStore.filteredArticles
                             let upcoming = allArticles.dropFirst(index + 1).prefix(5)
                             let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-                            if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 1200) }
+                            if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 260) }
                         }
                     }
                 }

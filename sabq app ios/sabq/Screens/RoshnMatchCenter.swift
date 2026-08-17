@@ -94,9 +94,9 @@ struct RoshnMatchCenter: View {
 
     private func header(_ d: RsMatchDetail) -> some View {
         ZStack {
-            RoshnTheme.heroGradient
+            RoshnTheme.hero
             Circle()
-                .stroke(RoshnTheme.sky.opacity(0.12), lineWidth: 1)
+                .stroke(.white.opacity(0.14), lineWidth: 1)
                 .frame(width: 160, height: 160)
 
             VStack(spacing: 12) {
@@ -136,18 +136,14 @@ struct RoshnMatchCenter: View {
         }
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(RoshnTheme.heroStroke, lineWidth: 1)
-        )
         .overlay(alignment: .top) {
-            // خط الهوية السماوي أعلى البطاقة — لمسة روشن المميزة.
+            // خط الهوية الذهبي أعلى البطاقة — لمسة التتويج المميزة.
             RoundedRectangle(cornerRadius: 2)
-                .fill(RoshnTheme.badgeGradient)
+                .fill(RoshnTheme.gold)
                 .frame(height: 3)
                 .padding(.horizontal, 40)
         }
-        .shadow(color: RoshnTheme.sky.opacity(0.08), radius: 12, y: 6)
+        .shadow(color: RoshnTheme.cardShadow, radius: 12, y: 6)
     }
 
     private func teamColumn(_ team: RsTeam) -> some View {
@@ -155,8 +151,7 @@ struct RoshnMatchCenter: View {
             WCRemoteImage(url: team.logo)
                 .padding(5).frame(width: 58, height: 58)
                 .background(Circle().fill(.white))
-                .overlay(Circle().stroke(RoshnTheme.heroStroke, lineWidth: 1))
-                .shadow(color: RoshnTheme.sky.opacity(0.10), radius: 5, y: 2)
+                .shadow(color: RoshnTheme.navyDeep.opacity(0.18), radius: 5, y: 2)
             Text(team.name)
                 .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(RoshnTheme.heroOn)
@@ -181,10 +176,9 @@ struct RoshnMatchCenter: View {
             } else {
                 Text(f.status.label.isEmpty ? "قادمة" : f.status.label)
                     .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(RoshnTheme.sky)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 11).padding(.vertical, 5)
                     .background(Capsule().fill(RoshnTheme.heroChip))
-                    .overlay(Capsule().stroke(RoshnTheme.heroStroke, lineWidth: 1))
             }
         }
     }
@@ -300,10 +294,7 @@ struct RoshnMatchCenter: View {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .fill(isGoal ? RoshnTheme.pitchSoft : RoshnTheme.card)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(isGoal ? RoshnTheme.pitch.opacity(0.3) : RoshnTheme.line, lineWidth: 1)
-        )
+        .shadow(color: RoshnTheme.cardShadow, radius: 4, y: 2)
     }
 
     private func eventIcon(_ type: String) -> some View {
@@ -346,7 +337,7 @@ struct RoshnMatchCenter: View {
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.card))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+            .shadow(color: RoshnTheme.cardShadow, radius: 6, y: 3)
         }
     }
 
@@ -400,7 +391,6 @@ struct RoshnMatchCenter: View {
                 WCRemoteImage(url: lineup.team.logo)
                     .padding(2).frame(width: 28, height: 28)
                     .background(Circle().fill(.white))
-                    .overlay(Circle().stroke(RoshnTheme.line, lineWidth: 1))
                 Text(lineup.team.name)
                     .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(RoshnTheme.ink)
@@ -429,7 +419,7 @@ struct RoshnMatchCenter: View {
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+        .shadow(color: RoshnTheme.cardShadow, radius: 6, y: 3)
     }
 
     private func playerGroup(title: String, players: [RsLineupPlayer], accent: Color) -> some View {
@@ -516,7 +506,7 @@ struct RoshnMatchCenter: View {
                             }
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(RoshnTheme.card))
-                            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(RoshnTheme.line, lineWidth: 1))
+                            .shadow(color: RoshnTheme.cardShadow, radius: 4, y: 2)
                         }
                     }
                 }
@@ -632,5 +622,20 @@ struct RoshnMatchCenter: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+}
+
+
+/// غلاف عرض مركز المباراة كورقة — يقرأ المعرّف عبر `Binding` حي لأن iOS 26
+/// قد يلتقط قيمة `@State` القديمة داخل closure الورقة عند أول فتح، فكان
+/// التمرير بالقيمة الاختيارية يفتح ورقة بيضاء فارغة (العلاج الموثق في
+/// docs/systems/sports-tournaments/SYSTEM.md).
+struct RoshnMatchCenterSheet: View {
+    @Binding var fixtureId: Int
+
+    var body: some View {
+        if fixtureId > 0 {
+            RoshnMatchCenter(fixtureId: fixtureId)
+        }
     }
 }

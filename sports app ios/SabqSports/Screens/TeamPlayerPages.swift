@@ -411,11 +411,40 @@ struct SpTeamPage: View {
 
     private func squadRow(_ p: SpSquadPlayer) -> some View {
         HStack(spacing: 10) {
-            photoCircle(p.photo, size: 36, fallback: "person.fill")
+            ZStack(alignment: .topTrailing) {
+                photoCircle(p.photo, size: 36, fallback: "person.fill")
+                if p.captain == true {
+                    Text("C")
+                        .font(SportsFonts.app(size: 8, weight: .black))
+                        .foregroundStyle(Color.black)
+                        .frame(width: 14, height: 14)
+                        .background(Color(red: 0.95, green: 0.77, blue: 0.25))
+                        .clipShape(Circle())
+                        .offset(x: 2, y: -2)
+                }
+            }
             VStack(alignment: .leading, spacing: 1) {
-                Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                if let a = p.age {
-                    Text(Lf("%d سنة", a)).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                HStack(spacing: 5) {
+                    if let flag = p.nationality?.flag, let flagURL = URL(string: flag) {
+                        AsyncImage(url: flagURL) { phase in
+                            if let img = phase.image {
+                                img.resizable().scaledToFill()
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(width: 14, height: 10)
+                        .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                    }
+                    Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                }
+                HStack(spacing: 4) {
+                    if let det = p.detailedPosition, det != p.position {
+                        Text(det).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                    }
+                    if let a = p.age {
+                        Text(Lf("%d سنة", a)).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                    }
                 }
             }
             Spacer()

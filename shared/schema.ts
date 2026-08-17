@@ -731,6 +731,21 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Email deliverability suppression list (F-05). Populated by the MailerSend
+// bounce/spam-complaint webhook; checked before sending any transactional mail
+// so a hard-bounced/complained address isn't retried forever (which silently
+// degrades sender reputation). email is stored lowercased for exact matching.
+export const emailSuppressions = pgTable("email_suppressions", {
+  email: text("email").primaryKey(),
+  // 'hard_bounce' | 'spam_complaint' | 'unsubscribe' | 'manual'
+  reason: text("reason").notNull(),
+  // 'mailersend_webhook' | 'admin' | ...
+  source: text("source").notNull(),
+  detail: text("detail"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type EmailSuppression = typeof emailSuppressions.$inferSelect;
+
 // إثبات توثيق الجوال بين نجاح OTP وإكمال بيانات التسجيل (اسم/بريد/كلمة مرور).
 // قصير العمر وأحادي الاستخدام: usedAt يُقفل ذريًا عند إنشاء الحساب، فلا يُنشئ
 // نفس الإثبات أكثر من حساب مهما تكررت الطلبات أو تزامنت.
@@ -947,6 +962,7 @@ export const articles = pgTable("articles", {
   categorySuggestionReason: text("category_suggestion_reason"), // سبب الاقتراح
   
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(), // تمييز المادة بأنها قراءة / قراءة من سبق
   views: integer("views").default(0).notNull(),
   /** Manual override for avg read time (seconds); when set, ai-insights uses this instead of reading_history AVG */
   avgReadTimeOverride: integer("avg_read_time_override"),
@@ -1060,6 +1076,10 @@ export const articles = pgTable("articles", {
   index("idx_articles_homepage").on(table.status, table.hideFromHomepage, table.publishedAt.desc()),
   index("idx_articles_homepage_order").on(table.status, table.hideFromHomepage, table.displayOrder.desc(), table.publishedAt.desc()),
   index("idx_articles_views").on(table.views.desc()),
+  // «أحدث المقالات» في لوحة التحكم تفرز created_at بلا شرط — بدون الفهرس مسحٌ
+  // كامل لمليون صف كل 4 دقائق (حادثة بطء اللوحة 2026-08-07). هذا الفهرس وفهرس
+  // views أعلاه أُنشئا يدوياً CONCURRENTLY في الإنتاج 2026-08-07.
+  index("idx_articles_created_at").on(table.createdAt.desc()),
   index("idx_articles_slug").on(table.slug),
   // Edge slug-redirect does OR(englishSlug, slug); englishSlug was unindexed → full scan.
   index("idx_articles_english_slug").on(table.englishSlug),
@@ -1071,6 +1091,10 @@ export const articles = pgTable("articles", {
   // فهارس trigram لبحث اللوحة (ILIKE %..%) — بدونها يمسح الجدول كاملاً (6.9GB):
   // شرط OR يتطلب فهرساً صالحاً لكل طرف، والفهرس القديم على lower(title) الجزئي
   // لا يطابق title ILIKE. أُنشئت يدوياً CONCURRENTLY في الإنتاج 2026-07-23.
+  // ⚠️ كل فهارس GIN الستة على articles مضبوطة في الإنتاج بـ fastupdate=off
+  // (حادثة 2026-08-08: تفريغ قائمة الانتظار المؤجلة كان يسكّت أي كاتب صدفةً
+  // 27-38 ثانية فتفشل حفوظات المحررين بمهلة الدور 15s). أي REINDEX أو إعادة
+  // إنشاء يجب أن يتبعها ALTER INDEX ... SET (fastupdate=off) وإلا عادت السكتات.
   index("idx_articles_title_trgm_raw").using("gin", table.title.op("gin_trgm_ops")),
   index("idx_articles_excerpt_trgm").using("gin", table.excerpt.op("gin_trgm_ops")),
   // idx_articles_subtitle_trgm حُذف من الإنتاج 2026-07-25: ظل 176MB بصفر
@@ -1254,6 +1278,10 @@ export const radarItems = pgTable("radar_items", {
     categorySlug?: string;
     provider?: string;
     model?: string;
+    // مسار «طوّر ببحث» (نظام التحرير الموحد): ملاحظات المراجع ومصادر التحقق
+    developNotes?: string[];
+    developSources?: { title: string; url: string }[];
+    developedWithSearch?: boolean;
   }>(),
   draftGeneratedAt: timestamp("draft_generated_at"),
   analyzedAt: timestamp("analyzed_at"),
@@ -3239,6 +3267,17 @@ export const articleIpViews = pgTable("article_ip_views", {
   index("idx_article_ip_views_article").on(table.articleId),
 ]);
 
+// Pending view increments — hot-path flush never locks `articles` rows.
+// Memory buffer → UPSERT here → periodic merge into articles.views (SKIP LOCKED).
+// See server/services/articleViewCounterService.ts (2026-08-06 contention fix).
+export const articleViewDeltas = pgTable("article_view_deltas", {
+  articleId: varchar("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  pending: integer("pending").default(0).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_view_deltas_pending").on(table.pending),
+]);
+
 // Feed Recommendations - التوصيات المخصصة للعرض في الفيد
 export const feedRecommendations = pgTable("feed_recommendations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -3667,13 +3706,14 @@ export const adminUpdateUserRolesSchema = z.object({
 
 export const suspendUserSchema = z.object({
   reason: z.string().min(5, "يجب إدخال سبب التعليق (5 أحرف على الأقل)"),
-  duration: z.number().int().positive().optional(), // in days
+  // coerce: dashboard Selects submit "30"-style strings
+  duration: z.coerce.number().int().positive().optional(), // in days
 });
 
 export const banUserSchema = z.object({
   reason: z.string().min(5, "يجب إدخال سبب الحظر (5 أحرف على الأقل)"),
   isPermanent: z.boolean().default(false),
-  duration: z.number().int().positive().optional(), // in days, only if not permanent
+  duration: z.coerce.number().int().positive().optional(), // in days, only if not permanent
 });
 export const insertCategorySchema = createInsertSchema(categories).omit({ 
   id: true, 
@@ -4320,6 +4360,7 @@ export const updateArticleSchema = z.object({
   aiBullets: z.union([z.array(z.string()), z.null()]).optional(),
   aiBulletsGeneratedAt: z.union([z.string().datetime(), z.null()]).optional(),
   isFeatured: z.boolean().optional(),
+  isReading: z.boolean().optional(),
   hideFromHomepage: z.boolean().optional(),
   publishedAt: z.union([
     z.string().datetime(),
@@ -4968,7 +5009,20 @@ export function canUserInteract(user: User): boolean {
 
 export function canUserLogin(user: User): boolean {
   const status = getUserEffectiveStatus(user);
-  return status !== "banned" && status !== "deleted";
+  // Block hard-negative states everywhere this gate runs (web LocalStrategy,
+  // deserializeUser, mobile verifyMemberSession, OAuth/phone). "pending"
+  // (email not yet verified) stays allowed on purpose — accounts are
+  // auto-activated and unverified users may browse. Previously only
+  // banned/deleted were blocked, so an admin "suspend" / a security "lock"
+  // had NO effect on web login or on existing sessions (mobile already
+  // rejected suspended explicitly). Now suspension/lock take effect on the
+  // next request across all surfaces.
+  return (
+    status !== "banned" &&
+    status !== "deleted" &&
+    status !== "suspended" &&
+    status !== "locked"
+  );
 }
 
 export function getUserStatusMessage(user: User): string | null {
@@ -6676,6 +6730,7 @@ export const enArticles = pgTable("en_articles", {
   smartSummary: text("smart_summary"),
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(),
   views: integer("views").default(0).notNull(),
   avgReadTimeOverride: integer("avg_read_time_override"),
   completionRateOverride: integer("completion_rate_override"),
@@ -6900,6 +6955,7 @@ export const urArticles = pgTable("ur_articles", {
   smartSummary: text("smart_summary"),
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(),
   views: integer("views").default(0).notNull(),
   avgReadTimeOverride: integer("avg_read_time_override"),
   completionRateOverride: integer("completion_rate_override"),
@@ -14191,6 +14247,8 @@ export const opinionTicketMessagesRelations = relations(opinionTicketMessages, (
 export const insertOpinionTicketSchema = z.object({
   title: z.string().trim().min(3, "العنوان قصير جداً").max(255, "العنوان طويل جداً"),
   message: z.string().trim().min(1, "نص الاستفسار مطلوب").max(10000, "النص طويل جداً"),
+  /** أدمن فقط: إنشاء تذكرة صادرة إلى مساهم (مراسل / كاتب رأي / زاوية). */
+  writerId: z.string().trim().min(1).optional(),
 });
 
 export const insertOpinionTicketMessageSchema = z.object({
@@ -15100,3 +15158,82 @@ export type Meeting = typeof meetings.$inferSelect;
 export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
 export type MeetingEvent = typeof meetingEvents.$inferSelect;
 export type MeetingTranscript = typeof meetingTranscripts.$inferSelect;
+
+// ════════════════════════════════════════════════════════════════════
+// النشر الاجتماعي (منصة X أولاً) — حسابات المنصات، المنشورات، والمحاولات
+// docs/systems/social-publishing/SYSTEM.md
+// ════════════════════════════════════════════════════════════════════
+
+// حساب منصة تواصل مرتبط (v1: حساب واحد لكل منصة — unique على platform).
+// بيانات الاعتماد مشفرة AES-256-GCM (v1:iv:tag:ct) — لا تُعاد للعميل أبداً.
+export const socialPlatformAccounts = pgTable("social_platform_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(), // 'x'
+  handle: text("handle"), // @sabqorg — بدون @
+  externalAccountId: text("external_account_id"),
+  displayName: text("display_name"),
+  status: text("status").default("connected").notNull(), // connected | expired | revoked | disconnected
+  credentialsEncrypted: text("credentials_encrypted"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  scopes: text("scopes"),
+  lastVerifiedAt: timestamp("last_verified_at"),
+  connectedByUserId: varchar("connected_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("social_platform_accounts_platform_unique").on(table.platform),
+]);
+
+export const socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // null = تغريدة مستقلة (تأليف مباشر من صفحة النشر الاجتماعي بلا خبر)
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }),
+  platform: text("platform").default("x").notNull(),
+  accountId: varchar("account_id").references(() => socialPlatformAccounts.id),
+  textSource: text("text_source").default("custom").notNull(), // title | title_link | custom | ai
+  text: text("text").notNull(),
+  linkUrl: text("link_url"),
+  imageSource: text("image_source").default("none").notNull(), // article | upload | library | none
+  imageUrl: text("image_url"),
+  // وسائط متعددة (التأليف المستقل): image = حتى 4 صور، video = رابط واحد
+  mediaKind: text("media_kind").default("none").notNull(), // none | image | video
+  mediaUrls: jsonb("media_urls").$type<string[]>().default([]),
+  // draft | scheduled | processing | published | failed | canceled
+  status: text("status").default("draft").notNull(),
+  scheduledAt: timestamp("scheduled_at"),
+  publishedAt: timestamp("published_at"),
+  externalPostId: text("external_post_id"),
+  externalPostUrl: text("external_post_url"),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  publishedByUserId: varchar("published_by_user_id").references(() => users.id),
+  canceledByUserId: varchar("canceled_by_user_id").references(() => users.id),
+  attempts: integer("attempts").default(0).notNull(),
+  lastError: text("last_error"),
+  lockedAt: timestamp("locked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("social_posts_article_idx").on(table.articleId),
+  index("social_posts_status_scheduled_idx").on(table.status, table.scheduledAt),
+  index("social_posts_status_locked_idx").on(table.status, table.lockedAt),
+]);
+
+// سجل محاولات append-only — كل محاولة نشر (فورية أو من العامل) بصفّها
+export const socialPostAttempts = pgTable("social_post_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  phase: text("phase").notNull(), // media_upload | create_post | token_refresh
+  outcome: text("outcome").notNull(), // success | error
+  httpStatus: integer("http_status"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"), // مُنظّف — بلا توكنات
+  retryable: boolean("retryable"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("social_post_attempts_post_idx").on(table.postId, table.createdAt),
+]);
+
+export type SocialPlatformAccount = typeof socialPlatformAccounts.$inferSelect;
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type SocialPostAttempt = typeof socialPostAttempts.$inferSelect;

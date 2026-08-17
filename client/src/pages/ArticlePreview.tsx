@@ -16,6 +16,7 @@ import {
   Edit,
   AlertTriangle,
   CheckCircle2,
+  BookOpen,
 } from "lucide-react";
 import { formatArticleTimestamp } from "@/lib/formatTime";
 import type { ArticleWithDetails } from "@shared/schema";
@@ -189,6 +190,16 @@ export default function ArticlePreview() {
                     data-testid="badge-article-category"
                   >
                     {article.category.icon} {article.category.nameAr}
+                  </Badge>
+                )}
+                {article.isReading && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/15 gap-1 font-bold text-xs px-2.5 py-0.5 rounded-md"
+                    data-testid="badge-article-reading"
+                  >
+                    <BookOpen className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    قراءة
                   </Badge>
                 )}
                 {article.newsType === 'breaking' && (

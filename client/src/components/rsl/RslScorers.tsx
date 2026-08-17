@@ -21,6 +21,8 @@ const PODIUM_RING = [
 interface RslScorersProps {
   inSeason: boolean;
   previousSeason: number | null;
+  /** مباراة روشن جارية → استطلاع أسرع للوحات السباق */
+  hasLiveMatch?: boolean;
 }
 
 /** لاحقة الأرشيف لنقاط السباقات — الموسم الماضي قبل انطلاق الجديد. */
@@ -118,21 +120,27 @@ function ListSkeleton() {
   );
 }
 
-export function RslScorers({ inSeason, previousSeason }: RslScorersProps) {
+export function RslScorers({ inSeason, previousSeason, hasLiveMatch = false }: RslScorersProps) {
   const suffix = seasonSuffix(!inSeason, previousSeason);
   const archiveLabel = !inSeason && previousSeason != null;
+  // أثناء البث: كل دقيقتين (كاش الخادم SHORT). خارج المباريات: 10 دقائق.
+  const raceStale = hasLiveMatch ? 2 * 60_000 : 10 * 60_000;
+  const racePoll = hasLiveMatch ? 2 * 60_000 : false;
 
   const { data: scorersData, isLoading: scorersLoading } = useQuery<{ scorers: RslScorer[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/scorers${suffix}`],
-    staleTime: 10 * 60_000,
+    staleTime: raceStale,
+    refetchInterval: racePoll,
   });
   const { data: assistsData, isLoading: assistsLoading } = useQuery<{ assists: RslLeader[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/assists${suffix}`],
-    staleTime: 10 * 60_000,
+    staleTime: raceStale,
+    refetchInterval: racePoll,
   });
   const { data: cardsData, isLoading: cardsLoading } = useQuery<{ yellow: RslLeader[]; red: RslLeader[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/cards${suffix}`],
-    staleTime: 10 * 60_000,
+    staleTime: raceStale,
+    refetchInterval: racePoll,
   });
 
   const scorers = Array.isArray(scorersData?.scorers) ? scorersData.scorers : [];

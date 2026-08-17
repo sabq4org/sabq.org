@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-11",
   "systems": [
     {
       "id": "account-center",
@@ -66,7 +66,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-26"
+      "lastReviewed": "2026-08-03"
     },
     {
       "id": "loyalty",
@@ -124,6 +124,8 @@
         "server/routes/rslPredictions.ts",
         "client/src/pages/PredictionCenter.tsx",
         "client/src/components/predictions/**",
+        "client/src/components/rsl/RslPredictionsPromo.tsx",
+        "client/src/components/rsl/RslHero.tsx",
         "sports app ios/SabqSports/Services/PredictionCoreModels.swift",
         "sports app ios/SabqSports/Screens/PredictionCenterView.swift",
         "sports app ios/SabqSports/Screens/PredictionContestDetailView.swift",
@@ -136,7 +138,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-07-31"
+      "lastReviewed": "2026-08-16"
     },
     {
       "id": "editorial",
@@ -159,6 +161,7 @@
         "client/src/pages/dashboard/MyServicesPage.tsx",
         "server/routes/staffProfiles.ts",
         "server/services/staffProfileService.ts",
+        "server/services/staffRoleInference.ts",
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
@@ -192,14 +195,24 @@
         "server/services/aiSmartThumbnailService.ts",
         "server/services/autoImageGenerationService.ts",
         "server/services/aiImageGenerator.ts",
+        "server/services/imageStyleService.ts",
+        "server/routes/imageStyles.ts",
+        "shared/imageStyles.ts",
+        "client/src/components/AIImageGeneratorDialog.tsx",
+        "client/src/components/ImageStyleSelector.tsx",
+        "client/src/components/admin/ImageStylesManager.tsx",
+        "client/src/pages/AutoImageSettings.tsx",
+        "tests/unit/imageStyles.test.ts",
         "server/services/opinionAuthorWorkspaceService.ts",
         "server/utils/internalAnnouncementTargeting.ts",
         "server/services/opinionWritersService.ts",
         "server/services/authorProfileService.ts",
         "server/services/mediaLicenseService.ts",
         "server/services/mediaLicenseUpload.ts",
+        "server/services/staffCommunications.ts",
         "shared/mediaLicense.ts",
         "client/src/hooks/useMediaLicenseGate.ts",
+        "client/src/pages/dashboard/StaffCommunicationsPage.tsx",
         "client/src/components/ReporterSelect.tsx",
         "client/src/components/OpinionAuthorSelect.tsx",
         "server/services/reportersAdminService.ts",
@@ -220,6 +233,7 @@
         "server/seo-generator.ts",
         "server/ai-classifier.ts",
         "server/ai/contentAnalyzer.ts",
+        "server/ai/editorialOutputGuards.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
@@ -239,6 +253,8 @@
         "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
+        "server/services/articleViewCounterService.ts",
+        "server/services/articleViewStatsService.ts",
         "client/src/pages/admin/publishers/**",
         "client/src/components/admin/publishers/**",
         "client/src/pages/publisher/**",
@@ -278,7 +294,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-02"
+      "lastReviewed": "2026-08-16"
     },
     {
       "id": "ifox",
@@ -480,7 +496,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح).",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح). مؤشر الجولة يتقدّم بعد اكتمال مبارياتها.",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -502,6 +518,7 @@
         "server/services/saudiLeagueService.ts",
         "server/services/sportsTournamentsService.ts",
         "server/services/sportsNamesService.ts",
+        "server/services/sportsPlayerNameFixes.ts",
         "server/services/worldCupNewsGenerator.ts",
         "server/services/kingsCupNewsGenerator.ts",
         "server/services/newsPulseInsights.ts",
@@ -525,13 +542,21 @@
         "client/src/components/worldcup/WorldCupHomeSection.tsx",
         "client/src/components/SabqPulseSection.tsx",
         "client/src/pages/RoshnHub.tsx",
+        "client/src/pages/SportsHub.tsx",
+        "client/src/pages/SportsDashboard.tsx",
+        "client/src/pages/SportsMatchesBoard.tsx",
+        "client/src/components/sports/pickPortalDefaultCompetition.ts",
+        "client/src/components/sports/matchCenterTabs.ts",
         "client/src/components/rsl/**",
         "sabq app ios/sabq/Services/RoshnModels.swift",
         "sabq app ios/sabq/Components/RoshnHomeStrip.swift",
         "sabq app ios/sabq/Screens/Roshn*.swift",
         "sabq app ios/sabqTests/RoshnModelsTests.swift",
         "sports app ios/SabqSports/Services/APIClient.swift",
-        "sports app ios/SabqSports/Services/AuthStore.swift"
+        "sports app ios/SabqSports/Services/AuthStore.swift",
+        "sports app ios/SabqSports/Screens/MatchCenterView.swift",
+        "android-native/vara/src/main/kotlin/com/sabq/vara/ui/MatchCenterScreen.kt",
+        "server/services/theSportsService.ts"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -554,7 +579,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-01"
+      "lastReviewed": "2026-08-14"
     },
     {
       "id": "push-notifications",
@@ -640,14 +665,23 @@
         "server/services/phoneRegistrationService.ts",
         "server/routes/phoneRegistration.ts",
         "tests/unit/phoneRegistration.test.ts",
-        "client/src/pages/CompleteName.tsx"
+        "client/src/pages/CompleteName.tsx",
+        "client/src/pages/UsersManagement.tsx",
+        "shared/effectiveRoles.ts",
+        "tests/unit/effectiveRoles.test.ts",
+        "server/services/staffRoleInference.ts",
+        "server/services/promoteCorrespondentService.ts",
+        "server/services/mobileUserRolePayload.ts",
+        "server/services/userRoleSync.ts",
+        "server/routes/promoteCorrespondent.ts",
+        "scripts/promote-correspondent.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-31"
+      "lastReviewed": "2026-08-16"
     },
     {
       "id": "seo-ssr",
@@ -812,6 +846,42 @@
       ],
       "lastReviewed": "2026-07-19",
       "notes": "Homepage bundle + SWR cache under blocks:smart:* to avoid DB pressure"
+    },
+    {
+      "id": "social-publishing",
+      "nameAr": "النشر الاجتماعي",
+      "nameEn": "Social Publishing (X)",
+      "status": "active",
+      "category": "content",
+      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. المعمارية provider-based لإضافة منصات لاحقاً.",
+      "docPath": "docs/systems/social-publishing/SYSTEM.md",
+      "relatedDocs": [
+        "docs/setup/X_PUBLISHING_SETUP_AR.md",
+        "docs/systems/editorial/SYSTEM.md",
+        "docs/systems/auth-rbac/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "shared/socialPostText.ts",
+        "server/services/socialPublishing/**",
+        "server/routes/socialPublishing.ts",
+        "server/jobs/socialPublishWorker.ts",
+        "client/src/components/social/SocialPublishDialog.tsx",
+        "client/src/pages/dashboard/SocialPublishingPage.tsx",
+        "tests/unit/socialPostText.test.ts",
+        "tests/unit/socialTokenCrypto.test.ts",
+        "tests/unit/socialPublishingLogic.test.ts",
+        "tests/unit/xApiClient.test.ts",
+        "docs/systems/social-publishing/**"
+      ],
+      "aiFeatureKeys": [
+        "social-post-suggest"
+      ],
+      "dashboardPath": "/dashboard/social-publishing",
+      "owners": [
+        "editorial",
+        "platform"
+      ],
+      "lastReviewed": "2026-08-06"
     },
     {
       "id": "sahraa-tv-block",

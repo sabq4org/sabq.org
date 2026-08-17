@@ -535,6 +535,8 @@ private fun AcAboutSection(nav: NavHostController, context: Context, version: St
         Column(Modifier.fillMaxWidth().clip(VaraCardShape).background(c.surface)) {
             SettingsRow(Icons.Default.Info, "عن التطبيق", null, c.textDim) { nav.navigate(Routes.About) }
             Box(Modifier.padding(start = 56.dp)) { VaraDivider() }
+            SettingsRow(Icons.Default.Lock, "سياسة الخصوصية", null, c.textDim) { nav.navigate(Routes.Privacy) }
+            Box(Modifier.padding(start = 56.dp)) { VaraDivider() }
             SettingsRow(Icons.Default.VerifiedUser, "سياسة الاستخدام", null, c.textDim) { nav.navigate(Routes.Usage) }
             Box(Modifier.padding(start = 56.dp)) { VaraDivider() }
             SettingsRow(Icons.Default.Description, "شروط الاستخدام", null, c.textDim) { nav.navigate(Routes.Terms) }
@@ -671,9 +673,11 @@ fun ForYouScreen(nav: NavHostController, vm: VaraViewModel) {
                 if (fresh.isNotEmpty()) vm.updateFollowedSnapshots(fresh)
             }
             val mine = async {
+                // المنصة المركزية — المسار القديم /sports/predictions/mine حُذف
+                // في #938 فكانت القائمة فارغة للأبد وتوحي بأن الحفظ لا يعمل.
                 predictions = if (!vm.isLoggedIn) emptyList()
-                else runCatching { vm.api.memberGet("/sports/predictions/mine", ignoreCache = true) }.getOrNull()
-                    ?.let { findArray(it, "predictions", "items").filterIsInstance<JsonObject>() } ?: emptyList()
+                else runCatching { vm.api.memberGet("/predictions/me/entries", mapOf("limit" to "6"), ignoreCache = true) }.getOrNull()
+                    ?.let { findArray(it, "items").filterIsInstance<JsonObject>() } ?: emptyList()
             }
             snapshots.await(); mine.await()
         }
@@ -723,8 +727,8 @@ fun ForYouScreen(nav: NavHostController, vm: VaraViewModel) {
                     when (val mine = predictions) {
                         null -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.accent) } }
                         else ->
-                            if (mine.isEmpty()) item { EmptyState("لم تتوقّع بعد", "ابدأ من تبويب «روشن» ← التوقّعات") }
-                            else items(mine.take(6)) { row -> ForYouPredictionRow(row) }
+                            if (mine.isEmpty()) item { EmptyState("لم تتوقّع بعد", "ابدأ من «حسابي» ← توقّعات VARA") }
+                            else items(mine.take(6)) { row -> ForYouPredictionRow(row, nav) }
                     }
                 } else {
                     item { Box(Modifier.padding(horizontal = 16.dp)) { SectionHeader("آخر توقّعاتك", icon = Icons.Default.AutoAwesome) } }
@@ -736,8 +740,9 @@ fun ForYouScreen(nav: NavHostController, vm: VaraViewModel) {
 }
 
 /// صف توقّع أغنى: شعارا الفريقين + التوقّع + الحالة + النقاط.
+/// ينقل لتفاصيل المسابقة نفسها عند وجود contestId (شكل me/entries المركزي).
 @Composable
-private fun ForYouPredictionRow(row: JsonObject) {
+private fun ForYouPredictionRow(row: JsonObject, nav: NavHostController) {
     val c = LocalVaraColors.current
     val meta = row.obj("fixture", "match", "metadata")
     val home = parseTeam(meta?.get("home") ?: row["home"], row.string("homeName") ?: "المضيف")
@@ -746,8 +751,12 @@ private fun ForYouPredictionRow(row: JsonObject) {
     val predHome = payload?.int("predHome", "home")
     val predAway = payload?.int("predAway", "away")
     val status = row.string("status") ?: ""
-    val points = row.int("points", "awardedPoints", "pointsAwarded")
-    VaraCard(Modifier.padding(horizontal = 16.dp)) {
+    val points = row.int("totalPoints", "points", "awardedPoints", "pointsAwarded")
+    val contestId = row.string("contestId")
+    VaraCard(
+        Modifier.padding(horizontal = 16.dp)
+            .then(if (contestId != null) Modifier.clickable { nav.navigate("prediction-contest/$contestId") } else Modifier)
+    ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             RemoteLogo(home.logo, home.name, 26)
             Spacer(Modifier.width(6.dp))
@@ -1594,6 +1603,26 @@ fun LegalScreen(nav: NavHostController, title: String) {
                 LegalSectionSpec("الإصدار", "النسخة الحالية: $version."),
             ),
         )
+        // متطلب Google Play: سياسة خصوصية متاحة داخل التطبيق (User Data policy).
+        "سياسة الخصوصية" -> Triple(
+            Icons.Default.Lock,
+            "خصوصيتك أولوية. توضّح هذه السياسة ما نجمعه من بيانات وكيف نستخدمها ونحميها، وحقوقك في حذفها.",
+            listOf(
+                LegalSectionSpec(
+                    "البيانات التي نجمعها",
+                    bullets = listOf(
+                        "بيانات العضوية عند التسجيل: الاسم، والبريد الإلكتروني أو رقم الجوال، وصورة الملف الاختيارية.",
+                        "معرّف الجهاز ورمز الإشعارات لتوصيل التنبيهات إلى جهازك.",
+                        "تفضيلاتك داخل التطبيق: الفِرق والمباريات والبطولات المتابَعة وإعدادات التنبيهات.",
+                        "نشاط الاستخدام (مثل المباريات التي تفتحها) لتخصيص تجربتك واحتساب نقاط الولاء.",
+                    ),
+                ),
+                LegalSectionSpec("كيف نستخدمها", "تُستخدم بياناتك حصريًا لتقديم الخدمة: الدخول بعضوية سبق، التنبيهات اللحظية، التوقّعات ولوحات المتصدّرين، وتخصيص المحتوى. لا نبيع بياناتك ولا نشاركها مع أطراف ثالثة لأغراض إعلانية، ولا يتضمّن التطبيق أدوات تتبّع إعلانية."),
+                LegalSectionSpec("التخزين والأمان", "تنتقل بياناتك مشفّرةً عبر HTTPS، وتُحفظ بيانات جلستك على جهازك مشفّرةً بمخزن مفاتيح النظام. المباريات والفِرق المتابَعة بلا تسجيل دخول تبقى على جهازك فقط."),
+                LegalSectionSpec("حقوقك والحذف", "يمكنك تعديل بياناتك أو حذف حسابك وكامل بياناتك نهائيًا في أي وقت من داخل التطبيق (حسابي ← منطقة الخطر ← حذف الحساب)، أو عبر التواصل معنا."),
+                LegalSectionSpec("التواصل والنسخة الكاملة", "النسخة الكاملة من سياسة خصوصية سبق على sabq.org/privacy، وللاستفسارات تواصل معنا عبر sabq.org/contact."),
+            ),
+        )
         "سياسة الاستخدام" -> Triple(
             Icons.Default.VerifiedUser,
             "تنظّم هذه السياسة طريقة استخدامك لتطبيق VARA لضمان تجربة عادلة وآمنة للجميع.",
@@ -1774,6 +1803,8 @@ private data class PredContest(
     val predAway: Int?,
     val finalHome: Int?,
     val finalAway: Int?,
+    val penHome: Int? = null,
+    val penAway: Int? = null,
     /** عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين). */
     val entriesCount: Int = 0,
 ) {
@@ -1817,6 +1848,7 @@ private fun parsePredContest(e: JsonElement): PredContest? {
     val meta = o.obj("metadata")
     val entry = o.obj("myEntry")?.obj("payload")
     val result = o.obj("result")
+    val penObj = result?.obj("penalties") ?: meta?.obj("penalties")
     return PredContest(
         id = o.string("id") ?: return null,
         contestType = o.string("contestType") ?: "match_score",
@@ -1831,6 +1863,8 @@ private fun parsePredContest(e: JsonElement): PredContest? {
         predAway = entry?.int("predAway"),
         finalHome = result?.int("finalHome"),
         finalAway = result?.int("finalAway"),
+        penHome = penObj?.int("home"),
+        penAway = penObj?.int("away"),
         entriesCount = o.int("entriesCount") ?: 0,
     )
 }
@@ -1944,15 +1978,21 @@ private fun predCountdown(targetMs: Long?, nowMs: Long = System.currentTimeMilli
 
 private fun predFmtMultiplier(value: Double): String = String.format(Locale.US, "%.1f", value)
 
-/// ترجمة أخطاء إرسال التوقّع إلى نصوص ودّية.
+/// ترجمة أخطاء إرسال التوقّع إلى نصوص ودّية — كل رموز predictions-core،
+/// لا يتسرب رمز إنجليزي خام للمستخدم أبدًا.
 private fun predSubmitError(t: Throwable): String {
     val failure = t as? ApiFailure
     val raw = failure?.message.orEmpty()
     return when {
         raw.contains("DRAW_NOT_ALLOWED") -> "التعادل غير متاح لهذه المباراة"
-        raw.contains("LOCKED") -> "أُقفل التوقّع"
+        raw.contains("PREDICTION_LOCKED") || raw.contains("LOCKED") -> "أُقفل التوقّع — انطلقت المباراة"
+        raw.contains("COMPETITION_DISABLED") -> "التوقّعات غير مفعّلة لهذه البطولة حاليًا"
+        raw.contains("CONTEST_NOT_OPEN") -> "لم تُفتح التوقّعات لهذه المباراة بعد"
+        raw.contains("INVALID_PREDICTION_PAYLOAD") -> "نتيجة غير صالحة — تحقق من الأرقام"
+        failure?.status == 401 -> "سجّل دخولك للمشاركة في التوقّعات"
+        failure?.status == 503 -> "التوقّعات متوقفة مؤقتًا — عُد قريبًا"
         failure?.status == 409 -> "تعذّر حفظ التوقّع — حدّث الشاشة وحاول مجددًا"
-        else -> raw.ifBlank { "تعذّر حفظ التوقّع" }
+        else -> "تعذّر حفظ التوقّع — تحقق من اتصالك وحاول مجددًا"
     }
 }
 
@@ -2001,7 +2041,17 @@ private fun PredCompetitionCard(comp: PredCompetitionSummary, open: () -> Unit) 
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(comp.nameAr, color = c.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(comp.nameAr, color = c.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    // موقوفة تشغيليًا: تُعرض للاطلاع لكن الخادم يرفض حفظ توقّع جديد.
+                    if (comp.status != "active") {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "متوقفة مؤقتًا", color = c.textDim, fontSize = 9.5.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(CircleShape).background(c.textFaint.copy(.15f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
                 Text(
                     listOf(comp.seasonKey.takeIf { it.isNotBlank() }, "${comp.openContests} توقّعات مفتوحة").filterNotNull().joinToString(" · "),
                     color = c.textDim, fontSize = 11.sp,
@@ -2213,7 +2263,12 @@ private fun PredContestRow(contest: PredContest, open: () -> Unit) {
             Box(Modifier.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
                 when {
                     contest.status == "settled" && contest.finalHome != null && contest.finalAway != null ->
-                        ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                            if (contest.penHome != null && contest.penAway != null) {
+                                ForceLtr { Text("(${contest.penAway}–${contest.penHome} ر.ت)", color = c.textDim, fontSize = 9.5.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
                     predParseMs(contest.locksAt) != null ->
                         ForceLtr { Text(VaraFormat.time(Instant.ofEpochMilli(predParseMs(contest.locksAt)!!)), color = c.textDim, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                     else -> Text("—", color = c.textFaint)
@@ -2319,6 +2374,8 @@ private data class PredContestDetailData(
     val contest: PredContest,
     val ruleSummary: String,
     val awards: List<PredAward>,
+    /** فشل جلب التسوية شبكةً — لا يعني «لم تُصب» فلا نعرضها ظلمًا. */
+    val settlementFailed: Boolean = false,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2339,11 +2396,13 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
         state = runCatching {
             val root = vm.api.memberGet("/predictions/contests/$contestId", ignoreCache = true).jsonObject
             val contest = parsePredContest(root) ?: error("تعذّر تحميل المسابقة")
+            var settlementFailed = false
             val awards = if (contest.status == "settled") {
-                runCatching { vm.api.memberGet("/predictions/contests/$contestId/settlement", ignoreCache = true).jsonObject }.getOrNull()
-                    ?.let { findArray(it, "myAwards", "awards").mapNotNull(::parsePredAward) }.orEmpty()
+                val settlement = runCatching { vm.api.memberGet("/predictions/contests/$contestId/settlement", ignoreCache = true).jsonObject }
+                    .onFailure { settlementFailed = true }.getOrNull()
+                settlement?.let { findArray(it, "myAwards", "awards").mapNotNull(::parsePredAward) }.orEmpty()
             } else emptyList()
-            PredContestDetailData(contest, predRuleSummary(root.obj("rule")), awards)
+            PredContestDetailData(contest, predRuleSummary(root.obj("rule")), awards, settlementFailed)
         }.fold({ data ->
             homeScore = data.contest.predHome ?: 0
             awayScore = data.contest.predAway ?: 0
@@ -2380,9 +2439,15 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                     PredScoreStepper(contest.away.name, awayScore) { awayScore = it }
                                 }
                                 Spacer(Modifier.height(14.dp))
+                                // ثلاث حالات ثابتة: «توقّعك محفوظ ✓» (الأرقام تطابق المحفوظ —
+                                // معطّل بلون النجاح)، «حفظ التعديل»، «تأكيد التوقّع». الوميض
+                                // المؤقت وحده كان يوهم أن الحفظ لم يتم (بلاغ 2026-08-15).
+                                val savedMatches = contest.hasEntry &&
+                                    contest.predHome == homeScore && contest.predAway == awayScore
                                 Button(
                                     {
                                         if (!vm.isLoggedIn) { nav.navigate(Routes.Login); return@Button }
+                                        if (savedMatches) return@Button
                                         submitting = true; submitError = null
                                         scope.launch {
                                             runCatching {
@@ -2391,23 +2456,36 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                                     buildJsonObject { put("prediction", buildJsonObject { put("predHome", homeScore); put("predAway", awayScore) }) },
                                                 )
                                             }
-                                                .onSuccess { justSaved = true; scope.launch { delay(1800); justSaved = false } }
+                                                // إعادة الجلب تُثبت «توقّعك» من الخادم — بدونها يرتد
+                                                // الزر بعد 1.8ث فيبدو أن الحفظ فشل.
+                                                .onSuccess { justSaved = true; revision++; scope.launch { delay(1800); justSaved = false } }
                                                 .onFailure { submitError = predSubmitError(it) }
                                             submitting = false
                                         }
                                     },
-                                    Modifier.fillMaxWidth(), enabled = !submitting,
+                                    Modifier.fillMaxWidth(), enabled = !submitting && !(savedMatches && !justSaved),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = c.accent),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = c.accent,
+                                        // المحفوظ يبقى بلون مؤكِّد لا رماديًا — حالة اطمئنان لا تعطيل
+                                        disabledContainerColor = if (savedMatches) c.accentDeep else c.accent.copy(.5f),
+                                        disabledContentColor = Color.White,
+                                    ),
                                 ) {
                                     Text(
                                         when {
                                             submitting -> "جارٍ الحفظ…"
-                                            justSaved -> "تم الحفظ ✓"
+                                            justSaved -> "تم حفظ توقّعك ✓"
+                                            savedMatches -> "توقّعك محفوظ ✓ \u2066$awayScore–$homeScore\u2069"
+                                            contest.hasEntry -> "حفظ التعديل \u2066$awayScore–$homeScore\u2069"
                                             else -> "تأكيد التوقّع \u2066$awayScore–$homeScore\u2069"
                                         },
                                         modifier = Modifier.padding(vertical = 4.dp), fontWeight = FontWeight.Bold,
                                     )
+                                }
+                                if (savedMatches) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("حرّك الأرقام لتعديل توقّعك", color = c.textDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                 }
                                 submitError?.let {
                                     Spacer(Modifier.height(8.dp))
@@ -2446,6 +2524,9 @@ fun PredictionContestDetailScreen(nav: NavHostController, vm: VaraViewModel, con
                                             color = c.gold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold,
                                             modifier = Modifier.clip(CircleShape).background(c.gold.copy(.15f)).padding(horizontal = 11.dp, vertical = 5.dp),
                                         )
+                                    } else if (detail.settlementFailed) {
+                                        // فشل شبكة ≠ خسارة — لا نحكم على المستخدم ظلمًا.
+                                        Text("تعذّر جلب التسوية — حدّث الشاشة", color = c.textDim, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     } else {
                                         Text("لم تُصب هذه المرة", color = c.textFaint, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }
@@ -2499,7 +2580,12 @@ private fun PredDetailHero(contest: PredContest) {
                 val lockMs = predParseMs(contest.locksAt)
                 when {
                     contest.status == "settled" && contest.finalHome != null && contest.finalAway != null ->
-                        ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            ForceLtr { Text("${contest.finalAway}–${contest.finalHome}", color = c.text, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                            if (contest.penHome != null && contest.penAway != null) {
+                                ForceLtr { Text("(${contest.penAway}–${contest.penHome} ر.ت)", color = c.textDim, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
                     lockMs != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         ForceLtr { Text(VaraFormat.time(Instant.ofEpochMilli(lockMs)), color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
                         Text(VaraFormat.dayMonthLabel(Instant.ofEpochMilli(lockMs)), color = c.textFaint, fontSize = 10.5.sp)

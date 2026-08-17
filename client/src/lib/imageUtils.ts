@@ -126,3 +126,47 @@ export function getFocalPointStyle(article: any, defaultPosition: string = 'cent
     objectPosition: position,
   };
 }
+
+/**
+ * Resolves the display image URL for an article, properly prioritizing:
+ * 1. Explicit imageUrl
+ * 2. Explicit videoThumbnailUrl (for video articles)
+ * 3. Auto-derived video thumbnail from YouTube / Dailymotion if videoUrl exists
+ * 4. thumbnailUrl
+ * 5. infographicBannerUrl
+ */
+export function getArticleDisplayImageUrl(article: any): string | null {
+  if (!article) return null;
+  
+  if (typeof article.imageUrl === 'string' && article.imageUrl.trim()) {
+    return article.imageUrl.trim();
+  }
+  if (typeof article.videoThumbnailUrl === 'string' && article.videoThumbnailUrl.trim()) {
+    return article.videoThumbnailUrl.trim();
+  }
+  if (typeof article.thumbnailUrl === 'string' && article.thumbnailUrl.trim()) {
+    return article.thumbnailUrl.trim();
+  }
+  if (typeof article.infographicBannerUrl === 'string' && article.infographicBannerUrl.trim()) {
+    return article.infographicBannerUrl.trim();
+  }
+  
+  // If videoUrl is provided, auto-extract thumbnail for YouTube / Dailymotion
+  const vUrl = article.videoUrl || article.video_url;
+  if (typeof vUrl === 'string' && vUrl.trim()) {
+    const trimmed = vUrl.trim();
+    // YouTube
+    const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+      return `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+    }
+    // Dailymotion
+    const dmMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/|dailymotion\.com\/embed\/video\/)([^_\n?#\/]+)/i);
+    if (dmMatch && dmMatch[1]) {
+      return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+    }
+  }
+  
+  return null;
+}
+

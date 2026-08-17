@@ -1,46 +1,74 @@
 {
-  "generatedAt": "2026-07-19T13:22:44.168Z",
+  "generatedAt": "2026-08-14T08:16:23.916Z",
   "systems": [
     {
+      "id": "account-center",
+      "fileCount": 18,
+      "samplePaths": [
+        "client/src/nav/accountMenuItems.ts",
+        "client/src/components/UserAccountMenu.tsx",
+        "client/src/pages/Profile.tsx",
+        "client/src/pages/ProfileSegmentRouter.tsx",
+        "client/src/pages/settings/SettingsCenter.tsx",
+        "client/src/pages/settings/sections/AccountSection.tsx",
+        "client/src/pages/settings/sections/AppearanceSection.tsx",
+        "client/src/pages/settings/sections/InterestsSection.tsx"
+      ]
+    },
+    {
+      "id": "official-letters",
+      "fileCount": 10,
+      "samplePaths": [
+        "shared/officialLetters.ts",
+        "server/services/officialLetterService.ts",
+        "server/services/officialLetterPdfService.ts",
+        "server/routes/officialLetters.ts",
+        "client/src/pages/dashboard/OfficialLetters.tsx",
+        "client/src/pages/dashboard/MyServicesPage.tsx",
+        "client/src/pages/VerifyLetter.tsx",
+        "client/src/components/officialLetters/MyOfficialLettersCard.tsx"
+      ]
+    },
+    {
       "id": "loyalty",
-      "fileCount": 19,
+      "fileCount": 828,
       "samplePaths": [
         "server/services/loyalty.ts",
         "server/routes/loyaltyAdmin.ts",
-        "client/src/pages/dashboard/LoyaltyAdminDashboard.tsx",
-        "client/src/pages/LoyaltyAccount.tsx",
-        "client/src/pages/LoyaltyPreview.tsx",
-        "client/src/pages/LoyaltyTermsPage.tsx",
-        "android-native/app/src/main/kotlin/com/sabq/smart/data/Loyalty.kt",
-        "android-native/app/src/main/kotlin/com/sabq/smart/data/LoyaltyEventQueue.kt"
+        "server/routes/sabqPlusPreview.ts",
+        "server/services/sabqPlusPreviewService.ts",
+        "server/lib/passkit/CouponPassBuilder.ts",
+        "server/lib/passkit/CouponPassAssets.ts",
+        "server/lib/passkit/CouponPassStripRenderer.ts",
+        "server/lib/passkit/coupon-pass-template.pass/icon.png"
       ]
     },
     {
       "id": "predictions-core",
-      "fileCount": 18,
+      "fileCount": 36,
       "samplePaths": [
         "server/services/predictions/fixtureAdapter.ts",
         "server/services/predictions/fixtureSyncLogic.ts",
         "server/services/predictions/outboxService.ts",
         "server/services/predictions/predictionCoreService.ts",
+        "server/services/predictions/predictionPromoFeed.ts",
         "server/services/predictions/registry.ts",
         "server/services/predictions/settlementService.ts",
-        "server/services/predictions/strategies/fixedPoints.ts",
-        "server/services/predictions/strategies/longTermPool.ts"
+        "server/services/predictions/strategies/fixedPoints.ts"
       ]
     },
     {
       "id": "editorial",
-      "fileCount": 61,
+      "fileCount": 120,
       "samplePaths": [
-        "server/routes/articleEditLocks.ts",
-        "server/routes/editorAlerts.ts",
-        "server/routes/editorPresence.ts",
-        "server/routes/dashboardPulse.ts",
-        "server/routes/coverageGaps.ts",
-        "server/routes/whatsappAgent.ts",
-        "server/routes/emailAgent.ts",
-        "server/routes/announcements.ts"
+        "client/src/components/staff/MyStaffProfileCard.tsx",
+        "client/src/components/staff/MyServicesHomeLink.tsx",
+        "client/src/components/staff/StaffProfileForm.tsx",
+        "client/src/pages/dashboard/StaffProfilesDirectory.tsx",
+        "client/src/pages/dashboard/StaffProfilePage.tsx",
+        "client/src/pages/dashboard/MyServicesPage.tsx",
+        "server/routes/staffProfiles.ts",
+        "server/services/staffProfileService.ts"
       ]
     },
     {
@@ -87,7 +115,7 @@
     },
     {
       "id": "radar",
-      "fileCount": 34,
+      "fileCount": 37,
       "samplePaths": [
         "server/services/radar/aiChain.ts",
         "server/services/radar/alerts.ts",
@@ -96,26 +124,26 @@
         "server/services/radar/cycle.ts",
         "server/services/radar/data/saudi-negative.json",
         "server/services/radar/data/saudi-positive.json",
-        "server/services/radar/exporter.ts"
+        "server/services/radar/developer.ts"
       ]
     },
     {
       "id": "audio-newsletter",
-      "fileCount": 11,
+      "fileCount": 10,
       "samplePaths": [
-        "server/services/audioNewsletterService.ts",
         "server/services/aiNewsletterService.ts",
         "server/services/aiNewsletterEnhancer.ts",
         "server/services/newsletterScheduler.ts",
         "server/services/ttsProviderRegistry.ts",
         "server/services/smartNewsletterTemplates.ts",
-        "server/routes/audioNewsletterRoutes.ts",
-        "server/routes/smartNewsletterRoutes.ts"
+        "server/routes/audioNewsletterCompatibility.ts",
+        "server/routes/smartNewsletterRoutes.ts",
+        "server/routes/newsletterAnalyticsRoutes.ts"
       ]
     },
     {
       "id": "media-library",
-      "fileCount": 15,
+      "fileCount": 17,
       "samplePaths": [
         "server/services/mediaAutoTagService.ts",
         "server/services/mediaCaptionService.ts",
@@ -124,12 +152,12 @@
         "server/services/mediaHashService.ts",
         "server/services/mediaHealthService.ts",
         "server/services/mediaLibraryService.ts",
-        "server/services/mediaSearchService.ts"
+        "server/services/mediaLicenseService.ts"
       ]
     },
     {
       "id": "sports-tournaments",
-      "fileCount": 81,
+      "fileCount": 119,
       "samplePaths": [
         "server/services/gulfCupData.ts",
         "server/services/gulfCupFixtureIdentity.ts",
@@ -143,7 +171,7 @@
     },
     {
       "id": "push-notifications",
-      "fileCount": 10,
+      "fileCount": 12,
       "samplePaths": [
         "server/services/fcmPayload.ts",
         "server/services/fcmService.ts",
@@ -171,7 +199,7 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 9,
+      "fileCount": 18,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
@@ -179,27 +207,27 @@
         "server/twoFactor.ts",
         "server/sessionFailoverStore.ts",
         "server/services/memberSessionService.ts",
-        "shared/rbac-constants.ts",
-        "client/src/hooks/useAuth.ts"
+        "server/services/phoneAuth.ts",
+        "shared/rbac-constants.ts"
       ]
     },
     {
       "id": "seo-ssr",
-      "fileCount": 35,
+      "fileCount": 131,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
+        "web-next/.DS_Store",
         "web-next/.dockerignore",
         "web-next/.env.example",
-        "web-next/.gitignore",
-        "web-next/Dockerfile"
+        "web-next/.gitignore"
       ]
     },
     {
       "id": "comments",
-      "fileCount": 10,
+      "fileCount": 11,
       "samplePaths": [
         "server/services/commentInsightsService.ts",
         "server/services/commentModerationService.ts",
@@ -234,16 +262,58 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 29,
+      "fileCount": 34,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
         "docs/systems/README.md",
+        "docs/systems/account-center/SYSTEM.md",
         "docs/systems/ads/SYSTEM.md",
         "docs/systems/ai-hub/SYSTEM.md",
         "docs/systems/audio-newsletter/OPERATIONS.md",
-        "docs/systems/audio-newsletter/SYSTEM.md",
-        "docs/systems/auth-rbac/SYSTEM.md"
+        "docs/systems/audio-newsletter/SYSTEM.md"
+      ]
+    },
+    {
+      "id": "smart-blocks",
+      "fileCount": 8,
+      "samplePaths": [
+        "server/services/smartBlocksService.ts",
+        "server/routes/smartBlocks.ts",
+        "client/src/pages/dashboard/SmartBlocksPage.tsx",
+        "client/src/components/SmartNewsBlock.tsx",
+        "client/src/components/en/EnglishSmartNewsBlock.tsx",
+        "client/src/components/ur/UrduSmartNewsBlock.tsx",
+        "client/src/pages/en/EnglishSmartBlocksPage.tsx",
+        "client/src/pages/ur/dashboard/UrduSmartBlocksPage.tsx"
+      ]
+    },
+    {
+      "id": "social-publishing",
+      "fileCount": 17,
+      "samplePaths": [
+        "shared/socialPostText.ts",
+        "server/services/socialPublishing/imageResolver.ts",
+        "server/services/socialPublishing/publerApiClient.ts",
+        "server/services/socialPublishing/socialPublishingService.ts",
+        "server/services/socialPublishing/suggestService.ts",
+        "server/services/socialPublishing/tokenCrypto.ts",
+        "server/services/socialPublishing/types.ts",
+        "server/services/socialPublishing/xApiClient.ts"
+      ]
+    },
+    {
+      "id": "sahraa-tv-block",
+      "fileCount": 10,
+      "samplePaths": [
+        "server/services/sahraaTvBlockService.ts",
+        "server/services/sahraaTvBlockUtils.ts",
+        "server/services/sahraaTvVideoResolver.ts",
+        "server/services/sahraaTvMediaProxy.ts",
+        "server/routes/sahraaTvBlock.ts",
+        "client/src/components/SahraaTvBlock.tsx",
+        "client/src/pages/dashboard/SahraaTvBlockSettings.tsx",
+        "attached_assets/al-sahraa-channel-logo.png"
       ]
     }
   ]

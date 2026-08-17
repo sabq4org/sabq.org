@@ -122,7 +122,7 @@ struct CategoryArticlesView: View {
                         subtitle: "لم نجد أخباراً في هذا القسم حالياً"
                     )
                 } else {
-                    SurfaceCard {
+                    SurfaceCard(lazy: true) {
                         ForEach(Array(categoryArticles.enumerated()), id: \.element.id) { index, article in
                             if index > 0 {
                                 Divider()

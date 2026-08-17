@@ -11,6 +11,7 @@
  * wc_player_names ← الـAI دفعة واحدة ثم الحفظ الدائم. كلها «أفضل جهد».
  */
 import { resolveSportsNames } from "./sportsNamesService";
+import { CURATED_PLAYER_AR } from "./sportsPlayerNameFixes";
 import { WC_PLAYER_AR } from "./worldCupNames";
 
 /**
@@ -31,7 +32,7 @@ export async function resolveNames(
     rawNames.map((name) => ({ name })),
     {
       skipAi: opts?.skipAi,
-      staticDict: WC_PLAYER_AR,
+      staticDict: { ...WC_PLAYER_AR, ...CURATED_PLAYER_AR },
       legacyPlayerTable: true,
     },
   );

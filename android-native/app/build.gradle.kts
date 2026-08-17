@@ -33,12 +33,14 @@ android {
         //     predictions win celebration + live polling fixes
         //   • 10.1.5 (146) — Play production (targetSdk 35) — last API-35 build
         //   • 10.1.6 (147) — Play target API 36 compliance (Android 16)
+        //   • 10.2.0 (148) — Play production (2026-08-03): KC+Roshn sections
+        //   • 10.2.1 (149) — KC predictions fix + opinion redesign + widget
         // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 36
-        versionCode = 147
-        versionName = "10.1.6"
+        versionCode = 150
+        versionName = "10.2.2"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced
@@ -161,6 +163,8 @@ android {
 dependencies {
     // Core
     implementation(libs.androidx.core.ktx)
+    // ترقية صريحة فوق fragment القديمة التي تجرّها play-services/appcompat
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -203,10 +207,11 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
 
+    // Home-screen widget (Glance)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
     // Storage
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
 
     // Push (FCM)

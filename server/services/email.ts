@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { db } from '../db';
 import { emailVerificationTokens, users } from '@shared/schema';
 import { and, eq } from 'drizzle-orm';
+import { isEmailSuppressed } from './emailSuppressionService';
 
 const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY;
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -63,6 +64,14 @@ async function sendTransactionalEmail(options: {
   text?: string;
   html?: string;
 }): Promise<void> {
+  // Deliverability guard (F-05): never (re)send to an address that hard-bounced
+  // or filed a spam complaint — that's how a sending domain's reputation rots.
+  // Single chokepoint for every transactional send.
+  if (await isEmailSuppressed(options.to)) {
+    console.warn(`⚠️ Email skipped — recipient suppressed (${options.subject})`); // no PII
+    throw new Error('EMAIL_SUPPRESSED');
+  }
+
   if (mailerSend && MAILERSEND_API_KEY) {
     try {
       const sentFrom = new Sender(FROM_EMAIL, FROM_NAME);
@@ -107,6 +116,16 @@ function generateToken(): string {
 }
 
 /**
+ * Hash a verification token for storage at rest (F-13). The raw 256-bit token
+ * is emailed in the link; only this SHA-256 digest is persisted, so a DB read
+ * (backup/replica/log) can't hand out working verification links. Verification
+ * recomputes the digest from the URL token to match.
+ */
+function hashVerificationToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
  * Send a generic email notification
  */
 export async function sendEmailNotification(options: {
@@ -117,7 +136,8 @@ export async function sendEmailNotification(options: {
 }): Promise<{ success: boolean; error?: string }> {
   try {
     await sendTransactionalEmail(options);
-    console.log(`✅ Email sent to ${options.to}: ${options.subject}`);
+    // لا نسجل عنوان المستلم (PII) — الموضوع يكفي للتشخيص (F-18).
+    console.log(`✅ Email sent: ${options.subject}`);
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending email:', error);
@@ -142,10 +162,11 @@ export async function sendVerificationEmail(userId: string, email: string): Prom
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24); // Token valid for 24 hours
 
-    // Save token to database
+    // Save token to database — hashed at rest; the raw token goes in the email
+    // link only (F-13).
     await db.insert(emailVerificationTokens).values({
       userId,
-      token,
+      token: hashVerificationToken(token),
       expiresAt,
       used: false,
     });
@@ -252,7 +273,7 @@ If you didn't sign up, please ignore this email.
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Verification email sent to ${email}`);
+    console.log(`✅ Verification email sent`); // لا نسجل العنوان (PII) — F-18
     
     return { success: true };
   } catch (error) {
@@ -269,20 +290,18 @@ If you didn't sign up, please ignore this email.
  */
 export async function verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; error?: string }> {
   try {
+    // Tokens are stored hashed (F-13) — compare the digest of the URL token.
+    const tokenHash = hashVerificationToken(token);
+
     // Find token in database
     const [verificationToken] = await db
       .select()
       .from(emailVerificationTokens)
-      .where(eq(emailVerificationTokens.token, token))
+      .where(eq(emailVerificationTokens.token, tokenHash))
       .limit(1);
 
     if (!verificationToken) {
       return { success: false, error: 'Invalid verification token' };
-    }
-
-    // Check if token is already used
-    if (verificationToken.used) {
-      return { success: false, error: 'Verification token already used' };
     }
 
     // Check if token is expired
@@ -290,11 +309,18 @@ export async function verifyEmailToken(token: string): Promise<{ success: boolea
       return { success: false, error: 'Verification token expired' };
     }
 
-    // Mark token as used
-    await db
+    // Mark token as used — conditional on still-unused so two concurrent
+    // requests can't both consume it (atomic single-use, F-13). Zero rows
+    // updated ⇒ it was already used.
+    const consumed = await db
       .update(emailVerificationTokens)
       .set({ used: true })
-      .where(eq(emailVerificationTokens.token, token));
+      .where(and(eq(emailVerificationTokens.token, tokenHash), eq(emailVerificationTokens.used, false)))
+      .returning({ id: emailVerificationTokens.id });
+
+    if (consumed.length === 0) {
+      return { success: false, error: 'Verification token already used' };
+    }
 
     // Update user email verification status AND flip pending → active.
     //
@@ -493,7 +519,7 @@ If you didn't request a password reset, please ignore this email.
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Password reset email sent to ${email}`);
+    console.log(`✅ Password reset email sent`); // لا نسجل العنوان (PII) — F-18
     
     return { success: true };
   } catch (error) {

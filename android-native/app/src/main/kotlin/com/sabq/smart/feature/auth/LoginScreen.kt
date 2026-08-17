@@ -464,7 +464,13 @@ private fun PhoneLoginSection(viewModel: AuthViewModel, form: AuthFormState) {
     var code by remember { mutableStateOf("") }
     var resendSeconds by remember { mutableIntStateOf(0) }
 
-    val normalized = number.filter { it.isDigit() }.take(9)
+    // يحذف بادئات 00966/966/0 قبل القص — من يكتب رقمه بالصيغة المحلية المعتادة
+    // (05XXXXXXXX) كان يُقص إلى 9 خانات بصفره فيبقى الزر معطلًا بصمت.
+    val normalized = number.filter { it.isDigit() }
+        .removePrefix("00966")
+        .removePrefix("966")
+        .removePrefix("0")
+        .take(9)
     val phoneValid = normalized.length == 9 && normalized.startsWith("5")
     val e164Display = "+966 $normalized"
     val submitting = form is AuthFormState.Submitting
@@ -480,7 +486,9 @@ private fun PhoneLoginSection(viewModel: AuthViewModel, form: AuthFormState) {
         PhoneStep.Number -> {
             PhoneNumberField(
                 number = number,
-                onNumberChange = { number = it.filter { c -> c.isDigit() }.take(9) },
+                // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات يتم في normalized —
+                // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
+                onNumberChange = { number = it.filter { c -> c.isDigit() }.take(14) },
             )
             Text(
                 text = "سنرسل رمز تحقّق برسالة نصية إلى جوالك.",

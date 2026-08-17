@@ -22,6 +22,7 @@ import {
   type NormalizedFixture,
 } from "./fixtureSyncLogic";
 import { getCompetition, getFixtures, type SplFixture } from "../saudiLeagueService";
+import { getKcFixtures } from "../kingsCupService";
 import { getGcFixtures, type GcFixture } from "../gulfCupService";
 import { getAcFixtures, type AcFixture } from "../asianCupService";
 
@@ -99,7 +100,9 @@ async function splSource(registrySlug: string): Promise<NormalizedFixture[]> {
 /** مفتاح المحوّل = slug بطولة المنصة (prediction_competitions.slug). */
 const FIXTURE_SOURCES: Record<string, () => Promise<NormalizedFixture[]>> = {
   "rsl-2026": () => splSource("pro-league"),
-  "kings-cup-2026": () => splSource("kings-cup"),
+  // كأس الملك عبر خدمته المخصصة لا splSource المباشر: نفس موسم KC_SEASON الذي
+  // تقرؤه كل أسطح الكأس (fallbackSeason وحده قد ينحرف) + التركيب اللحظي الموحّد.
+  "kings-cup-2026": async () => (await getKcFixtures()).map(normalizeSpl),
   "super-cup-2026": () => splSource("super-cup"),
   "gulf-cup-27": async () => (await getGcFixtures()).map(normalizeGc),
   "asian-cup-2027": async () => (await getAcFixtures()).map(normalizeAc),
@@ -149,6 +152,8 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
           status: predictionContests.status,
           locksAt: predictionContests.locksAt,
           resultVersion: predictionContests.resultVersion,
+          metadata: predictionContests.metadata,
+          resultPayload: predictionContests.resultPayload,
         })
         .from(predictionContests)
         .where(and(
@@ -163,6 +168,31 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
       const now = new Date();
       for (const fixture of fixtures) {
         const contest = contestByRef.get(fixture.externalRef) ?? null;
+
+        // إثراء المسابقات المسوّاة سابقًا بركلات الترجيح إن توفّرت لدى المزوّد
+        if (
+          contest &&
+          contest.status === "settled" &&
+          (fixture.penaltiesHome != null || fixture.penaltiesAway != null)
+        ) {
+          const pen = { home: fixture.penaltiesHome, away: fixture.penaltiesAway };
+          const meta = (contest.metadata ?? {}) as Record<string, unknown>;
+          const res = (contest.resultPayload ?? {}) as Record<string, unknown>;
+          if (!meta.penalties || !res.penalties) {
+            await db
+              .update(predictionContests)
+              .set({
+                metadata: { ...meta, penalties: pen },
+                resultPayload: { ...res, penalties: pen },
+                updatedAt: now,
+              })
+              .where(eq(predictionContests.id, contest.id));
+            console.log(
+              `[Prediction Adapter] backfilled penalties for settled contest ${competition.slug}#${fixture.externalRef} → ${pen.home}-${pen.away}`,
+            );
+          }
+        }
+
         const action = decideSyncAction(fixture, contest, now);
 
         switch (action.kind) {
@@ -195,9 +225,21 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
             break;
           }
           case "set_result": {
+            const penalties =
+              fixture.penaltiesHome != null || fixture.penaltiesAway != null
+                ? { home: fixture.penaltiesHome, away: fixture.penaltiesAway }
+                : null;
+            await db
+              .update(predictionContests)
+              .set({
+                metadata: fixtureMetadata(fixture),
+                updatedAt: now,
+              })
+              .where(eq(predictionContests.id, contest!.id));
             await setContestResult(contest!.id, {
               finalHome: action.finalHome,
               finalAway: action.finalAway,
+              penalties,
             });
             summary.resultsSet++;
             break;
@@ -234,5 +276,9 @@ function fixtureMetadata(fixture: NormalizedFixture): Record<string, unknown> {
     round: fixture.round,
     venue: fixture.venue,
     kickoffAt: fixture.kickoff.toISOString(),
+    penalties:
+      fixture.penaltiesHome != null || fixture.penaltiesAway != null
+        ? { home: fixture.penaltiesHome, away: fixture.penaltiesAway }
+        : null,
   };
 }
