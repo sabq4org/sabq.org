@@ -638,41 +638,74 @@ export async function sendBreakingNewsPush(
 ): Promise<{ success: number; failed: number }> {
   log.info(`[PushWorker] Sending breaking news push for article: ${article.id}`);
 
-  // Get all active FCM devices only
-  const devices = await db
-    .select({ deviceToken: pushDevices.deviceToken })
+  const allDevices = await db
+    .select({
+      deviceToken: pushDevices.deviceToken,
+      platform: pushDevices.platform,
+      tokenProvider: pushDevices.tokenProvider,
+    })
     .from(pushDevices)
-    .where(and(
-      eq(pushDevices.isActive, true),
-      eq(pushDevices.tokenProvider, 'fcm')
-    ));
+    .where(eq(pushDevices.isActive, true));
 
-  if (devices.length === 0) {
-    log.info("[PushWorker] No active FCM devices for breaking news");
+  if (allDevices.length === 0) {
+    log.info("[PushWorker] No active devices for breaking news");
     return { success: 0, failed: 0 };
   }
 
-  const message: FCMMessage = {
-    title: "خبر عاجل",
-    body: article.title,
-    imageUrl: article.imageUrl || undefined,
-    data: {
-      type: "breaking_news",
-      articleId: article.id,
-      article_slug: article.slug,
-      deeplink: `/article/${article.slug}`,
-    },
-  };
+  const iosDevices = allDevices.filter((d) => d.platform === "ios" || d.tokenProvider === "apns");
+  const androidDevices = allDevices.filter((d) => d.platform === "android" || d.tokenProvider === "fcm");
 
-  log.info(`[PushWorker] Breaking news: sending to ${devices.length} FCM devices`);
-  
-  // Send to FCM devices only
-  const fcmTokens = devices.map(d => d.deviceToken);
-  const fcmResults = await sendToMultipleDevices(fcmTokens, message);
+  const deeplink = `/article/${article.slug}`;
+  let totalSuccess = 0;
+  let totalFailed = 0;
 
-  log.info(`[PushWorker] Breaking news sent: ${fcmResults.successCount} success, ${fcmResults.failureCount} failed`);
+  // Send to iOS via APNs
+  if (iosDevices.length > 0 && isApnsConfigured()) {
+    const apnsPayload = createCustomNotificationPayload(
+      "🔴 خبر عاجل",
+      article.title,
+      {
+        imageUrl: article.imageUrl || undefined,
+        deeplink,
+        articleId: String(article.id),
+        articleSlug: article.slug,
+        type: "breaking_news",
+        priority: "time-sensitive",
+      }
+    );
+    const iosTokens = iosDevices.map((d) => d.deviceToken);
+    const apnsResults = await sendApnsBatch(iosTokens, apnsPayload);
+    log.info(`[PushWorker] Breaking news APNs (iOS): ${apnsResults.success}/${iosDevices.length}`);
+    totalSuccess += apnsResults.success;
+    totalFailed += apnsResults.failed;
+  } else if (iosDevices.length > 0) {
+    log.info(`[PushWorker] APNs not configured - skipping ${iosDevices.length} iOS devices`);
+  }
 
-  return { success: fcmResults.successCount, failed: fcmResults.failureCount };
+  // Send to Android via FCM
+  if (androidDevices.length > 0 && isFcmConfigured()) {
+    const message: FCMMessage = {
+      title: "🔴 خبر عاجل",
+      body: article.title,
+      imageUrl: article.imageUrl || undefined,
+      data: {
+        type: "breaking_news",
+        articleId: String(article.id),
+        article_slug: article.slug,
+        deeplink,
+      },
+    };
+    const androidTokens = androidDevices.map((d) => d.deviceToken);
+    const fcmResults = await sendToMultipleDevices(androidTokens, message);
+    log.info(`[PushWorker] Breaking news FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
+    totalSuccess += fcmResults.successCount;
+    totalFailed += fcmResults.failureCount;
+  } else if (androidDevices.length > 0) {
+    log.info(`[PushWorker] FCM not configured - skipping ${androidDevices.length} Android devices`);
+  }
+
+  log.info(`[PushWorker] Breaking news sent: ${totalSuccess} success, ${totalFailed} failed`);
+  return { success: totalSuccess, failed: totalFailed };
 }
 
 export { processPendingCampaigns };

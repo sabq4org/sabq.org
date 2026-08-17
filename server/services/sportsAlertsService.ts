@@ -1080,8 +1080,8 @@ export async function pushToUserDevices(
       await Promise.all(
         apnsDevices.map(async (d) => {
           try {
-            // دائماً topic فارا للتنبيهات الرياضية — حتى للتوكنات القديمة بلا bundleId.
-            const topic = SPORTS_APP_BUNDLE_ID;
+            // Topic فارا للتنبيهات الرياضية (يدعم حزمة debug للمحاكي/التطوير)
+            const topic = d.bundleId === SPORTS_APP_DEBUG_BUNDLE_ID ? SPORTS_APP_DEBUG_BUNDLE_ID : SPORTS_APP_BUNDLE_ID;
             const resp = await sendPushNotification(
               d.token,
               createCustomNotificationPayload(title, body, {
