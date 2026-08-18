@@ -4339,6 +4339,7 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
           userId: session.userId,
           commentId: created.id,
           reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+          automated: true,
         });
       }
     }

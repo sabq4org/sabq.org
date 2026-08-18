@@ -1474,6 +1474,10 @@ export const comments = pgTable("comments", {
   moderatedBy: varchar("moderated_by").references(() => users.id),
   moderatedAt: timestamp("moderated_at"),
   moderationReason: text("moderation_reason"),
+  // اعتراض صاحب التعليق على قرار الرفض الآلي — يُضبط مرة واحدة عند طلب
+  // المراجعة البشرية ويعيد التعليق لحالة pending (قناة معالجة للمتضررين
+  // وفق متطلبات اعتماد أخلاقيات الذكاء الاصطناعي)
+  appealedAt: timestamp("appealed_at"),
   // Sentiment analysis fields
   currentSentiment: text("current_sentiment"), // positive, neutral, negative (denormalized for performance)
   currentSentimentConfidence: real("current_sentiment_confidence"), // 0-1
@@ -3848,6 +3852,7 @@ export const insertCommentSchema = createInsertSchema(comments).omit({
   moderatedBy: true,
   moderatedAt: true,
   moderationReason: true,
+  appealedAt: true,
   currentSentiment: true,
   currentSentimentConfidence: true,
   sentimentAnalyzedAt: true,
