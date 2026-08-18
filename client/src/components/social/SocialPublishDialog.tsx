@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ExternalLink,
   ImageOff,
+  Info,
   Loader2,
   RefreshCcw,
   Send,
@@ -77,6 +78,9 @@ interface SocialPostRow {
   id: string;
   status: string;
   text: string;
+  textSource?: string;
+  createdByName?: string | null;
+  isAuthorProposal?: boolean;
   scheduledAt: string | null;
   publishedAt: string | null;
   externalPostUrl: string | null;
@@ -151,15 +155,24 @@ export function SocialPublishDialog({
   });
   const posts = Array.isArray(postsRaw?.posts) ? postsRaw!.posts : [];
 
-  // تهيئة النص من العنوان عند فتح النافذة أو وصول السياق
+  const existingDraft = useMemo(() => {
+    return posts.find((p) => p.status === "draft") ?? null;
+  }, [posts]);
+
+  // تهيئة النص من المسودة أو العنوان عند فتح النافذة أو وصول السياق
   useEffect(() => {
     if (!open) return;
+    if (existingDraft && !text) {
+      setText(existingDraft.text);
+      setTextSource("custom");
+      return;
+    }
     if (context && (textSource === "title" || textSource === "title_link")) {
       setText(context.title);
       setIncludeLink(textSource === "title_link");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, context?.title, textSource]);
+  }, [open, context?.title, textSource, existingDraft]);
 
   useEffect(() => {
     if (!open) {
@@ -215,6 +228,18 @@ export function SocialPublishDialog({
   });
 
   async function createDraft(): Promise<SocialPostRow> {
+    if (existingDraft) {
+      return apiRequest<SocialPostRow>(`/api/social-publishing/posts/${existingDraft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          includeLink,
+          imageSource: effectiveImage.source,
+          imageUrl: effectiveImage.url,
+        }),
+      });
+    }
     return apiRequest<SocialPostRow>(`/api/social-publishing/posts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -359,6 +384,21 @@ export function SocialPublishDialog({
             </div>
           ) : (
             <div className="space-y-4">
+              {existingDraft && (
+                <div className="flex items-start gap-2 rounded-lg border border-purple-200 bg-purple-50 p-3 text-xs text-purple-900 dark:border-purple-900/50 dark:bg-purple-950/30 dark:text-purple-200">
+                  <Info className="h-4 w-4 mt-0.5 text-purple-600 shrink-0" />
+                  <div>
+                    <span className="font-semibold">
+                      {existingDraft.isAuthorProposal
+                        ? "يوجد مقترح منشور محفوظ من كاتب المقال"
+                        : "توجد مسودة محفوظة لهذا المقال"}
+                    </span>
+                    {existingDraft.createdByName && <> ({existingDraft.createdByName})</>}
+                    . يمكنك مراجعته وتعديل النص واعتماده للنشر أو الجدولة.
+                  </div>
+                </div>
+              )}
+
               {/* مصدر النص */}
               <div className="space-y-2">
                 <Label>مصدر النص</Label>

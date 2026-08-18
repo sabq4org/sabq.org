@@ -867,9 +867,11 @@
         "server/jobs/socialPublishWorker.ts",
         "client/src/components/social/SocialPublishDialog.tsx",
         "client/src/pages/dashboard/SocialPublishingPage.tsx",
+        "client/src/pages/opinion-author/OpinionAuthorSocialProposalDialog.tsx",
         "tests/unit/socialPostText.test.ts",
         "tests/unit/socialTokenCrypto.test.ts",
         "tests/unit/socialPublishingLogic.test.ts",
+        "tests/unit/opinionSocialProposal.test.ts",
         "tests/unit/xApiClient.test.ts",
         "docs/systems/social-publishing/**"
       ],
@@ -881,7 +883,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-08-06"
+      "lastReviewed": "2026-08-18"
     },
     {
       "id": "sahraa-tv-block",
