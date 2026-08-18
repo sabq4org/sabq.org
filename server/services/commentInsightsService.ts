@@ -303,15 +303,20 @@ export async function notifyCommentRejected(params: {
   userId: string | null | undefined;
   commentId: string;
   reason: string;
+  /** true عندما يكون الرفض قرارًا آليًا (رقابة ذكية / كلمات محظورة) بلا مراجعة بشرية. */
+  automated?: boolean;
 }): Promise<void> {
   if (!params.userId) return;
   try {
+    const body = params.automated
+      ? `نعتذر، لم يُنشر تعليقك لمخالفته سياسة النشر — قرار آلي من نظام الرقابة الذكية. السبب: ${params.reason}. إن رأيت أن القرار غير صحيح، يمكنك طلب مراجعة بشرية من صفحة الإشعارات.`
+      : `نعتذر، لم يتم نشر تعليقك لمخالفته سياسة النشر. السبب: ${params.reason}`;
     await storage.createNotification({
       userId: params.userId,
       type: "comment_rejected",
       title: "لم يتم نشر تعليقك",
-      body: `نعتذر، لم يتم نشر تعليقك لمخالفته سياسة النشر. السبب: ${params.reason}`,
-      metadata: { commentId: params.commentId },
+      body,
+      metadata: { commentId: params.commentId, automated: params.automated === true },
     });
   } catch (error) {
     console.error("[Comment Insights] Failed to notify commenter:", error);
@@ -334,6 +339,53 @@ export async function notifyCommentOwnerRejected(
     commentId,
     reason: reason || "مخالفة سياسة النشر",
   });
+}
+
+// ── Appeal (remediation channel for automated rejections) ───────────────────
+
+export type CommentAppealOutcome =
+  | "queued"
+  | "not_found"
+  | "not_owner"
+  | "not_rejected"
+  | "already_appealed";
+
+/**
+ * اعتراض صاحب التعليق على قرار رفض آلي: يعيد التعليق إلى طابور المراجعة
+ * البشرية (pending) مرة واحدة فقط لكل تعليق. لا يمس قرارات المشرفين لاحقًا —
+ * المشرف يرى التحليل الآلي كاملًا ويحسم بنفسه.
+ */
+export async function appealRejectedComment(
+  commentId: string,
+  userId: string
+): Promise<CommentAppealOutcome> {
+  const [row] = await db
+    .select({
+      id: comments.id,
+      userId: comments.userId,
+      status: comments.status,
+      appealedAt: comments.appealedAt,
+      moderationReason: comments.moderationReason,
+    })
+    .from(comments)
+    .where(eq(comments.id, commentId))
+    .limit(1);
+
+  if (!row) return "not_found";
+  if (row.userId !== userId) return "not_owner";
+  if (row.appealedAt) return "already_appealed";
+  if (row.status !== "rejected") return "not_rejected";
+
+  await db
+    .update(comments)
+    .set({
+      status: "pending",
+      appealedAt: new Date(),
+      moderationReason: `${row.moderationReason ? row.moderationReason + " | " : ""}اعتراض من صاحب التعليق — بانتظار مراجعة بشرية`,
+    })
+    .where(eq(comments.id, commentId));
+
+  return "queued";
 }
 
 // ── Full pipeline ────────────────────────────────────────────────────────────
@@ -400,6 +452,7 @@ export async function runCommentModerationPipeline(
           userId: params.userId,
           commentId: params.commentId,
           reason,
+          automated: true,
         });
         await params.onStatusChange?.("rejected");
         console.log(
@@ -479,6 +532,7 @@ export async function runCommentModerationPipeline(
           userId: params.userId,
           commentId: params.commentId,
           reason: result.reason,
+          automated: true,
         });
       }
       await params.onStatusChange?.(status);

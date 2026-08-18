@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { ifoxCalendarService } from "../services/ifox";
+import { ifoxCalendarService, ifoxPreferencesService, ifoxQualityService } from "../services/ifox";
 import { AIArticleGenerator } from "../services/aiArticleGenerator";
 import { aiImageGenerator } from "../services/aiImageGenerator";
 import { sendArticleNotification } from "../notificationService";
@@ -9,8 +9,12 @@ import { nanoid } from "nanoid";
 /**
  * iFox Content Generator Job
  * معالج تلقائي لمهام توليد المحتوى المجدولة
- * 
- * يعمل كل 5 دقائق للتحقق من المهام المجدولة وتنفيذها
+ *
+ * يعمل كل 15 دقيقة للتحقق من المهام المجدولة وتنفيذها.
+ *
+ * حوكمة النشر: قرار «نشر مباشر أم مسودة» يخضع لإعدادات ifox_ai_preferences
+ * (autoPublishEnabled / enableQualityCheck / autoPublishThreshold / requireHumanReview)
+ * عبر resolvePublishDecision أدناه — الافتراضي الآمن هو المسودة.
  */
 
 let isProcessing = false;
@@ -21,6 +25,68 @@ const MAX_BATCH_SIZE = 10;
 
 // Maximum retry attempts before moving task to 'failed' status
 const MAX_RETRY_ATTEMPTS = 3;
+
+type PublishDecision = {
+  status: 'published' | 'draft';
+  reason: string;
+  qualityScore?: number;
+};
+
+/**
+ * يحسم قرار النشر وفق إعدادات الحوكمة الفعّالة.
+ *
+ * القاعدة: النشر الآلي لا يحدث إلا إذا فعّله المشغّل صراحة، ولم يشترط
+ * مراجعة بشرية، واجتاز المقال بوابة الجودة (عند تفعيلها) بعتبة النشر الآلي.
+ * أي غموض أو تعذّر (لا إعدادات، فشل فحص الجودة) يهبط بأمان إلى مسودة.
+ */
+async function resolvePublishDecision(params: {
+  taskId: string;
+  title: string;
+  content: string;
+  keywords: string[];
+}): Promise<PublishDecision> {
+  let prefs;
+  try {
+    prefs = await ifoxPreferencesService.getActivePreferences();
+  } catch (prefsError) {
+    console.error(`[iFox Generator] ⚠️ Failed to load AI preferences, defaulting to draft:`, prefsError);
+    return { status: 'draft', reason: 'preferences_unavailable' };
+  }
+
+  if (!prefs || prefs.autoPublishEnabled !== true) {
+    return { status: 'draft', reason: 'auto_publish_disabled' };
+  }
+
+  if (prefs.requireHumanReview === true) {
+    return { status: 'draft', reason: 'human_review_required' };
+  }
+
+  const qualityCheckEnabled = prefs.enableQualityCheck !== false;
+  if (!qualityCheckEnabled) {
+    return { status: 'published', reason: 'auto_publish_enabled_no_quality_check' };
+  }
+
+  try {
+    const check = await ifoxQualityService.checkArticleQuality({
+      taskId: params.taskId,
+      title: params.title,
+      content: params.content,
+      keywords: params.keywords,
+    });
+
+    const score = check.overallScore ?? 0;
+    const threshold = prefs.autoPublishThreshold ?? 90;
+
+    if (score >= threshold) {
+      return { status: 'published', reason: 'quality_gate_passed', qualityScore: score };
+    }
+    return { status: 'draft', reason: `quality_below_threshold (${score} < ${threshold})`, qualityScore: score };
+  } catch (qualityError) {
+    // الفشل نحو الإنسان: تعذّر الفحص لا يعني تجاوز البوابة
+    console.error(`[iFox Generator] ⚠️ Quality check failed, defaulting to draft:`, qualityError);
+    return { status: 'draft', reason: 'quality_check_failed' };
+  }
+}
 
 export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', async () => {
   if (isProcessing) {
@@ -128,7 +194,21 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         }
 
         // ========================================
-        // STEP 4: Create Article in Database
+        // STEP 4: Resolve publish decision (governance gate)
+        // ========================================
+        const decision = await resolvePublishDecision({
+          taskId: entry.id,
+          title: generatedArticle.title,
+          content: generatedArticle.content,
+          keywords,
+        });
+        console.log(
+          `[iFox Generator] 🛂 Publish decision: ${decision.status} (${decision.reason})` +
+          (decision.qualityScore !== undefined ? ` — quality ${decision.qualityScore}/100` : '')
+        );
+
+        // ========================================
+        // STEP 5: Create Article in Database
         // ========================================
         const now = new Date();
         
@@ -167,9 +247,9 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
           newsType: 'regular' as const,
           publishType: 'instant' as const,
           
-          // Publishing status
-          status: 'published' as const,
-          publishedAt: now,
+          // Publishing status — governed by resolvePublishDecision above
+          status: decision.status,
+          publishedAt: decision.status === 'published' ? now : undefined,
           
           // CRITICAL: Mark as AI-generated to filter from Sabq main site
           aiGenerated: true,
@@ -213,7 +293,7 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
           await ifoxCalendarService.updateEntry(entry.id, {
             status: 'completed',
             articleId: createdArticle.id,
-            actualPublishedAt: new Date(),
+            ...(decision.status === 'published' ? { actualPublishedAt: new Date() } : {}),
           }, userId);
           
           console.log(`[iFox Generator] ✅ Calendar entry updated with article link`);
@@ -225,7 +305,7 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         // ========================================
         // STEP 6: Send Notifications
         // ========================================
-        if (articleData.status === 'published') {
+        if (decision.status === 'published') {
           try {
             await sendArticleNotification(createdArticle, 'published');
             console.log(`[iFox Generator] 📢 Notification sent for published article`);
@@ -236,7 +316,11 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         }
 
         console.log(`[iFox Generator] ✅ Task completed successfully: ${topicIdea}`);
-        console.log(`[iFox Generator] 📰 Article published: ${createdArticle.id} - "${createdArticle.title}"`);
+        console.log(
+          decision.status === 'published'
+            ? `[iFox Generator] 📰 Article published: ${createdArticle.id} - "${createdArticle.title}"`
+            : `[iFox Generator] 📝 Article saved as draft pending review: ${createdArticle.id} - "${createdArticle.title}"`
+        );
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[iFox Generator] ❌ Error processing task ${entry.id}:`, errorMessage);

@@ -484,11 +484,8 @@ export default function TopicDetail() {
 
     setTtsState("loading");
     try {
-      const res = await fetch(apiUrl("/api/ai/text-to-speech"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `${topic.title}. ${topic.excerpt}` }),
-      });
+      // النص يُبنى في الخادم من الموضوع المنشور نفسه — لا يُرسل نص حر من العميل
+      const res = await fetch(apiUrl(`/api/muqtarab/topics/${topic.id}/summary-audio`));
       if (!res.ok) throw new Error("TTS failed");
       const blob = await res.blob();
       stopTts();

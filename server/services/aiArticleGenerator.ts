@@ -199,10 +199,15 @@ Additional rules:
       }
       
       const parsed = JSON.parse(jsonStr);
-      
+
+      // بوابة سلامة: استجابة بلا عنوان أو محتوى فعلي ليست مقالًا صالحًا للنشر
+      if (!parsed.title || typeof parsed.title !== 'string' || !parsed.content || typeof parsed.content !== 'string') {
+        throw new Error('AI response parsed but missing required title/content fields');
+      }
+
       return {
-        title: parsed.title || 'Untitled Article',
-        content: parsed.content || '',
+        title: parsed.title,
+        content: parsed.content,
         summary: parsed.summary || '',
         metaDescription: parsed.metaDescription || '',
         seoKeywords: Array.isArray(parsed.seoKeywords) ? parsed.seoKeywords : [],
@@ -211,17 +216,13 @@ Additional rules:
       };
     } catch (error) {
       console.error('Failed to parse AI response:', error);
-      
-      // Fallback: treat as raw content
-      return {
-        title: 'Generated Article',
-        content: content,
-        summary: content.substring(0, 200),
-        metaDescription: content.substring(0, 160),
-        seoKeywords: [],
-        suggestedTags: [],
-        estimatedReadTime: Math.ceil(content.split(/\s+/).length / 200)
-      };
+
+      // لا مسار احتياطي هنا عمدًا: النص الخام غير المُحلَّل كان يُنشر سابقًا
+      // كمقال حي بعنوان "Generated Article". الفشل الصريح يعيد المهمة
+      // لمنطق إعادة المحاولة لدى المستدعي بدل نشر مخرجات مشوّهة.
+      throw new Error(
+        `AI response is not valid article JSON: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
