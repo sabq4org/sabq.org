@@ -5,6 +5,7 @@ const { mockDb } = vi.hoisted(() => ({
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
+    execute: vi.fn(),
   },
 }));
 
@@ -13,6 +14,7 @@ vi.mock("../../server/db", () => ({ db: mockDb }));
 import {
   createOrUpdateAuthorSocialProposal,
   getAuthorSocialProposalStatus,
+  getPublishStats,
   isWithinOpinionSocialWindow,
   SOCIAL_POST_OPINION_WINDOW_MS,
   SocialPublishValidationError,
@@ -697,5 +699,50 @@ describe("opinionAuthorSocialProposal — إشعارات حالة المقترح
 
     // لا يتم استدعاء insert لإشعارات التحرير
     expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("opinionAuthorSocialProposal — إحصائيات لوحة التحكم ومؤشر المقترحات المعلقة", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("يعيد عدد المقترحات المعلقة للكتّاب بدقة ضمن getPublishStats", async () => {
+    mockDb.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          total: 15,
+          published_today: 4,
+          scheduled_upcoming: 3,
+          failed: 1,
+          pending_drafts: 7,
+          pending_author_proposals: 5,
+        },
+      ],
+    });
+
+    const stats = await getPublishStats();
+    expect(stats).toEqual({
+      total: 15,
+      publishedToday: 4,
+      scheduledUpcoming: 3,
+      failed: 1,
+      pendingDrafts: 7,
+      pendingAuthorProposals: 5,
+    });
+  });
+
+  it("يتعامل مع النتائج الفارغة بأصفار آمنة", async () => {
+    mockDb.execute.mockResolvedValueOnce({ rows: [] });
+
+    const stats = await getPublishStats();
+    expect(stats).toEqual({
+      total: 0,
+      publishedToday: 0,
+      scheduledUpcoming: 0,
+      failed: 0,
+      pendingDrafts: 0,
+      pendingAuthorProposals: 0,
+    });
   });
 });

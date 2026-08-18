@@ -17,6 +17,7 @@ import {
   RefreshCcw,
   Send,
   Share2,
+  Sparkles,
   Unlink,
   User,
   X as XIcon,
@@ -90,6 +91,8 @@ interface PublishStats {
   publishedToday: number;
   scheduledUpcoming: number;
   failed: number;
+  pendingDrafts: number;
+  pendingAuthorProposals: number;
 }
 
 interface AttemptRow {
@@ -158,7 +161,16 @@ export default function SocialPublishingPage() {
   const canCreate = hasPermission(user, "social_publish.create");
 
   const [disconnectTarget, setDisconnectTarget] = useState<SafeAccount | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const initialFilter = useMemo<StatusFilter>(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get("filter");
+      if (p === "draft" || p === "published" || p === "scheduled" || p === "failed") {
+        return p;
+      }
+    } catch {}
+    return "all";
+  }, []);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilter);
   const [attemptsFor, setAttemptsFor] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<SocialPostRow | null>(null);
@@ -404,6 +416,17 @@ export default function SocialPublishingPage() {
   };
 
   const statTiles = [
+    {
+      key: "proposals",
+      label: "مقترحات معلقة",
+      value: stats?.pendingAuthorProposals ?? 0,
+      icon: Sparkles,
+      valueClass:
+        (stats?.pendingAuthorProposals ?? 0) > 0
+          ? "text-purple-600 dark:text-purple-400 font-bold"
+          : "text-foreground",
+      chip: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    },
     {
       key: "today",
       label: "نُشر اليوم",

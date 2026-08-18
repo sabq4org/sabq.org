@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth, getHighestRole } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth, getHighestRole, hasPermission, hasRole } from "@/hooks/useAuth";
 import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, Newspaper, BadgeCheck, BadgeAlert } from "lucide-react";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
@@ -166,6 +167,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         .slice(0, 8)
     : [];
 
+  const canViewSocial = Boolean(
+    user && (hasPermission(user, "social_publish.view") || hasRole(user, "admin", "system_admin", "editor"))
+  );
+  const { data: socialStats } = useQuery<{ pendingAuthorProposals?: number }>({
+    queryKey: ["/api/social-publishing/stats"],
+    enabled: canViewSocial,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const pendingAuthorSocialProposals = socialStats?.pendingAuthorProposals ?? 0;
+
   // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل ومدير المحتوى
   const isIdentitySidebar =
     role === "opinion_author" || role === "angle_writer" || role === "reporter" || role === "content_manager";
@@ -304,6 +316,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       );
     }
 
+    const isSocialPublishing =
+      item.id === "social_publishing" || item.path === "/dashboard/social-publishing";
+    const badgeCount = isSocialPublishing ? pendingAuthorSocialProposals : (item.badge?.count ?? 0);
+
     return (
       <SidebarMenuItem key={item.id}>
         <SidebarMenuButton
@@ -315,9 +331,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             href={item.path || "#"}
             onClick={() => handleNavClick(item)}
           >
-            <span className="flex min-w-0 items-center gap-3">
-              {Icon && <Icon className="h-4 w-4 shrink-0" />}
-              <span className="truncate">{item.labelAr || item.labelKey}</span>
+            <span className="flex w-full min-w-0 items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-3">
+                {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{item.labelAr || item.labelKey}</span>
+              </span>
+              {badgeCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 shrink-0 rounded-full bg-primary/15 px-1.5 text-[10px] font-bold tabular-nums text-primary border-0"
+                  data-testid={`badge-nav-${item.id}`}
+                >
+                  {badgeCount > 99 ? "+99" : badgeCount}
+                </Badge>
+              )}
             </span>
           </Link>
         </SidebarMenuButton>
