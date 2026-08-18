@@ -283,8 +283,15 @@ export default function SocialPublishingPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async (postId: string) =>
-      apiRequest(`/api/social-publishing/posts/${postId}/cancel`, { method: "POST" }),
+    mutationFn: async (arg: string | { postId: string; reason?: string }) => {
+      const postId = typeof arg === "string" ? arg : arg.postId;
+      const reason = typeof arg === "object" ? arg.reason : undefined;
+      return apiRequest(`/api/social-publishing/posts/${postId}/cancel`, {
+        method: "POST",
+        headers: reason ? { "Content-Type": "application/json" } : undefined,
+        body: reason ? JSON.stringify({ reason }) : undefined,
+      });
+    },
     onSuccess: () => {
       invalidate();
       toast({ title: "تم إلغاء / رفض المنشور" });

@@ -458,6 +458,10 @@ router.post(
   },
 );
 
+const cancelPostSchema = z.object({
+  reason: z.string().max(1000).nullish(),
+});
+
 router.post(
   "/api/social-publishing/posts/:id/cancel",
   requireAuth,
@@ -467,7 +471,9 @@ router.post(
   ),
   async (req, res) => {
     try {
-      const post = await cancelPost(req.params.id, requestUserId(req));
+      const parsed = cancelPostSchema.safeParse(req.body);
+      const reason = parsed.success ? parsed.data.reason : undefined;
+      const post = await cancelPost(req.params.id, requestUserId(req), reason);
       res.json(post);
     } catch (error) {
       handleError(res, error, "تعذر الإلغاء");
