@@ -18,6 +18,11 @@ import {
 } from "../services/opinionAuthorWorkspaceService";
 import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
 import { uploadMediaLicenseDocument } from "../services/mediaLicenseUpload";
+import {
+  createOrUpdateAuthorSocialProposal,
+  getAuthorSocialProposalStatus,
+  SocialPublishValidationError,
+} from "../services/socialPublishing/socialPublishingService";
 
 const router = Router();
 const requestUserId = (req: Request) => (req.user as { id: string }).id;
@@ -194,5 +199,47 @@ router.post(
     }
   },
 );
+
+// ── مقترح النشر على منصة X لمقال الرأي المنشور (نافذة 24 ساعة) ────────
+
+router.get("/api/opinion-author/articles/:articleId/social-proposal", async (req, res) => {
+  try {
+    const status = await getAuthorSocialProposalStatus(req.params.articleId, requestUserId(req));
+    res.json(status);
+  } catch (error: unknown) {
+    if (error instanceof SocialPublishValidationError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error("[Opinion Author Social Proposal] get status failed:", error);
+    res.status(500).json({ message: "تعذر التحقق من حالة النشر الاجتماعي" });
+  }
+});
+
+const authorProposalSchema = z.object({
+  text: z.string().trim().min(1, "نص المنشور مطلوب").max(2000, "النص طويل جداً"),
+  textSource: z.enum(["title", "custom"]),
+});
+
+router.post("/api/opinion-author/articles/:articleId/social-proposal", async (req, res) => {
+  try {
+    const parsed = authorProposalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات المقترح غير صالحة" });
+    }
+    const post = await createOrUpdateAuthorSocialProposal({
+      articleId: req.params.articleId,
+      authorUserId: requestUserId(req),
+      text: parsed.data.text,
+      textSource: parsed.data.textSource,
+    });
+    res.status(201).json({ success: true, post });
+  } catch (error: unknown) {
+    if (error instanceof SocialPublishValidationError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error("[Opinion Author Social Proposal] submit failed:", error);
+    res.status(500).json({ message: "تعذر إرسال مقترح النشر الاجتماعي" });
+  }
+});
 
 export default router;

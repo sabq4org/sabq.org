@@ -8,15 +8,18 @@ import {
   BarChart3,
   CalendarClock,
   CheckCircle2,
+  Edit3,
   ExternalLink,
   Link2,
   ListTree,
   Loader2,
   PenSquare,
   RefreshCcw,
+  Send,
   Share2,
   Unlink,
   User,
+  X as XIcon,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
@@ -24,7 +27,17 @@ import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +53,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { fmtRelativeToNow, fmtSocialDateTime } from "@/components/social/socialFormat";
 import { ComposeTweetDialog } from "@/components/social/ComposeTweetDialog";
+import { validateXPostText, X_MAX_WEIGHTED_LENGTH } from "@shared/socialPostText";
 import { cn } from "@/lib/utils";
 
 interface SafeAccount {
@@ -59,6 +73,7 @@ interface SocialPostRow {
   articleImageUrl?: string | null;
   createdByName?: string | null;
   publishedByName?: string | null;
+  isAuthorProposal?: boolean;
   status: string;
   text: string;
   imageUrl: string | null;
@@ -87,7 +102,7 @@ interface AttemptRow {
   createdAt: string;
 }
 
-type StatusFilter = "all" | "published" | "scheduled" | "failed";
+type StatusFilter = "all" | "draft" | "scheduled" | "published" | "failed";
 
 const STATUS_META: Record<
   string,
@@ -146,6 +161,10 @@ export default function SocialPublishingPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [attemptsFor, setAttemptsFor] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<SocialPostRow | null>(null);
+  const [editText, setEditText] = useState("");
+  const [schedulingPost, setSchedulingPost] = useState<SocialPostRow | null>(null);
+  const [scheduledAtLocal, setScheduledAtLocal] = useState("");
 
   // نتيجة ربط OAuth تصل عبر ?x=connected|denied|…
   useEffect(() => {
@@ -203,6 +222,7 @@ export default function SocialPublishingPage() {
   const filterCounts = useMemo(
     () => ({
       all: posts.length,
+      draft: posts.filter((p) => p.status === "draft").length,
       published: posts.filter((p) => p.status === "published").length,
       scheduled: posts.filter((p) => p.status === "scheduled").length,
       failed: posts.filter((p) => p.status === "failed").length,
@@ -267,10 +287,59 @@ export default function SocialPublishingPage() {
       apiRequest(`/api/social-publishing/posts/${postId}/cancel`, { method: "POST" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "أُلغي المنشور المجدول" });
+      toast({ title: "تم إلغاء / رفض المنشور" });
     },
     onError: (error: any) => {
       toast({ title: "تعذر الإلغاء", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (postId: string) =>
+      apiRequest<{ post: SocialPostRow }>(`/api/social-publishing/posts/${postId}/publish`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "نُشر على X بنجاح" });
+    },
+    onError: (error: any) => {
+      invalidate();
+      toast({ title: "فشل النشر", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async ({ postId, text }: { postId: string; text: string }) =>
+      apiRequest(`/api/social-publishing/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      }),
+    onSuccess: () => {
+      setEditingPost(null);
+      invalidate();
+      toast({ title: "تم تعديل نص المنشور بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ title: "تعذر تعديل المنشور", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: async ({ postId, scheduledAt }: { postId: string; scheduledAt: string }) =>
+      apiRequest(`/api/social-publishing/posts/${postId}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: new Date(scheduledAt).toISOString() }),
+      }),
+    onSuccess: () => {
+      setSchedulingPost(null);
+      invalidate();
+      toast({ title: "تمت جدولة المنشور بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ title: "تعذرت الجدولة", description: error.message, variant: "destructive" });
     },
   });
 
@@ -364,8 +433,9 @@ export default function SocialPublishingPage() {
 
   const filterButtons: Array<{ key: StatusFilter; label: string }> = [
     { key: "all", label: "الكل" },
-    { key: "published", label: "منشور" },
+    { key: "draft", label: "مسودات ومقترحات" },
     { key: "scheduled", label: "مجدول" },
+    { key: "published", label: "منشور" },
     { key: "failed", label: "فشل" },
   ];
 
@@ -651,12 +721,18 @@ export default function SocialPublishingPage() {
 
                         <div className="flex min-w-0 flex-1 flex-col gap-2.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge className={cn(meta.pill, "border-0 px-2.5 py-0.5 text-sm font-semibold")}>
-                              {meta.label}
-                              {p.status === "scheduled" && p.scheduledAt && (
-                                <> · {fmtRelativeToNow(p.scheduledAt)}</>
-                              )}
-                            </Badge>
+                            {p.isAuthorProposal && p.status === "draft" ? (
+                              <Badge className="border-0 bg-purple-500/15 text-purple-700 dark:text-purple-300 px-2.5 py-0.5 text-sm font-semibold">
+                                مقترح كاتب رأي
+                              </Badge>
+                            ) : (
+                              <Badge className={cn(meta.pill, "border-0 px-2.5 py-0.5 text-sm font-semibold")}>
+                                {meta.label}
+                                {p.status === "scheduled" && p.scheduledAt && (
+                                  <> · {fmtRelativeToNow(p.scheduledAt)}</>
+                                )}
+                              </Badge>
+                            )}
                             {p.status === "failed" && (
                               <Badge
                                 className="border-0 bg-muted px-2.5 py-0.5 text-sm text-muted-foreground"
@@ -693,7 +769,7 @@ export default function SocialPublishingPage() {
                               {p.createdByName && (
                                 <span className="inline-flex items-center gap-1.5">
                                   <User className="h-4 w-4 opacity-70" />
-                                  أنشأه{" "}
+                                  {p.isAuthorProposal ? "اقترحه الكاتب " : "أنشأه "}
                                   <b className="font-semibold text-foreground/80">
                                     {p.createdByName}
                                   </b>
@@ -736,6 +812,64 @@ export default function SocialPublishingPage() {
                                     فتح في X
                                   </a>
                                 </Button>
+                              )}
+                              {p.status === "draft" && (
+                                <>
+                                  {(canCreate || canManageScheduled) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 gap-1 text-xs"
+                                      onClick={() => {
+                                        setEditingPost(p);
+                                        setEditText(p.text);
+                                      }}
+                                      data-testid={`button-log-edit-${p.id}`}
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" />
+                                      تعديل النص
+                                    </Button>
+                                  )}
+                                  {canPublishNow && (
+                                    <Button
+                                      size="sm"
+                                      className="h-8 gap-1 text-xs bg-primary hover:bg-primary/90"
+                                      disabled={publishMutation.isPending}
+                                      onClick={() => publishMutation.mutate(p.id)}
+                                      data-testid={`button-log-publish-${p.id}`}
+                                    >
+                                      <Send className="h-3.5 w-3.5" />
+                                      اعتماد ونشر
+                                    </Button>
+                                  )}
+                                  {canManageScheduled && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 gap-1 text-xs"
+                                      onClick={() => {
+                                        setSchedulingPost(p);
+                                        setScheduledAtLocal("");
+                                      }}
+                                      data-testid={`button-log-schedule-${p.id}`}
+                                    >
+                                      <CalendarClock className="h-3.5 w-3.5" />
+                                      جدولة
+                                    </Button>
+                                  )}
+                                  {(canCreate || canManageScheduled) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-xs text-red-600 border-red-500/20 hover:bg-red-500/10"
+                                      disabled={cancelMutation.isPending}
+                                      onClick={() => cancelMutation.mutate(p.id)}
+                                      data-testid={`button-log-cancel-${p.id}`}
+                                    >
+                                      رفض المقترح
+                                    </Button>
+                                  )}
+                                </>
                               )}
                               {p.status === "scheduled" && canManageScheduled && (
                                 <Button
@@ -862,6 +996,149 @@ export default function SocialPublishingPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* تعديل مسودة / مقترح منشور */}
+      <Dialog
+        open={Boolean(editingPost)}
+        onOpenChange={(open) => !open && setEditingPost(null)}
+      >
+        <DialogContent
+          className="w-[calc(100vw-1.25rem)] max-w-lg rounded-xl p-4 sm:p-6"
+          dir="rtl"
+        >
+          <DialogHeader className="text-right">
+            <DialogTitle className="flex items-center gap-2">
+              <Edit3 className="h-4 w-4 text-primary" />
+              تعديل نص المنشور
+            </DialogTitle>
+            <DialogDescription>
+              {editingPost?.articleTitle ? `من خبر: ${editingPost.articleTitle}` : "تعديل نص المسودة"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <Textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              rows={4}
+              placeholder="اكتب نص المنشور..."
+              className="min-h-28 resize-none text-sm leading-relaxed"
+              data-testid="textarea-edit-post-text"
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground" dir="ltr">
+              <span>{validateXPostText(editText, null).weightedLength} / {X_MAX_WEIGHTED_LENGTH}</span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={editMutation.isPending}
+              onClick={() => setEditingPost(null)}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !editText.trim() ||
+                !validateXPostText(editText, null).valid ||
+                editMutation.isPending
+              }
+              onClick={() => {
+                if (editingPost) {
+                  editMutation.mutate({ postId: editingPost.id, text: editText.trim() });
+                }
+              }}
+              data-testid="button-save-post-edit"
+            >
+              {editMutation.isPending ? (
+                <>
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" /> جاري الحفظ...
+                </>
+              ) : (
+                "حفظ التعديل"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* جدولة منشور */}
+      <Dialog
+        open={Boolean(schedulingPost)}
+        onOpenChange={(open) => !open && setSchedulingPost(null)}
+      >
+        <DialogContent
+          className="w-[calc(100vw-1.25rem)] max-w-md rounded-xl p-4 sm:p-6"
+          dir="rtl"
+        >
+          <DialogHeader className="text-right">
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="h-4 w-4 text-primary" />
+              تحديد موعد نشر التغريدة
+            </DialogTitle>
+            <DialogDescription>
+              اختر الوقت والتاريخ لنشر التغريدة تلقائياً عبر منصة X.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <Input
+              type="datetime-local"
+              value={scheduledAtLocal}
+              onChange={(e) => setScheduledAtLocal(e.target.value)}
+              className="text-sm"
+              dir="ltr"
+              data-testid="input-schedule-datetime"
+            />
+            <p className="text-xs text-muted-foreground">
+              * يجب أن يكون الموعد في المستقبل (بعد دقيقة على الأقل).
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={scheduleMutation.isPending}
+              onClick={() => setSchedulingPost(null)}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !scheduledAtLocal ||
+                new Date(scheduledAtLocal).getTime() <= Date.now() + 60 * 1000 ||
+                scheduleMutation.isPending
+              }
+              onClick={() => {
+                if (schedulingPost && scheduledAtLocal) {
+                  scheduleMutation.mutate({
+                    postId: schedulingPost.id,
+                    scheduledAt: scheduledAtLocal,
+                  });
+                }
+              }}
+              data-testid="button-confirm-schedule"
+            >
+              {scheduleMutation.isPending ? (
+                <>
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" /> جاري الجدولة...
+                </>
+              ) : (
+                "اعتماد الجدولة"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

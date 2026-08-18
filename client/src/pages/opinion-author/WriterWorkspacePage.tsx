@@ -57,11 +57,13 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Share2,
   Sparkles,
   Target,
   Users,
   WandSparkles,
 } from "lucide-react";
+import { OpinionAuthorSocialProposalDialog } from "./OpinionAuthorSocialProposalDialog";
 
 type ArticleRow = {
   id: string;
@@ -285,6 +287,7 @@ export default function WriterWorkspacePage() {
   const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewTitle, setReviewTitle] = useState("");
+  const [socialProposalArticle, setSocialProposalArticle] = useState<TrackingArticle | null>(null);
   /** Ideas are AI-generated and slow — only fetch after explicit user action. */
   const [ideasRequested, setIdeasRequested] = useState(false);
 
@@ -782,6 +785,7 @@ export default function WriterWorkspacePage() {
                         onEdit={() => navigate(`/dashboard/articles/${article.id}/edit`)}
                         onView={() => navigate(`/article/${article.id}`)}
                         onReview={() => reviewMutation.mutate(article)}
+                        onSocialProposal={setSocialProposalArticle}
                         reviewPending={reviewMutation.isPending}
                         submitPending={submitReviewMutation.isPending}
                         onSubmit={(id) => submitReviewMutation.mutate(id)}
@@ -826,6 +830,17 @@ export default function WriterWorkspacePage() {
           {reviewResult && <ReviewResultView result={reviewResult} />}
         </DialogContent>
       </Dialog>
+
+      {socialProposalArticle && (
+        <OpinionAuthorSocialProposalDialog
+          articleId={socialProposalArticle.id}
+          articleTitle={socialProposalArticle.title}
+          open={Boolean(socialProposalArticle)}
+          onOpenChange={(open) => {
+            if (!open) setSocialProposalArticle(null);
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -940,12 +955,41 @@ function trackingState(article: TrackingArticle) {
   return { label: "مسودة", description: "المقال محفوظ لديك ولم يُرسل إلى فريق التحرير بعد.", icon: Feather, tone: "default" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
 }
 
-function WriterTrackingCard({ article, onEdit, onView, onReview, reviewPending, submitPending, onSubmit }: { article: TrackingArticle; onEdit: () => void; onView: () => void; onReview: () => void; reviewPending: boolean; submitPending: boolean; onSubmit: (id: string) => void }) {
+function WriterTrackingCard({
+  article,
+  onEdit,
+  onView,
+  onReview,
+  onSocialProposal,
+  reviewPending,
+  submitPending,
+  onSubmit,
+}: {
+  article: TrackingArticle;
+  onEdit: () => void;
+  onView: () => void;
+  onReview: () => void;
+  onSocialProposal?: (article: TrackingArticle) => void;
+  reviewPending: boolean;
+  submitPending: boolean;
+  onSubmit: (id: string) => void;
+}) {
   const state = trackingState(article);
   const StateIcon = state.icon;
   const isInvalid = state.tone === "danger";
   const needsChanges = article.reviewStatus === "needs_changes";
   const isPlainDraft = article.status === "draft" && !article.reviewStatus;
+
+  const isActuallyPublished =
+    article.status === "published" &&
+    Boolean(article.publishedAt) &&
+    new Date(article.publishedAt!).getTime() <= Date.now();
+  const elapsedMs = isActuallyPublished
+    ? Date.now() - new Date(article.publishedAt!).getTime()
+    : Infinity;
+  const isWithin24Hours =
+    isActuallyPublished && elapsedMs >= 0 && elapsedMs <= 24 * 60 * 60 * 1000;
+
   const toneClasses = {
     default: "border-border bg-card",
     warning: "border-warning/50 bg-warning/[0.08] dark:border-border dark:bg-warning/10",
@@ -961,7 +1005,87 @@ function WriterTrackingCard({ article, onEdit, onView, onReview, reviewPending, 
     danger: "bg-destructive/15 text-destructive",
   };
 
-  return <Card id={`writer-article-${article.id}`} className={toneClasses[state.tone]}><CardContent className="space-y-4 p-4 md:p-5"><div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold leading-7">{article.title}</h3><Badge className={`gap-1.5 border-0 ${badgeClasses[state.tone]}`}><StateIcon className="h-3.5 w-3.5" />{state.label}</Badge></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{state.description}</p>{state.date && <p className="mt-1 text-xs text-muted-foreground">{state.dateLabel}: {format(new Date(state.date), "d MMMM yyyy، h:mm a", { locale: ar })}</p>}</div><div className="flex shrink-0 flex-wrap gap-2">{(isPlainDraft || needsChanges) && <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5"><Edit3 className="h-4 w-4" /> تعديل المقال</Button>}{isPlainDraft && <Button variant="secondary" size="sm" onClick={onReview} disabled={reviewPending} className="gap-1.5"><BrainCircuit className="h-4 w-4" /> قارئ سبق الأول</Button>}{(isPlainDraft || needsChanges) && <SubmitRevisionButton article={article} isPending={submitPending} onSubmit={onSubmit} />}{article.status === "published" && <Button variant="outline" size="sm" onClick={onView}>عرض المقال</Button>}</div></div>{needsChanges && article.reviewNotes && <EditorialChecklist notes={article.reviewNotes} />}{isInvalid && <div className="rounded-xl border border-destructive/30 bg-background/70 p-3 dark:border-border"><p className="text-xs font-semibold text-destructive dark:text-destructive">سبب عدم النشر</p><p className="mt-1 text-sm leading-6 text-destructive/80 dark:text-destructive/80">{article.reviewNotes?.trim() || "لم يسجل فريق التحرير سببًا لهذا القرار. يرجى التواصل عبر الاستفسارات."}</p></div>}{!needsChanges && !isInvalid && article.reviewNotes && article.reviewStatus !== "pending_review" && <div className="rounded-xl border bg-background/70 p-3"><p className="text-xs font-semibold">ملاحظة فريق التحرير</p><p className="mt-1 text-sm leading-6 text-muted-foreground">{article.reviewNotes}</p></div>}</CardContent></Card>;
+  return (
+    <Card id={`writer-article-${article.id}`} className={toneClasses[state.tone]}>
+      <CardContent className="space-y-4 p-4 md:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold leading-7">{article.title}</h3>
+              <Badge className={`gap-1.5 border-0 ${badgeClasses[state.tone]}`}>
+                <StateIcon className="h-3.5 w-3.5" />
+                {state.label}
+              </Badge>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{state.description}</p>
+            {state.date && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {state.dateLabel}: {format(new Date(state.date), "d MMMM yyyy، h:mm a", { locale: ar })}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {(isPlainDraft || needsChanges) && (
+              <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5">
+                <Edit3 className="h-4 w-4" /> تعديل المقال
+              </Button>
+            )}
+            {isPlainDraft && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onReview}
+                disabled={reviewPending}
+                className="gap-1.5"
+              >
+                <BrainCircuit className="h-4 w-4" /> قارئ سبق الأول
+              </Button>
+            )}
+            {(isPlainDraft || needsChanges) && (
+              <SubmitRevisionButton
+                article={article}
+                isPending={submitPending}
+                onSubmit={onSubmit}
+              />
+            )}
+            {article.status === "published" && (
+              <>
+                {isWithin24Hours && onSocialProposal && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onSocialProposal(article)}
+                    className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                    data-testid={`button-writer-social-proposal-${article.id}`}
+                  >
+                    <Share2 className="h-4 w-4" /> اقتراح منشور X
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={onView}>
+                  عرض المقال
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+        {needsChanges && article.reviewNotes && <EditorialChecklist notes={article.reviewNotes} />}
+        {isInvalid && (
+          <div className="rounded-xl border border-destructive/30 bg-background/70 p-3 dark:border-border">
+            <p className="text-xs font-semibold text-destructive dark:text-destructive">سبب عدم النشر</p>
+            <p className="mt-1 text-sm leading-6 text-destructive/80 dark:text-destructive/80">
+              {article.reviewNotes?.trim() || "لم يسجل فريق التحرير سببًا لهذا القرار. يرجى التواصل عبر الاستفسارات."}
+            </p>
+          </div>
+        )}
+        {!needsChanges && !isInvalid && article.reviewNotes && article.reviewStatus !== "pending_review" && (
+          <div className="rounded-xl border bg-background/70 p-3">
+            <p className="text-xs font-semibold">ملاحظة فريق التحرير</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{article.reviewNotes}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function IdeaCard({ idea, onStart }: { idea: WriterIdea; onStart: () => void }) {
