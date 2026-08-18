@@ -501,6 +501,8 @@ export interface SocialPublishStats {
   publishedToday: number;
   scheduledUpcoming: number;
   failed: number;
+  pendingDrafts: number;
+  pendingAuthorProposals: number;
 }
 
 /** عدادات لوحة النشر الاجتماعي — استعلام تجميعي واحد */
@@ -509,12 +511,19 @@ export async function getPublishStats(): Promise<SocialPublishStats> {
     SELECT
       count(*)::int AS total,
       count(*) FILTER (
-        WHERE status = 'published'
-          AND published_at >= (now() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'
+        WHERE p.status = 'published'
+          AND p.published_at >= (now() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'
       )::int AS published_today,
-      count(*) FILTER (WHERE status = 'scheduled')::int AS scheduled_upcoming,
-      count(*) FILTER (WHERE status = 'failed')::int AS failed
-    FROM social_posts
+      count(*) FILTER (WHERE p.status = 'scheduled')::int AS scheduled_upcoming,
+      count(*) FILTER (WHERE p.status = 'failed')::int AS failed,
+      count(*) FILTER (WHERE p.status = 'draft')::int AS pending_drafts,
+      count(*) FILTER (
+        WHERE p.status = 'draft'
+          AND p.article_id IS NOT NULL
+          AND (p.created_by_user_id = a.author_id OR p.created_by_user_id = a.submitter_id)
+      )::int AS pending_author_proposals
+    FROM social_posts AS p
+    LEFT JOIN articles AS a ON p.article_id = a.id
   `);
   const row = (result.rows?.[0] ?? {}) as Record<string, number>;
   return {
@@ -522,6 +531,8 @@ export async function getPublishStats(): Promise<SocialPublishStats> {
     publishedToday: Number(row.published_today ?? 0),
     scheduledUpcoming: Number(row.scheduled_upcoming ?? 0),
     failed: Number(row.failed ?? 0),
+    pendingDrafts: Number(row.pending_drafts ?? 0),
+    pendingAuthorProposals: Number(row.pending_author_proposals ?? 0),
   };
 }
 

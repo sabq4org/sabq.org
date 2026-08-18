@@ -143,6 +143,7 @@ export function OpinionAuthorSocialProposalDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/workspace"] });
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
       queryClient.invalidateQueries({ queryKey: ["/api/social-publishing/posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/social-publishing/stats"] });
       toast({
         title: "تم إرسال المقترح بنجاح",
         description: "وصل مقترحك إلى فريق النشر الاجتماعي في سبق للمراجعة والاعتماد.",

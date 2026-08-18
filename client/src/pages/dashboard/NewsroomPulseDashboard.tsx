@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Radar,
   RefreshCw,
+  Share2,
   Sparkles,
   Star,
   Timer,
@@ -1022,6 +1023,7 @@ export default function NewsroomPulseDashboard() {
   const canReviewMuqtarab = hasPermission(user, "muqtarab.manage");
   const canViewMessages = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES);
   const canViewWriterTickets = hasRole(user, "admin", "editor", "system_admin");
+  const canSocialPublish = !isReporterOnly && (hasPermission(user, "social_publish.view") || hasRole(user, "admin", "system_admin", "editor"));
 
   const role: UserRole = resolveUserRole(getHighestRole(user));
   const navFlags = useMemo(() => ({ aiDeepAnalysis: false, smartThemes: true, audioSummaries: false }), []);
@@ -1065,6 +1067,20 @@ export default function NewsroomPulseDashboard() {
     refetchInterval: 120_000,
   });
   const muqtarabCount = Array.isArray(muqtarabRaw) ? muqtarabRaw.length : 0;
+
+  const { data: socialStatsRaw } = useQuery<{
+    total: number;
+    publishedToday: number;
+    scheduledUpcoming: number;
+    failed: number;
+    pendingDrafts: number;
+    pendingAuthorProposals: number;
+  }>({
+    queryKey: ["/api/social-publishing/stats"],
+    enabled: Boolean(user && canSocialPublish),
+    refetchInterval: 60_000,
+  });
+  const pendingAuthorSocialProposals = socialStatsRaw?.pendingAuthorProposals ?? 0;
   const stats = useMemo<DashboardStats | undefined>(() => {
     const base = statsQuery.data;
     const pulse = pulseQuery.data;
@@ -1217,11 +1233,25 @@ export default function NewsroomPulseDashboard() {
 
         <section className="space-y-2 sm:space-y-3">
           <SectionTitle title="يتطلب تدخلك" description="الأعمال التي لا ينبغي أن تبقى في قائمة الانتظار" />
-          <div className={cn("grid gap-1.5 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-4")}>
+          <div className={cn("grid gap-1.5 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-5 lg:grid-cols-3")}>
             {!isContentManager && <ActionCard title="تعليقات للمراجعة" count={stats?.comments.pending ?? 0} description={stats?.comments.pendingOlderThanTwoHours ? `${number(stats.comments.pendingOlderThanTwoHours)} تجاوزت ساعتين` : "ضمن وقت الاستجابة"} href="/dashboard/ai-moderation" icon={MessageSquare} tone="danger" />}
             {canReviewMuqtarab && <ActionCard title="مراجعة مُقترب" count={muqtarabCount} description="مواضيع تنتظر قرار التحرير" href="/dashboard/muqtarab/review" icon={BellRing} tone="warning" />}
             <ActionCard title="المسار التحريري" count={pipelineTotal} description={`${number(stats?.articles.scheduled)} مواد مجدولة`} href="/dashboard/articles" icon={FileClock} tone="info" />
             <ActionCard title="تحتاج تعديلات" count={stats?.articles.needsChanges ?? 0} description="مواد أُعيدت للمعالجة" href="/dashboard/articles" icon={AlertTriangle} tone="warning" />
+            {canSocialPublish && (
+              <ActionCard
+                title="مقترحات X للكتّاب"
+                count={pendingAuthorSocialProposals}
+                description={
+                  pendingAuthorSocialProposals > 0
+                    ? `${number(pendingAuthorSocialProposals)} مقترحات تنتظر المراجعة`
+                    : "لا توجد مقترحات معلقة"
+                }
+                href="/dashboard/social-publishing?filter=draft"
+                icon={Share2}
+                tone={pendingAuthorSocialProposals > 0 ? "warning" : "info"}
+              />
+            )}
           </div>
           {(canViewMessages || canViewWriterTickets) && <MessagesTabs showVisitorMessages={canViewMessages} showWriterTickets={canViewWriterTickets} />}
         </section>
