@@ -28,6 +28,7 @@ import { sanitizeSecretText } from "./tokenCrypto";
 import { SocialProviderError, type SocialPublishProvider } from "./types";
 import { xProvider } from "./xApiClient";
 import { activeSocialTransport, publerProvider } from "./publerApiClient";
+import { notifyAuthorOfSocialPostStatus } from "../editorialNotifications";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -363,13 +364,27 @@ export async function schedulePost(postId: string, scheduledAt: Date): Promise<S
   if (!updated) {
     throw new SocialPublishValidationError("تعذرت الجدولة — تحقق من حالة المنشور", 409);
   }
+  if (updated.articleId) {
+    void notifyAuthorOfSocialPostStatus(updated.id, "social_scheduled").catch((err) => {
+      console.error(`${LOG_PREFIX} فشل إشعار الكاتب بجدولة X:`, err);
+    });
+  }
   return updated;
 }
 
-export async function cancelPost(postId: string, canceledByUserId: string): Promise<SocialPost> {
+export async function cancelPost(
+  postId: string,
+  canceledByUserId: string,
+  reason?: string | null,
+): Promise<SocialPost> {
   const [updated] = await db
     .update(socialPosts)
-    .set({ status: "canceled", canceledByUserId, updatedAt: new Date() })
+    .set({
+      status: "canceled",
+      canceledByUserId,
+      lastError: reason ? sanitizeSecretText(reason) : null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(socialPosts.id, postId), inArray(socialPosts.status, ["draft", "scheduled"])))
     .returning();
   if (!updated) {
@@ -377,6 +392,13 @@ export async function cancelPost(postId: string, canceledByUserId: string): Prom
       "تعذر الإلغاء — المنشور نُشر أو دخل مرحلة النشر بالفعل",
       409,
     );
+  }
+  if (updated.articleId) {
+    void notifyAuthorOfSocialPostStatus(updated.id, "social_rejected", {
+      reviewerNote: reason,
+    }).catch((err) => {
+      console.error(`${LOG_PREFIX} فشل إشعار الكاتب بإلغاء X:`, err);
+    });
   }
   return updated;
 }
@@ -748,6 +770,13 @@ export async function publishClaimedPost(
       .where(eq(socialPosts.id, claimed.id))
       .returning();
     console.log(`${LOG_PREFIX} نُشر ${claimed.id} → ${result.externalPostUrl}`);
+
+    if (updated?.articleId) {
+      void notifyAuthorOfSocialPostStatus(updated.id, "social_published").catch((err) => {
+        console.error(`${LOG_PREFIX} فشل إشعار الكاتب بالنشر على X:`, err);
+      });
+    }
+
     return updated;
   } catch (err) {
     const pErr = err instanceof SocialProviderError ? err : null;

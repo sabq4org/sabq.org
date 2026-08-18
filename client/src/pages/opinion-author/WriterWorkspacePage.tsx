@@ -397,6 +397,10 @@ export default function WriterWorkspacePage() {
       if (token) window.open(`/survey/${token}`, "_blank", "noopener");
       return;
     }
+    if (notification.type === "social_published" && notification.deepLink?.startsWith("https://")) {
+      window.open(notification.deepLink, "_blank", "noopener");
+      return;
+    }
     setActiveTab("articles");
     if (notification.articleId) {
       window.setTimeout(() => {

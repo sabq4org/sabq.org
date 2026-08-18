@@ -60,6 +60,8 @@ interface ProposalStatusResponse {
     status: string;
     linkUrl: string | null;
     imageUrl: string | null;
+    externalPostUrl?: string | null;
+    lastError?: string | null;
     createdAt: string;
     publishedAt: string | null;
     scheduledAt: string | null;
@@ -240,22 +242,57 @@ export function OpinionAuthorSocialProposalDialog({
             {/* حالة المقترح السابق إن وُجد */}
             {existing && (
               <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs sm:text-sm">
-                <div className="flex items-center gap-2 font-semibold text-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span>
-                    {existing.status === "published"
-                      ? "تم نشر المقترح على منصة X بنجاح"
-                      : existing.status === "scheduled"
-                        ? "اعتمد فريق سبق المقترح وجُدول للنشر"
-                        : existing.status === "canceled"
-                          ? "تم رفض أو إلغاء المقترح من فريق سبق"
-                          : "تم إرسال مقترح سابق وهو قيد مراجعة فريق سبق"}
-                  </span>
-                </div>
-                {isEligible && existing.status === "draft" && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    يمكنك تعديل النص وإعادة الإرسال طالما المقال ضمن نافذة الـ24 ساعة.
-                  </p>
+                {existing.status === "published" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span>تم نشر المقترح على منصة X بنجاح</span>
+                    </div>
+                    {existing.externalPostUrl && (
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 border-emerald-500/30 text-xs text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                      >
+                        <a href={existing.externalPostUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3 w-3" />
+                          فتح التغريدة
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                ) : existing.status === "scheduled" ? (
+                  <div className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
+                    <Clock className="h-4 w-4 text-amber-600" />
+                    <span>
+                      اعتمد فريق سبق المقترح وجُدول للنشر
+                    </span>
+                  </div>
+                ) : existing.status === "canceled" ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 font-semibold text-foreground">
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <span>اعتذر فريق النشر عن تغريدة هذا المقترح</span>
+                    </div>
+                    {existing.lastError && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        ملاحظة المحرر: {existing.lastError}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 font-semibold text-foreground">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                      <span>تم إرسال المقترح وهو قيد مراجعة فريق سبق</span>
+                    </div>
+                    {isEligible && (
+                      <p className="text-xs text-muted-foreground">
+                        يمكنك تعديل النص وإعادة الإرسال طالما المقال ضمن نافذة الـ24 ساعة.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}

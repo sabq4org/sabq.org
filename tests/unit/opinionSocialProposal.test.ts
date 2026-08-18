@@ -17,6 +17,7 @@ import {
   SOCIAL_POST_OPINION_WINDOW_MS,
   SocialPublishValidationError,
 } from "../../server/services/socialPublishing/socialPublishingService";
+import { notifyAuthorOfSocialPostStatus } from "../../server/services/editorialNotifications";
 
 describe("opinionAuthorSocialProposal — نافذة الـ24 ساعة", () => {
   const baseTime = new Date("2026-08-18T12:00:00.000Z");
@@ -443,5 +444,258 @@ describe("opinionAuthorSocialProposal — التحقق والأمان والمل
     });
 
     expect(result).toEqual(updatedPost);
+  });
+});
+
+describe("opinionAuthorSocialProposal — إشعارات حالة المقترح للكاتب", () => {
+  const authorId = "author-user-123";
+  const articleId = "article-op-789";
+  const postId = "post-social-001";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("يُسجل إشعار social_published للكاتب عند نشر المقترح", async () => {
+    const postData = {
+      id: postId,
+      articleId,
+      createdByUserId: authorId,
+      externalPostUrl: "https://x.com/sabqorg/status/123456789",
+      scheduledAt: null,
+    };
+    const articleData = {
+      id: articleId,
+      title: "مقال النشر",
+      slug: "published-article-slug",
+      englishSlug: null,
+      articleType: "opinion",
+      authorId,
+      submitterId: authorId,
+      scheduledAt: null,
+      publishedAt: new Date(),
+    };
+
+    // 1) select post + article
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ post: postData, article: articleData }]),
+          }),
+        }),
+      }),
+    });
+
+    // 2) select user prefs (defaults)
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve([]),
+        }),
+      }),
+    });
+
+    // 3) insert editorialNotifications
+    mockDb.insert.mockReturnValueOnce({
+      values: (val: any) => {
+        expect(val.userId).toBe(authorId);
+        expect(val.type).toBe("social_published");
+        expect(val.title).toContain("نُشر مقترحك على منصة X");
+        expect(val.body).toContain("تم نشر تغريدة مقالك");
+        expect(val.deepLink).toBe("https://x.com/sabqorg/status/123456789");
+        return {
+          returning: () => Promise.resolve([{ id: "notif-1" }]),
+        };
+      },
+    });
+
+    // 4) select devices (none)
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        where: () => Promise.resolve([]),
+      }),
+    });
+
+    // 5) update deliveryStatus
+    mockDb.update.mockReturnValueOnce({
+      set: (val: any) => {
+        expect(val.deliveryStatus).toBe("no_device");
+        return {
+          where: () => Promise.resolve(),
+        };
+      },
+    });
+
+    await notifyAuthorOfSocialPostStatus(postId, "social_published");
+  });
+
+  it("يُسجل إشعار social_scheduled للكاتب عند جدولة المقترح", async () => {
+    const scheduledDate = new Date("2026-08-19T10:00:00.000Z");
+    const postData = {
+      id: postId,
+      articleId,
+      createdByUserId: authorId,
+      externalPostUrl: null,
+      scheduledAt: scheduledDate,
+    };
+    const articleData = {
+      id: articleId,
+      title: "مقال الجدولة",
+      slug: "scheduled-article-slug",
+      englishSlug: null,
+      articleType: "opinion",
+      authorId,
+      submitterId: authorId,
+      scheduledAt: scheduledDate,
+      publishedAt: new Date(),
+    };
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ post: postData, article: articleData }]),
+          }),
+        }),
+      }),
+    });
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve([]),
+        }),
+      }),
+    });
+
+    mockDb.insert.mockReturnValueOnce({
+      values: (val: any) => {
+        expect(val.userId).toBe(authorId);
+        expect(val.type).toBe("social_scheduled");
+        expect(val.title).toContain("تمت جدولة مقترحك للنشر على X");
+        return {
+          returning: () => Promise.resolve([{ id: "notif-2" }]),
+        };
+      },
+    });
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        where: () => Promise.resolve([]),
+      }),
+    });
+
+    mockDb.update.mockReturnValueOnce({
+      set: () => ({
+        where: () => Promise.resolve(),
+      }),
+    });
+
+    await notifyAuthorOfSocialPostStatus(postId, "social_scheduled");
+  });
+
+  it("يُسجل إشعار social_rejected للكاتب عند رفض أو إلغاء المقترح", async () => {
+    const postData = {
+      id: postId,
+      articleId,
+      createdByUserId: authorId,
+      externalPostUrl: null,
+      scheduledAt: null,
+    };
+    const articleData = {
+      id: articleId,
+      title: "مقال الرفض",
+      slug: "rejected-article-slug",
+      englishSlug: null,
+      articleType: "opinion",
+      authorId,
+      submitterId: authorId,
+      scheduledAt: null,
+      publishedAt: new Date(),
+    };
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ post: postData, article: articleData }]),
+          }),
+        }),
+      }),
+    });
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve([]),
+        }),
+      }),
+    });
+
+    mockDb.insert.mockReturnValueOnce({
+      values: (val: any) => {
+        expect(val.userId).toBe(authorId);
+        expect(val.type).toBe("social_rejected");
+        expect(val.title).toContain("قرار حول مقترح النشر على X");
+        expect(val.body).toContain("اعتذر فريق النشر");
+        expect(val.reviewerNote).toBe("لا يتناسب مع خطة النشر اليوم");
+        return {
+          returning: () => Promise.resolve([{ id: "notif-3" }]),
+        };
+      },
+    });
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        where: () => Promise.resolve([]),
+      }),
+    });
+
+    mockDb.update.mockReturnValueOnce({
+      set: () => ({
+        where: () => Promise.resolve(),
+      }),
+    });
+
+    await notifyAuthorOfSocialPostStatus(postId, "social_rejected", {
+      reviewerNote: "لا يتناسب مع خطة النشر اليوم",
+    });
+  });
+
+  it("لا يرسل إشعاراً إذا كان المنشور من إنشاء محرر وليس كاتب المقال", async () => {
+    const postData = {
+      id: postId,
+      articleId,
+      createdByUserId: "editor-user-999", // المحرر أنشأ التغريدة
+      externalPostUrl: null,
+      scheduledAt: null,
+    };
+    const articleData = {
+      id: articleId,
+      title: "مقال",
+      slug: "article-slug",
+      englishSlug: null,
+      articleType: "opinion",
+      authorId, // الكاتب مختلف
+      submitterId: authorId,
+      scheduledAt: null,
+      publishedAt: new Date(),
+    };
+
+    mockDb.select.mockReturnValueOnce({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ post: postData, article: articleData }]),
+          }),
+        }),
+      }),
+    });
+
+    await notifyAuthorOfSocialPostStatus(postId, "social_published");
+
+    // لا يتم استدعاء insert لإشعارات التحرير
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 });
