@@ -200,6 +200,8 @@
         "shared/imageStyles.ts",
         "client/src/components/AIImageGeneratorDialog.tsx",
         "client/src/components/ImageStyleSelector.tsx",
+        "client/src/components/editor-extensions/ResizableImage.ts",
+        "client/src/components/editor-extensions/ResizableImageNodeView.tsx",
         "client/src/components/admin/ImageStylesManager.tsx",
         "client/src/pages/AutoImageSettings.tsx",
         "tests/unit/imageStyles.test.ts",
@@ -294,7 +296,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-16"
+      "lastReviewed": "2026-08-19"
     },
     {
       "id": "ifox",

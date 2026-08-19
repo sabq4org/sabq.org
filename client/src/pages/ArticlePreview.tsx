@@ -303,8 +303,12 @@ export default function ArticlePreview() {
                 className="prose prose-lg dark:prose-invert max-w-none article-content"
                 dangerouslySetInnerHTML={{ 
                   __html: DOMPurify.sanitize(article.content || '', {
-                    ADD_TAGS: ['iframe', 'blockquote'],
-                    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'class', 'data-theme'],
+                    ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
+                    ADD_ATTR: [
+                      'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+                      'class', 'data-theme', 'data-align', 'data-width', 'data-caption',
+                      'alt', 'title', 'loading', 'width', 'height', 'style',
+                    ],
                   }) 
                 }}
                 data-testid="article-content"
