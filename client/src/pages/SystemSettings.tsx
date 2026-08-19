@@ -11,9 +11,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { 
   Settings, 
   Info, 
@@ -22,8 +29,6 @@ import {
   AlertCircle, 
   Calendar, 
   Clock, 
-  Eye,
-  EyeOff,
   PartyPopper,
   Megaphone,
   Bell,
@@ -33,18 +38,16 @@ import {
   Loader2,
   CalendarRange,
   X,
-  Sparkles,
   Check,
   RotateCcw,
-  ShieldAlert,
-  HelpCircle
+  ChevronLeft
 } from "lucide-react";
 import {
   useTournamentBlockSettings,
   type TournamentBlockSlug,
 } from "@/hooks/useTournamentBlockSettings";
 import { useDmsTopAdsVisibility } from "@/hooks/useDmsTopAdsVisibility";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { ar } from "date-fns/locale";
 
 interface CelebrationModeState {
@@ -83,20 +86,20 @@ const SectionHeader = ({
   icon?: React.ElementType;
   badge?: React.ReactNode;
 }) => (
-  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-sky-100 bg-gradient-to-l from-sky-50/60 via-background to-transparent px-4 py-3 dark:border-sky-900/30 dark:from-sky-950/20 shadow-xs">
-    <div className="flex items-center gap-3">
-      <div className={`h-6 w-1.5 ${color} rounded-full shrink-0`} />
+  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-sky-100 bg-gradient-to-l from-sky-50/70 via-background to-transparent p-4 dark:border-sky-900/30 dark:from-sky-950/30 shadow-xs">
+    <div className="flex items-center gap-3 min-w-0">
+      <div className={`h-7 w-1.5 ${color} rounded-full shrink-0`} />
       {Icon && (
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100/70 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
-          <Icon className="h-4 w-4" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100/80 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 shrink-0">
+          <Icon className="h-4.5 w-4.5" />
         </div>
       )}
-      <div>
-        <h3 className="text-base sm:text-lg font-bold text-foreground leading-tight">{title}</h3>
-        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      <div className="min-w-0">
+        <h3 className="text-base sm:text-lg font-bold text-foreground leading-tight truncate">{title}</h3>
+        {subtitle && <p className="text-xs text-muted-foreground mt-0.5 leading-normal">{subtitle}</p>}
       </div>
     </div>
-    {badge && <div className="mt-1 sm:mt-0 flex items-center">{badge}</div>}
+    {badge && <div className="flex items-center shrink-0 self-start sm:self-center">{badge}</div>}
   </div>
 );
 
@@ -130,9 +133,9 @@ function FeatureToggleCard({
   return (
     <Card className={`group relative overflow-hidden rounded-2xl border ${accentBorderColor} bg-card shadow-xs transition-all duration-200 hover:shadow-md`}>
       <CardContent className="p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3.5 flex-1 min-w-0">
-            <div className={`mt-0.5 shrink-0 rounded-xl p-2.5 transition-colors ${enabled ? "bg-primary/15" : "bg-muted/60"}`}>
+            <div className={`mt-0.5 shrink-0 rounded-xl p-2.5 transition-colors ${enabled ? "bg-primary/15" : "bg-muted/70"}`}>
               <Icon className={`h-5 w-5 ${enabled ? iconColorEnabled : iconColorDisabled}`} />
             </div>
             <div className="space-y-1 min-w-0 flex-1">
@@ -150,11 +153,11 @@ function FeatureToggleCard({
             </div>
           </div>
 
-          <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+          <div className="flex items-center justify-between sm:justify-end gap-3 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-border/50">
             <span className={`text-xs font-semibold sm:hidden ${enabled ? "text-primary" : "text-muted-foreground"}`}>
               {enabled ? "مفعّل" : "معطّل"}
             </span>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 shrink-0">
               {isPending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               <Switch
                 checked={enabled}
@@ -172,21 +175,12 @@ function FeatureToggleCard({
   );
 }
 
-/** ISO → قيمة حقل datetime-local بتوقيت المتصفح (فارغ إن لم يُضبط) */
-function isoToLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /** تنسيق عربي مقروء لتاريخ ISO */
 function formatReadableDate(iso: string | null): string | null {
   if (!iso) return null;
   try {
     const d = parseISO(iso);
-    if (isNaN(d.getTime())) return null;
+    if (!isValid(d)) return null;
     return format(d, "d MMMM yyyy - h:mm a", { locale: ar });
   } catch {
     return null;
@@ -221,7 +215,7 @@ function getTournamentBlockEffectiveStatus(
     return {
       status: "scheduled",
       label: "مجدول للظهور",
-      badgeClass: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+      badgeClass: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
       description: `سيظهر تلقائيًا عند حلول تاريخ البدء: ${formatReadableDate(startAt)}`,
     };
   }
@@ -230,7 +224,7 @@ function getTournamentBlockEffectiveStatus(
     return {
       status: "expired",
       label: "منتهي العرض",
-      badgeClass: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+      badgeClass: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800",
       description: `انتهت فترة العرض المحددة في: ${formatReadableDate(endAt)}`,
     };
   }
@@ -238,9 +232,256 @@ function getTournamentBlockEffectiveStatus(
   return {
     status: "active",
     label: "معروض حاليًا",
-    badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+    badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
     description: "البلوك ظاهر للزوار حاليًا في الموقع والتطبيقات المربوطة.",
   };
+}
+
+/**
+ * مكون منتقي التاريخ والوقت المخصص للأجهزة المحمولة والديسكتوب
+ * يفتح نافذة حوار منظمة وبسيطة جداً لاختيار اليوم والوقت بدون تشويش أو تداخل عناصر
+ */
+interface CustomDateTimePickerDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (isoDateString: string | null) => void;
+  initialIsoValue: string | null;
+  title: string;
+}
+
+function CustomDateTimePickerDialog({
+  isOpen,
+  onClose,
+  onSave,
+  initialIsoValue,
+  title,
+}: CustomDateTimePickerDialogProps) {
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear, currentYear + 1, currentYear + 2];
+  const months = [
+    { value: 1, label: "يناير (1)" },
+    { value: 2, label: "فبراير (2)" },
+    { value: 3, label: "مارس (3)" },
+    { value: 4, label: "أبريل (4)" },
+    { value: 5, label: "مايو (5)" },
+    { value: 6, label: "يونيو (6)" },
+    { value: 7, label: "يوليو (7)" },
+    { value: 8, label: "أغسطس (8)" },
+    { value: 9, label: "سبتمبر (9)" },
+    { value: 10, label: "أكتوبر (10)" },
+    { value: 11, label: "نوفمبر (11)" },
+    { value: 12, label: "ديسمبر (12)" },
+  ];
+
+  const initialDate = initialIsoValue ? new Date(initialIsoValue) : new Date();
+  const validInitial = isValid(initialDate) ? initialDate : new Date();
+
+  const [year, setYear] = useState<number>(validInitial.getFullYear());
+  const [month, setMonth] = useState<number>(validInitial.getMonth() + 1);
+  const [day, setDay] = useState<number>(validInitial.getDate());
+  
+  // تحويل 24 ساعة إلى 12 ساعة + صباحاً/مساءً
+  const rawHours = validInitial.getHours();
+  const [hour12, setHour12] = useState<number>(rawHours % 12 === 0 ? 12 : rawHours % 12);
+  const [minute, setMinute] = useState<number>(validInitial.getMinutes());
+  const [period, setPeriod] = useState<"AM" | "PM">(rawHours >= 12 ? "PM" : "AM");
+
+  // إعادة التعيين عند فتح النافذة بقيمة جديدة
+  useEffect(() => {
+    if (isOpen) {
+      const d = initialIsoValue ? new Date(initialIsoValue) : new Date();
+      const valid = isValid(d) ? d : new Date();
+      setYear(valid.getFullYear());
+      setMonth(valid.getMonth() + 1);
+      setDay(valid.getDate());
+      const h = valid.getHours();
+      setHour12(h % 12 === 0 ? 12 : h % 12);
+      setMinute(valid.getMinutes());
+      setPeriod(h >= 12 ? "PM" : "AM");
+    }
+  }, [isOpen, initialIsoValue]);
+
+  // عدد الأيام في الشهر المحدد
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const handleConfirm = () => {
+    // حساب الساعة بنظام 24
+    let h24 = hour12 % 12;
+    if (period === "PM") h24 += 12;
+    
+    // بناء تاريخ محلي ثم تحويله إلى ISO
+    const selectedDate = new Date(year, month - 1, Math.min(day, daysInMonth), h24, minute, 0);
+    onSave(selectedDate.toISOString());
+    onClose();
+  };
+
+  const handleClear = () => {
+    onSave(null);
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md w-[95vw] rounded-2xl p-4 sm:p-6" dir="rtl">
+        <DialogHeader className="text-start space-y-1.5">
+          <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary" />
+            <span>{title}</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
+            حدد التاريخ والوقت بدقة من القوائم المنظمة أدناه
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* قسم التاريخ: اليوم / الشهر / السنة */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span>التاريخ (اليوم والشهر والسنة)</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {/* اليوم */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-muted-foreground">اليوم</span>
+                <Select value={String(Math.min(day, daysInMonth))} onValueChange={(v) => setDay(Number(v))}>
+                  <SelectTrigger className="h-10 text-sm font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {days.map((d) => (
+                      <SelectItem key={d} value={String(d)}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* الشهر */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-muted-foreground">الشهر</span>
+                <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+                  <SelectTrigger className="h-10 text-sm font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {months.map((m) => (
+                      <SelectItem key={m.value} value={String(m.value)}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* السنة */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-muted-foreground">السنة</span>
+                <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                  <SelectTrigger className="h-10 text-sm font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y) => (
+                      <SelectItem key={y} value={String(y)}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* قسم الوقت: الساعة / الدقيقة / ص أو م */}
+          <div className="space-y-2 pt-2 border-t border-border/60">
+            <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-primary" />
+              <span>التوقيت (الساعة والدقيقة)</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {/* الساعة */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-muted-foreground">الساعة</span>
+                <Select value={String(hour12)} onValueChange={(v) => setHour12(Number(v))}>
+                  <SelectTrigger className="h-10 text-sm font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                      <SelectItem key={h} value={String(h)}>
+                        {h}:00
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* الدقيقة */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-muted-foreground">الدقيقة</span>
+                <Select value={String(minute)} onValueChange={(v) => setMinute(Number(v))}>
+                  <SelectTrigger className="h-10 text-sm font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {String(m).padStart(2, "0")} دقيقة
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* الفترة */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-muted-foreground">الفترة</span>
+                <Select value={period} onValueChange={(v: "AM" | "PM") => setPeriod(v)}>
+                  <SelectTrigger className="h-10 text-sm font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AM">صباحاً (ص)</SelectItem>
+                    <SelectItem value="PM">مساءً (م)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="flex flex-row items-center justify-between gap-2 pt-2 border-t border-border/60 sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handleClear}
+            className="text-xs text-muted-foreground hover:text-destructive h-9 px-3"
+          >
+            مسح التاريخ
+          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="text-xs h-9 px-3"
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              className="text-xs font-bold h-9 px-4 bg-primary text-primary-foreground"
+            >
+              تأكيد التاريخ
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 interface TournamentBlockCardProps {
@@ -256,11 +497,7 @@ interface TournamentBlockCardProps {
 }
 
 /**
- * بطاقة تحكم بلوك بطولة في الواجهة:
- * - تصميم حديث ومتجاوب كلياً على الجوال وشاشات الديسكتوب
- * - حالة واضحة وشارات ملونة (معروض حالياً / مجدول / منتهي / معطل)
- * - حقول التواريخ منسقة بعناية مع أزرار مسح وتطبيق سريعة
- * - حفظ تلقائي ومؤشرات واضحة
+ * بطاقة تحكم بلوك بطولة في الواجهة بتصميم متين لا ينكسر على أي متصفح
  */
 function TournamentBlockCard({
   slug,
@@ -282,21 +519,22 @@ function TournamentBlockCard({
   });
   const teams = Array.isArray(teamsData?.teams) ? teamsData.teams : [];
 
-  const [startLocal, setStartLocal] = useState("");
-  const [endLocal, setEndLocal] = useState("");
+  const [startIso, setStartIso] = useState<string | null>(block.startAt);
+  const [endIso, setEndIso] = useState<string | null>(block.endAt);
   const [windowTouched, setWindowTouched] = useState(false);
+
+  // نوافذ الحوار للمنتقي المخصص
+  const [isStartPickerOpen, setIsStartPickerOpen] = useState(false);
+  const [isEndPickerOpen, setIsEndPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!windowTouched) {
-      setStartLocal(isoToLocalInput(block.startAt));
-      setEndLocal(isoToLocalInput(block.endAt));
+      setStartIso(block.startAt);
+      setEndIso(block.endAt);
     }
   }, [block.startAt, block.endAt, windowTouched]);
 
   const saveWindow = () => {
-    const startIso = startLocal ? new Date(startLocal).toISOString() : null;
-    const endIso = endLocal ? new Date(endLocal).toISOString() : null;
-
     if (startIso && endIso && new Date(startIso) >= new Date(endIso)) {
       toast({
         title: "تنبيه في التوقيت",
@@ -317,19 +555,9 @@ function TournamentBlockCard({
     });
   };
 
-  const clearStart = () => {
-    setStartLocal("");
-    setWindowTouched(true);
-  };
-
-  const clearEnd = () => {
-    setEndLocal("");
-    setWindowTouched(true);
-  };
-
   const clearBoth = () => {
-    setStartLocal("");
-    setEndLocal("");
+    setStartIso(null);
+    setEndIso(null);
     block.save({ startAt: null, endAt: null });
     setWindowTouched(false);
     toast({
@@ -344,12 +572,9 @@ function TournamentBlockCard({
     block.endAt
   );
 
-  const startId = useId();
-  const endId = useId();
-
   return (
-    <Card className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border ${borderAccent} bg-card shadow-xs transition-all duration-200 hover:shadow-md`}>
-      {/* رأس البطاقة وحالة البلوك */}
+    <Card className={`group relative flex flex-col justify-between rounded-2xl border ${borderAccent} bg-card shadow-xs transition-all duration-200 hover:shadow-md`}>
+      {/* رأس البطاقة مع مفتاح التفعيل المحمي من الانضغاط */}
       <CardHeader className="p-4 sm:p-5 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -358,47 +583,43 @@ function TournamentBlockCard({
             </div>
             <div className="space-y-1 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base sm:text-lg font-bold leading-snug">
+                <CardTitle className="text-base font-bold leading-snug">
                   {title}
                 </CardTitle>
                 {tournamentTag && (
-                  <Badge variant="outline" className="text-[10px] font-semibold py-0 px-2 h-4.5 bg-background/80">
+                  <Badge variant="outline" className="text-[10px] font-semibold py-0 px-2 h-4.5 bg-background">
                     {tournamentTag}
                   </Badge>
                 )}
               </div>
-              <CardDescription className="text-xs sm:text-sm leading-relaxed text-muted-foreground line-clamp-2 sm:line-clamp-none">
+              <CardDescription className="text-xs sm:text-sm leading-relaxed text-muted-foreground">
                 {description}
               </CardDescription>
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="flex items-center gap-2">
-              {block.isSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              <Switch
-                checked={block.visible}
-                onCheckedChange={(v) => {
-                  block.save({ visible: v });
-                  toast({
-                    title: v ? "تم تفعيل البلوك" : "تم تعطيل البلوك",
-                    description: v ? `أصبح ${title} مفعلاً` : `تم إخفاء ${title} من الواجهات`,
-                  });
-                }}
-                disabled={block.isSaving}
-                data-testid={`switch-${slug}-visibility`}
-                aria-label={`تفعيل ${title}`}
-                className="scale-105 data-[state=checked]:bg-primary"
-              />
-            </div>
-            <span className="text-[11px] font-medium text-muted-foreground hidden sm:inline-block">
-              {block.visible ? "مفعّل" : "معطّل"}
-            </span>
+          {/* مفتاح التفعيل مع مساحة كافية بدون تداخل */}
+          <div className="flex items-center gap-2 shrink-0 pt-0.5">
+            {block.isSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            <Switch
+              checked={block.visible}
+              onCheckedChange={(v) => {
+                block.save({ visible: v });
+                toast({
+                  title: v ? "تم تفعيل البلوك" : "تم تعطيل البلوك",
+                  description: v ? `أصبح ${title} مفعلاً` : `تم إخفاء ${title} من الواجهات`,
+                });
+              }}
+              disabled={block.isSaving}
+              data-testid={`switch-${slug}-visibility`}
+              aria-label={`تفعيل ${title}`}
+              className="data-[state=checked]:bg-primary"
+            />
           </div>
         </div>
 
         {/* شريط الحالة والملخص الزمني */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/40 p-2.5 border border-border/40 text-xs">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/40 p-2.5 border border-border/50 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground font-medium">حالة العرض:</span>
             <Badge variant="outline" className={`font-bold px-2 py-0.5 text-[11px] border ${statusInfo.badgeClass}`}>
@@ -421,8 +642,8 @@ function TournamentBlockCard({
       </CardHeader>
 
       <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
-        {/* قسم نافذة التوقيت: ابتداء وانتهاء الظهور بتصميم مهيّأ للجوال والحواسيب */}
-        <div className="rounded-xl border border-border/60 bg-gradient-to-b from-muted/20 to-muted/40 p-3 sm:p-3.5 space-y-3">
+        {/* قسم نافذة التوقيت بتصميم كتل واضحة وأزرار اختيار مريحة للجوال */}
+        <div className="rounded-xl border border-border/70 bg-muted/20 p-3 sm:p-3.5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
               <CalendarRange className="h-3.5 w-3.5 text-primary" />
@@ -431,93 +652,108 @@ function TournamentBlockCard({
             <span className="text-[11px] text-muted-foreground">فارغ = فوري وبلا حد</span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
-            {/* تاريخ البدء */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor={startId} className="text-xs font-semibold text-foreground/90 flex items-center gap-1">
-                  <span>يظهر من تاريخ:</span>
-                  {startLocal && (
-                    <span className="text-[10px] font-normal text-muted-foreground">
-                      ({formatReadableDate(startLocal ? new Date(startLocal).toISOString() : null) || "محدد"})
-                    </span>
-                  )}
-                </label>
-                {startLocal && (
+          <div className="grid grid-cols-1 gap-2.5">
+            {/* تاريخ البدء كزر تفاعلي يفتح منتقي منظم */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold text-foreground/90">
+                <span>يظهر من تاريخ:</span>
+                {startIso && (
                   <button
                     type="button"
-                    onClick={clearStart}
-                    className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-0.5 transition-colors"
+                    onClick={() => {
+                      setStartIso(null);
+                      setWindowTouched(true);
+                    }}
+                    className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
                   >
                     <X className="h-3 w-3" />
                     <span>مسح</span>
                   </button>
                 )}
               </div>
-              <div className="relative">
-                <Input
-                  id={startId}
-                  type="datetime-local"
-                  dir="ltr"
-                  value={startLocal}
-                  onChange={(e) => {
-                    setStartLocal(e.target.value);
-                    setWindowTouched(true);
-                  }}
-                  data-testid={`input-${slug}-start`}
-                  className="h-10 text-sm bg-background/90 text-start font-sans"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsStartPickerOpen(true)}
+                className="w-full flex items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-2.5 text-xs sm:text-sm text-start font-medium transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid={`btn-${slug}-start-picker`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className={startIso ? "text-foreground font-semibold truncate" : "text-muted-foreground"}>
+                    {startIso ? formatReadableDate(startIso) : "فوري وبدون تاريخ بدء (اضغط للتحديد)"}
+                  </span>
+                </div>
+                <ChevronLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
             </div>
 
-            {/* تاريخ الانتهاء */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor={endId} className="text-xs font-semibold text-foreground/90 flex items-center gap-1">
-                  <span>يختفي بعد تاريخ:</span>
-                  {endLocal && (
-                    <span className="text-[10px] font-normal text-muted-foreground">
-                      ({formatReadableDate(endLocal ? new Date(endLocal).toISOString() : null) || "محدد"})
-                    </span>
-                  )}
-                </label>
-                {endLocal && (
+            {/* تاريخ الانتهاء كزر تفاعلي يفتح منتقي منظم */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold text-foreground/90">
+                <span>يختفي بعد تاريخ:</span>
+                {endIso && (
                   <button
                     type="button"
-                    onClick={clearEnd}
-                    className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-0.5 transition-colors"
+                    onClick={() => {
+                      setEndIso(null);
+                      setWindowTouched(true);
+                    }}
+                    className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-0.5"
                   >
                     <X className="h-3 w-3" />
                     <span>مسح</span>
                   </button>
                 )}
               </div>
-              <div className="relative">
-                <Input
-                  id={endId}
-                  type="datetime-local"
-                  dir="ltr"
-                  value={endLocal}
-                  onChange={(e) => {
-                    setEndLocal(e.target.value);
-                    setWindowTouched(true);
-                  }}
-                  data-testid={`input-${slug}-end`}
-                  className="h-10 text-sm bg-background/90 text-start font-sans"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsEndPickerOpen(true)}
+                className="w-full flex items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-2.5 text-xs sm:text-sm text-start font-medium transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid={`btn-${slug}-end-picker`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className={endIso ? "text-foreground font-semibold truncate" : "text-muted-foreground"}>
+                    {endIso ? formatReadableDate(endIso) : "بلا حد زمني للانتهاء (اضغط للتحديد)"}
+                  </span>
+                </div>
+                <ChevronLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
             </div>
           </div>
 
+          {/* نوافذ الحوار لمنتقي التاريخ والوقت المخصصين */}
+          <CustomDateTimePickerDialog
+            isOpen={isStartPickerOpen}
+            onClose={() => setIsStartPickerOpen(false)}
+            onSave={(iso) => {
+              setStartIso(iso);
+              setWindowTouched(true);
+            }}
+            initialIsoValue={startIso}
+            title={`تحديد تاريخ بدء ظهور ${title}`}
+          />
+
+          <CustomDateTimePickerDialog
+            isOpen={isEndPickerOpen}
+            onClose={() => setIsEndPickerOpen(false)}
+            onSave={(iso) => {
+              setEndIso(iso);
+              setWindowTouched(true);
+            }}
+            initialIsoValue={endIso}
+            title={`تحديد تاريخ انتهاء ظهور ${title}`}
+          />
+
           {/* زر حفظ التوقيت يظهر فور التعديل */}
           {windowTouched && (
-            <div className="pt-1 flex items-center justify-end gap-2">
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/50">
               <Button 
                 size="sm" 
                 variant="outline"
                 onClick={() => {
-                  setStartLocal(isoToLocalInput(block.startAt));
-                  setEndLocal(isoToLocalInput(block.endAt));
+                  setStartIso(block.startAt);
+                  setEndIso(block.endAt);
                   setWindowTouched(false);
                 }}
                 disabled={block.isSaving}
@@ -559,10 +795,10 @@ function TournamentBlockCard({
               });
             }}
           >
-            <SelectTrigger data-testid={`select-${slug}-champion`} className="h-10 text-sm bg-background">
+            <SelectTrigger data-testid={`select-${slug}-champion`} className="h-10 text-xs sm:text-sm bg-background">
               <SelectValue placeholder="تلقائي (من نتيجة النهائي أو ختام البطولة)" />
             </SelectTrigger>
-            <SelectContent className="max-h-60">
+            <SelectContent className="max-h-56">
               <SelectItem value="auto" className="font-semibold text-primary">
                 تلقائي (من نتيجة النهائي أو ختام البطولة)
               </SelectItem>
@@ -633,6 +869,8 @@ export default function SystemSettings() {
       expiresAt: announcement.expiresAt || null,
     } : undefined,
   });
+
+  const [isAnnouncementDatePickerOpen, setIsAnnouncementDatePickerOpen] = useState(false);
 
   const updateAnnouncementMutation = useMutation({
     mutationFn: async (data: AnnouncementFormData) => {
@@ -747,7 +985,7 @@ export default function SystemSettings() {
             <div aria-hidden className="pointer-events-none absolute -left-16 -top-20 h-44 w-44 rounded-full bg-[#1BADF8]/10 blur-3xl dark:bg-[#1BADF8]/15" />
             <div aria-hidden className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
             <div className="relative flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-              <div className="flex-1 space-y-1.5">
+              <div className="flex-1 space-y-1.5 min-w-0">
                 <div className="flex items-center gap-3">
                   <span className="rounded-xl bg-[#1BADF8]/15 p-2.5 text-[#078fd1] dark:text-[#45c0f5] shrink-0">
                     <Settings className="h-5 w-5 sm:h-6 sm:w-6" data-testid="icon-settings" />
@@ -760,7 +998,7 @@ export default function SystemSettings() {
                   إدارة إعدادات العرض وبطاقات البطولات وجدولة الظهور والمميزات الخاصة والإعلانات
                 </p>
               </div>
-              <Badge variant="outline" className="gap-1.5 border-sky-200/80 bg-background/80 px-3 py-1 text-xs font-bold dark:border-sky-900/40 shadow-2xs">
+              <Badge variant="outline" className="gap-1.5 border-sky-200/80 bg-background/80 px-3 py-1 text-xs font-bold dark:border-sky-900/40 shadow-2xs shrink-0">
                 <ToggleRight className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />
                 <span className="tabular-nums">{activeFeaturesCount.toLocaleString("en-US")}</span> ميزات نشطة
               </Badge>
@@ -1063,25 +1301,36 @@ export default function SystemSettings() {
                         control={form.control}
                         name="expiresAt"
                         render={({ field }) => (
-                          <FormItem className="rounded-xl border border-border/80 bg-muted/30 p-3.5">
+                          <FormItem className="rounded-xl border border-border/80 bg-muted/30 p-3.5 space-y-2">
                             <FormLabel className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
                               <Calendar className="h-3.5 w-3.5 text-primary" />
                               <span>تاريخ ووقت الانتهاء المخصص</span>
                             </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="datetime-local"
-                                dir="ltr"
-                                data-testid="input-announcement-expires"
-                                className="h-10 text-sm bg-background"
-                                {...field}
-                                value={field.value || ""}
-                              />
-                            </FormControl>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsAnnouncementDatePickerOpen(true)}
+                                className="w-full flex items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-2.5 text-xs sm:text-sm text-start font-medium transition-colors hover:bg-accent/50"
+                                data-testid="input-announcement-expires-btn"
+                              >
+                                <span className={field.value ? "text-foreground font-semibold truncate" : "text-muted-foreground"}>
+                                  {field.value ? formatReadableDate(field.value) : "اضغط لتحديد تاريخ ووقت الانتهاء"}
+                                </span>
+                                <ChevronLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+                              </button>
+                            </div>
                             <FormDescription className="text-xs">
                               حدد التاريخ والوقت الذي سينتهي فيه ظهور الإعلان بدقة
                             </FormDescription>
                             <FormMessage />
+
+                            <CustomDateTimePickerDialog
+                              isOpen={isAnnouncementDatePickerOpen}
+                              onClose={() => setIsAnnouncementDatePickerOpen(false)}
+                              onSave={(iso) => field.onChange(iso)}
+                              initialIsoValue={field.value || null}
+                              title="تحديد تاريخ انتهاء الإعلان الداخلي"
+                            />
                           </FormItem>
                         )}
                       />
