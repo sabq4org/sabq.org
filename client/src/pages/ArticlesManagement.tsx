@@ -800,7 +800,18 @@ export default function ArticlesManagement() {
 
   const formatArticleDate = (date: string | Date | null | undefined) => {
     if (!date) return null;
-    return fmtSocialDateTime(date);
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime())) return null;
+
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Riyadh",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
   };
 
   const formatScheduledDate = formatArticleDate;
@@ -939,7 +950,9 @@ export default function ArticlesManagement() {
           data-testid={isDesktop ? `scheduled-label-desktop-${article.id}` : `scheduled-label-${article.id}`}
         >
           <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
-          <span>مجدول: {formatScheduledDate((article as any).scheduledAt)}</span>
+          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+            {formatScheduledDate((article as any).scheduledAt)}
+          </span>
         </span>
       );
     }
@@ -950,7 +963,9 @@ export default function ArticlesManagement() {
           data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
         >
           <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span>مسودة: {formatDraftDate(article.createdAt)}</span>
+          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+            {formatDraftDate(article.createdAt)}
+          </span>
         </span>
       );
     }
@@ -1526,102 +1541,108 @@ export default function ArticlesManagement() {
                   </div>
                   
                   {/* Action Buttons - Permission-based visibility */}
-                  <div className="flex gap-2 pt-2 border-t">
-                    {canEditArticle(article) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(article)}
-                        className="flex-1"
-                        data-testid={`button-edit-mobile-${article.id}`}
-                      >
-                        <Edit className="ml-2 h-3.5 w-3.5" />
-                        تعديل
-                      </Button>
-                    )}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/60">
+                    <div className="flex items-center gap-2 flex-1 min-w-[170px]">
+                      {canEditArticle(article) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(article)}
+                          className="flex-1 h-8 text-xs font-semibold rounded-lg gap-1.5"
+                          data-testid={`button-edit-mobile-${article.id}`}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          <span>تعديل</span>
+                        </Button>
+                      )}
+                      
+                      {canPublishArticle && (
+                        <Button
+                          size="sm"
+                          variant={article.newsType === "breaking" ? "destructive" : "outline"}
+                          onClick={() => toggleBreakingMutation.mutate({ 
+                            id: article.id, 
+                            currentState: article.newsType === "breaking"
+                          })}
+                          disabled={toggleBreakingMutation.isPending}
+                          className="flex-1 h-8 text-xs font-semibold rounded-lg gap-1.5"
+                          data-testid={`button-breaking-mobile-${article.id}`}
+                        >
+                          <Bell className="h-3.5 w-3.5" />
+                          <span>{article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}</span>
+                        </Button>
+                      )}
+                    </div>
                     
-                    {canPublishArticle && (
-                      <Button
-                        size="sm"
-                        variant={article.newsType === "breaking" ? "destructive" : "outline"}
-                        onClick={() => toggleBreakingMutation.mutate({ 
-                          id: article.id, 
-                          currentState: article.newsType === "breaking"
-                        })}
-                        disabled={toggleBreakingMutation.isPending}
-                        className="flex-1"
-                        data-testid={`button-breaking-mobile-${article.id}`}
-                      >
-                        <Bell className="ml-2 h-3.5 w-3.5" />
-                        {article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}
-                      </Button>
-                    )}
-                    
-                    {canFeatureArticle && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
-                        disabled={featureMutation.isPending}
-                        data-testid={`button-feature-mobile-${article.id}`}
-                      >
-                        <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-                      </Button>
-                    )}
-                    
-                    {article.status === "published" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => translateMutation.mutate(article.id)}
-                        disabled={translateMutation.isPending}
-                        data-testid={`button-translate-mobile-${article.id}`}
-                        title="ترجم للإنجليزية"
-                      >
-                        {translateMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                        ) : (
-                          <Languages className="h-4 w-4 text-emerald-500" />
-                        )}
-                      </Button>
-                    )}
-                    {canSocialPublish && article.status === "published" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setSocialPublishArticle(article)}
-                        data-testid={`button-social-publish-mobile-${article.id}`}
-                        title="النشر على X"
-                      >
-                        <Share2 className="h-4 w-4 text-sky-600" />
-                      </Button>
-                    )}
-                    {canArchiveArticle && article.status !== "archived" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        // Route through the same confirmation dialog as the
-                        // desktop trash button so the editor is forced to
-                        // capture an archive reason. The previous direct
-                        // POST to `/archive` was silent — the author got
-                        // zero feedback when their content disappeared.
-                        onClick={() => setDeletingArticle(article)}
-                        data-testid={`button-archive-mobile-${article.id}`}
-                        title="أرشفة"
-                      >
-                        <Archive className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canDeleteArticle && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setDeletingArticle(article)}
-                        data-testid={`button-delete-mobile-${article.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {canFeatureArticle && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                          onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
+                          disabled={featureMutation.isPending}
+                          data-testid={`button-feature-mobile-${article.id}`}
+                          title={article.isFeatured ? "إلغاء التمييز" : "تمييز"}
+                        >
+                          <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
+                        </Button>
+                      )}
+                      
+                      {article.status === "published" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                          onClick={() => translateMutation.mutate(article.id)}
+                          disabled={translateMutation.isPending}
+                          data-testid={`button-translate-mobile-${article.id}`}
+                          title="ترجم للإنجليزية"
+                        >
+                          {translateMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                          ) : (
+                            <Languages className="h-4 w-4 text-emerald-500" />
+                          )}
+                        </Button>
+                      )}
+                      {canSocialPublish && article.status === "published" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                          onClick={() => setSocialPublishArticle(article)}
+                          data-testid={`button-social-publish-mobile-${article.id}`}
+                          title="النشر على X"
+                        >
+                          <Share2 className="h-4 w-4 text-sky-600" />
+                        </Button>
+                      )}
+                      {canArchiveArticle && article.status !== "archived" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeletingArticle(article)}
+                          data-testid={`button-archive-mobile-${article.id}`}
+                          title="أرشفة"
+                        >
+                          <Archive className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDeleteArticle && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeletingArticle(article)}
+                          data-testid={`button-delete-mobile-${article.id}`}
+                          title="حذف"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))
