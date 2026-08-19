@@ -49,7 +49,7 @@ function ActionBtn({
     <Button
       variant="ghost"
       size="icon"
-      className={cn("h-8 w-8 shrink-0", className)}
+      className={cn("h-7 w-7 sm:h-8 sm:w-8 rounded-lg transition-all hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground", className)}
       {...props}
     >
       {children}

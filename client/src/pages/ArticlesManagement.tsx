@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, User } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -171,28 +171,28 @@ function SortableRow({
 const TYPE_CHIP: Record<string, { label: string; className: string; icon?: typeof Camera }> = {
   news: {
     label: "خبر",
-    className: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   },
   opinion: {
     label: "رأي",
-    className: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    className: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
   },
   analysis: {
     label: "تحليل",
-    className: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+    className: "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
   },
   column: {
     label: "عمود",
-    className: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+    className: "border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
   },
   weekly_photos: {
     label: "صور",
-    className: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
+    className: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
     icon: Camera,
   },
   infographic: {
     label: "إنفوجرافيك",
-    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
     icon: BarChart3,
   },
 };
@@ -809,17 +809,18 @@ export default function ArticlesManagement() {
   const formatPublishedDate = formatArticleDate;
 
   const getTypeBadge = (type: string) => {
-    const meta = TYPE_CHIP[type] ?? { label: type, className: "bg-muted text-muted-foreground" };
+    const meta = TYPE_CHIP[type] ?? { label: type, className: "border-border/70 bg-muted text-muted-foreground" };
     const Icon = meta.icon;
     return (
       <Badge
+        variant="outline"
         className={cn(
-          "gap-1 border-0 px-2 py-0.5 text-xs font-semibold",
+          "gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border shadow-xs",
           meta.className,
         )}
       >
-        {Icon ? <Icon className="h-3 w-3" /> : null}
-        {meta.label}
+        {Icon ? <Icon className="h-3 w-3 shrink-0" /> : null}
+        <span>{meta.label}</span>
       </Badge>
     );
   };
@@ -827,47 +828,14 @@ export default function ArticlesManagement() {
   const getCategoryChip = (nameAr?: string | null) => {
     if (!nameAr) return null;
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground/80">
-        <Tag className="h-3 w-3 text-muted-foreground" />
-        {nameAr}
-      </span>
+      <Badge
+        variant="outline"
+        className="gap-1 rounded-md border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 font-semibold px-2.5 py-0.5 text-xs shadow-xs"
+      >
+        <Tag className="h-3 w-3 opacity-75 shrink-0" />
+        <span>{nameAr}</span>
+      </Badge>
     );
-  };
-
-  const getSourceBadge = (source?: string) => {
-    const badges = {
-      manual: (
-        <Badge variant="outline" className="gap-1 border-blue-200/80 bg-blue-50/80 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300" data-testid="badge-source-manual">
-          <PenLine className="h-3 w-3" />
-          المحرر
-        </Badge>
-      ),
-      whatsapp: (
-        <Badge variant="outline" className="gap-1 border-green-200/80 bg-green-50/80 text-xs font-medium text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300" data-testid="badge-source-whatsapp">
-          <MessageCircle className="h-3 w-3" />
-          واتساب
-        </Badge>
-      ),
-      email: (
-        <Badge variant="outline" className="gap-1 border-purple-200/80 bg-purple-50/80 text-xs font-medium text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-300" data-testid="badge-source-email">
-          <Mail className="h-3 w-3" />
-          البريد الذكي
-        </Badge>
-      ),
-      "ios-app": (
-        <Badge variant="outline" className="gap-1 border-slate-300/80 bg-slate-100/80 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200" data-testid="badge-source-ios">
-          <Smartphone className="h-3 w-3" />
-          تطبيق iOS
-        </Badge>
-      ),
-      "android-app": (
-        <Badge variant="outline" className="gap-1 border-emerald-200/80 bg-emerald-50/80 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid="badge-source-android">
-          <Smartphone className="h-3 w-3" />
-          تطبيق Android
-        </Badge>
-      ),
-    };
-    return badges[(source || "manual") as keyof typeof badges] || badges.manual;
   };
 
   const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
@@ -884,6 +852,105 @@ export default function ArticlesManagement() {
   };
   const getMobilePlatformLabel = (source?: string) =>
     source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
+
+  const getAuthorOrSourceBadge = (article: Article) => {
+    if (article.source === "email") {
+      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "بريد إلكتروني";
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300"
+          data-testid="badge-source-email"
+        >
+          <Mail className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
+          <span>أُرسل بواسطة: {sender}</span>
+        </span>
+      );
+    }
+    if (article.source === "whatsapp") {
+      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "واتساب";
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-950/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+          data-testid="badge-source-whatsapp"
+        >
+          <MessageCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>أُرسل بواسطة: {sender}</span>
+        </span>
+      );
+    }
+    if (isMobileAppSource(article.source)) {
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-400/25 bg-slate-100/70 dark:bg-slate-900/40 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300"
+          data-testid={article.source === "android-app" ? "badge-source-android" : "badge-source-ios"}
+        >
+          <Smartphone className="h-3 w-3 text-slate-600 dark:text-slate-400 shrink-0" />
+          <span>من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
+        </span>
+      );
+    }
+    if ((article as any).publisher?.companyName) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-50/70 dark:bg-amber-950/30 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+          <Building2 className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>وكالة: {(article as any).publisher.companyName}</span>
+        </span>
+      );
+    }
+    const authorName =
+      article.author?.firstName && article.author?.lastName
+        ? `${article.author.firstName} ${article.author.lastName}`
+        : article.author?.firstName || article.author?.email || "صحيفة سبق";
+
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/70 px-2 py-0.5 text-xs font-medium text-foreground/80"
+        data-testid="badge-source-manual"
+      >
+        <User className="h-3 w-3 text-muted-foreground shrink-0" />
+        <span>{authorName}</span>
+      </span>
+    );
+  };
+
+  const getDateBadge = (article: Article, isDesktop = true) => {
+    if (article.status === "scheduled" && (article as any).scheduledAt) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-50/60 dark:bg-sky-950/25 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300"
+          data-testid={isDesktop ? `scheduled-label-desktop-${article.id}` : `scheduled-label-${article.id}`}
+        >
+          <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+          <span>مجدول: {formatScheduledDate((article as any).scheduledAt)}</span>
+        </span>
+      );
+    }
+    if (article.status === "draft" && article.createdAt) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-50/60 dark:bg-amber-950/25 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
+          data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
+        >
+          <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>مسودة: {formatDraftDate(article.createdAt)}</span>
+        </span>
+      );
+    }
+    if (article.status === "published" && article.publishedAt) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+          data-testid={isDesktop ? `published-date-desktop-${article.id}` : `published-date-${article.id}`}
+        >
+          <Clock className="h-3 w-3 shrink-0 opacity-70" />
+          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+            {formatPublishedDate(article.publishedAt)}
+          </span>
+        </span>
+      );
+    }
+    return null;
+  };
 
   const articlesTotal = articlesData?.total ?? 0;
 
@@ -1133,20 +1200,20 @@ export default function ArticlesManagement() {
                 onDragEnd={handleDragEnd}
               >
                 <table className="w-full table-fixed">
-                  <thead className="border-b border-border bg-muted/40">
+                  <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                     <tr>
-                      <th className="w-9 px-1 py-3 text-center" data-testid="header-drag"></th>
-                      <th className="w-11 px-2 py-3 text-center">
+                      <th className="w-8 px-1 py-3 text-center" data-testid="header-drag"></th>
+                      <th className="w-10 px-2 py-3 text-center">
                         <Checkbox
                           checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
                           onCheckedChange={toggleSelectAll}
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="px-3 py-3 text-right text-sm font-semibold">الخبر</th>
-                      <th className="w-[72px] px-2 py-3 text-center text-sm font-semibold">عاجل</th>
-                      <th className="w-[88px] px-2 py-3 text-center text-sm font-semibold">المشاهدات</th>
-                      <th className="w-[300px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">الخبر</th>
+                      <th className="w-20 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">عاجل</th>
+                      <th className="w-28 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">المشاهدات</th>
+                      <th className="w-72 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1167,24 +1234,30 @@ export default function ArticlesManagement() {
                                 : false
                           }
                         >
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="px-2 py-3.5 text-center align-middle">
                             <Checkbox
                               checked={selectedArticles.has(article.id)}
                               onCheckedChange={() => toggleArticleSelection(article.id)}
                               data-testid={`checkbox-article-${article.id}`}
                             />
                           </td>
-                          <td className="min-w-0 px-3 py-3.5 align-top">
-                            <div className="space-y-2">
+                          <td className="min-w-0 px-4 py-3.5 align-middle">
+                            <div className="space-y-1.5">
                               <div className="flex items-center gap-2">
                                 {((article as any).albumImages?.length > 0 ||
                                   (article as any).mediaAssetsCount > 0) && (
-                                  <Images className="h-4 w-4 shrink-0 text-sky-500" />
+                                  <span title="يحتوي على ألبوم صور" className="inline-flex">
+                                    <Images className="h-4 w-4 shrink-0 text-sky-500" />
+                                  </span>
                                 )}
                                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
                                   <h3
                                     title={article.title}
-                                    className="min-w-0 truncate text-[15px] font-bold leading-snug tracking-tight text-foreground sm:text-base"
+                                    onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
+                                    className={cn(
+                                      "min-w-0 truncate text-[15px] sm:text-base font-normal sm:font-medium leading-relaxed tracking-normal text-foreground/90 hover:text-primary transition-colors",
+                                      canEditArticle(article) ? "cursor-pointer" : ""
+                                    )}
                                   >
                                     {article.title}
                                   </h3>
@@ -1196,19 +1269,22 @@ export default function ArticlesManagement() {
                                 </div>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {getTypeBadge(article.articleType || "news")}
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
                                 {getCategoryChip(article.category?.nameAr)}
-                                {getSourceBadge(article.source)}
+                                {getTypeBadge(article.articleType || "news")}
+                                {getAuthorOrSourceBadge(article)}
+                                {getDateBadge(article, true)}
                                 {(article.isAiGeneratedThumbnail ||
                                   (article as any).isAiGeneratedImage) && (
-                                  <span
-                                    className="inline-flex items-center"
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-1 rounded-md border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-medium px-2 py-0.5 text-[11px] shadow-xs"
                                     title="صورة مولدة بالذكاء الاصطناعي"
                                     data-testid={`badge-ai-image-${article.id}`}
                                   >
-                                    <Brain className="h-4 w-4 text-purple-500" />
-                                  </span>
+                                    <Brain className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                                    <span>AI</span>
+                                  </Badge>
                                 )}
                               </div>
 
@@ -1218,87 +1294,6 @@ export default function ArticlesManagement() {
                                 testId={`banner-review-desktop-${article.id}`}
                               />
 
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                                <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400">
-                                  {article.source === "email" ? (
-                                    <>
-                                      <Mail className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل بواسطة:{" "}
-                                        {article.sourceMetadata?.senderName ||
-                                          article.sourceMetadata?.from ||
-                                          "بريد إلكتروني"}
-                                      </span>
-                                    </>
-                                  ) : article.source === "whatsapp" ? (
-                                    <>
-                                      <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل بواسطة:{" "}
-                                        {article.sourceMetadata?.senderName ||
-                                          article.sourceMetadata?.from ||
-                                          "واتساب"}
-                                      </span>
-                                    </>
-                                  ) : isMobileAppSource(article.source) ? (
-                                    <>
-                                      <Smartphone className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل من {getMobilePlatformLabel(article.source)}:{" "}
-                                        {getMobileSenderName(article)}
-                                      </span>
-                                    </>
-                                  ) : (article as any).publisher?.companyName ? (
-                                    <>
-                                      <Building2 className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل بواسطة: {(article as any).publisher.companyName}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <PenLine className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        نُشر بواسطة:{" "}
-                                        {article.author?.firstName && article.author?.lastName
-                                          ? `${article.author.firstName} ${article.author.lastName}`
-                                          : article.author?.firstName ||
-                                            article.author?.email ||
-                                            "المحرر"}
-                                      </span>
-                                    </>
-                                  )}
-                                </span>
-                                {article.status === "scheduled" && (article as any).scheduledAt && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-green-700 dark:text-green-300"
-                                    data-testid={`scheduled-label-desktop-${article.id}`}
-                                  >
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    {formatScheduledDate((article as any).scheduledAt)}
-                                  </span>
-                                )}
-                                {article.status === "draft" && article.createdAt && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-green-700 dark:text-green-300"
-                                    data-testid={`draft-date-desktop-${article.id}`}
-                                  >
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    {formatDraftDate(article.createdAt)}
-                                  </span>
-                                )}
-                                {article.status === "published" && article.publishedAt && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"
-                                    data-testid={`published-date-desktop-${article.id}`}
-                                  >
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    <span dir="ltr" className="font-medium tabular-nums">
-                                      {formatPublishedDate(article.publishedAt)}
-                                    </span>
-                                  </span>
-                                )}
-                              </div>
 
                               {article.status === "draft" && (
                                 <EditorialDraftReviewCue
@@ -1390,99 +1385,59 @@ export default function ArticlesManagement() {
                   data-testid={`card-article-${article.id}`}
                 >
                   {/* Header: Checkbox + Title + Status */}
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2.5">
                     <Checkbox 
-                      className="mt-0.5"
+                      className="mt-1"
                       checked={selectedArticles.has(article.id)}
                       onCheckedChange={() => toggleArticleSelection(article.id)}
                       data-testid={`checkbox-article-mobile-${article.id}`}
                     />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-base break-words leading-snug flex items-center gap-1.5 flex-wrap">
-                            {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                              <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            )}
-                            {article.title}
-                            <EditorialDraftReviewCue
-                              article={article}
-                              layout="inline"
-                              testId={`badge-review-mobile-${article.id}`}
-                            />
-                          </h3>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div>
+                        <h3
+                          className={cn(
+                            "font-normal sm:font-medium text-[15px] sm:text-base break-words leading-relaxed text-foreground flex items-center gap-1.5 flex-wrap",
+                            canEditArticle(article) ? "cursor-pointer hover:text-primary transition-colors" : ""
+                          )}
+                          onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
+                        >
+                          {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
+                            <Images className="h-4 w-4 text-sky-500 flex-shrink-0" />
+                          )}
+                          {article.title}
                           <EditorialDraftReviewCue
                             article={article}
-                            layout="banner"
-                            testId={`banner-review-mobile-${article.id}`}
+                            layout="inline"
+                            testId={`badge-review-mobile-${article.id}`}
                           />
-                          <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
-                            {article.source === 'email' ? (
-                              <>
-                                <Mail className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'بريد إلكتروني'}</span>
-                              </>
-                            ) : article.source === 'whatsapp' ? (
-                              <>
-                                <MessageCircle className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
-                              </>
-                            ) : isMobileAppSource(article.source) ? (
-                              <>
-                                <Smartphone className="h-3 w-3" />
-                                <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
-                              </>
-                            ) : (article as any).publisher?.companyName ? (
-                              <>
-                                <Building2 className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {(article as any).publisher.companyName}</span>
-                              </>
-                            ) : (
-                              <>
-                                <PenLine className="h-3 w-3" />
-                                <span>نُشر بواسطة: {article.author?.firstName && article.author?.lastName 
-                                  ? `${article.author.firstName} ${article.author.lastName}` 
-                                  : article.author?.firstName || article.author?.email || 'المحرر'}</span>
-                              </>
-                            )}
-                          </div>
-                          {article.status === "scheduled" && (article as any).scheduledAt && (
-                            <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1 mt-1" data-testid={`scheduled-label-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span>تمت الجدولة في: {formatScheduledDate((article as any).scheduledAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "draft" && article.createdAt && (
-                            <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1 mt-1" data-testid={`draft-date-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span>أُرسلت بتاريخ: {formatDraftDate(article.createdAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "published" && article.publishedAt && (
-                            <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1" data-testid={`published-date-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "archived" && (article as any).reviewNotes && (
-                            <div
-                              className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-1"
-                              data-testid={`archive-reason-${article.id}`}
-                            >
-                              <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                              <span>
-                                <span className="font-semibold">سبب الأرشفة:</span>{" "}
-                                {(article as any).reviewNotes}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                        </h3>
+                        <EditorialDraftReviewCue
+                          article={article}
+                          layout="banner"
+                          testId={`banner-review-mobile-${article.id}`}
+                        />
                       </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {getTypeBadge(article.articleType || "news")}
+
+                      {/* Distinct Meta Strip */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
                         {getCategoryChip(article.category?.nameAr)}
-                        {getSourceBadge(article.source)}
+                        {getTypeBadge(article.articleType || "news")}
+                        {getAuthorOrSourceBadge(article)}
+                        {getDateBadge(article, false)}
                       </div>
+
+                      {article.status === "archived" && (article as any).reviewNotes && (
+                        <div
+                          className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-2 flex items-start gap-1 mt-1"
+                          data-testid={`archive-reason-${article.id}`}
+                        >
+                          <Archive className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                            {(article as any).reviewNotes}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
