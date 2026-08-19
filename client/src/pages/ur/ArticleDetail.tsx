@@ -199,8 +199,12 @@ export default function UrduArticleDetail() {
 
   // Sanitize HTML content with XSS protection
   const sanitizedContent = DOMPurify.sanitize(article.content, {
-    ADD_TAGS: ['iframe', 'blockquote', 'img'],
-    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src'],
+    ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
+    ADD_ATTR: [
+      'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+      'class', 'data-align', 'data-width', 'data-caption', 'style',
+      'alt', 'title', 'loading', 'width', 'height', 'srcset', 'sizes',
+    ],
     ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
 

@@ -194,12 +194,14 @@ export default function ArticleDetail() {
   const sanitizedArticleHtml = useMemo(() => {
     if (!article?.content) return "";
     const sanitized = DOMPurify.sanitize(article.content, {
-      ADD_TAGS: ['iframe', 'blockquote', 'img'],
+      ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
       ADD_ATTR: [
         'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
         'data-lang', 'data-theme', 'data-video-embed', 'data-url', 'data-embed-url',
         'data-whatsapp-cta', 'data-phone', 'data-phrase', 'data-message',
+        'data-align', 'data-width', 'data-caption',
         'class', 'alt', 'loading', 'width', 'height', 'srcset', 'sizes',
+        'style',
         'fetchpriority', 'decoding', 'target', 'rel', 'aria-label', 'aria-hidden',
       ],
       ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,

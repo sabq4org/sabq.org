@@ -2,7 +2,7 @@
 import { useEditor, EditorContent, Editor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
+import { ResizableImage } from "./editor-extensions/ResizableImage";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -160,9 +160,9 @@ export function RichTextEditor({
           rel: "noopener noreferrer",
         },
       }),
-      Image.configure({
+      ResizableImage.configure({
         HTMLAttributes: {
-          class: "max-w-full h-auto rounded-md my-4",
+          class: "sabq-article-image rounded-md",
         },
       }),
       TextAlign.configure({

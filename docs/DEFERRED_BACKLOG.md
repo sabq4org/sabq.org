@@ -20,7 +20,7 @@
 | 5 | الرادار (ممرات الشأن السعودي) | معايرة النبرة + التقرير اليومي (المرحلتان 1+2 اندمجتا في ‏#1316) | ذاكرة `radar-saudi-watch-lanes` |
 | 6 | مكتبة الوسائط | المراحل 2–4 من الخطة المعتمدة (المرحلة 1 منفذة 2026-07-15) | ذاكرة `media-library-overhaul` |
 | 7 | إعادة تصميم صفحة التسجيل Register | أُجلت عند دمج «بساطة مطلقة» للدخول (‏#1251) | ذاكرة `login-redesign-2026-07` |
-| 8 | SSR للبشر (الصفحات العامة) | مؤجل — الحل المؤقت حقن preload للهيرو من الحافة | ذاكرة `pagespeed-hero-preload-2026-07-26` |
+| 8 | SSR للبشر (الصفحات العامة) — تحويل الزوار من الـSPA إلى `web-next` | مؤجل — الحل المؤقت حقن preload للهيرو من الحافة. **خارطة طريق جاهزة عند الإحياء** (فحص 2026-08-18، مبنية على [مقال Next.js 16.3](https://nextjs.org/blog/building-app-like-experiences-with-nextjs-16-3)): (أ) تكافؤ المنتج أولًا — صفحات web-next نسخ زاحف بلا تعليقات/إعلانات/تحليلات؛ (ب) إزالة بوابة `isCrawler` من `functions/_middleware.js` وتمرير طلبات RSC (`?_rsc=`) وإعادة النظر في كاش variant «b/h»؛ (ج) ترحيل الكاش: `'use cache'` + `cacheTag('article-{slug}')` بدل `revalidate=60` (غير متوافق مع `cacheComponents` — يكسر البناء) + endpoint يستدعي `revalidateTag` من API ريلواي عند النشر؛ (د) تحويل `<a>` إلى `<Link>` للمسارات الخمسة المملوكة فقط ثم تفعيل `cacheComponents` + `partialPrefetching`. مهارتا التبنّي الرسميتان: `next-cache-components-adoption` و`next-partial-prefetching-adoption`. **قرار 2026-08-18: لا تفعيل قبل قلب البشر — web-next يخدم الزواحف فقط والميزات بلا أثر عليها** | ذاكرة `pagespeed-hero-preload-2026-07-26` |
 | 9 | اليوم الوطني 96 | زراعة جدول الإنتاج (SQL سُلّم للمالك) + تفعيل البلوك قبيل الموسم (الكود مدموج ‏#1305) | ذاكرة `national-day-96-plan` |
 | 10 | VARA Android | EN strings + OTP + إعادة الجدولة بعد BOOT_COMPLETED (الأساس مدموج ‏#1302/#1303) | ذاكرة `vara-android-parity-2026-07-27` |
 
@@ -38,4 +38,4 @@
 
 ---
 
-*آخر تحديث: 2026-08-03*
+*آخر تحديث: 2026-08-18*

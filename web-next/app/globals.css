@@ -187,3 +187,62 @@ body {
   color: hsl(var(--primary));
   width: 9.5rem;
 }
+
+/* ===== صور المقالات: المحاذاة والتفاف النص (Float & Wrap) ===== */
+.prose img.sabq-image--right,
+.prose img[data-align="right"],
+.prose img[align="right"],
+.prose .sabq-image--right {
+  float: right !important;
+  display: inline-block !important;
+  max-width: 100%;
+  height: auto;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 1.5rem !important;
+  margin-block-start: 0.5rem !important;
+  margin-block-end: 1rem !important;
+  border-radius: 0.5rem;
+  clear: none;
+}
+
+.prose img.sabq-image--left,
+.prose img[data-align="left"],
+.prose img[align="left"],
+.prose .sabq-image--left {
+  float: left !important;
+  display: inline-block !important;
+  max-width: 100%;
+  height: auto;
+  margin-inline-start: 1.5rem !important;
+  margin-inline-end: 0 !important;
+  margin-block-start: 0.5rem !important;
+  margin-block-end: 1rem !important;
+  border-radius: 0.5rem;
+  clear: none;
+}
+
+.prose img.sabq-image--center,
+.prose img[data-align="center"],
+.prose .sabq-image--center {
+  float: none !important;
+  display: block !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  clear: both;
+}
+
+@media (max-width: 640px) {
+  .prose img.sabq-image--right,
+  .prose img[data-align="right"],
+  .prose img.sabq-image--left,
+  .prose img[data-align="left"] {
+    max-width: 55% !important;
+    margin-inline-end: 1rem !important;
+  }
+}
+
