@@ -46,6 +46,7 @@ import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
 import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
 import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
+import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { cn } from "@/lib/utils";
 import {
   DndContext,
@@ -97,6 +98,7 @@ type Article = {
     id: string;
     nameAr: string;
     nameEn: string;
+    color?: string | null;
   } | null;
   author?: {
     id: string;
@@ -150,7 +152,14 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border/80 hover:bg-muted/25 odd:bg-muted/[0.12] ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-muted/60 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-muted/60 border-r-4 border-r-orange-500' : ''}`}
+      className={cn(
+        "border-b border-border/80 transition-colors",
+        "bg-card even:bg-muted/40 hover:bg-muted/60 dark:even:bg-muted/20 dark:hover:bg-muted/40",
+        isDragging ? "bg-primary/15 shadow-lg" : "",
+        isSaving ? "opacity-70" : "",
+        highlightResubmitted === "resubmitted" ? "bg-amber-50/90 dark:bg-amber-950/30 border-r-4 border-r-amber-500" : "",
+        highlightResubmitted === "awaiting" ? "bg-orange-50/90 dark:bg-orange-950/30 border-r-4 border-r-orange-500" : ""
+      )}
       data-testid={`row-article-${article.id}`}
     >
       <td 
@@ -791,17 +800,7 @@ export default function ArticlesManagement() {
 
   const formatArticleDate = (date: string | Date | null | undefined) => {
     if (!date) return null;
-    try {
-      return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return null;
-    }
+    return fmtSocialDateTime(date);
   };
 
   const formatScheduledDate = formatArticleDate;
@@ -825,15 +824,34 @@ export default function ArticlesManagement() {
     );
   };
 
-  const getCategoryChip = (nameAr?: string | null) => {
-    if (!nameAr) return null;
+  const getCategoryChip = (category?: { nameAr?: string | null; color?: string | null } | null) => {
+    if (!category?.nameAr) return null;
+    const catColor = category.color && /^#([0-9a-fA-F]{6})$/.test(category.color) ? category.color : null;
+    
+    if (catColor) {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 rounded-md font-semibold px-2.5 py-0.5 text-xs shadow-xs transition-colors"
+          style={{
+            borderColor: `${catColor}55`,
+            backgroundColor: `${catColor}18`,
+            color: catColor,
+          }}
+        >
+          <Tag className="h-3 w-3 shrink-0" style={{ color: catColor }} />
+          <span>{category.nameAr}</span>
+        </Badge>
+      );
+    }
+
     return (
       <Badge
         variant="outline"
         className="gap-1 rounded-md border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 font-semibold px-2.5 py-0.5 text-xs shadow-xs"
       >
         <Tag className="h-3 w-3 opacity-75 shrink-0" />
-        <span>{nameAr}</span>
+        <span>{category.nameAr}</span>
       </Badge>
     );
   };
@@ -862,7 +880,7 @@ export default function ArticlesManagement() {
           data-testid="badge-source-email"
         >
           <Mail className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
-          <span>أُرسل بواسطة: {sender}</span>
+          <span>البريد الذكي: {sender}</span>
         </span>
       );
     }
@@ -874,7 +892,7 @@ export default function ArticlesManagement() {
           data-testid="badge-source-whatsapp"
         >
           <MessageCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>أُرسل بواسطة: {sender}</span>
+          <span>واتساب: {sender}</span>
         </span>
       );
     }
@@ -885,7 +903,7 @@ export default function ArticlesManagement() {
           data-testid={article.source === "android-app" ? "badge-source-android" : "badge-source-ios"}
         >
           <Smartphone className="h-3 w-3 text-slate-600 dark:text-slate-400 shrink-0" />
-          <span>من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
+          <span>{getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
         </span>
       );
     }
@@ -900,15 +918,15 @@ export default function ArticlesManagement() {
     const authorName =
       article.author?.firstName && article.author?.lastName
         ? `${article.author.firstName} ${article.author.lastName}`
-        : article.author?.firstName || article.author?.email || "صحيفة سبق";
+        : article.author?.firstName || article.author?.email || "المحرر";
 
     return (
       <span
-        className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/70 px-2 py-0.5 text-xs font-medium text-foreground/80"
+        className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-50/70 dark:bg-blue-950/30 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
         data-testid="badge-source-manual"
       >
-        <User className="h-3 w-3 text-muted-foreground shrink-0" />
-        <span>{authorName}</span>
+        <PenLine className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
+        <span>المحرر: {authorName}</span>
       </span>
     );
   };
@@ -978,10 +996,10 @@ export default function ArticlesManagement() {
 
         {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="rounded-xl border-border/60 shadow-none">
-                <CardContent className="p-3">
+              <Card key={i} className="rounded-2xl border-border/80 bg-card shadow-xs">
+                <CardContent className="p-3.5">
                   <Skeleton className="mb-2 h-3.5 w-14" />
                   <Skeleton className="h-7 w-16" />
                 </CardContent>
@@ -989,17 +1007,18 @@ export default function ArticlesManagement() {
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
             {([
               {
                 key: "published" as const,
                 label: "منشورة",
                 value: metrics.published,
                 Icon: Newspaper,
-                idle: "border-emerald-200/70 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100",
-                active: "border-emerald-700 bg-emerald-700 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600",
-                iconIdle: "bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] text-foreground",
+                active: "border-emerald-500/50 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20 shadow-xs",
+                iconIdle: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                iconActive: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white shadow-xs",
+                valueClass: "text-emerald-600 dark:text-emerald-400",
                 testId: "card-stat-published",
               },
               {
@@ -1007,10 +1026,11 @@ export default function ArticlesManagement() {
                 label: "مجدولة",
                 value: metrics.scheduled,
                 Icon: Clock,
-                idle: "border-sky-200/70 bg-sky-50/40 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
-                active: "border-sky-700 bg-sky-700 text-white shadow-sm dark:border-sky-500 dark:bg-sky-600",
-                iconIdle: "bg-sky-100/90 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-sky-500/40 hover:bg-sky-500/[0.04] text-foreground",
+                active: "border-sky-500/50 bg-sky-500/10 text-sky-950 dark:text-sky-100 ring-2 ring-sky-500/20 shadow-xs",
+                iconIdle: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                iconActive: "bg-sky-500 text-white dark:bg-sky-500 dark:text-white shadow-xs",
+                valueClass: "text-sky-600 dark:text-sky-400",
                 testId: "card-stat-scheduled",
               },
               {
@@ -1018,10 +1038,11 @@ export default function ArticlesManagement() {
                 label: "مسودة",
                 value: metrics.draft,
                 Icon: FilePenLine,
-                idle: "border-amber-200/70 bg-amber-50/40 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
-                active: "border-amber-700 bg-amber-700 text-white shadow-sm dark:border-amber-500 dark:bg-amber-600",
-                iconIdle: "bg-amber-100/90 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-amber-500/40 hover:bg-amber-500/[0.04] text-foreground",
+                active: "border-amber-500/50 bg-amber-500/10 text-amber-950 dark:text-amber-100 ring-2 ring-amber-500/20 shadow-xs",
+                iconIdle: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                iconActive: "bg-amber-500 text-white dark:bg-amber-500 dark:text-white shadow-xs",
+                valueClass: "text-amber-600 dark:text-amber-400",
                 testId: "card-stat-draft",
               },
               {
@@ -1029,10 +1050,11 @@ export default function ArticlesManagement() {
                 label: "مؤرشفة",
                 value: metrics.archived,
                 Icon: Archive,
-                idle: "border-rose-200/70 bg-rose-50/40 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
-                active: "border-rose-800 bg-rose-800 text-white shadow-sm dark:border-rose-500 dark:bg-rose-700",
-                iconIdle: "bg-rose-100/90 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-rose-500/40 hover:bg-rose-500/[0.04] text-foreground",
+                active: "border-rose-500/50 bg-rose-500/10 text-rose-950 dark:text-rose-100 ring-2 ring-rose-500/20 shadow-xs",
+                iconIdle: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                iconActive: "bg-rose-500 text-white dark:bg-rose-500 dark:text-white shadow-xs",
+                valueClass: "text-rose-600 dark:text-rose-400",
                 testId: "card-stat-archived",
               },
             ]).map((card) => {
@@ -1045,18 +1067,23 @@ export default function ArticlesManagement() {
                   aria-selected={isActive}
                   onClick={() => setActiveStatus(card.key)}
                   className={cn(
-                    "rounded-xl border px-3 py-2.5 text-start transition-colors",
+                    "rounded-2xl border p-3.5 sm:p-4 text-start transition-all duration-200 cursor-pointer select-none",
                     isActive ? card.active : card.idle,
                   )}
                   data-testid={card.testId}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold">{card.label}</span>
-                    <span className={cn("rounded-lg p-1.5", isActive ? card.iconActive : card.iconIdle)}>
-                      <card.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="truncate text-xs sm:text-sm font-semibold text-muted-foreground">{card.label}</span>
+                    <span className={cn("rounded-xl p-1.5 transition-colors", isActive ? card.iconActive : card.iconIdle)}>
+                      <card.Icon className="h-4 w-4" aria-hidden="true" />
                     </span>
                   </div>
-                  <div className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight leading-none">
+                  <div
+                    className={cn(
+                      "mt-2 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight leading-none transition-colors",
+                      isActive ? card.valueClass : "text-foreground"
+                    )}
+                  >
                     {card.value.toLocaleString("en-US")}
                   </div>
                 </button>
@@ -1270,7 +1297,7 @@ export default function ArticlesManagement() {
                               </div>
 
                               <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                {getCategoryChip(article.category?.nameAr)}
+                                {getCategoryChip(article.category)}
                                 {getTypeBadge(article.articleType || "news")}
                                 {getAuthorOrSourceBadge(article)}
                                 {getDateBadge(article, true)}
@@ -1420,7 +1447,7 @@ export default function ArticlesManagement() {
 
                       {/* Distinct Meta Strip */}
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        {getCategoryChip(article.category?.nameAr)}
+                        {getCategoryChip(article.category)}
                         {getTypeBadge(article.articleType || "news")}
                         {getAuthorOrSourceBadge(article)}
                         {getDateBadge(article, false)}
