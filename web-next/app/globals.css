@@ -192,6 +192,8 @@ body {
 .prose img.sabq-image--right,
 .prose img[data-align="right"],
 .prose img[align="right"],
+.prose img[style*="float: right"],
+.prose img[style*="float:right"],
 .prose .sabq-image--right {
   float: right !important;
   display: inline-block !important;
@@ -208,6 +210,8 @@ body {
 .prose img.sabq-image--left,
 .prose img[data-align="left"],
 .prose img[align="left"],
+.prose img[style*="float: left"],
+.prose img[style*="float:left"],
 .prose .sabq-image--left {
   float: left !important;
   display: inline-block !important;
