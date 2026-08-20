@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, User } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, HeartPulse, Zap } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -163,7 +163,7 @@ function SortableRow({
       data-testid={`row-article-${article.id}`}
     >
       <td 
-        className="hidden md:table-cell py-3 px-2 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
+        className="hidden md:table-cell w-9 py-3 px-1 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
         {...attributes} 
         {...listeners}
       >
@@ -253,6 +253,8 @@ export default function ArticlesManagement() {
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
   const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
   const [socialPublishArticle, setSocialPublishArticle] = useState<Article | null>(null);
+  const [notifyArticle, setNotifyArticle] = useState<Article | null>(null);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [revisionNotes, setRevisionNotes] = useState("");
   const [revisionNotesError, setRevisionNotesError] = useState<string | null>(null);
   // Reason captured in the archive dialog. Required by the backend
@@ -713,6 +715,53 @@ export default function ArticlesManagement() {
       });
     },
   });
+
+  const resurfaceMutation = useMutation({
+    mutationFn: async (articleId: string) => {
+      return await apiRequest(`/api/articles/${articleId}/resurface`, {
+        method: "POST",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      toast({
+        title: "تم الإنعاش",
+        description: "عاد الخبر إلى صدارة الموجز وبدأ دورة جديدة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إنعاش الخبر",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSendNotification = async (article: Article) => {
+    setIsSendingNotification(true);
+    try {
+      const data = await apiRequest<{ message?: string }>(`/api/admin/push/quick-send`, {
+        method: "POST",
+        body: JSON.stringify({ articleId: article.id }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      toast({
+        title: "بدأ الإرسال",
+        description: data?.message || "جارٍ إرسال الإشعار للمستخدمين في الخلفية",
+      });
+      setNotifyArticle(null);
+    } catch (error: any) {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إرسال الإشعار",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
 
   // Selection handlers
   const toggleArticleSelection = (articleId: string) => {
@@ -1181,7 +1230,7 @@ export default function ArticlesManagement() {
           {/* Bulk Actions Toolbar */}
           {selectedArticles.size > 0 && (
             <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 md:gap-4">
                 <div className="text-sm text-muted-foreground tabular-nums">
                   تم تحديد {selectedArticles.size.toLocaleString("en-US")} مقال
                 </div>
@@ -1226,7 +1275,7 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden overflow-hidden rounded-xl border border-border/80 bg-card shadow-none md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none md:block">
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
@@ -1241,7 +1290,7 @@ export default function ArticlesManagement() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full table-fixed">
+                <table className="w-full min-w-[920px] table-fixed">
                   <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                     <tr>
                       <th className="w-8 px-1 py-3 text-center" data-testid="header-drag"></th>
@@ -1252,7 +1301,7 @@ export default function ArticlesManagement() {
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">الخبر</th>
+                      <th className="min-w-[340px] px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">الخبر</th>
                       <th className="w-20 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">عاجل</th>
                       <th className="w-28 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">المشاهدات</th>
                       <th className="w-72 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">الإجراءات</th>
@@ -1283,7 +1332,7 @@ export default function ArticlesManagement() {
                               data-testid={`checkbox-article-${article.id}`}
                             />
                           </td>
-                          <td className="min-w-0 px-4 py-3.5 align-middle">
+                          <td className="min-w-[340px] px-4 py-3.5 align-middle">
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-2">
                                 {((article as any).albumImages?.length > 0 ||
@@ -1358,7 +1407,7 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="w-[72px] px-2 py-3.5 text-center align-top">
                             {canPublishArticle ? (
                               <BreakingSwitch
                                 articleId={article.id}
@@ -1370,10 +1419,10 @@ export default function ArticlesManagement() {
                               </span>
                             )}
                           </td>
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="w-[88px] px-2 py-3.5 text-center align-top">
                             <ViewsCount views={article.views} iconClassName="h-4 w-4" />
                           </td>
-                          <td className="px-2 py-3.5 align-top">
+                          <td className="w-[280px] px-2 py-3.5 align-top">
                             <RowActions
                               articleId={article.id}
                               articleTitle={article.title}
@@ -1541,18 +1590,19 @@ export default function ArticlesManagement() {
                   </div>
                   
                   {/* Action Buttons - Permission-based visibility */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/60">
-                    <div className="flex items-center gap-2 flex-1 min-w-[170px]">
+                  <div className="space-y-2 pt-2 border-t">
+                    {/* Primary Action Buttons Grid */}
+                    <div className="grid grid-cols-2 gap-2">
                       {canEditArticle(article) && (
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleEdit(article)}
-                          className="flex-1 h-8 text-xs font-semibold rounded-lg gap-1.5"
+                          className="h-9 font-medium text-xs sm:text-sm"
                           data-testid={`button-edit-mobile-${article.id}`}
                         >
-                          <Edit className="h-3.5 w-3.5" />
-                          <span>تعديل</span>
+                          <Edit className="ml-1.5 h-3.5 w-3.5" />
+                          تعديل
                         </Button>
                       )}
                       
@@ -1565,83 +1615,135 @@ export default function ArticlesManagement() {
                             currentState: article.newsType === "breaking"
                           })}
                           disabled={toggleBreakingMutation.isPending}
-                          className="flex-1 h-8 text-xs font-semibold rounded-lg gap-1.5"
+                          className="h-9 font-medium text-xs sm:text-sm"
                           data-testid={`button-breaking-mobile-${article.id}`}
                         >
-                          <Bell className="h-3.5 w-3.5" />
-                          <span>{article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}</span>
+                          <Zap className="ml-1.5 h-3.5 w-3.5" />
+                          {article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}
+                        </Button>
+                      )}
+
+                      {canSocialPublish && article.status === "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSocialPublishArticle(article)}
+                          className="h-9 font-medium text-xs sm:text-sm text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800 hover:bg-sky-50 dark:hover:bg-sky-950/50"
+                          data-testid={`button-social-publish-mobile-${article.id}`}
+                        >
+                          <Share2 className="ml-1.5 h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                          نشر على X
+                        </Button>
+                      )}
+
+                      {canPublishArticle && article.status === "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setNotifyArticle(article)}
+                          className="h-9 font-medium text-xs sm:text-sm text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                          data-testid={`button-notify-mobile-${article.id}`}
+                        >
+                          <Bell className="ml-1.5 h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          إرسال إشعار
                         </Button>
                       )}
                     </div>
-                    
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      {canFeatureArticle && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
-                          onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
-                          disabled={featureMutation.isPending}
-                          data-testid={`button-feature-mobile-${article.id}`}
-                          title={article.isFeatured ? "إلغاء التمييز" : "تمييز"}
-                        >
-                          <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-                        </Button>
-                      )}
-                      
-                      {article.status === "published" && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
-                          onClick={() => translateMutation.mutate(article.id)}
-                          disabled={translateMutation.isPending}
-                          data-testid={`button-translate-mobile-${article.id}`}
-                          title="ترجم للإنجليزية"
-                        >
-                          {translateMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                          ) : (
-                            <Languages className="h-4 w-4 text-emerald-500" />
-                          )}
-                        </Button>
-                      )}
-                      {canSocialPublish && article.status === "published" && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
-                          onClick={() => setSocialPublishArticle(article)}
-                          data-testid={`button-social-publish-mobile-${article.id}`}
-                          title="النشر على X"
-                        >
-                          <Share2 className="h-4 w-4 text-sky-600" />
-                        </Button>
-                      )}
-                      {canArchiveArticle && article.status !== "archived" && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeletingArticle(article)}
-                          data-testid={`button-archive-mobile-${article.id}`}
-                          title="أرشفة"
-                        >
-                          <Archive className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {canDeleteArticle && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeletingArticle(article)}
-                          data-testid={`button-delete-mobile-${article.id}`}
-                          title="حذف"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+
+                    {/* Secondary Action Icons Row */}
+                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40">
+                      <div className="flex items-center gap-1">
+                        {canFeatureArticle && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
+                            disabled={featureMutation.isPending}
+                            data-testid={`button-feature-mobile-${article.id}`}
+                            title={article.isFeatured ? "إلغاء التمييز" : "تمييز"}
+                          >
+                            <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} />
+                          </Button>
+                        )}
+                        
+                        {article.status === "published" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => translateMutation.mutate(article.id)}
+                            disabled={translateMutation.isPending}
+                            data-testid={`button-translate-mobile-${article.id}`}
+                            title="ترجم للإنجليزية"
+                          >
+                            {translateMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                            ) : (
+                              <Languages className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            )}
+                          </Button>
+                        )}
+
+                        {canPublishArticle && article.status === "published" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => resurfaceMutation.mutate(article.id)}
+                            disabled={resurfaceMutation.isPending}
+                            data-testid={`button-resurface-mobile-${article.id}`}
+                            title="إنعاش (عودة لصدارة الموجز)"
+                          >
+                            {resurfaceMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                            ) : (
+                              <HeartPulse className="h-4 w-4 text-rose-500" />
+                            )}
+                          </Button>
+                        )}
+
+                        {activeStatus !== "archived" && article.status !== "archived" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setRevisionArticle(article)}
+                            data-testid={`button-revision-mobile-${article.id}`}
+                            title="طلب تعديل"
+                          >
+                            <FilePenLine className="h-4 w-4 text-amber-600" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {canArchiveArticle && article.status !== "archived" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setDeletingArticle(article)}
+                            data-testid={`button-archive-mobile-${article.id}`}
+                            title="أرشفة"
+                          >
+                            <Archive className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
+                        
+                        {canDeleteArticle && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setDeletingArticle(article)}
+                            data-testid={`button-delete-mobile-${article.id}`}
+                            title="حذف"
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2077,6 +2179,63 @@ export default function ArticlesManagement() {
           }}
         />
       )}
+
+      {/* إرسال إشعار للمستخدمين - موبايل */}
+      <AlertDialog
+        open={!!notifyArticle}
+        onOpenChange={(open) => {
+          if (!open && !isSendingNotification) {
+            setNotifyArticle(null);
+          }
+        }}
+      >
+        <AlertDialogContent dir="rtl" className="sm:max-w-md w-[95vw] rounded-2xl p-4 sm:p-6">
+          <AlertDialogHeader className="text-right space-y-1.5">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+              <Bell className="h-5 w-5 text-blue-600" />
+              <span>إرسال إشعار للمستخدمين</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground text-right">
+              سيتم إرسال إشعار فوري بهذا الخبر لجميع مستخدمي التطبيق ومتابعي سبق.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {notifyArticle && (
+            <div className="py-2">
+              <div className="p-3 rounded-xl border bg-muted/40 text-xs sm:text-sm font-semibold text-foreground leading-relaxed">
+                "{notifyArticle.title}"
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <AlertDialogCancel disabled={isSendingNotification} className="text-xs h-9 px-3 mt-0">
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (notifyArticle) {
+                  handleSendNotification(notifyArticle);
+                }
+              }}
+              disabled={isSendingNotification}
+              className="text-xs font-bold h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-confirm-send-notification"
+            >
+              {isSendingNotification ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 ml-1.5 animate-spin" />
+                  جاري الإرسال...
+                </>
+              ) : (
+                <>
+                  <Bell className="w-3.5 h-3.5 ml-1.5" />
+                  إرسال الإشعار
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
