@@ -154,7 +154,7 @@ function SortableRow({
       data-testid={`row-article-${article.id}`}
     >
       <td 
-        className="hidden md:table-cell py-3 px-2 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
+        className="hidden md:table-cell w-9 py-3 px-1 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
         {...attributes} 
         {...listeners}
       >
@@ -1072,7 +1072,7 @@ export default function ArticlesManagement() {
           {/* Bulk Actions Toolbar */}
           {selectedArticles.size > 0 && (
             <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 md:gap-4">
                 <div className="text-sm text-muted-foreground tabular-nums">
                   تم تحديد {selectedArticles.size.toLocaleString("en-US")} مقال
                 </div>
@@ -1117,7 +1117,7 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden overflow-hidden rounded-xl border border-border/80 bg-card shadow-none md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none md:block">
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
@@ -1132,7 +1132,7 @@ export default function ArticlesManagement() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full table-fixed">
+                <table className="w-full min-w-[920px] table-fixed">
                   <thead className="border-b border-border bg-muted/40">
                     <tr>
                       <th className="w-9 px-1 py-3 text-center" data-testid="header-drag"></th>
@@ -1143,10 +1143,10 @@ export default function ArticlesManagement() {
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="px-3 py-3 text-right text-sm font-semibold">الخبر</th>
+                      <th className="min-w-[340px] px-3 py-3 text-right text-sm font-semibold">الخبر</th>
                       <th className="w-[72px] px-2 py-3 text-center text-sm font-semibold">عاجل</th>
                       <th className="w-[88px] px-2 py-3 text-center text-sm font-semibold">المشاهدات</th>
-                      <th className="w-[300px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
+                      <th className="w-[280px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1167,14 +1167,14 @@ export default function ArticlesManagement() {
                                 : false
                           }
                         >
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="w-11 px-2 py-3.5 text-center align-top">
                             <Checkbox
                               checked={selectedArticles.has(article.id)}
                               onCheckedChange={() => toggleArticleSelection(article.id)}
                               data-testid={`checkbox-article-${article.id}`}
                             />
                           </td>
-                          <td className="min-w-0 px-3 py-3.5 align-top">
+                          <td className="min-w-[340px] px-3 py-3.5 align-top">
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
                                 {((article as any).albumImages?.length > 0 ||
@@ -1321,7 +1321,7 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="w-[72px] px-2 py-3.5 text-center align-top">
                             {canPublishArticle ? (
                               <BreakingSwitch
                                 articleId={article.id}
@@ -1333,10 +1333,10 @@ export default function ArticlesManagement() {
                               </span>
                             )}
                           </td>
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="w-[88px] px-2 py-3.5 text-center align-top">
                             <ViewsCount views={article.views} iconClassName="h-4 w-4" />
                           </td>
-                          <td className="px-2 py-3.5 align-top">
+                          <td className="w-[280px] px-2 py-3.5 align-top">
                             <RowActions
                               articleId={article.id}
                               articleTitle={article.title}
