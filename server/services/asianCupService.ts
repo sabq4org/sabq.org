@@ -54,6 +54,7 @@ import {
 } from "./theSportsService";
 import { apiFootballGet } from "./apiFootballClient";
 import { isEnglishSports } from "./sportsLang";
+import { mergeLiveMatchProgress } from "./sportsMatchStatus";
 import pLimit from "p-limit";
 import {
   getCommentary,
@@ -224,18 +225,32 @@ async function overlayAcLiveScore(fixture: AcFixture): Promise<AcFixture> {
     );
     if (!live || (!live.live && !live.finished)) return fixture;
     const mapped = TS_STATUS_TO_AC[live.statusId];
+    const merged = mergeLiveMatchProgress(
+      {
+        ...fixture.status,
+        extra: null,
+      },
+      {
+        live: live.live,
+        finished: live.finished,
+        elapsed: live.elapsed,
+        extra: live.extra,
+        statusId: live.statusId,
+        statusCode: mapped?.code,
+      },
+    );
     return {
       ...fixture,
       goals: { home: live.home, away: live.away },
       status: {
         ...fixture.status,
-        code: mapped?.code ?? fixture.status.code,
+        code: merged.code,
         label: isEnglishSports()
-          ? WC_STATUS_EN[mapped?.code ?? fixture.status.code] ?? fixture.status.label
-          : mapped?.label ?? fixture.status.label,
-        elapsed: live.elapsed ?? fixture.status.elapsed,
-        live: live.live,
-        finished: live.finished || fixture.status.finished,
+          ? WC_STATUS_EN[merged.code] ?? merged.label
+          : merged.label,
+        elapsed: merged.elapsed,
+        live: merged.live,
+        finished: merged.finished,
       },
     };
   } catch {

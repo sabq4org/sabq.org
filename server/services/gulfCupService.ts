@@ -36,6 +36,7 @@ import {
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
+import { latestPositiveEventMinute, mergeLiveMatchProgress } from "./sportsMatchStatus";
 import {
   getCommentary,
   getExpectedLineups,
@@ -1095,9 +1096,20 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
           goals: { home: liveTs.home, away: liveTs.away },
           status: {
             ...fixture.status,
-            elapsed: liveTs.elapsed ?? fixture.status.elapsed,
-            live: liveTs.live,
-            finished: liveTs.finished || fixture.status.finished,
+            ...mergeLiveMatchProgress(
+              {
+                ...fixture.status,
+                extra: null,
+              },
+              {
+                live: liveTs.live,
+                finished: liveTs.finished,
+                elapsed: liveTs.elapsed,
+                extra: liveTs.extra,
+                statusId: liveTs.statusId,
+                latestEventMinute: latestPositiveEventMinute(liveTs.events),
+              },
+            ),
           },
         };
       }
@@ -1367,9 +1379,19 @@ async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> 
         goals: { home: ts.home, away: ts.away },
         status: {
           ...f.status,
-          elapsed: ts.elapsed ?? f.status.elapsed,
-          live: ts.live,
-          finished: ts.finished || f.status.finished,
+          ...mergeLiveMatchProgress(
+            {
+              ...f.status,
+              extra: null,
+            },
+            {
+              live: ts.live,
+              finished: ts.finished,
+              elapsed: ts.elapsed,
+              extra: ts.extra,
+              statusId: ts.statusId,
+            },
+          ),
         },
       };
     }),

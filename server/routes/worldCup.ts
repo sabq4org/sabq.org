@@ -57,6 +57,7 @@ import {
   isSportmonksConfigured,
   WC_LEAGUE_ID as SM_WC_LEAGUE_ID,
 } from "../services/sportmonksService";
+import { mergeLiveMatchProgress } from "../services/sportsMatchStatus";
 import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
@@ -97,11 +98,13 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
             ? { home: ts.penHome, away: ts.penAway }
             : fx.penalties,
         status: {
-          ...fx.status,
-          elapsed: ts.elapsed ?? fx.status.elapsed,
-          extra: ts.extra ?? fx.status.extra,
-          live: ts.live,
-          finished: ts.finished || fx.status.finished,
+          ...mergeLiveMatchProgress(fx.status, {
+            live: ts.live,
+            finished: ts.finished,
+            elapsed: ts.elapsed,
+            extra: ts.extra,
+            statusId: ts.statusId,
+          }),
         },
       };
     }
@@ -117,10 +120,12 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
       ...fx,
       goals: { home: live.home, away: live.away },
       status: {
-        ...fx.status,
-        elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
-        live: live.live,
-        finished: live.finished || fx.status.finished,
+        ...mergeLiveMatchProgress(fx.status, {
+          live: live.live,
+          finished: live.finished,
+          elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
+          statusCode: live.stateDevName,
+        }),
       },
     };
   } catch {

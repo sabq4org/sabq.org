@@ -42,6 +42,10 @@ import {
   stabilizeClockStartEpoch,
   clearClockAnchor,
 } from "./matchClock";
+import {
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 
 // حالات SportMonks اللحظية → نص عربي للبطاقة (أدق وأسرع من API-Football)
 const LIVE_STATE_AR: Record<string, string> = {
@@ -76,16 +80,6 @@ const CLOCK_PAUSED_STATES = new Set([
   "FT_PEN",
   "AET_PEN",
 ]);
-
-const TS_STATUS_AR: Record<number, string> = {
-  2: "الشوط الأول",
-  3: "بين الشوطين",
-  4: "الشوط الثاني",
-  5: "الوقت الإضافي",
-  6: "الإضافي الثاني",
-  7: "ركلات الترجيح",
-  8: "انتهت",
-};
 
 const TS_CLOCK_RUNNING_STATUS = new Set([2, 4, 5, 6]);
 
@@ -259,12 +253,28 @@ function buildContentState(
 
   if (live && (live.live || live.finished)) {
     const minute = freshestMinute(base.minute, live);
+    const merged = mergeLiveMatchProgress(
+      {
+        code: f.status.code,
+        label: base.statusLabel,
+        elapsed: minute,
+        extra: f.status.extra,
+        live: base.isLive,
+        finished: base.isFinished,
+      },
+      {
+        live: live.live,
+        finished: live.finished,
+        elapsed: minute,
+        statusCode: live.stateDevName,
+      },
+    );
     base.homeScore = live.home;
     base.awayScore = live.away;
     base.minute = minuteLabel(minute);
-    base.statusLabel = LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel;
-    base.isLive = live.live;
-    base.isFinished = live.finished || base.isFinished;
+    base.statusLabel = LIVE_STATE_AR[merged.code] ?? merged.label;
+    base.isLive = merged.live;
+    base.isFinished = merged.finished;
     base.clockStartEpoch = sportmonksClockStartEpoch(live) ?? base.clockStartEpoch;
   }
 
@@ -272,7 +282,6 @@ function buildContentState(
   // lastEvent يبقى من API-Football/الخدمة العامة (عربي مُعرَّب) — ثانوي ومقبول
   // تأخّره قليلًا، بينما النتيجة والساعة تأتي من المصدر الأسرع.
   if (ts && (ts.live || ts.finished)) {
-    const tsLabel = TS_STATUS_AR[ts.statusId] ?? base.statusLabel;
     const baseMin = minuteFromText(base.minute);
     const tsMin = (ts.elapsed ?? 0) + (ts.extra ?? 0);
     const tsRunning = ts.live && TS_CLOCK_RUNNING_STATUS.has(ts.statusId);
@@ -280,6 +289,24 @@ function buildContentState(
       baseMin,
       tsMin,
       minuteFromClockStartEpoch(base.clockStartEpoch, tsRunning),
+    );
+    const merged = mergeLiveMatchProgress(
+      {
+        code: f.status.code,
+        label: base.statusLabel,
+        elapsed: displayMinute > 0 ? displayMinute : f.status.elapsed,
+        extra: ts.extra ?? f.status.extra,
+        live: base.isLive,
+        finished: base.isFinished,
+      },
+      {
+        live: ts.live,
+        finished: ts.finished,
+        elapsed: ts.elapsed,
+        extra: ts.extra,
+        statusId: ts.statusId,
+        latestEventMinute: latestPositiveEventMinute(ts.events),
+      },
     );
     return {
       ...base,
@@ -290,9 +317,9 @@ function buildContentState(
       minute: ts.extra && ts.extra > 0 && ts.elapsed
         ? `${ts.elapsed}+${ts.extra}'`
         : minuteLabel(displayMinute),
-      statusLabel: tsLabel || base.statusLabel,
-      isLive: ts.live,
-      isFinished: ts.finished || base.isFinished,
+      statusLabel: merged.label,
+      isLive: merged.live,
+      isFinished: merged.finished,
       // مرساة TheSports مشتقة من طابع بداية الشوط نفسه؛ تلتقط الانطلاق خلال
       // ثوانٍ ولا تنتظر API-Football الأبطأ، وتبقى مطابقة لساعة التطبيق.
       clockStartEpoch:

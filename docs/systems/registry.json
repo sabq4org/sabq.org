@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-08-11",
+  "updatedAt": "2026-08-21",
   "systems": [
     {
       "id": "account-center",
@@ -521,6 +521,10 @@
         "server/services/sportsTournamentsService.ts",
         "server/services/sportsNamesService.ts",
         "server/services/sportsPlayerNameFixes.ts",
+        "server/services/sportsMatchStatus.ts",
+        "server/services/sportsAlertsService.ts",
+        "server/services/sportsAlertPrefsService.ts",
+        "server/jobs/sportsAlertsJob.ts",
         "server/services/worldCupNewsGenerator.ts",
         "server/services/kingsCupNewsGenerator.ts",
         "server/services/newsPulseInsights.ts",
@@ -581,7 +585,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-14"
+      "lastReviewed": "2026-08-21"
     },
     {
       "id": "push-notifications",
@@ -610,7 +614,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-29"
+      "lastReviewed": "2026-08-21"
     },
     {
       "id": "ads",

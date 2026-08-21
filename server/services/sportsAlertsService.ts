@@ -59,6 +59,11 @@ import {
   sendToMultipleDevices,
   isFcmConfigured,
 } from "./fcmService";
+import {
+  isPlausibleFootballFullTime,
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 
 interface MatchSnapshot {
   homeGoals: number;
@@ -756,6 +761,19 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
 
     // نهاية المباراة
     if (!prev.finished && cur.finished) {
+      // ومضة FT عند الاستراحة/بداية الشوط الثاني (~د45–47) ليست نهاية.
+      // نُبقي اللقطة جارية حتى تصمد ساعة ≥80 أو رمز إداري.
+      if (
+        !isPlausibleFootballFullTime({
+          elapsed: m.status.elapsed,
+          extra: m.status.extra,
+          statusCode: m.status.code,
+        })
+      ) {
+        cur.finished = false;
+        cur.live = true;
+        continue;
+      }
       // حذر الأدوار الإقصائية: تعادل بلا ترجيح لا يُنهي مباراة إقصائية — الغالب
       // FT خاطفة قبل الأشواط الإضافية. نُبقي اللقطة «غير منتهية» فيُعاد فحص
       // التحوّل كل دورة، ولا نُعلن إلا إن صمدت «النهاية» المهلة كاملة.
@@ -1227,11 +1245,14 @@ function applyTsOverlay(
           ? { home: ts.penHome, away: ts.penAway }
           : m.penalties,
       status: {
-        ...m.status,
-        elapsed: ts.elapsed ?? m.status.elapsed,
-        extra: ts.extra ?? m.status.extra,
-        live: ts.live,
-        finished: ts.finished || m.status.finished,
+        ...mergeLiveMatchProgress(m.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          latestEventMinute: latestPositiveEventMinute(ts.events),
+        }),
       },
     };
   });

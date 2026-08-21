@@ -22,6 +22,7 @@ import {
 import { getLiveFixtures, isWorldCupConfigured, type WcFixture } from "../services/worldCupService";
 import { getLiveScore, isSportmonksConfigured } from "../services/sportmonksService";
 import { clockStartEpochFor } from "../services/matchClock";
+import { mergeLiveMatchProgress } from "../services/sportsMatchStatus";
 
 /** عنصر موجز مضغوط — مفاتيح قصيرة لتقليل حجم كل دفعة. */
 interface LiveDigestItem {
@@ -60,10 +61,12 @@ async function overlayWc(fx: WcFixture): Promise<WcFixture> {
       ...fx,
       goals: { home: live.home, away: live.away },
       status: {
-        ...fx.status,
-        elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
-        live: live.live,
-        finished: live.finished || fx.status.finished,
+        ...mergeLiveMatchProgress(fx.status, {
+          live: live.live,
+          finished: live.finished,
+          elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
+          statusCode: live.stateDevName,
+        }),
       },
     };
   } catch {
