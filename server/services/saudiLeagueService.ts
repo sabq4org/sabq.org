@@ -25,6 +25,10 @@ import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
 import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./asianCupService";
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
+import {
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 import { getPlayerForm as smGetPlayerForm, getSmSquad, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
@@ -379,19 +383,25 @@ function localizeTeam(raw: any, tr?: FxTranslators): SplTeam {
 function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture {
   const fx = item.fixture ?? {};
   const statusCode: string = fx.status?.short ?? "TBD";
+  const elapsed = fx.status?.elapsed ?? null;
+  const extra = fx.status?.extra ?? null;
+  const status = mergeLiveMatchProgress({
+    code: statusCode,
+    label: isEnglishSports()
+      ? WC_STATUS_EN[statusCode] ?? statusCode
+      : WC_STATUS_AR[statusCode] ?? statusCode,
+    elapsed,
+    extra,
+    live: WC_LIVE_STATUSES.has(statusCode),
+    finished: WC_FINISHED_STATUSES.has(statusCode),
+  });
   return {
     id: fx.id,
     date: fx.date,
     timestamp: fx.timestamp,
     status: {
-      code: statusCode,
-      label: isEnglishSports()
-        ? WC_STATUS_EN[statusCode] ?? statusCode
-        : WC_STATUS_AR[statusCode] ?? statusCode,
-      elapsed: fx.status?.elapsed ?? null,
-      extra: fx.status?.extra ?? null,
-      live: WC_LIVE_STATUSES.has(statusCode),
-      finished: WC_FINISHED_STATUSES.has(statusCode),
+      ...status,
+      extra: status.extra ?? extra,
     },
     round: localizeSplRound(item.league?.round ?? ""),
     // الوضع الإنجليزي: اسم الملعب/المدينة الأصلي من المزوّد بلا تعريب.
@@ -2073,11 +2083,13 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
           ? { home: ts.penHome, away: ts.penAway }
           : f.penalties,
       status: {
-        ...f.status,
-        elapsed: ts.elapsed ?? f.status.elapsed,
-        extra: ts.extra ?? f.status.extra,
-        live: ts.live,
-        finished: ts.finished || f.status.finished,
+        ...mergeLiveMatchProgress(f.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+        }),
         clockStartEpoch: ts.clockStartEpoch ?? f.status.clockStartEpoch,
       },
     };
@@ -2137,11 +2149,14 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
           ? { home: ts.penHome, away: ts.penAway }
           : fx.penalties,
       status: {
-        ...fx.status,
-        elapsed: ts.elapsed ?? fx.status.elapsed,
-        extra: ts.extra ?? fx.status.extra,
-        live: ts.live,
-        finished: ts.finished || fx.status.finished,
+        ...mergeLiveMatchProgress(fx.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          latestEventMinute: latestPositiveEventMinute(ts.events),
+        }),
         clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
       },
     };
@@ -2208,9 +2223,14 @@ export async function getWorldLiveMatchDetail(
           ? { home: ts.penHome, away: ts.penAway }
           : mapped.penalties,
       status: {
-        ...mapped.status,
-        live: ts.live,
-        finished: ts.finished || mapped.status.finished,
+        ...mergeLiveMatchProgress(mapped.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          latestEventMinute: latestPositiveEventMinute(ts.events),
+        }),
       },
     };
     const withFx: SplMatchDetail = { ...detail, fixture };
