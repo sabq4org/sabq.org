@@ -26,6 +26,7 @@ import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./as
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
 import {
+  isWithinLiveOverlayWindow,
   latestPositiveEventMinute,
   mergeLiveMatchProgress,
 } from "./sportsMatchStatus";
@@ -385,16 +386,19 @@ function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture 
   const statusCode: string = fx.status?.short ?? "TBD";
   const elapsed = fx.status?.elapsed ?? null;
   const extra = fx.status?.extra ?? null;
-  const status = mergeLiveMatchProgress({
-    code: statusCode,
-    label: isEnglishSports()
-      ? WC_STATUS_EN[statusCode] ?? statusCode
-      : WC_STATUS_AR[statusCode] ?? statusCode,
-    elapsed,
-    extra,
-    live: WC_LIVE_STATUSES.has(statusCode),
-    finished: WC_FINISHED_STATUSES.has(statusCode),
-  });
+  const status = mergeLiveMatchProgress(
+    {
+      code: statusCode,
+      label: isEnglishSports()
+        ? WC_STATUS_EN[statusCode] ?? statusCode
+        : WC_STATUS_AR[statusCode] ?? statusCode,
+      elapsed,
+      extra,
+      live: WC_LIVE_STATUSES.has(statusCode),
+      finished: WC_FINISHED_STATUSES.has(statusCode),
+    },
+    { kickoffTs: fx.timestamp ?? null },
+  );
   return {
     id: fx.id,
     date: fx.date,
@@ -1854,9 +1858,14 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     namesComplete = !rawNames.some((n) => n && tr(n) === n);
     if (!namesComplete) void resolveNames(rawNames).catch(() => {});
     const events = eventsRaw.map((e: any) => localizeEventRow(e, tr));
+    const withEvents = appendScoreSummaryEvents(fixture, events);
+    const status = mergeLiveMatchProgress(fixture.status, {
+      kickoffTs: fixture.timestamp,
+      latestEventMinute: latestPositiveEventMinute(withEvents),
+    });
     return {
-      fixture,
-      events: appendScoreSummaryEvents(fixture, events),
+      fixture: { ...fixture, status: { ...fixture.status, ...status } },
+      events: withEvents,
       statistics: localizeStats(statsRaw),
       lineups: localizeLineups(lineupsRaw, tr),
       leagueId: item.league?.id ?? null,
@@ -2067,9 +2076,7 @@ function mapTsStatsToSpl(ts: TsLiveStats, detail: SplMatchDetail): SplMatchDetai
 // جوهر مشترك: ركّب نتيجة TheSports الحيّة على أي SplFixture بمعرّف بطولة معروف.
 async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: string): Promise<T> {
   const nowSec = Math.floor(Date.now() / 1000);
-  const nearKickoff =
-    !f.status.finished && f.timestamp <= nowSec + 600 && f.timestamp >= nowSec - 3 * 3600;
-  if (!f.status.live && !nearKickoff) return f;
+  if (!f.status.live && !isWithinLiveOverlayWindow(f.timestamp, nowSec)) return f;
   try {
     const ts = await getTheSportsFastScore(f.id, f.timestamp, tsCompId);
     if (!ts || (!ts.live && !ts.finished)) return f;
@@ -2089,6 +2096,7 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
           elapsed: ts.elapsed,
           extra: ts.extra,
           statusId: ts.statusId,
+          kickoffTs: f.timestamp,
         }),
         clockStartEpoch: ts.clockStartEpoch ?? f.status.clockStartEpoch,
       },
@@ -2132,9 +2140,7 @@ export async function overlayLiveFixturesForComp<T extends SplFixture>(
 export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<SplMatchDetail> {
   const fx = detail.fixture;
   const nowSec = Math.floor(Date.now() / 1000);
-  const nearKickoff =
-    !fx.status.finished && fx.timestamp <= nowSec + 600 && fx.timestamp >= nowSec - 3 * 3600;
-  if (!fx.status.live && !nearKickoff) return detail;
+  if (!fx.status.live && !isWithinLiveOverlayWindow(fx.timestamp, nowSec)) return detail;
   const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
   const tsCompId = getTsCompetitionId(comp?.slug);
   if (!tsCompId) return detail;
@@ -2156,6 +2162,7 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
           extra: ts.extra,
           statusId: ts.statusId,
           latestEventMinute: latestPositiveEventMinute(ts.events),
+          kickoffTs: fx.timestamp,
         }),
         clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
       },
@@ -2230,6 +2237,7 @@ export async function getWorldLiveMatchDetail(
           extra: ts.extra,
           statusId: ts.statusId,
           latestEventMinute: latestPositiveEventMinute(ts.events),
+          kickoffTs: mapped.timestamp,
         }),
       },
     };
