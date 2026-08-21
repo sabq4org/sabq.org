@@ -16,6 +16,21 @@ import {
 /** أقل زمن لعب يُقبل معه صافرة نهاية حقيقية (يستبعد الشوط الأول والاستراحة وبداية الشوط الثاني). */
 export const MIN_FULLTIME_PLAYED_MINUTES = 80;
 
+/**
+ * أقل زمن حائط منذ الانطلاق قبل قبول FT.
+ * ش1 (~45+بدل) + استراحة (~15) + ش2 لا يكتمل قبل ~100 دقيقة تقويمية.
+ * بدونه يثبّت المزود elapsed=90 مع FT عند الاستراحة فتمرّ حادثة د47–د80.
+ */
+export const MIN_MINUTES_AFTER_KICKOFF_FOR_FT = 100;
+
+/** نافذة التركيب الحيّ: 3 ساعات بعد الانطلاق حتى 10 دقائق قبله — بلا شرط !finished. */
+export function isWithinLiveOverlayWindow(
+  kickoffTs: number,
+  nowSec = Math.floor(Date.now() / 1000),
+): boolean {
+  return kickoffTs <= nowSec + 600 && kickoffTs >= nowSec - 3 * 3600;
+}
+
 const ADMIN_FINISHED_CODES = new Set(["AWD", "WO"]);
 
 /** رموز TheSports في detail_live / MQTT — 8 = نهاية المباراة فقط وفق توثيق الطبقة. */
@@ -48,6 +63,9 @@ export type LiveStatusOverlay = {
   statusCode?: string;
   /** أحدث دقيقة حدث مرصودة (هدف/بطاقة/…) — تكشف شوطًا ثانيًا حتى لو الساعة ضاعت. */
   latestEventMinute?: number | null;
+  /** Unix ثوانٍ لانطلاقة المباراة — لرفض FT قبل اكتمال الوقت التقويمي. */
+  kickoffTs?: number | null;
+  nowSec?: number;
 };
 
 function playedMinutes(
@@ -64,9 +82,19 @@ export function isPlausibleFootballFullTime(input: {
   extra?: number | null;
   statusCode?: string | null;
   latestEventMinute?: number | null;
+  kickoffTs?: number | null;
+  nowSec?: number;
 }): boolean {
   const code = (input.statusCode || "").toUpperCase();
   if (ADMIN_FINISHED_CODES.has(code)) return true;
+
+  if (input.kickoffTs) {
+    const now = input.nowSec ?? Math.floor(Date.now() / 1000);
+    const sinceKickoffMin = (now - input.kickoffTs) / 60;
+    if (sinceKickoffMin >= 0 && sinceKickoffMin < MIN_MINUTES_AFTER_KICKOFF_FOR_FT) {
+      return false;
+    }
+  }
 
   const played = playedMinutes(input.elapsed, input.extra, input.latestEventMinute);
   if (played > 0) return played >= MIN_FULLTIME_PLAYED_MINUTES;
@@ -117,9 +145,10 @@ export function mergeLiveMatchProgress(
   base: MatchProgress,
   overlay?: LiveStatusOverlay | null,
 ): MatchProgress {
-  const elapsed = overlay?.elapsed ?? base.elapsed;
-  const extra = overlay?.extra ?? base.extra;
   const eventMinute = overlay?.latestEventMinute ?? null;
+  const kickoffTs = overlay?.kickoffTs ?? null;
+  let elapsed = overlay?.elapsed ?? base.elapsed;
+  let extra = overlay?.extra ?? base.extra;
   const fromOverlay = overlayCode(overlay);
 
   const apply = (code: string, live: boolean, finished: boolean): MatchProgress => ({
@@ -130,6 +159,24 @@ export function mergeLiveMatchProgress(
     live,
     finished,
   });
+
+  const plausibility = {
+    elapsed,
+    extra,
+    latestEventMinute: eventMinute,
+    kickoffTs,
+    nowSec: overlay?.nowSec,
+  };
+
+  /** إن قفزت ساعة المزود لـ90 بينما الأحداث ما زالت في الشوط الثاني، نعرض دقيقة الحدث. */
+  const preferEventClock = () => {
+    if (eventMinute != null && eventMinute > 0 && eventMinute < MIN_FULLTIME_PLAYED_MINUTES && (elapsed ?? 0) >= MIN_FULLTIME_PLAYED_MINUTES) {
+      elapsed = eventMinute;
+      extra = null;
+    } else if (eventMinute != null && eventMinute > (elapsed ?? 0)) {
+      elapsed = eventMinute;
+    }
+  };
 
   if (overlay?.live) {
     const code =
@@ -145,14 +192,13 @@ export function mergeLiveMatchProgress(
     const candidateCode = fromOverlay && WC_FINISHED_STATUSES.has(fromOverlay) ? fromOverlay : "FT";
     if (
       isPlausibleFootballFullTime({
-        elapsed,
-        extra,
+        ...plausibility,
         statusCode: candidateCode,
-        latestEventMinute: eventMinute,
       })
     ) {
       return apply(candidateCode, false, true);
     }
+    preferEventClock();
     const code = inPlayCode(base.code)
       ? base.code
       : inferInPlayCode(elapsed, extra, "2H");
@@ -162,12 +208,11 @@ export function mergeLiveMatchProgress(
   if (
     base.finished &&
     !isPlausibleFootballFullTime({
-      elapsed,
-      extra,
+      ...plausibility,
       statusCode: base.code,
-      latestEventMinute: eventMinute,
     })
   ) {
+    preferEventClock();
     const code = inferInPlayCode(elapsed, extra, inPlayCode(base.code) ? base.code : "2H");
     return apply(code, true, false);
   }

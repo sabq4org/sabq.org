@@ -61,6 +61,7 @@ import {
 } from "./fcmService";
 import {
   isPlausibleFootballFullTime,
+  isWithinLiveOverlayWindow,
   latestPositiveEventMinute,
   mergeLiveMatchProgress,
 } from "./sportsMatchStatus";
@@ -768,6 +769,7 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
           elapsed: m.status.elapsed,
           extra: m.status.extra,
           statusCode: m.status.code,
+          kickoffTs: m.timestamp,
         })
       ) {
         cur.finished = false;
@@ -1210,9 +1212,7 @@ async function collectTsLive(matches: SplLiveBoardItem[]): Promise<Map<number, T
     matches.map(async (m) => {
       const tsCompId = getTsCompetitionId(m.competitionSlug);
       if (!tsCompId) return; // بطولة غير مربوطة بـTheSports → المصدر الحالي
-      const nearKickoff =
-        !m.status.finished && m.timestamp <= now + 600 && m.timestamp >= now - 3 * 3600;
-      if (!m.status.live && !nearKickoff) return;
+      if (!m.status.live && !isWithinLiveOverlayWindow(m.timestamp, now)) return;
       try {
         const ts = await getTheSportsMatchLive(m.id, m.timestamp, tsCompId);
         if (ts && (ts.live || ts.finished)) out.set(m.id, ts);
@@ -1252,6 +1252,7 @@ function applyTsOverlay(
           extra: ts.extra,
           statusId: ts.statusId,
           latestEventMinute: latestPositiveEventMinute(ts.events),
+          kickoffTs: m.timestamp,
         }),
       },
     };

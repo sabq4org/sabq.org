@@ -57,7 +57,7 @@ import {
   isSportmonksConfigured,
   WC_LEAGUE_ID as SM_WC_LEAGUE_ID,
 } from "../services/sportmonksService";
-import { mergeLiveMatchProgress } from "../services/sportsMatchStatus";
+import { isWithinLiveOverlayWindow, mergeLiveMatchProgress } from "../services/sportsMatchStatus";
 import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
@@ -80,7 +80,7 @@ const NOT_CONFIGURED = {
 // تأخّر كاش API-Football فتظهر النتيجة/الدقيقة في الوقت الحقيقي في كل النقاط
 // (نظرة عامة، مباشر، جدول، مركز المباراة). لا نُحوّر كائنات الكاش: نُرجّع نسخًا.
 async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
-  if (!fx?.status?.live) return fx;
+  if (!fx?.status?.live && !isWithinLiveOverlayWindow(fx.timestamp)) return fx;
 
   // 1) TheSports أولًا — النتيجة الفائقة (sub-minute). أفضل جهد: يرجع null في
   //    الإنتاج حتى يُدرَج عنوان Railway ويُضبط THESPORTS_* فنتراجع لـSportMonks.
@@ -104,6 +104,7 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
             elapsed: ts.elapsed,
             extra: ts.extra,
             statusId: ts.statusId,
+            kickoffTs: fx.timestamp,
           }),
         },
       };
@@ -125,6 +126,7 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
           finished: live.finished,
           elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
           statusCode: live.stateDevName,
+          kickoffTs: fx.timestamp,
         }),
       },
     };

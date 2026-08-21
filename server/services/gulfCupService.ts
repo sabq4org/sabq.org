@@ -36,7 +36,11 @@ import {
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
-import { latestPositiveEventMinute, mergeLiveMatchProgress } from "./sportsMatchStatus";
+import {
+  isWithinLiveOverlayWindow,
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 import {
   getCommentary,
   getExpectedLineups,
@@ -1108,6 +1112,7 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
                 extra: liveTs.extra,
                 statusId: liveTs.statusId,
                 latestEventMinute: latestPositiveEventMinute(liveTs.events),
+                kickoffTs: fixture.timestamp,
               },
             ),
           },
@@ -1366,10 +1371,10 @@ async function getGcMatchTsId(fx: GcFixture): Promise<string | null> {
 /** نتيجة TheSports اللحظية فوق المباريات الجارية فقط (الجسر الزمني ±دقيقتين). */
 async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> {
   if (!GC_TS_COMPETITION_ID) return fixtures;
-  if (!fixtures.some((f) => f.status.live && !f.status.finished)) return fixtures;
+  if (!fixtures.some((f) => f.status.live || isWithinLiveOverlayWindow(f.timestamp))) return fixtures;
   return Promise.all(
     fixtures.map(async (f) => {
-      if (!f.status.live || f.status.finished) return f;
+      if (!f.status.live && !isWithinLiveOverlayWindow(f.timestamp)) return f;
       const ts = await getTheSportsFastScore(f.id, f.timestamp, GC_TS_COMPETITION_ID).catch(
         () => null,
       );
@@ -1390,6 +1395,7 @@ async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> 
               elapsed: ts.elapsed,
               extra: ts.extra,
               statusId: ts.statusId,
+              kickoffTs: f.timestamp,
             },
           ),
         },

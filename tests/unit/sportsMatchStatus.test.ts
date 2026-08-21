@@ -3,8 +3,10 @@ import {
   inferInPlayCode,
   isPlausibleFootballFullTime,
   latestPositiveEventMinute,
+  isWithinLiveOverlayWindow,
   mergeLiveMatchProgress,
   MIN_FULLTIME_PLAYED_MINUTES,
+  MIN_MINUTES_AFTER_KICKOFF_FOR_FT,
   type MatchProgress,
 } from "../../server/services/sportsMatchStatus";
 
@@ -39,6 +41,34 @@ describe("isPlausibleFootballFullTime", () => {
   it("يقبل الحسم الإداري مبكرًا", () => {
     expect(isPlausibleFootballFullTime({ elapsed: 10, statusCode: "AWD" })).toBe(true);
     expect(isPlausibleFootballFullTime({ elapsed: 0, statusCode: "WO" })).toBe(true);
+  });
+
+  it("يرفض FT إذا مرّ أقل من 100 دقيقة على الانطلاق حتى لو الساعة 90", () => {
+    const now = 1_800_000_000;
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        statusCode: "FT",
+        kickoffTs: now - 80 * 60,
+        nowSec: now,
+      }),
+    ).toBe(false);
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        statusCode: "FT",
+        kickoffTs: now - (MIN_MINUTES_AFTER_KICKOFF_FOR_FT + 5) * 60,
+        nowSec: now,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("isWithinLiveOverlayWindow", () => {
+  it("تبقى النافذة مفتوحة بعد وسم FT طالما الانطلاق خلال 3 ساعات", () => {
+    const now = 1_800_000_000;
+    expect(isWithinLiveOverlayWindow(now - 90 * 60, now)).toBe(true);
+    expect(isWithinLiveOverlayWindow(now - 4 * 3600, now)).toBe(false);
   });
 });
 
@@ -112,6 +142,19 @@ describe("mergeLiveMatchProgress — حادثة الدقيقة 47", () => {
     expect(merged.live).toBe(true);
     expect(merged.code).toBe("2H");
     expect(merged.label).toBe("الشوط الثاني");
+  });
+
+  it("لا تتجمّد الشارة على انتهت في الشوط الثاني إذا قفز المزود لـFT+90", () => {
+    const now = 1_800_000_000;
+    const merged = mergeLiveMatchProgress(
+      base({ code: "FT", label: "انتهت", live: false, finished: true, elapsed: 90 }),
+      { latestEventMinute: 71, kickoffTs: now - 85 * 60, nowSec: now },
+    );
+    expect(merged.finished).toBe(false);
+    expect(merged.live).toBe(true);
+    expect(merged.code).toBe("2H");
+    expect(merged.label).toBe("الشوط الثاني");
+    expect(merged.elapsed).toBe(71);
   });
 });
 

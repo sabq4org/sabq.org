@@ -267,6 +267,7 @@ function buildContentState(
         finished: live.finished,
         elapsed: minute,
         statusCode: live.stateDevName,
+        kickoffTs: f.timestamp,
       },
     );
     base.homeScore = live.home;
@@ -306,6 +307,7 @@ function buildContentState(
         extra: ts.extra,
         statusId: ts.statusId,
         latestEventMinute: latestPositiveEventMinute(ts.events),
+        kickoffTs: f.timestamp,
       },
     );
     return {
