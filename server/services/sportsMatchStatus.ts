@@ -33,7 +33,7 @@ export type MatchProgress = {
   code: string;
   label: string;
   elapsed: number | null;
-  extra?: number | null;
+  extra: number | null;
   live: boolean;
   finished: boolean;
 };
@@ -118,7 +118,7 @@ export function mergeLiveMatchProgress(
   overlay?: LiveStatusOverlay | null,
 ): MatchProgress {
   const elapsed = overlay?.elapsed ?? base.elapsed;
-  const extra = overlay?.extra ?? base.extra ?? null;
+  const extra = overlay?.extra ?? base.extra;
   const eventMinute = overlay?.latestEventMinute ?? null;
   const fromOverlay = overlayCode(overlay);
 
