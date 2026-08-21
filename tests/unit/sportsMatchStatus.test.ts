@@ -5,6 +5,7 @@ import {
   latestPositiveEventMinute,
   isWithinLiveOverlayWindow,
   mergeLiveMatchProgress,
+  LATCH_MINUTES_AFTER_KICKOFF_FOR_FT,
   MIN_FULLTIME_PLAYED_MINUTES,
   MIN_MINUTES_AFTER_KICKOFF_FOR_FT,
   type MatchProgress,
@@ -43,7 +44,7 @@ describe("isPlausibleFootballFullTime", () => {
     expect(isPlausibleFootballFullTime({ elapsed: 0, statusCode: "WO" })).toBe(true);
   });
 
-  it("يرفض FT إذا مرّ أقل من 100 دقيقة على الانطلاق حتى لو الساعة 90", () => {
+  it("يرفض FT إذا مرّ أقل من 120 دقيقة على الانطلاق حتى لو الساعة 90", () => {
     const now = 1_800_000_000;
     expect(
       isPlausibleFootballFullTime({
@@ -57,7 +58,42 @@ describe("isPlausibleFootballFullTime", () => {
       isPlausibleFootballFullTime({
         elapsed: 90,
         statusCode: "FT",
+        kickoffTs: now - 112 * 60,
+        nowSec: now,
+      }),
+    ).toBe(false);
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        statusCode: "FT",
         kickoffTs: now - (MIN_MINUTES_AFTER_KICKOFF_FOR_FT + 5) * 60,
+        nowSec: now,
+      }),
+    ).toBe(true);
+  });
+
+  it("يرفض FT عند د87 حتى لو قفزت الساعة لـ90 (حادثة الاتحاد/القادسية)", () => {
+    const now = 1_800_000_000;
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        statusCode: "FT",
+        latestEventMinute: 87,
+        kickoffTs: now - 112 * 60,
+        nowSec: now,
+      }),
+    ).toBe(false);
+  });
+
+  it("يقبل FT بعد الحائط إن بقي آخر حدث تحت 90", () => {
+    const now = 1_800_000_000;
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        extra: 3,
+        statusCode: "FT",
+        latestEventMinute: 87,
+        kickoffTs: now - LATCH_MINUTES_AFTER_KICKOFF_FOR_FT * 60,
         nowSec: now,
       }),
     ).toBe(true);
@@ -155,6 +191,27 @@ describe("mergeLiveMatchProgress — حادثة الدقيقة 47", () => {
     expect(merged.code).toBe("2H");
     expect(merged.label).toBe("الشوط الثاني");
     expect(merged.elapsed).toBe(71);
+  });
+
+  it("لا تُعلن النهاية عند د87 مع أحداث حيّة حتى بعد 112 دقيقة تقويمية", () => {
+    const now = 1_800_000_000;
+    const merged = mergeLiveMatchProgress(
+      base({ code: "FT", label: "انتهت", live: false, finished: true, elapsed: 90 }),
+      {
+        live: false,
+        finished: true,
+        elapsed: 90,
+        statusId: 8,
+        latestEventMinute: 87,
+        kickoffTs: now - 112 * 60,
+        nowSec: now,
+      },
+    );
+    expect(merged.finished).toBe(false);
+    expect(merged.live).toBe(true);
+    expect(merged.code).toBe("2H");
+    expect(merged.label).toBe("الشوط الثاني");
+    expect(merged.elapsed).toBe(87);
   });
 });
 

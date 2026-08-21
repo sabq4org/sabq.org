@@ -13,15 +13,21 @@ import {
   WC_STATUS_EN,
 } from "./worldCupNames";
 
-/** أقل زمن لعب يُقبل معه صافرة نهاية حقيقية (يستبعد الشوط الأول والاستراحة وبداية الشوط الثاني). */
-export const MIN_FULLTIME_PLAYED_MINUTES = 80;
+/** أقل زمن لعب يُقبل معه صافرة نهاية حقيقية — الوقت الأصلي 90 دقيقة. */
+export const MIN_FULLTIME_PLAYED_MINUTES = 90;
 
 /**
  * أقل زمن حائط منذ الانطلاق قبل قبول FT.
- * ش1 (~45+بدل) + استراحة (~15) + ش2 لا يكتمل قبل ~100 دقيقة تقويمية.
- * بدونه يثبّت المزود elapsed=90 مع FT عند الاستراحة فتمرّ حادثة د47–د80.
+ * ش1 (~45+بدل) + استراحة (~15) + ش2 (~45+بدل) ≈ 120 دقيقة تقويمية.
+ * عتبة 100 كانت تسمح بـFT كاذب عند د80–د87 من الشوط الثاني.
  */
-export const MIN_MINUTES_AFTER_KICKOFF_FOR_FT = 100;
+export const MIN_MINUTES_AFTER_KICKOFF_FOR_FT = 120;
+
+/**
+ * إن بقيت الأحداث تحت 90 والمزوّد يدّعي FT+90، نقبل النهاية بعد هذا الحائط
+ * (مباراة انتهت فعلًا وآخر حدث تبديل عند د87).
+ */
+export const LATCH_MINUTES_AFTER_KICKOFF_FOR_FT = 130;
 
 /** نافذة التركيب الحيّ: 3 ساعات بعد الانطلاق حتى 10 دقائق قبله — بلا شرط !finished. */
 export function isWithinLiveOverlayWindow(
@@ -68,13 +74,18 @@ export type LiveStatusOverlay = {
   nowSec?: number;
 };
 
-function playedMinutes(
+function effectivePlayedForFullTime(
   elapsed?: number | null,
   extra?: number | null,
   latestEventMinute?: number | null,
 ): number {
   const clock = Math.max(elapsed ?? 0, 0) + Math.max(extra ?? 0, 0);
-  return Math.max(clock, latestEventMinute ?? 0);
+  const event = latestEventMinute ?? 0;
+  // ساعة 90 المزيفة لا تُلغي أحداثًا ما زالت في الوقت الأصلي (د87 + FT+90).
+  if (event > 0 && event < MIN_FULLTIME_PLAYED_MINUTES && clock >= MIN_FULLTIME_PLAYED_MINUTES) {
+    return event;
+  }
+  return Math.max(clock, event);
 }
 
 export function isPlausibleFootballFullTime(input: {
@@ -88,15 +99,24 @@ export function isPlausibleFootballFullTime(input: {
   const code = (input.statusCode || "").toUpperCase();
   if (ADMIN_FINISHED_CODES.has(code)) return true;
 
-  if (input.kickoffTs) {
-    const now = input.nowSec ?? Math.floor(Date.now() / 1000);
-    const sinceKickoffMin = (now - input.kickoffTs) / 60;
-    if (sinceKickoffMin >= 0 && sinceKickoffMin < MIN_MINUTES_AFTER_KICKOFF_FOR_FT) {
-      return false;
-    }
+  const now = input.nowSec ?? Math.floor(Date.now() / 1000);
+  const sinceKickoffMin =
+    input.kickoffTs != null ? (now - input.kickoffTs) / 60 : null;
+
+  if (sinceKickoffMin != null && sinceKickoffMin >= 0 && sinceKickoffMin < MIN_MINUTES_AFTER_KICKOFF_FOR_FT) {
+    return false;
   }
 
-  const played = playedMinutes(input.elapsed, input.extra, input.latestEventMinute);
+  const eventStillInRegularTime =
+    input.latestEventMinute != null &&
+    input.latestEventMinute > 0 &&
+    input.latestEventMinute < MIN_FULLTIME_PLAYED_MINUTES;
+
+  if (eventStillInRegularTime) {
+    return sinceKickoffMin != null && sinceKickoffMin >= LATCH_MINUTES_AFTER_KICKOFF_FOR_FT;
+  }
+
+  const played = effectivePlayedForFullTime(input.elapsed, input.extra, input.latestEventMinute);
   if (played > 0) return played >= MIN_FULLTIME_PLAYED_MINUTES;
 
   // بلا ساعة ولا أحداث: نثق برمز النهاية للأرشيف (مباريات قديمة بلا elapsed).
@@ -138,7 +158,7 @@ function inPlayCode(code: string): boolean {
  *
  * قواعد الغلبة:
  *   1) المصدر الحيّ يُلغي أي نهاية.
- *   2) النهاية لا تُقبل قبل ~80 دقيقة لعب (إلا الحسم الإداري AWD/WO).
+ *   2) النهاية لا تُقبل قبل 90 دقيقة لعب (إلا الحسم الإداري AWD/WO).
  *   3) إن رُفضت النهاية تُستنتج مرحلة اللعب من الدقيقة/رمز الأساس.
  */
 export function mergeLiveMatchProgress(
