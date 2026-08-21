@@ -2161,7 +2161,10 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
           elapsed: ts.elapsed,
           extra: ts.extra,
           statusId: ts.statusId,
-          latestEventMinute: latestPositiveEventMinute(ts.events),
+          latestEventMinute: latestPositiveEventMinute([
+            ...ts.events,
+            ...(detail.events ?? []),
+          ]),
           kickoffTs: fx.timestamp,
         }),
         clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
