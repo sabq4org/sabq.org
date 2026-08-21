@@ -120,6 +120,14 @@ type Category = {
   nameEn: string;
 };
 
+// جوال = عرض أقل من md، أو هاتف بالوضع الأفقي (شاشة لمس قصيرة الارتفاع
+// يتجاوز عرضها 768 فتُعامَل خطأً كديسكتوب لو اعتمدنا على العرض وحده)
+function isMobileViewport() {
+  if (typeof window === "undefined") return false;
+  if (window.innerWidth < 768) return true;
+  return window.matchMedia("(pointer: coarse)").matches && window.innerHeight < 500;
+}
+
 function SortableRow({
   article,
   children,
@@ -287,15 +295,17 @@ export default function ArticlesManagement() {
   const [showClassificationDialog, setShowClassificationDialog] = useState(false);
 
   // State for mobile detection
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  );
+  const [isMobile, setIsMobile] = useState(isMobileViewport);
 
   // Mobile detection effect
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setIsMobile(isMobileViewport());
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   // DnD sensors
@@ -1227,8 +1237,8 @@ export default function ArticlesManagement() {
             </div>
           </div>
 
-          {/* Bulk Actions Toolbar */}
-          {selectedArticles.size > 0 && (
+          {/* Bulk Actions Toolbar — الجوال يكتفي بالشريط السفلي الثابت */}
+          {selectedArticles.size > 0 && !isMobile && (
             <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 md:gap-4">
                 <div className="text-sm text-muted-foreground tabular-nums">
@@ -1275,7 +1285,8 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none md:block">
+          {!isMobile && (
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none">
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
@@ -1286,7 +1297,7 @@ export default function ArticlesManagement() {
               </div>
             ) : (
               <DndContext
-                sensors={isMobile ? [] : sensors}
+                sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
@@ -1451,15 +1462,17 @@ export default function ArticlesManagement() {
               </DndContext>
             )}
           </div>
+          )}
 
-          {/* Articles Cards - Mobile View */}
-          <div className="md:hidden space-y-2">
+          {/* Articles Cards - Mobile View (عمود واحد رأسيًا، وعمودان على الجوال الأفقي) */}
+          {isMobile && (
+          <div className="grid grid-cols-1 items-start gap-2.5 min-[820px]:grid-cols-2">
             {articlesLoading ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
+              <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
                 جاري التحميل...
               </div>
             ) : articles.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
+              <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
                 لا توجد مقالات
               </div>
             ) : (
@@ -1477,12 +1490,23 @@ export default function ArticlesManagement() {
                 >
                   {/* Header: Checkbox + Title + Status */}
                   <div className="flex items-start gap-2.5">
-                    <Checkbox 
-                      className="mt-1"
-                      checked={selectedArticles.has(article.id)}
-                      onCheckedChange={() => toggleArticleSelection(article.id)}
-                      data-testid={`checkbox-article-mobile-${article.id}`}
-                    />
+                    {/* هدف اللمس 44px يوفره الغلاف؛ بدونه قاعدة الـWCAG العامة
+                        تضخّم المربع نفسه إلى 44px فيبدو كصورة مكسورة */}
+                    <div
+                      className="-m-2.5 shrink-0 cursor-pointer p-2.5"
+                      onClick={(e) => {
+                        // نقرات الفأرة/اللمس تصل للغلاف فقط (المربع pointer-events-none)،
+                        // أما click المصطنع من كيبورد المربع فيتكفل به onCheckedChange
+                        if (e.target === e.currentTarget) toggleArticleSelection(article.id);
+                      }}
+                    >
+                      <Checkbox
+                        className="no-min-touch-size pointer-events-none mt-1"
+                        checked={selectedArticles.has(article.id)}
+                        onCheckedChange={() => toggleArticleSelection(article.id)}
+                        data-testid={`checkbox-article-mobile-${article.id}`}
+                      />
+                    </div>
                     <div className="flex-1 min-w-0 space-y-2">
                       <div>
                         <h3
@@ -1750,6 +1774,7 @@ export default function ArticlesManagement() {
               ))
             )}
           </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -1783,8 +1808,8 @@ export default function ArticlesManagement() {
       </DashboardPageShell>
 
       {/* Bulk Action Bar - Mobile Only */}
-      {selectedArticles.size > 0 && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
+      {selectedArticles.size > 0 && isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium tabular-nums">
               {selectedArticles.size.toLocaleString("en-US")} مقال محدد
