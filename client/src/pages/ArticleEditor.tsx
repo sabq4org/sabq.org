@@ -114,7 +114,7 @@ import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
 import { SabqEditorAssistant } from "@/components/article-editor/SabqEditorAssistant";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { apiRequest, apiUrl, queryClient, getCsrfToken } from "@/lib/queryClient";
 import {
   markArticleSubmittedInAnalyticsCache,
@@ -530,13 +530,14 @@ export default function ArticleEditor() {
   const canUseContentTypeSelector = user && hasPermission(user, PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR);
   const canHideFromHomepage = user && hasPermission(user, PERMISSION_CODES.ARTICLES_HIDE_HOMEPAGE);
   
-  // Check if user can backdate articles (superadmin, admin, chief_editor only)
+  // Check if user can backdate articles (any superuser-tier role + chief_editor).
+  // SUPERUSER_ROLE_NAMES covers admin/superadmin/system_admin/system.admin — a
+  // hand-rolled list here previously omitted system_admin and hid the feature.
+  const backdateRoles: string[] = [...SUPERUSER_ROLE_NAMES, 'chief_editor'];
   const canBackdateArticles = user && (
-    user.role === 'superadmin' || 
-    user.role === 'admin' || 
-    user.role === 'chief_editor' ||
-    (user.roles && user.roles.some((r: any) => 
-      ['superadmin', 'admin', 'chief_editor'].includes(r.name || r)
+    backdateRoles.includes(user.role ?? "") ||
+    (user.roles && user.roles.some((r: any) =>
+      backdateRoles.includes(r.name || r)
     ))
   );
   
