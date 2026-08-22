@@ -241,6 +241,8 @@
         "server/ai/editorialOutputGuards.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
+        "client/src/components/DashboardLayout.tsx",
+        "client/src/components/ui/sidebar.tsx",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
         "client/src/pages/dashboard/EditorAlertsSettings.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",

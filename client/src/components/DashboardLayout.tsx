@@ -91,6 +91,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const handleSearchShortcut = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
+        if (window.matchMedia("(max-width: 767px)").matches) return;
         searchInputRef.current?.focus();
       }
     };
@@ -554,11 +555,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="ابحث في لوحة التحكم"
-                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background"
+                    autoFocus={false}
+                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background md:pl-12"
                     aria-label="البحث في لوحة التحكم"
                     data-testid="sidebar-navigation-search"
                   />
-                  <kbd className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <kbd className="pointer-events-none absolute left-2 top-1/2 hidden -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground md:inline">
                     ⌘K
                   </kbd>
                 </div>
