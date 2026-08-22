@@ -26,6 +26,12 @@ import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./as
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
 import {
+  KC_R16_SEASON,
+  isKcSyntheticFixtureId,
+  isKingsCupR16Round,
+  mergeKingsCupR16Schedule,
+} from "./kingsCupR16Schedule";
+import {
   isWithinLiveOverlayWindow,
   latestPositiveEventMinute,
   mergeLiveMatchProgress,
@@ -438,11 +444,15 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
     return getWorldCupMergedFixtures();
   }
   const season = seasonOverride ?? await seasonFor(comp);
-  return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
-    const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
-    const tr = await fixtureTranslators(rows);
-    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
+  const rows = await withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
+    const fetched = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
+    const tr = await fixtureTranslators(fetched);
+    return fetched.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
+  if (comp.slug === "kings-cup" && season === KC_R16_SEASON) {
+    return mergeKingsCupR16Schedule(rows);
+  }
+  return rows;
 }
 
 export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixture[]> {
@@ -499,13 +509,25 @@ export async function getCompetitionRounds(
   } catch {
     // غياب الجدول → نكتفي بإشارة المزود.
   }
-  const current = pickActiveRoundKey(listed.rounds, listed.apiCurrent, fixtures);
-  return { rounds: listed.rounds, current };
+  let rounds = listed.rounds;
+  if (
+    comp.slug === "kings-cup" &&
+    fixtures.some((f) => isKingsCupR16Round(f.round)) &&
+    !rounds.some((r) => r.key === "Round of 16")
+  ) {
+    rounds = [...rounds, { key: "Round of 16", label: localizeSplRound("Round of 16") }];
+  }
+  const current = pickActiveRoundKey(rounds, listed.apiCurrent, fixtures);
+  return { rounds, current };
 }
 
 /** مباريات جولة محدّدة (round الخام كما يعود من getCompetitionRounds). */
 export async function getFixturesByRound(comp: SaudiCompetition, round: string, seasonOverride?: number): Promise<SplFixture[]> {
   const season = seasonOverride ?? await seasonFor(comp);
+  if (comp.slug === "kings-cup" && (round === "Round of 16" || isKingsCupR16Round(round))) {
+    const merged = (await getFixtures(comp, season)).filter((f) => isKingsCupR16Round(f.round));
+    if (merged.length) return merged;
+  }
   return withSWR(`spl:roundfx:${comp.id}:${season}:${round}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, round, timezone: TIMEZONE });
     const tr = await fixtureTranslators(rows);
@@ -1813,6 +1835,12 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   // مباراة مونديال اصطناعية (خانة إقصائية قبل نشر المزوّد): لا وجود لها عنده —
   // نخدم بطاقتها الأساسية من الجدول المُكمّل بلا أحداث/إحصاءات/تشكيلات، فيفتح
   // مركز المباراة على الويب والتطبيق بدل «المباراة غير موجودة».
+  if (isKcSyntheticFixtureId(fixtureId)) {
+    const kc = getCompetition("kings-cup");
+    const fx = kc ? (await getFixtures(kc, KC_R16_SEASON)).find((f) => f.id === fixtureId) : undefined;
+    if (!fx) return null;
+    return { fixture: fx, events: [], statistics: null, lineups: [], leagueId: 504 };
+  }
   if (isSyntheticFixtureId(fixtureId)) {
     const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId);
     if (!fx) return null;
@@ -1938,6 +1966,10 @@ export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEve
  * كي تطابق القائمة الرئيسية (التي تستخدم overlay) ولا تتأخّر النتيجة 10–20ث.
  */
 export async function getMatchLite(fixtureId: number): Promise<SplFixture | null> {
+  if (isKcSyntheticFixtureId(fixtureId)) {
+    const kc = getCompetition("kings-cup");
+    return kc ? (await getFixtures(kc, KC_R16_SEASON)).find((f) => f.id === fixtureId) ?? null : null;
+  }
   if (isSyntheticFixtureId(fixtureId)) {
     const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId) ?? null;
     if (!fx?.status.live) return fx;

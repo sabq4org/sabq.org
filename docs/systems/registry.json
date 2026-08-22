@@ -523,6 +523,7 @@
         "server/services/sportsPlayerNameFixes.ts",
         "server/services/sportsMatchStatus.ts",
         "server/services/competitionStatus.ts",
+        "server/services/kingsCupR16Schedule.ts",
         "server/services/sportsAlertsService.ts",
         "server/services/sportsAlertPrefsService.ts",
         "server/jobs/sportsAlertsJob.ts",
