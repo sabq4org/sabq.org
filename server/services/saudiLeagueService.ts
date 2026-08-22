@@ -26,10 +26,21 @@ import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./as
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
 import {
+  KC_R16_SEASON,
+  isKcSyntheticFixtureId,
+  isKingsCupR16Round,
+  mergeKingsCupR16Schedule,
+} from "./kingsCupR16Schedule";
+import {
   isWithinLiveOverlayWindow,
   latestPositiveEventMinute,
   mergeLiveMatchProgress,
 } from "./sportsMatchStatus";
+import {
+  computeSeasonDateStatus,
+  refineCompetitionStatus,
+  type CompetitionStatus,
+} from "./competitionStatus";
 import { getPlayerForm as smGetPlayerForm, getSmSquad, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
@@ -248,7 +259,7 @@ export function listCompetitions() {
  * سابقًا كان هنا كاش `spl:season:*` مستقل يستدعي `leagues?current=true` ويلتقط
  * الخطأ داخل الـfetcher فيُخزّن `fallbackSeason` لـ6 ساعات. عند انتقال أغسطس
  * 2026 بقي دوري الأبطال/يوروبا على 2025 المنتهي (نتائج نهائية بلا قادمة) بينما
- * الميتا (`spl:compmeta:v2`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
+ * الميتا (`spl:compmeta:v3`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
  * لا تُعِد كاشًا منفصلًا ولا تُخزّن fallback عند فشل المزوّد.
  */
 async function seasonFor(comp: SaudiCompetition): Promise<number> {
@@ -433,11 +444,15 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
     return getWorldCupMergedFixtures();
   }
   const season = seasonOverride ?? await seasonFor(comp);
-  return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
-    const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
-    const tr = await fixtureTranslators(rows);
-    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
+  const rows = await withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
+    const fetched = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
+    const tr = await fixtureTranslators(fetched);
+    return fetched.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
+  if (comp.slug === "kings-cup" && season === KC_R16_SEASON) {
+    return mergeKingsCupR16Schedule(rows);
+  }
+  return rows;
 }
 
 export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixture[]> {
@@ -494,13 +509,25 @@ export async function getCompetitionRounds(
   } catch {
     // غياب الجدول → نكتفي بإشارة المزود.
   }
-  const current = pickActiveRoundKey(listed.rounds, listed.apiCurrent, fixtures);
-  return { rounds: listed.rounds, current };
+  let rounds = listed.rounds;
+  if (
+    comp.slug === "kings-cup" &&
+    fixtures.some((f) => isKingsCupR16Round(f.round)) &&
+    !rounds.some((r) => r.key === "Round of 16")
+  ) {
+    rounds = [...rounds, { key: "Round of 16", label: localizeSplRound("Round of 16") }];
+  }
+  const current = pickActiveRoundKey(rounds, listed.apiCurrent, fixtures);
+  return { rounds, current };
 }
 
 /** مباريات جولة محدّدة (round الخام كما يعود من getCompetitionRounds). */
 export async function getFixturesByRound(comp: SaudiCompetition, round: string, seasonOverride?: number): Promise<SplFixture[]> {
   const season = seasonOverride ?? await seasonFor(comp);
+  if (comp.slug === "kings-cup" && (round === "Round of 16" || isKingsCupR16Round(round))) {
+    const merged = (await getFixtures(comp, season)).filter((f) => isKingsCupR16Round(f.round));
+    if (merged.length) return merged;
+  }
   return withSWR(`spl:roundfx:${comp.id}:${season}:${round}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, round, timezone: TIMEZONE });
     const tr = await fixtureTranslators(rows);
@@ -1808,6 +1835,12 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   // مباراة مونديال اصطناعية (خانة إقصائية قبل نشر المزوّد): لا وجود لها عنده —
   // نخدم بطاقتها الأساسية من الجدول المُكمّل بلا أحداث/إحصاءات/تشكيلات، فيفتح
   // مركز المباراة على الويب والتطبيق بدل «المباراة غير موجودة».
+  if (isKcSyntheticFixtureId(fixtureId)) {
+    const kc = getCompetition("kings-cup");
+    const fx = kc ? (await getFixtures(kc, KC_R16_SEASON)).find((f) => f.id === fixtureId) : undefined;
+    if (!fx) return null;
+    return { fixture: fx, events: [], statistics: null, lineups: [], leagueId: 504 };
+  }
   if (isSyntheticFixtureId(fixtureId)) {
     const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId);
     if (!fx) return null;
@@ -1933,6 +1966,10 @@ export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEve
  * كي تطابق القائمة الرئيسية (التي تستخدم overlay) ولا تتأخّر النتيجة 10–20ث.
  */
 export async function getMatchLite(fixtureId: number): Promise<SplFixture | null> {
+  if (isKcSyntheticFixtureId(fixtureId)) {
+    const kc = getCompetition("kings-cup");
+    return kc ? (await getFixtures(kc, KC_R16_SEASON)).find((f) => f.id === fixtureId) ?? null : null;
+  }
   if (isSyntheticFixtureId(fixtureId)) {
     const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId) ?? null;
     if (!fx?.status.live) return fx;
@@ -3950,23 +3987,7 @@ const COMP_META_TTL = SEASON_TTL;
 
 // ---------- البند 9: ترويسة البطولة (شعار + موسم) ----------
 
-/**
- * حالة موسم البطولة:
- * - `ongoing`: انطلق الموسم ولم ينتهِ بعد (اليوم بين start و end).
- * - `upcoming`: موسم محدّد لكنه لم يبدأ بعد (today < start) — مثل الدوريات
- *    الأوروبية صيفًا التي يصبح موسمها current قبل انطلاقها بأسابيع.
- * - `finished`: انتهى الموسم (today > end).
- * - `unknown`: لا تتوفر تواريخ start/end من المزود.
- */
-export type CompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
-
-function computeStatus(start: string | null, end: string | null): CompetitionStatus {
-  if (!start || !end) return "unknown";
-  const today = new Date().toISOString().slice(0, 10); // بتوقيت UTC؛ تواريخ المزود يومية فلا حاجة لدقّة المنطقة
-  if (today < start) return "upcoming";
-  if (today > end) return "finished";
-  return "ongoing";
-}
+export type { CompetitionStatus };
 
 export interface SplCompetitionMeta {
   logo: string | null;
@@ -3979,12 +4000,12 @@ export interface SplCompetitionMeta {
 
 export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
   try {
-    // المفتاح موسوم بنسخة (v2) لأن شكل القيمة تغيّر (إضافة start/end/status)؛
-    // رفع النسخة يُبطل القيم القديمة فورًا بدل انتظار TTL.
+    // المفتاح موسوم بنسخة (v3): تصحيح كأس لم يُحسم نهائيها بعد دور مبكر.
+    // رفع النسخة يُبطل «منتهٍ» الكاذب فورًا بدل انتظار TTL.
     // ملاحظة مهمة: لا نلتقط الخطأ داخل الـ fetcher — نتركه يُرمى حتى لا يخزّن
     // withSWR نتيجة fallback خاطئة (start/end=null) لـ 6 ساعات عند فشل/تحديد
     // معدّل من API-Football (يحدث وقت النشر مع رشقة الطلبات المتوازية).
-    return await withSWR(`spl:compmeta:v2:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
+    return await withSWR(`spl:compmeta:v3:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
       const rows = await apiGet("leagues", { id: comp.id });
       if (!rows.length) throw new Error(`[SaudiLeague] no league data for ${comp.id}`);
       const lg = rows[0]?.league ?? {};
@@ -3992,17 +4013,28 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
       const start = typeof current?.start === "string" ? current.start : null;
       const end = typeof current?.end === "string" ? current.end : null;
-      let status = computeStatus(start, end);
-      // المزود قد يُبقي موسمًا قديمًا بعلم current بينما انطلقت مباريات الموسم
-      // الجديد فعلًا (شائع في الدوريات العربية)، فيظهر «انتهى الموسم» خطأً.
-      // وجود مباراة قادمة وشيكة دلالة كافية أن الموسم جارٍ — نطلب التالية فقط
-      // حين تحتسب الحالة finished (تكلفة محدودة بطلب واحد للحالات النادرة).
+      let status = computeSeasonDateStatus(start, end);
+      // المزود قد يقصّر تاريخ النهاية إلى آخر مباراة نُشرت (كأس بعد دور الـ32)
+      // أو يُبقي موسمًا قديمًا بعلم current. نصحّح قبل تثبيت الشارة.
       if (status === "finished") {
         const next = await apiGet("fixtures", { league: comp.id, next: 1 }).catch(() => []);
         const ts = next[0]?.fixture?.timestamp;
-        if (typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21) {
-          status = "ongoing";
+        const hasUpcomingWithinDays =
+          typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21;
+        let recentRounds: { round?: string | null; finished: boolean }[] = [];
+        if (!hasUpcomingWithinDays && comp.type === "cup") {
+          const last = await apiGet("fixtures", { league: comp.id, last: 10 }).catch(() => []);
+          recentRounds = (last ?? []).map((r: any) => ({
+            round: r?.league?.round ?? null,
+            finished: WC_FINISHED_STATUSES.has(String(r?.fixture?.status?.short ?? "")),
+          }));
         }
+        status = refineCompetitionStatus({
+          dateStatus: status,
+          type: comp.type,
+          hasUpcomingWithinDays,
+          recentRounds,
+        });
       }
       return {
         logo: lg.logo ?? null,
