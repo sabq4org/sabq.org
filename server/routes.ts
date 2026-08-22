@@ -27,6 +27,8 @@ import { normalizePhone, findExistingPhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
+import { getNextSlotsForWriters } from "./services/opinionWritersService";
+import { attachWriterWeeklySlots, collectOpinionDraftWriterIds } from "./services/writerWeeklySlot";
 import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
@@ -7235,8 +7237,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         publisher: row.publisher,
       }));
 
+      const writerIds = collectOpinionDraftWriterIds(formattedArticles);
+      const slotsByWriter = await getNextSlotsForWriters(writerIds);
+      const articlesWithSlots = attachWriterWeeklySlots(formattedArticles, slotsByWriter);
+
       res.json({ 
-        articles: formattedArticles, 
+        articles: articlesWithSlots, 
         total,
         page: pageNum,
         limit: limitNum,

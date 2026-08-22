@@ -224,7 +224,10 @@
         "server/routes/reportersAdmin.ts",
         "client/src/pages/AuthorArticlesPage.tsx",
         "client/src/pages/OpinionDetailPage.tsx",
+        "client/src/pages/ArticlesManagement.tsx",
         "client/src/pages/dashboard/OpinionWritersPage.tsx",
+        "server/services/writerWeeklySlot.ts",
+        "tests/unit/writerWeeklySlot.test.ts",
         "client/src/pages/dashboard/ReportersPage.tsx",
         "client/src/pages/reporter/ReporterMyArticlesPage.tsx",
         "server/journalist-agent-ai.ts",
@@ -296,7 +299,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-19"
+      "lastReviewed": "2026-08-22"
     },
     {
       "id": "ifox",
