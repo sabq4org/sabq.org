@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, HeartPulse, Zap } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, CalendarClock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, HeartPulse, Zap } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -81,8 +81,14 @@ type Article = {
   isReading?: boolean;
   views: number;
   publishedAt: string | null;
+  scheduledAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  writerWeeklySlot?: {
+    weekday: number;
+    publishTime: string;
+    nextSlot: string;
+  } | null;
   isAiGeneratedThumbnail?: boolean;
   source?: string;
   sourceMetadata?: {
@@ -1015,18 +1021,40 @@ export default function ArticlesManagement() {
         </span>
       );
     }
-    if (article.status === "draft" && article.createdAt) {
-      return (
-        <span
-          className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-50/60 dark:bg-amber-950/25 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
-          data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
-        >
-          <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-            {formatDraftDate(article.createdAt)}
+    if (article.status === "draft") {
+      const weeklyAt =
+        article.articleType === "opinion"
+          ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
+          : null;
+      const weeklyFormatted = weeklyAt ? formatArticleDate(weeklyAt) : null;
+      if (weeklyFormatted) {
+        return (
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-violet-500/25 bg-violet-50/60 dark:bg-violet-950/25 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300"
+            title="موعد الجدول الأسبوعي للكاتب"
+            data-testid={isDesktop ? `weekly-slot-desktop-${article.id}` : `weekly-slot-${article.id}`}
+          >
+            <CalendarClock className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
+            <span>أسبوعي</span>
+            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+              {weeklyFormatted}
+            </span>
           </span>
-        </span>
-      );
+        );
+      }
+      if (article.createdAt) {
+        return (
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-50/60 dark:bg-amber-950/25 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
+            data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
+          >
+            <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+              {formatDraftDate(article.createdAt)}
+            </span>
+          </span>
+        );
+      }
     }
     if (article.status === "published" && article.publishedAt) {
       return (

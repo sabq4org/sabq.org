@@ -478,31 +478,67 @@ export async function getNextSlotForWriter(writerId: string): Promise<{
   publishTime: string;
   nextSlot: string;
 } | null> {
-  const [schedule] = await db
+  const slots = await getNextSlotsForWriters([writerId]);
+  return slots[writerId] ?? null;
+}
+
+/**
+ * موعد الأسبوع القادم لدفعة كتّاب — قائمة المسودات تستدعيه مرة واحدة
+ * بدل طلب next-slot لكل صف.
+ */
+export async function getNextSlotsForWriters(
+  writerIds: string[],
+): Promise<Record<string, { weekday: number; publishTime: string; nextSlot: string }>> {
+  const unique = [...new Set(writerIds.filter((id) => typeof id === "string" && id.length > 0))];
+  if (unique.length === 0) return {};
+
+  const schedules = await db
     .select()
     .from(opinionWriterSchedules)
-    .where(eq(opinionWriterSchedules.writerId, writerId))
-    .limit(1);
-  if (!schedule || !schedule.active) return null;
+    .where(and(
+      inArray(opinionWriterSchedules.writerId, unique),
+      eq(opinionWriterSchedules.active, true),
+    ));
+  if (schedules.length === 0) return {};
 
-  const [floorRow] = await db
+  const scheduledWriterIds = schedules.map((row) => row.writerId);
+  const floorRows = await db
     .select({
+      authorId: articles.authorId,
       floor: sql<string | null>`greatest(
         max(${articles.publishedAt}) filter (where ${articles.status} = 'published'),
         max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')
       )`,
     })
     .from(articles)
-    .where(and(eq(articles.articleType, "opinion"), eq(articles.authorId, writerId)));
+    .where(and(
+      eq(articles.articleType, "opinion"),
+      inArray(articles.authorId, scheduledWriterIds),
+    ))
+    .groupBy(articles.authorId);
 
-  const floor = parseDbTimestamp(floorRow?.floor);
-  const nextSlot = computeNextSlot(schedule.weekday, schedule.publishTime, floor);
-  if (!nextSlot) return null;
-  return {
-    weekday: schedule.weekday,
-    publishTime: schedule.publishTime,
-    nextSlot: nextSlot.toISOString(),
-  };
+  const floorByWriter = new Map(
+    floorRows.map((row) => [row.authorId, parseDbTimestamp(row.floor)]),
+  );
+
+  const now = new Date();
+  const result: Record<string, { weekday: number; publishTime: string; nextSlot: string }> = {};
+  for (const schedule of schedules) {
+    if (result[schedule.writerId]) continue;
+    const nextSlot = computeNextSlot(
+      schedule.weekday,
+      schedule.publishTime,
+      floorByWriter.get(schedule.writerId) ?? null,
+      now,
+    );
+    if (!nextSlot) continue;
+    result[schedule.writerId] = {
+      weekday: schedule.weekday,
+      publishTime: schedule.publishTime,
+      nextSlot: nextSlot.toISOString(),
+    };
+  }
+  return result;
 }
 
 export type WriterArticleRow = {
