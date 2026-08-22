@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-08-22 (موعد الجدول الأسبوعي في قائمة مسودات كتّاب الرأي) | المالك: editorial
+> آخر مراجعة: 2026-08-22 (موعد الجدول الأسبوعي في المسودات + منع تركيز بحث السايدبار على الموبايل) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -64,6 +64,7 @@
 - **راسل الزملاء — فلتر الترخيص:** في `/dashboard/staff-communications` تُحفظ قيمة `metadata.licenseFilter` على الحملة: `all` | `with_valid` | `without_valid`. عند الإرسال يصفّي `resolveRecipients` في `server/services/staffCommunications.ts` المستلمين عبر `toMediaLicenseStatus(...).valid` (حساب «صحيفة سبق» يُعامل كساري). `without_valid` = بلا ملف / منتهٍ / تحت المراجعة / يحتاج تصحيحاً — لمراسلة من يحتاجون استخراج الترخيص.
 - **إدارة الترخيص — كتّاب الرأي:** `/dashboard/opinion-writers` عبر `DashboardPageHeader`؛ خلية مضغوطة + فلترة (تحت المراجعة / يحتاج تصحيحاً / …) + اعتماد/رفض/طلب تصحيح؛ `GET /api/admin/opinion-writers/:id/media-license-file`.
 - **إدارة المراسلين:** `/dashboard/reporters` — **مسؤول النظام فقط** (`requireRoles` في السايدبار + `ProtectedRoute` + `requireRole` على `/api/admin/reporters*`). لا تُفتح عبر `articles.view`/`users.view`. أعمدة الصفحة: ترخيص، مدينة، آخر دخول — **بدون** منشورة/آخر خبر/مشاهدات. API: `GET /api/admin/reporters` من `users` + ملف الترخيص؛ `GET /api/admin/reporters/:id/articles` موجود ولا تستهلكه الصفحة. ترتيب: تحت المراجعة → منتهٍ → يحتاج تصحيحاً → جدّد → بدون → ساري. KPI «نشطون آخر ٧ أيام» يعتمد `lastLoginAt` فقط.
+- **سايدبار الموبايل لا يفتح لوحة المفاتيح:** `Sheet` في `client/src/components/ui/sidebar.tsx` يمنع `onOpenAutoFocus` حتى لا يُركَّز محرك «ابحث في لوحة التحكم» عند فتح القائمة من الجوال. التركيز يبقى يدوياً عند لمس الحقل. اختصار ⌘K للديسكتوب فقط.
 - **مفضلة لوحة التحكم:** نجمة ★ بجانب اسم الصفحة النشطة في `AppBreadcrumbs` (كل صفحات `/dashboard/*` ذات عنصر قائمة). `AppBreadcrumbs` يمرّر `permissions`/`allRoles` وإلا تُستبعد العناصر ذات صلاحيات ويُعرض «نظرة عامة» خطأً. `findActiveItem` لا يطابق `meta.exact` بالمقدّمة. `DashboardPageHeader.showFavoriteToggle` افتراضياً false لتفادي نجمتين.
 - **سايدبار محرّر المقال:** بدون `sticky`/`max-h` على عمود الإعدادات — التمرير يتم مع صفحة الداشبورد حتى يُصل لآخر حقول SEO والكلمات المفتاحية (كان sticky يقصّ الأسفل داخل `overflow-auto` للداشبورد).
 - **مرفقات يتيمة (`article_media_assets` بلا `mediaFile.url`):** كانت تُفلتر من لوحة المرفقات و`SortableAttachmentItem` فيختفي زر الحذف بينما الصفحة العامة قد تعرض قسم «الصور المرفقة» فارغاً. المحرر يعرضها الآن ببطاقة تحذير + حذف؛ حذف الصورة البارزة يمسح صف `displayOrder===0`؛ `DELETE /api/media-assets/:id` يقبل `articles.edit_own` مع فحص الملكية. ألبوم الصور يُفتح تلقائياً إن وُجدت صور.
