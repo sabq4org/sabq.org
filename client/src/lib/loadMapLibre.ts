@@ -48,7 +48,7 @@ function ensureStylesheet() {
 export function loadMapLibre(): Promise<MapLibreLike> {
   if (window.maplibregl) return Promise.resolve(window.maplibregl);
   if (loadPromise) return loadPromise;
-  loadPromise = new Promise((resolve, reject) => {
+  const pending = new Promise<MapLibreLike>((resolve, reject) => {
     ensureStylesheet();
     const existing = document.querySelector(`script[src="${JS_HREF}"]`) as HTMLScriptElement | null;
     const done = () => {
@@ -73,7 +73,8 @@ export function loadMapLibre(): Promise<MapLibreLike> {
     loadPromise = null;
     throw err;
   });
-  return loadPromise;
+  loadPromise = pending;
+  return pending;
 }
 
 export function ensureMapLibreRtl(maplibregl: MapLibreLike) {
