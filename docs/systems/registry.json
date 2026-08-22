@@ -527,6 +527,8 @@
         "server/services/sportsNamesService.ts",
         "server/services/sportsPlayerNameFixes.ts",
         "server/services/sportsMatchStatus.ts",
+        "server/services/matchGoalEvents.ts",
+        "tests/unit/matchGoalEvents.test.ts",
         "server/services/competitionStatus.ts",
         "server/services/kingsCupR16Schedule.ts",
         "server/services/sportsAlertsService.ts",

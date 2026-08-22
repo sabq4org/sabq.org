@@ -37,6 +37,11 @@ import {
   mergeLiveMatchProgress,
 } from "./sportsMatchStatus";
 import {
+  creditedGoalCounts,
+  isGoalCancellationText,
+  reconcileMatchGoalEvents,
+} from "./matchGoalEvents";
+import {
   computeSeasonDateStatus,
   refineCompetitionStatus,
   type CompetitionStatus,
@@ -1707,7 +1712,12 @@ async function getSplLineupsFromTs(detail: SplMatchDetail): Promise<SplLineup[]>
 }
 
 function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
-  const loc = localizeEvent(e.type ?? "", e.detail ?? "");
+  const comments = String(e.comments ?? "");
+  let loc = localizeEvent(e.type ?? "", e.detail ?? "");
+  // هدف أبقاه المزود بعد الإلغاء (comments=Cancelled) — لا يُعرض كهدف.
+  if (loc.type === "goal" && isGoalCancellationText(`${loc.label} ${comments}`)) {
+    loc = localizeEvent("var", "Goal cancelled");
+  }
   // تبديل: API-Football يعكس الحقلين — e.player = الخارج، e.assist = الداخل. نعرض
   // الداخل في «player» (العنوان) والخارج في «assist» («بديلًا عن»)، مطابقةً لمسار
   // TheSports. الأهداف/البطاقات تبقى كما هي (player=الفاعل، assist=الصانع).
@@ -1737,18 +1747,11 @@ function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
   };
 }
 
-function creditedGoalCounts(events: SplMatchEvent[], homeId: number): { home: number; away: number } {
-  let home = 0;
-  let away = 0;
-  for (const e of events) {
-    if (e.type !== "goal") continue;
-    const scoredByHome = e.teamId === homeId;
-    const ownGoal = e.label.includes("عكسي");
-    const creditHome = ownGoal ? !scoredByHome : scoredByHome;
-    if (creditHome) home += 1;
-    else away += 1;
-  }
-  return { home, away };
+function finalizeMatchEvents(fixture: SplFixture, events: SplMatchEvent[]): SplMatchEvent[] {
+  return appendScoreSummaryEvents(
+    fixture,
+    reconcileMatchGoalEvents(events, fixture.goals, fixture.home.id),
+  );
 }
 
 function appendScoreSummaryEvents(fixture: SplFixture, events: SplMatchEvent[]): SplMatchEvent[] {
@@ -1891,7 +1894,7 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     namesComplete = !rawNames.some((n) => n && tr(n) === n);
     if (!namesComplete) void resolveNames(rawNames).catch(() => {});
     const events = eventsRaw.map((e: any) => localizeEventRow(e, tr));
-    const withEvents = appendScoreSummaryEvents(fixture, events);
+    const withEvents = finalizeMatchEvents(fixture, events);
     const status = mergeLiveMatchProgress(fixture.status, {
       kickoffTs: fixture.timestamp,
       latestEventMinute: latestPositiveEventMinute(withEvents),
@@ -2207,7 +2210,8 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
         clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
       },
     };
-    const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
+    const rawEvents = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
+    const events = finalizeMatchEvents(fixture, rawEvents);
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, detail) : detail.statistics;
     return { ...detail, fixture, events, statistics };
   } catch {
@@ -2282,7 +2286,8 @@ export async function getWorldLiveMatchDetail(
       },
     };
     const withFx: SplMatchDetail = { ...detail, fixture };
-    const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : [];
+    const rawEvents = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : [];
+    const events = finalizeMatchEvents(fixture, rawEvents);
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, withFx) : null;
     return { ...withFx, events, statistics };
   } catch {
