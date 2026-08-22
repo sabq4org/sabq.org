@@ -30,6 +30,11 @@ import {
   latestPositiveEventMinute,
   mergeLiveMatchProgress,
 } from "./sportsMatchStatus";
+import {
+  computeSeasonDateStatus,
+  refineCompetitionStatus,
+  type CompetitionStatus,
+} from "./competitionStatus";
 import { getPlayerForm as smGetPlayerForm, getSmSquad, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
@@ -248,7 +253,7 @@ export function listCompetitions() {
  * سابقًا كان هنا كاش `spl:season:*` مستقل يستدعي `leagues?current=true` ويلتقط
  * الخطأ داخل الـfetcher فيُخزّن `fallbackSeason` لـ6 ساعات. عند انتقال أغسطس
  * 2026 بقي دوري الأبطال/يوروبا على 2025 المنتهي (نتائج نهائية بلا قادمة) بينما
- * الميتا (`spl:compmeta:v2`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
+ * الميتا (`spl:compmeta:v3`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
  * لا تُعِد كاشًا منفصلًا ولا تُخزّن fallback عند فشل المزوّد.
  */
 async function seasonFor(comp: SaudiCompetition): Promise<number> {
@@ -3950,23 +3955,7 @@ const COMP_META_TTL = SEASON_TTL;
 
 // ---------- البند 9: ترويسة البطولة (شعار + موسم) ----------
 
-/**
- * حالة موسم البطولة:
- * - `ongoing`: انطلق الموسم ولم ينتهِ بعد (اليوم بين start و end).
- * - `upcoming`: موسم محدّد لكنه لم يبدأ بعد (today < start) — مثل الدوريات
- *    الأوروبية صيفًا التي يصبح موسمها current قبل انطلاقها بأسابيع.
- * - `finished`: انتهى الموسم (today > end).
- * - `unknown`: لا تتوفر تواريخ start/end من المزود.
- */
-export type CompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
-
-function computeStatus(start: string | null, end: string | null): CompetitionStatus {
-  if (!start || !end) return "unknown";
-  const today = new Date().toISOString().slice(0, 10); // بتوقيت UTC؛ تواريخ المزود يومية فلا حاجة لدقّة المنطقة
-  if (today < start) return "upcoming";
-  if (today > end) return "finished";
-  return "ongoing";
-}
+export type { CompetitionStatus };
 
 export interface SplCompetitionMeta {
   logo: string | null;
@@ -3979,12 +3968,12 @@ export interface SplCompetitionMeta {
 
 export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
   try {
-    // المفتاح موسوم بنسخة (v2) لأن شكل القيمة تغيّر (إضافة start/end/status)؛
-    // رفع النسخة يُبطل القيم القديمة فورًا بدل انتظار TTL.
+    // المفتاح موسوم بنسخة (v3): تصحيح كأس لم يُحسم نهائيها بعد دور مبكر.
+    // رفع النسخة يُبطل «منتهٍ» الكاذب فورًا بدل انتظار TTL.
     // ملاحظة مهمة: لا نلتقط الخطأ داخل الـ fetcher — نتركه يُرمى حتى لا يخزّن
     // withSWR نتيجة fallback خاطئة (start/end=null) لـ 6 ساعات عند فشل/تحديد
     // معدّل من API-Football (يحدث وقت النشر مع رشقة الطلبات المتوازية).
-    return await withSWR(`spl:compmeta:v2:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
+    return await withSWR(`spl:compmeta:v3:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
       const rows = await apiGet("leagues", { id: comp.id });
       if (!rows.length) throw new Error(`[SaudiLeague] no league data for ${comp.id}`);
       const lg = rows[0]?.league ?? {};
@@ -3992,17 +3981,28 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
       const start = typeof current?.start === "string" ? current.start : null;
       const end = typeof current?.end === "string" ? current.end : null;
-      let status = computeStatus(start, end);
-      // المزود قد يُبقي موسمًا قديمًا بعلم current بينما انطلقت مباريات الموسم
-      // الجديد فعلًا (شائع في الدوريات العربية)، فيظهر «انتهى الموسم» خطأً.
-      // وجود مباراة قادمة وشيكة دلالة كافية أن الموسم جارٍ — نطلب التالية فقط
-      // حين تحتسب الحالة finished (تكلفة محدودة بطلب واحد للحالات النادرة).
+      let status = computeSeasonDateStatus(start, end);
+      // المزود قد يقصّر تاريخ النهاية إلى آخر مباراة نُشرت (كأس بعد دور الـ32)
+      // أو يُبقي موسمًا قديمًا بعلم current. نصحّح قبل تثبيت الشارة.
       if (status === "finished") {
         const next = await apiGet("fixtures", { league: comp.id, next: 1 }).catch(() => []);
         const ts = next[0]?.fixture?.timestamp;
-        if (typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21) {
-          status = "ongoing";
+        const hasUpcomingWithinDays =
+          typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21;
+        let recentRounds: { round?: string | null; finished: boolean }[] = [];
+        if (!hasUpcomingWithinDays && comp.type === "cup") {
+          const last = await apiGet("fixtures", { league: comp.id, last: 10 }).catch(() => []);
+          recentRounds = (last ?? []).map((r: any) => ({
+            round: r?.league?.round ?? null,
+            finished: WC_FINISHED_STATUSES.has(String(r?.fixture?.status?.short ?? "")),
+          }));
         }
+        status = refineCompetitionStatus({
+          dateStatus: status,
+          type: comp.type,
+          hasUpcomingWithinDays,
+          recentRounds,
+        });
       }
       return {
         logo: lg.logo ?? null,

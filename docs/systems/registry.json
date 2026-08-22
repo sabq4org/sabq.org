@@ -522,6 +522,7 @@
         "server/services/sportsNamesService.ts",
         "server/services/sportsPlayerNameFixes.ts",
         "server/services/sportsMatchStatus.ts",
+        "server/services/competitionStatus.ts",
         "server/services/sportsAlertsService.ts",
         "server/services/sportsAlertPrefsService.ts",
         "server/jobs/sportsAlertsJob.ts",
@@ -585,7 +586,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-21"
+      "lastReviewed": "2026-08-22"
     },
     {
       "id": "push-notifications",
