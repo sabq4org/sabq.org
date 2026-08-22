@@ -247,6 +247,7 @@
         "client/src/components/NewsMap.tsx",
         "client/src/components/NewsMapHudhud.tsx",
         "client/src/lib/hudhudMap.ts",
+        "client/src/lib/loadMapLibre.ts",
         "client/src/lib/newsMapMarkers.ts",
         "server/routes/newsMap.ts",
         "tests/unit/hudhudMap.test.ts",
