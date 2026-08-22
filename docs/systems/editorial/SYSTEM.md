@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-08-22 (موعد الجدول الأسبوعي في المسودات + منع تركيز بحث السايدبار على الموبايل) | المالك: editorial
+> آخر مراجعة: 2026-08-22 (خلفية هدهد لخريطة الأخبار في الرئيسية) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -118,6 +118,8 @@
 - **نظرة عامة لبوابة الناشر:** `getPortalOverview` خلف كاش دقيقة `publisher:portal:overview:{id}` مع إبطال عند الإرسال/النشر/الحذف.
 - **محرّر الأخبار الإنجليزية:** الحفظ عبر `/api/en/dashboard/articles` (+ PATCH) بصلاحيات RBAC (`articles.create` / `edit_*`) — مثل الأوردو. المسار القديم `/api/en/articles` كان يرفض بـ `allowedLanguages.includes('en')` (الافتراضي `['ar']` فقط) فيظهر «لا توجد لديك صلاحيات للمحتوى الإنجليزي» حتى للأدمن.
 - **لوحة مقالات EN (`/en/dashboard/articles`):** المنشورات تُرتَّب زمنياً `publishedAt DESC` (مثل `/api/en/articles` العامة) — **لا** تقدّم `displayOrder` وإلا تُدفن الترجمات الحديثة تحت مقالات قديمة أُعيد سحبها. المسودة/المجدول/الأرشيف بـ`updatedAt`/`scheduledAt`. المقاييس تشمل `scheduled`. فلاتر: `newsType=breaking|regular` و`translated=true|false`. الواجهة تعرض تاريخ النشر وشارة Translated. الترجمة تفضّل `englishSlug` العربي لنفس الرمز القصير، تطابق التصنيف عبر slug/`nameEn` (`enArticleTranslationService`)، وتنسخ `newsType`/`isFeatured`/`reporterId`/`imageFocalPoint`، وتُبطل كاش `sitemap-en-articles`. تبديل العاجل ثنائي الاتجاه (AR↔EN عبر `sourceArticleId`). Backfill: `tsx scripts/backfill-en-translation-meta.ts --apply`.
+
+- **خريطة الأخبار في الرئيسية:** `/api/news-map` + `NewsMap`. البلاطات الافتراضية OSM. إن وُجد `VITE_HUDHUD_PUBLISHABLE_KEY` (`pk_`) تُرسم الخلفية من أسلوب هدهد عبر MapLibre يُحمَّل من CDN (لا يُضمَّن في حزمة Vite). `VITE_HUDHUD_MAP_ID` أو `default`، عربي RTL، فاتح/داكن حسب الثيم. فشل الأسلوب أو التحميل يرجع إلى OSM. النقاط من `geo_locations`. المفتاح وقت بناء Vite على Pages — لا يُكتب في المستودع.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
