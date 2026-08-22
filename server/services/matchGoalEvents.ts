@@ -1,6 +1,12 @@
 /**
  * أهداف المباراة بعد الإلغاء/التصحيح: لا تُعرض كـ«هدف» إن سقطت من النتيجة.
  * الفار أو تصحيح المزود قد يُبقي حادثة الهدف بينما النتيجة عادت 0-0.
+ *
+ * القاعدة الحاكمة: النتيجة الرسمية هي الحكم. لا يُحذف أي هدف ما دام عدد
+ * الأهداف المعروضة ≤ النتيجة — فالمزود كثيرًا ما يحذف حادثة الهدف الملغى
+ * بنفسه ويُبقي صف الفار وحده كسياق، وحذفٌ إضافي عندنا يأكل هدفًا صحيحًا
+ * (حادثة الخلود × التعاون 2026-08-22: هدف الدقيقة 30 اختفى). حوادث الإلغاء
+ * تُستخدم فقط لاختيار الهدف الأولى بالحذف عند وجود فائض فعلي.
  */
 
 export type GoalEventLike = {
@@ -50,71 +56,91 @@ function eventSortKey(e: GoalEventLike): number {
   return (e.minute ?? 0) * 100 + (e.extra ?? 0);
 }
 
-function dropVarCancelledGoals<T extends GoalEventLike>(events: T[]): T[] {
-  const drop = new Set<number>();
-  const cancellations = events
-    .map((e, i) => ({ e, i }))
-    .filter(({ e }) => e.type !== "goal" && isGoalCancellationEvent(e));
+/**
+ * يحذف من أهداف جهةٍ واحدة (home أو away) ما زاد عن النتيجة الرسمية.
+ * الأولوية بالحذف: الهدف الأقرب قبل حادثة إلغاء (فار) لنفس الجهة، ثم الأحدث.
+ */
+function dropSideExcess<T extends GoalEventLike>(
+  events: T[],
+  drop: Set<number>,
+  homeId: number,
+  wantHome: boolean,
+  excess: number,
+): void {
+  if (excess <= 0) return;
 
-  for (const { e: cancel } of cancellations) {
+  const goalIdxs: number[] = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (!isCreditedGoalEvent(e)) continue;
+    if (creditsHomeGoal(e, homeId) === wantHome) goalIdxs.push(i);
+  }
+
+  const cancels = events.filter(
+    (e) =>
+      e.type !== "goal" &&
+      isGoalCancellationEvent(e) &&
+      creditsHomeGoal(e, homeId) === wantHome,
+  );
+
+  const victims = new Set<number>();
+
+  // أولًا: الهدف المقترن بكل إلغاء — الأحدث الذي وقع حتى دقيقة الإلغاء (+1 سماحية).
+  for (const cancel of cancels) {
+    if (victims.size >= excess) break;
     let best = -1;
     let bestKey = Number.NEGATIVE_INFINITY;
-    for (let i = 0; i < events.length; i++) {
-      if (drop.has(i)) continue;
-      const g = events[i];
-      if (!isCreditedGoalEvent(g)) continue;
-      if (cancel.teamId && g.teamId && cancel.teamId !== g.teamId) continue;
-      const gk = eventSortKey(g);
+    for (const i of goalIdxs) {
+      if (victims.has(i)) continue;
+      const gk = eventSortKey(events[i]);
       if (gk > eventSortKey(cancel) + 1) continue;
       if (gk >= bestKey) {
         bestKey = gk;
         best = i;
       }
     }
-    if (best >= 0) drop.add(best);
+    if (best >= 0) victims.add(best);
   }
 
-  return events.filter((_, i) => !drop.has(i));
-}
+  // ثم: الأحدث فالأحدث حتى يُستوفى الفائض.
+  const byKeyDesc = goalIdxs
+    .filter((i) => !victims.has(i))
+    .sort((a, b) => eventSortKey(events[b]) - eventSortKey(events[a]));
+  for (const i of byKeyDesc) {
+    if (victims.size >= excess) break;
+    victims.add(i);
+  }
 
-function dropGoalsBeyondOfficial<T extends GoalEventLike>(
-  events: T[],
-  official: { home: number | null; away: number | null },
-  homeId: number,
-): T[] {
-  if (official.home == null && official.away == null) return events;
-  const allowedHome = official.home ?? creditedGoalCounts(events, homeId).home;
-  const allowedAway = official.away ?? creditedGoalCounts(events, homeId).away;
-
-  const drop = new Set<number>();
-  const takeExtras = (wantHome: boolean, allowed: number) => {
-    const idxs: number[] = [];
-    for (let i = 0; i < events.length; i++) {
-      const e = events[i];
-      if (!isCreditedGoalEvent(e)) continue;
-      if (creditsHomeGoal(e, homeId) === wantHome) idxs.push(i);
-    }
-    idxs.sort((a, b) => eventSortKey(events[a]) - eventSortKey(events[b]));
-    for (const i of idxs.slice(Math.max(0, allowed))) drop.add(i);
-  };
-
-  takeExtras(true, Math.max(0, allowedHome));
-  takeExtras(false, Math.max(0, allowedAway));
-  return events.filter((_, i) => !drop.has(i));
+  for (const i of victims) drop.add(i);
 }
 
 /**
- * يحذف الهدف المعروض بعد إلغاء الفار، ثم أي أهداف زيادة عن النتيجة الرسمية.
- * أحداث الفار نفسها تبقى (سياق)، وهدف بنص إلغاء لا يُحسب ولا يُعرض كهدف.
+ * يوفّق قائمة الأحداث مع النتيجة الرسمية:
+ * - هدفٌ نصُّه نص إلغاء لا يُحسب ولا يُعرض كهدف (يسقط من القائمة).
+ * - إن زادت الأهداف المعروضة عن النتيجة الرسمية حُذف الفائض فقط، بدءًا
+ *   بالهدف المقترن بإلغاء الفار ثم الأحدث.
+ * - إن كانت الأهداف ≤ النتيجة فلا يُحذف شيء — حتى مع وجود حادثة إلغاء،
+ *   لأن المزود غالبًا حذف الهدف الملغى بنفسه وأبقى صف الفار كسياق.
+ * أحداث الفار نفسها تبقى دائمًا (سياق).
  */
 export function reconcileMatchGoalEvents<T extends GoalEventLike>(
   events: T[],
   official: { home: number | null; away: number | null },
   homeId: number,
 ): T[] {
-  const withoutFakeGoals = events.filter(
+  const kept = events.filter(
     (e) => !(e.type === "goal" && isGoalCancellationEvent(e)),
   );
-  const afterVar = dropVarCancelledGoals(withoutFakeGoals);
-  return dropGoalsBeyondOfficial(afterVar, official, homeId);
+  if (official.home == null && official.away == null) return kept;
+
+  const credited = creditedGoalCounts(kept, homeId);
+  const drop = new Set<number>();
+  if (official.home != null) {
+    dropSideExcess(kept, drop, homeId, true, credited.home - official.home);
+  }
+  if (official.away != null) {
+    dropSideExcess(kept, drop, homeId, false, credited.away - official.away);
+  }
+  if (drop.size === 0) return kept;
+  return kept.filter((_, i) => !drop.has(i));
 }
