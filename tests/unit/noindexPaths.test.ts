@@ -40,9 +40,6 @@ describe("isNoindexPath — prefixes", () => {
     "/settings/security",
     "/settings/notifications",
     "/en/settings/account",
-    "/lab",
-    "/lab/",
-    "/lab/article/some-slug",
   ])("%s is noindex", (p) => expect(isNoindexPath(p)).toBe(true));
 
   it("does NOT match prefix lookalikes (boundary check)", () => {
@@ -50,8 +47,6 @@ describe("isNoindexPath — prefixes", () => {
     expect(isNoindexPath("/administrator-news")).toBe(false);
     expect(isNoindexPath("/payments-explained")).toBe(false);
     expect(isNoindexPath("/settingsx")).toBe(false);
-    expect(isNoindexPath("/label")).toBe(false);
-    expect(isNoindexPath("/laboratory")).toBe(false);
   });
 });
 

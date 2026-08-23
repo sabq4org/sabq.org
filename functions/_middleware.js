@@ -141,8 +141,6 @@ const NOINDEX_PREFIXES = [
   "/advertiser/", "/publisher/", "/staff/",
   // روابط دعوات المجالس وواجهاتها شخصية: قابلة للفتح والمشاركة، لا للفهرسة.
   "/gulf-cup/majlis",
-  // تجارب تصميم معزولة — وصول مباشر فقط، لا فهرسة ولا كاش حافة عام.
-  "/lab",
 ];
 
 // Boundary-aware prefix match (mirrors isNoindexPath in
