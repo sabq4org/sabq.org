@@ -724,15 +724,14 @@
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
         "web-next/**",
-        "functions/_middleware.js",
-        "client/src/pages/lab/**"
+        "functions/_middleware.js"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-23"
+      "lastReviewed": "2026-07-30"
     },
     {
       "id": "comments",

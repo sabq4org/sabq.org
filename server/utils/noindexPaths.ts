@@ -51,8 +51,6 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/survey',
   // روابط دعوة الاجتماعات (توكن سري لكل اجتماع) — لا فهرسة ولا تخزين على الحافة.
   '/meet',
-  // تجارب تصميم معزولة (مثل /lab/article/:slug) — وصول مباشر فقط، لا فهرسة.
-  '/lab',
 ];
 
 export function isNoindexPath(pathname: string): boolean {
