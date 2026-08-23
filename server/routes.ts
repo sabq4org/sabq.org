@@ -13902,7 +13902,8 @@ Respond in valid JSON format only:
       const updatedKey = article.updatedAt instanceof Date
         ? article.updatedAt.toISOString()
         : String(article.updatedAt ?? "");
-      const audioCacheKey = `summary-audio:v2:${article.id}:${updatedKey}`;
+      // v3: صوت علي السعودي + eleven_multilingual_v2 — تخطّي أي كاش قديم بصوت Flash/Google.
+      const audioCacheKey = `summary-audio:v3:${article.id}:${updatedKey}`;
       const cachedAudio = memoryCache.get<{ buffer: Buffer; provider: string }>(audioCacheKey);
       if (cachedAudio) {
         res.setHeader("X-TTS-Provider", cachedAudio.provider);
@@ -13930,18 +13931,23 @@ Respond in valid JSON format only:
           const elevenLabsService = getElevenLabsService();
           if (elevenLabsService) {
             try {
+              // multilingual_v2 أعلى جودة عربية بكثير من Flash، والكاش 24 ساعة
+              // يجعل كلفة المهلة الأطول تُدفع مرة واحدة لكل مقال فقط.
               audioBuffer = await Promise.race([
                 elevenLabsService.textToSpeech({
                   text: textToConvert,
-                  model: 'eleven_flash_v2_5',
+                  model: 'eleven_multilingual_v2',
+                  voiceId: process.env.ELEVENLABS_NEWS_VOICE_ID || 'MI88rOZjXbH22N8KHXUo', // علي — سعودي عميق هادئ
+                  language: 'ar',
                   voiceSettings: {
-                    stability: 0.75,
-                    similarity_boost: 0.75,
-                    style: 0.30,
-                    use_speaker_boost: true
+                    stability: 0.50,          // أقل = تلوين نبري إذاعي بدل الرتابة
+                    similarity_boost: 0.80,
+                    style: 0.15,              // رصانة نشرة دون مبالغة درامية
+                    use_speaker_boost: true,
+                    speed: 0.95               // إبطاء بسيط = وقار المذيع
                   }
-                }, 8_000),
-                timeoutPromise(8_000)
+                }, 20_000),
+                timeoutPromise(20_000)
               ]);
               usedProvider = 'elevenlabs';
             } catch (eErr) {
