@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-07-30 | المالك: platform
+> آخر مراجعة: 2026-08-23 | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -10,6 +10,7 @@
 
 ## عقود مهمة
 - مسارات noindex → `Cache-Control: private, no-store`.
+- **تجارب التصميم `/lab/*` (2026-08-23):** بادئة noindex في `noindexPaths.ts` و`functions/_middleware.js`. `/lab/article/:slug` صفحة قراءة تجريبية معزولة — لا SSR، لا sitemap، لا تنقّل عام. `/article/:slug` يبقى المسار المفهرس الوحيد للخبر.
 - `SSR_ROUTES=on/off` مفتاح تراجع فوري.
 - **`/api/edge/seo-meta` (2026-07-25):** كاش ذاكرة `edgeSeoMetaCache` (MATCH 5د / MISS 30ث) + single-flight لنفس المسار + تطبيع المسار (بدون `?utm_*`) + CDN `s-maxage=300, stale-while-revalidate=600` (كان 60ث فيعيد ضرب الأصل كل دقيقة — ظهر كـ APM بطيء بعد كل إقلاع).
 - **hreflang AR↔EN (2026-07-30):** الربط عبر `en_articles.seoMetadata.sourceArticleId`؛ وإلا لا يُرسل رابط لغة شقيقة مكسور. الترجمات **الجديدة** تفضّل نفس `englishSlug` العربي إن كان متاحاً (`/article/X` ↔ `/en/article/X`). IndexNow بعد الترجمة يستهدف `/en/article/...` ويُبطل كاش Redis لـ `__sitemapEnArticles*` + كاش `sitemap-news` في الذاكرة.
