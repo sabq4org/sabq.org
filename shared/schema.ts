@@ -14429,6 +14429,11 @@ export const aiUsageLogs = pgTable("ai_usage_logs", {
   errorCode: varchar("error_code", { length: 32 }),
   errorMessage: text("error_message"),
   userId: varchar("user_id"),
+  // نصّت عليهما خطة «محرر سبق» الموحد (المرحلة 4 — قياس الجودة): نوع المهمة
+  // التحريرية (edit/develop/review/…) ونسخة البرومبت وقت الاستدعاء، ليُحسب
+  // لاحقًا مقياس «نسبة تعديل البشر» لكل مهمة ولكل نسخة برومبت.
+  taskType: varchar("task_type", { length: 32 }),
+  promptVersion: varchar("prompt_version", { length: 16 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_ai_usage_logs_created").on(table.createdAt),
@@ -14525,6 +14530,36 @@ export type AiUsageDailyRow = typeof aiUsageDaily.$inferSelect;
 export type AiProviderHealthRow = typeof aiProviderHealth.$inferSelect;
 export type AiConfigAuditRow = typeof aiConfigAudit.$inferSelect;
 export type AiBudget = typeof aiBudgets.$inferSelect;
+
+// فريق سبق الذكي — سجلّ «الموظفين» الرقميين (طبقة هوية فوق البوابة).
+// السجل الافتراضي في shared/aiStaffRoster.ts (نمط gateway/defaults.ts):
+// الجدول يتقدم على الثوابت متى زُرع عبر scripts/seed-ai-staff.ts، وكل
+// المؤشرات تُشتق من ai_usage_logs/ai_usage_daily عبر feature_keys — لا
+// ازدواج بيانات. القيم المقيّدة نصوص موثقة في aiStaffRoster.ts (لا pgEnum).
+export const aiStaff = pgTable("ai_staff", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  employeeCode: varchar("employee_code", { length: 16 }).notNull(),
+  nameAr: varchar("name_ar", { length: 64 }).notNull(),
+  titleAr: varchar("title_ar", { length: 128 }).notNull(),
+  bioAr: text("bio_ar").default("").notNull(),
+  departmentKey: varchar("department_key", { length: 32 }).notNull(),
+  managerSlug: varchar("manager_slug", { length: 64 }),
+  avatarUrl: varchar("avatar_url", { length: 512 }).default("").notNull(),
+  featureKeys: jsonb("feature_keys").$type<string[]>().default([]).notNull(),
+  featureKeyPrefixes: jsonb("feature_key_prefixes").$type<string[]>().default([]).notNull(),
+  systems: jsonb("systems").$type<string[]>().default([]).notNull(),
+  triggerMode: varchar("trigger_mode", { length: 16 }).default("on-demand").notNull(),
+  scheduleNoteAr: varchar("schedule_note_ar", { length: 128 }).default("").notNull(),
+  metricsSource: varchar("metrics_source", { length: 16 }).default("gateway").notNull(),
+  status: varchar("status", { length: 16 }).default("active").notNull(), // active | paused
+  sortOrder: integer("sort_order").default(100).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type AiStaffRow = typeof aiStaff.$inferSelect;
+export type InsertAiStaff = typeof aiStaff.$inferInsert;
 
 // ============================================================================
 // المنصة المركزية لتوقعات سبق الرياضي — Prediction Core

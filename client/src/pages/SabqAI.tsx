@@ -396,6 +396,87 @@ function StatsBand() {
   );
 }
 
+
+/* ==================== فريق سبق الذكي — الزملاء الرقميون ==================== */
+
+interface AiTeamPublicPayload {
+  generatedAt: string;
+  team: { slug: string; nameAr: string; titleAr: string; departmentAr: string; avatarUrl: string }[];
+  counters: { monthOps: number; teamCount: number };
+}
+
+/**
+ * شريحة الفريق: أول غرفة أخبار سعودية تعرّف بزملائها الرقميين بأسمائهم.
+ * نسخة استعراض وحوكمة منقّاة — أسماء وأدوار ومجاميع شهرية فقط؛ التكاليف
+ * والنماذج والأعطال تبقى داخل اللوحة. أي فشل في الجلب → تسقط الشريحة
+ * بصمت (قاعدة المصداقية: لا أرقام وهمية).
+ */
+function TeamBand() {
+  const { data: teamRaw } = useQuery<AiTeamPublicPayload>({
+    queryKey: ["/api/public/ai-team"],
+    staleTime: 5 * 60_000,
+  });
+  const payload = teamRaw && Array.isArray(teamRaw.team) && teamRaw.team.length > 0 ? teamRaw : null;
+  if (!payload) return null;
+
+  const shown = payload.team.slice(0, 6);
+  const rest = payload.team.length - shown.length;
+
+  return (
+    <section className="bg-[#0E2233] text-white px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-team">
+      <div className="max-w-4xl mx-auto text-center min-w-0">
+        <div className="text-[11px] md:text-xs font-bold tracking-wide text-[#4CBCFD] mb-2">داخل عقل سبق</div>
+        <h2 className="text-xl md:text-3xl font-extrabold mb-2">فريق سبق الذكي</h2>
+        <p className="text-xs md:text-sm text-[#8CA3B5] max-w-xl mx-auto mb-6">
+          أول غرفة أخبار سعودية تعرّفك بزملائها الرقميين بأسمائهم وأدوارهم — يعملون على مدار الساعة،
+          ولا يُنشر لهم حرف قبل اعتماد محرر بشري.
+        </p>
+        <div className="flex justify-center mb-6" dir="ltr">
+          {shown.map((m) => (
+            <span
+              key={m.slug}
+              title={`${m.nameAr} — ${m.titleAr}`}
+              className="w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border-[3px] border-[#0E2233] bg-[#0E76B8] -mx-1.5 flex items-center justify-center"
+            >
+              {m.avatarUrl ? (
+                <img src={m.avatarUrl} alt={m.nameAr} className="w-full h-full object-cover" loading="lazy" />
+              ) : (
+                <span className="text-white font-bold">{m.nameAr.slice(0, 1)}</span>
+              )}
+            </span>
+          ))}
+          {rest > 0 && (
+            <span className="w-12 h-12 md:w-16 md:h-16 rounded-full border-[3px] border-[#0E2233] bg-[#1E3448] -mx-1.5 flex items-center justify-center text-[#8CA3B5] text-xs md:text-sm font-bold">
+              +{rest}
+            </span>
+          )}
+        </div>
+        <div className="flex justify-center gap-8 md:gap-12 flex-wrap mb-6">
+          {payload.counters.monthOps > 0 && (
+            <div>
+              <div className="text-2xl md:text-3xl font-extrabold text-[#4CBCFD] tabular-nums">
+                {payload.counters.monthOps.toLocaleString("en-US")}
+              </div>
+              <div className="text-[11px] text-[#8CA3B5]">عملًا هذا الشهر</div>
+            </div>
+          )}
+          <div>
+            <div className="text-2xl md:text-3xl font-extrabold text-[#4CBCFD] tabular-nums">{payload.counters.teamCount}</div>
+            <div className="text-[11px] text-[#8CA3B5]">زميلًا رقميًا</div>
+          </div>
+          <div>
+            <div className="text-2xl md:text-3xl font-extrabold text-[#4CBCFD] tabular-nums">100%</div>
+            <div className="text-[11px] text-[#8CA3B5]">تحت إشراف بشري</div>
+          </div>
+        </div>
+        <span className="inline-block text-[11px] md:text-xs border border-[#4CBCFD]/40 bg-[#4CBCFD]/10 text-[#DCF1FE] rounded-full px-5 py-1.5">
+          🛡 الإنسان يعتمد كل شيء — سياسة سبق للذكاء الاصطناعي
+        </span>
+      </div>
+    </section>
+  );
+}
+
 /* ==================== الأرقام تتحدث — عدّادات حية ==================== */
 
 interface AiPublicStats {
@@ -894,6 +975,7 @@ export default function SabqAI() {
         <Pipeline />
         <UnderHood />
         <LiveStatsBand />
+        <TeamBand />
         <SportsBand />
         <DomainsGrid />
         <GovernanceBand />
