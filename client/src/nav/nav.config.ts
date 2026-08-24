@@ -67,6 +67,7 @@ import {
   HeartPulse,
   Headphones,
   Briefcase,
+  Bot,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -642,6 +643,16 @@ export const navConfig: NavItem[] = [
         permissions: ["ai.view", "ai.manage"],
       },
     ],
+  },
+
+  // ===== فريق سبق الذكي / AI Staff Team =====
+  {
+    id: "ai_staff",
+    labelKey: "nav.ai_staff",
+    labelAr: "فريق سبق الذكي",
+    path: "/dashboard/ai/staff",
+    icon: Bot,
+    roles: ["admin", "system_admin", "editor", "analyst"],
   },
 
   // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====

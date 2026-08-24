@@ -935,6 +935,27 @@
         "platform"
       ],
       "lastReviewed": "2026-07-30"
+    },
+    {
+      "id": "ai-staff",
+      "nameAr": "فريق سبق الذكي",
+      "nameEn": "AI Staff Team",
+      "status": "active",
+      "category": "ai",
+      "summary": "طبقة هوية فوق بوابة AI Hub: موظفون رقميون بأسماء وأدوار وهيكل تنظيمي قمته بشرية، دليل وبطاقات هوية في اللوحة (/dashboard/ai/staff) وشريحة علنية في عقل سبق — كل المؤشرات مشتقة من ai_usage_logs/ai_feature_configs بلا محرك جديد.",
+      "docPath": "docs/systems/ai-staff/SYSTEM.md",
+      "relatedDocs": [
+        "docs/editorial-ai-unified-system-plan-2026-08-03.md",
+        "docs/ai-governance/README.md"
+      ],
+      "pathGlobs": [
+        "shared/aiStaffRoster.ts",
+        "server/services/aiStaffService.ts",
+        "server/routes/aiStaff.ts",
+        "client/src/pages/dashboard/AiStaff/**",
+        "scripts/seed-ai-staff.ts",
+        "client/public/ai-team/**"
+      ]
     }
   ]
 }

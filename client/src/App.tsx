@@ -461,6 +461,8 @@ const IFoxSettings = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFo
 const IFoxAITasks = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFoxAITasks")));
 const AIManagementDashboard = lazy(() => retryImport(() => import("@/pages/admin/ifox/ai-management")));
 const AiHubPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiHub")));
+const AiStaffPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff")));
+const AiStaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff/Profile")));
 const IntegrationsSettingsPage = lazy(() => retryImport(() => import("@/pages/dashboard/IntegrationsSettings")));
 const SystemsCatalogPage = lazy(() => retryImport(() => import("@/pages/dashboard/SystemsCatalogPage")));
 const ImageStudio = lazy(() => retryImport(() => import("@/pages/ifox/ImageStudio")));
@@ -791,6 +793,8 @@ function Router() {
         <Route path="/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         <Route path="/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/admin/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/admin/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
+        <Route path="/admin/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
 
         <Route path="/reporter/:slug">{() => <LazyRoute component={ReporterProfile} />}</Route>
         <Route path="/author/:name">{() => <LazyRoute component={AuthorArticlesPage} />}</Route>
@@ -1045,6 +1049,8 @@ function Router() {
         <Route path="/dashboard/admin/ifox/settings">{() => <LazyRoute component={IFoxSettings} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/dashboard/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/dashboard/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
+        <Route path="/dashboard/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
         <Route path="/dashboard/integrations">{() => <LazyRoute component={IntegrationsSettingsPage} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         
