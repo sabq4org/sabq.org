@@ -763,7 +763,7 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
     // نهاية المباراة
     if (!prev.finished && cur.finished) {
       // ومضة FT عند الاستراحة/بداية الشوط الثاني (~د45–47) ليست نهاية.
-      // نُبقي اللقطة جارية حتى تصمد ساعة ≥80 أو رمز إداري.
+      // نُبقي اللقطة جارية حتى تصمد ساعة ≥90 (أو رمز إداري) وتتجاوز حائط الومضة المبكرة.
       if (
         !isPlausibleFootballFullTime({
           elapsed: m.status.elapsed,
