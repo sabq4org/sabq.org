@@ -419,37 +419,36 @@ function TeamBand() {
   const payload = teamRaw && Array.isArray(teamRaw.team) && teamRaw.team.length > 0 ? teamRaw : null;
   if (!payload) return null;
 
-  const shown = payload.team.slice(0, 6);
-  const rest = payload.team.length - shown.length;
-
   return (
     <section className="bg-[#0E2233] text-white px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-team">
-      <div className="max-w-4xl mx-auto text-center min-w-0">
+      <div className="max-w-5xl mx-auto text-center min-w-0">
         <div className="text-[11px] md:text-xs font-bold tracking-wide text-[#4CBCFD] mb-2">داخل عقل سبق</div>
         <h2 className="text-xl md:text-3xl font-extrabold mb-2">فريق سبق الذكي</h2>
         <p className="text-xs md:text-sm text-[#8CA3B5] max-w-xl mx-auto mb-6">
           أول غرفة أخبار سعودية تعرّفك بزملائها الرقميين بأسمائهم وأدوارهم — يعملون على مدار الساعة،
           ولا يُنشر لهم حرف قبل اعتماد محرر بشري.
         </p>
-        <div className="flex justify-center mb-6" dir="ltr">
-          {shown.map((m) => (
-            <span
+        {/* الوعد يُوفى: كل زميل باسمه ومسماه وإدارته — لا دوائر مجهولة */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 md:gap-3 mb-7 text-right">
+          {payload.team.map((m) => (
+            <div
               key={m.slug}
-              title={`${m.nameAr} — ${m.titleAr}`}
-              className="w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border-[3px] border-[#0E2233] bg-[#0E76B8] -mx-1.5 flex items-center justify-center"
+              className="flex items-center gap-2.5 md:gap-3 rounded-xl border border-[#1E3448] bg-[#12293B] px-2.5 py-2 md:px-3 md:py-2.5 min-w-0"
             >
-              {m.avatarUrl ? (
-                <img src={m.avatarUrl} alt={m.nameAr} className="w-full h-full object-cover" loading="lazy" />
-              ) : (
-                <span className="text-white font-bold">{m.nameAr.slice(0, 1)}</span>
-              )}
-            </span>
+              <span className="w-11 h-11 md:w-14 md:h-14 rounded-full overflow-hidden bg-[#0E76B8] shrink-0 flex items-center justify-center">
+                {m.avatarUrl ? (
+                  <img src={m.avatarUrl} alt={m.nameAr} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <span className="text-white font-bold">{m.nameAr.slice(0, 1)}</span>
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm md:text-base font-extrabold leading-tight truncate">{m.nameAr}</span>
+                <span className="block text-[11px] md:text-xs text-[#DCF1FE]/80 leading-tight truncate">{m.titleAr}</span>
+                <span className="block text-[10px] text-[#4CBCFD] leading-tight truncate">{m.departmentAr}</span>
+              </span>
+            </div>
           ))}
-          {rest > 0 && (
-            <span className="w-12 h-12 md:w-16 md:h-16 rounded-full border-[3px] border-[#0E2233] bg-[#1E3448] -mx-1.5 flex items-center justify-center text-[#8CA3B5] text-xs md:text-sm font-bold">
-              +{rest}
-            </span>
-          )}
         </div>
         <div className="flex justify-center gap-8 md:gap-12 flex-wrap mb-6">
           {payload.counters.monthOps > 0 && (

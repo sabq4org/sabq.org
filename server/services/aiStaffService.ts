@@ -94,6 +94,57 @@ function num(value: unknown): number {
 const riyadhDayStartUtc = sql`(date_trunc('day', now() + interval '3 hours') - interval '3 hours')`;
 /** أول الشهر الحالي بتوقيت الرياض كتاريخ (لعمود date في الملخص اليومي). */
 const riyadhMonthStart = sql`(date_trunc('month', now() + interval '3 hours'))::date`;
+/** أول الشهر كطابع UTC (لعمود created_at في السجل الخام). */
+const riyadhMonthStartUtc = sql`(date_trunc('month', now() + interval '3 hours') - interval '3 hours')`;
+
+interface MonthUsageRow {
+  featureKey: string;
+  requests: number;
+  costUsd: number;
+  p95: number | null;
+}
+
+/**
+ * استهلاك الشهر الحالي لكل مفتاح ميزة. المصدر الأول ai_usage_daily؛ وإن كان
+ * فارغًا (كرون الملخص متوقف/لم يعمل بعد) نحسب من السجل الخام مباشرة —
+ * محتمل التكلفة مرة كل نافذة كاش، وأفضل من عرض أصفار كاذبة (قاعدة المصداقية).
+ */
+async function getMonthUsageByFeature(): Promise<MonthUsageRow[]> {
+  const dailyRows = await db
+    .select({
+      featureKey: aiUsageDaily.featureKey,
+      requests: sql<number>`sum(${aiUsageDaily.requests})`,
+      costUsd: sql<number>`sum(${aiUsageDaily.estimatedCostUsd})`,
+      p95: sql<number>`avg(${aiUsageDaily.p95LatencyMs}) filter (where ${aiUsageDaily.p95LatencyMs} > 0)`,
+    })
+    .from(aiUsageDaily)
+    .where(gte(aiUsageDaily.date, sql`${riyadhMonthStart}`))
+    .groupBy(aiUsageDaily.featureKey);
+  if (dailyRows.length > 0) {
+    return dailyRows.map((r) => ({
+      featureKey: r.featureKey,
+      requests: num(r.requests),
+      costUsd: num(r.costUsd),
+      p95: num(r.p95) > 0 ? num(r.p95) : null,
+    }));
+  }
+
+  const rawRows = await db
+    .select({
+      featureKey: aiUsageLogs.featureKey,
+      requests: sql<number>`count(*)`,
+      costUsd: sql<number>`sum(${aiUsageLogs.estimatedCostUsd})`,
+    })
+    .from(aiUsageLogs)
+    .where(gte(aiUsageLogs.createdAt, sql`${riyadhMonthStartUtc}`))
+    .groupBy(aiUsageLogs.featureKey);
+  return rawRows.map((r) => ({
+    featureKey: r.featureKey,
+    requests: num(r.requests),
+    costUsd: num(r.costUsd),
+    p95: null,
+  }));
+}
 
 /**
  * السجل الفعّال: صفوف ai_staff إن زُرعت، وإلا السجل الافتراضي — نفس
@@ -156,17 +207,8 @@ async function computeTeam(): Promise<AiStaffTeamPayload> {
     .where(gte(aiUsageLogs.createdAt, sql`${riyadhDayStartUtc}`))
     .groupBy(aiUsageLogs.featureKey);
 
-  // الشهر: من الملخص اليومي (لا نلمس الخام لنطاق شهر كامل)
-  const monthRows = await db
-    .select({
-      featureKey: aiUsageDaily.featureKey,
-      requests: sql<number>`sum(${aiUsageDaily.requests})`,
-      costUsd: sql<number>`sum(${aiUsageDaily.estimatedCostUsd})`,
-      p95: sql<number>`avg(${aiUsageDaily.p95LatencyMs}) filter (where ${aiUsageDaily.p95LatencyMs} > 0)`,
-    })
-    .from(aiUsageDaily)
-    .where(gte(aiUsageDaily.date, sql`${riyadhMonthStart}`))
-    .groupBy(aiUsageDaily.featureKey);
+  // الشهر: الملخص اليومي أولًا، والسجل الخام عند غيابه
+  const monthRows = await getMonthUsageByFeature();
 
   // حالة الميزات من البوابة (الإيقاف يمر من هناك بسجل تدقيق — لا مسار موازٍ)
   const configRows = await db
@@ -333,20 +375,11 @@ export async function getAiTeamPublic(): Promise<AiTeamPublicPayload> {
   const roster = await getEffectiveRoster();
   const active = roster.filter((m) => m.status === "active");
 
-  // مجموع أعمال الشهر لكل الفريق من الملخص اليومي — رقم حقيقي واحد
-  const exactKeys = [...new Set(active.flatMap((m) => m.featureKeys))];
-  const prefixes = [...new Set(active.flatMap((m) => m.featureKeyPrefixes))];
-  const conds: SQL[] = [];
-  if (exactKeys.length > 0) conds.push(inArray(aiUsageDaily.featureKey, exactKeys));
-  for (const p of prefixes) conds.push(like(aiUsageDaily.featureKey, `${p}%`));
-  let monthOps = 0;
-  if (conds.length > 0) {
-    const [row] = await db
-      .select({ requests: sql<number>`coalesce(sum(${aiUsageDaily.requests}), 0)` })
-      .from(aiUsageDaily)
-      .where(sql`${gte(aiUsageDaily.date, sql`${riyadhMonthStart}`)} AND (${or(...conds)})`);
-    monthOps = num(row?.requests);
-  }
+  // مجموع أعمال الشهر لكل الفريق — رقم حقيقي واحد (بنفس مسار الاحتياط الخام)
+  const monthRows = await getMonthUsageByFeature();
+  const monthOps = monthRows
+    .filter((row) => active.some((m) => staffOwnsFeatureKey(m, row.featureKey)))
+    .reduce((a, row) => a + row.requests, 0);
 
   const payload: AiTeamPublicPayload = {
     generatedAt: new Date().toISOString(),
