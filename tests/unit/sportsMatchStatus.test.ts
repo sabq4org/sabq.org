@@ -44,7 +44,7 @@ describe("isPlausibleFootballFullTime", () => {
     expect(isPlausibleFootballFullTime({ elapsed: 0, statusCode: "WO" })).toBe(true);
   });
 
-  it("يرفض FT إذا مرّ أقل من 120 دقيقة على الانطلاق حتى لو الساعة 90", () => {
+  it("يرفض ومضة FT المبكرة بالساعة الحائطية ويقبل النهاية الحقيقية في وقتها", () => {
     const now = 1_800_000_000;
     expect(
       isPlausibleFootballFullTime({
@@ -58,10 +58,20 @@ describe("isPlausibleFootballFullTime", () => {
       isPlausibleFootballFullTime({
         elapsed: 90,
         statusCode: "FT",
-        kickoffTs: now - 112 * 60,
+        kickoffTs: now - 60 * 60,
         nowSec: now,
       }),
     ).toBe(false);
+    // نهاية حقيقية عند 108 دقائق تقويمية (ش2 قصير البدل) — تُقبل فورًا لا بعد 120.
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        extra: 3,
+        statusCode: "FT",
+        kickoffTs: now - 108 * 60,
+        nowSec: now,
+      }),
+    ).toBe(true);
     expect(
       isPlausibleFootballFullTime({
         elapsed: 90,
@@ -79,10 +89,24 @@ describe("isPlausibleFootballFullTime", () => {
         elapsed: 90,
         statusCode: "FT",
         latestEventMinute: 87,
-        kickoffTs: now - 112 * 60,
+        kickoffTs: now - 105 * 60,
         nowSec: now,
       }),
     ).toBe(false);
+  });
+
+  it("يقبل نهاية حقيقية بعد تبديل د87 حين تبلغ 112 دقيقة تقويمية (لا انتظار لـ130)", () => {
+    const now = 1_800_000_000;
+    expect(
+      isPlausibleFootballFullTime({
+        elapsed: 90,
+        extra: 4,
+        statusCode: "FT",
+        latestEventMinute: 87,
+        kickoffTs: now - 112 * 60,
+        nowSec: now,
+      }),
+    ).toBe(true);
   });
 
   it("يقبل FT بعد الحائط إن بقي آخر حدث تحت 90", () => {
@@ -193,7 +217,7 @@ describe("mergeLiveMatchProgress — حادثة الدقيقة 47", () => {
     expect(merged.elapsed).toBe(71);
   });
 
-  it("لا تُعلن النهاية عند د87 مع أحداث حيّة حتى بعد 112 دقيقة تقويمية", () => {
+  it("لا تُعلن النهاية عند د87 مع أحداث حيّة قبل 110 دقيقة تقويمية", () => {
     const now = 1_800_000_000;
     const merged = mergeLiveMatchProgress(
       base({ code: "FT", label: "انتهت", live: false, finished: true, elapsed: 90 }),
@@ -203,7 +227,7 @@ describe("mergeLiveMatchProgress — حادثة الدقيقة 47", () => {
         elapsed: 90,
         statusId: 8,
         latestEventMinute: 87,
-        kickoffTs: now - 112 * 60,
+        kickoffTs: now - 105 * 60,
         nowSec: now,
       },
     );
