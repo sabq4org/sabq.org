@@ -358,9 +358,10 @@ export class OpsRoomEngine {
       return;
     }
 
-    // أوقف الإنسان المهمة أثناء التنفيذ؟ نتجاهل المخرج ولا نحفظه
+    // أوقف الإنسان المهمة أثناء التنفيذ، أو انتهت مهلتها وبدأت محاولة أحدث؟
+    // نتجاهل هذا المخرج ولا نحفظه (رقم المحاولة هو رمز الجيل)
     const current = await this.store.getTask(step.id);
-    if (!current || current.status !== "running") {
+    if (!current || current.status !== "running" || current.attempts !== step.attempts) {
       await this.event(mainId, step.id, "system", "coordinator", "stopped", `تجاهل المنسق مخرج ${this.agentName(slug)} لأن المهمة أُوقفت أثناء التنفيذ`);
       return;
     }
@@ -434,7 +435,8 @@ export class OpsRoomEngine {
   private async failStep(mainId: string, step: OpsTaskRow, reason: string, startedAt: number): Promise<void> {
     const durationMs = this.now().getTime() - startedAt;
     const current = await this.store.getTask(step.id);
-    if (!current || current.status !== "running") return;
+    // محاولة أحدث قائمة؟ فشل هذه المحاولة القديمة لا يخصها
+    if (!current || current.status !== "running" || current.attempts !== step.attempts) return;
     const slug = step.agentSlug as OpsAgentSlug;
     if (current.attempts < current.maxAttempts) {
       await this.transition(
