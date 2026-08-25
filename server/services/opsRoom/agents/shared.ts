@@ -54,6 +54,59 @@ export function looseNumber(min = 0, max = 100) {
   });
 }
 
+const ENUM_ALIASES_AR: Record<string, string[]> = {
+  high: ["عال", "مرتفع", "رسمي", "موثوق", "قوي", "شديد", "حرج"],
+  medium: ["متوسط", "معتدل", "مقبول"],
+  low: ["منخفض", "ضعيف", "بسيط"],
+  unknown: ["مجهول", "غير معروف", "غير محدد"],
+  pass: ["مجتاز", "ناجح", "سليم"],
+  needs_fix: ["تعديل", "تصحيح"],
+  blocked: ["موقوف", "محظور", "مرفوض"],
+  ok: ["سليم", "جيد", "مناسب"],
+  weak: ["ضعيف"],
+  missing: ["مفقود", "غائب", "لا يوجد"],
+  allow: ["سماح", "مقبول", "نشر"],
+  review: ["مراجعة", "ملتبس"],
+  block: ["حجب", "حظر"],
+  suitable: ["مناسب", "ملائم"],
+  questionable: ["مشكوك", "غير مؤكد"],
+  unsuitable: ["غير مناسب", "غير ملائم"],
+  no_image: ["لا صورة", "بلا صورة"],
+  now: ["فور", "الآن"],
+  within_15_min: ["15", "ربع ساعة"],
+  next_slot: ["لاحق", "التالي"],
+  hold: ["تأجيل", "انتظار", "إيقاف"],
+  all: ["الكل", "الجميع", "عام"],
+  breaking_subscribers: ["عاجل"],
+  category_followers: ["قسم", "تصنيف"],
+  sports_followers: ["رياض"],
+  info_card: ["بطاقة"],
+  timeline: ["زمني"],
+  comparison: ["مقارنة"],
+  chart: ["رسم", "مخطط"],
+  none: ["لا شيء", "بدون"],
+};
+
+/**
+ * تعداد متسامح: النماذج تكتب «عالٍ؛ مصدر رسمي» بدل high — نطبّع بالمطابقة
+ * الحرفية أولًا ثم بالمرادفات العربية/الإنجليزية، وإلا القيمة الاحتياطية.
+ */
+export function looseEnum<const T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) {
+  return z.unknown().transform((v): T[number] => {
+    const raw = (coerceToString(v) ?? "").trim().toLowerCase();
+    if (!raw) return fallback;
+    const exact = values.find((x) => x.toLowerCase() === raw);
+    if (exact) return exact;
+    const byPrefix = values.find((x) => raw.startsWith(x.toLowerCase()) || raw.includes(x.toLowerCase()));
+    if (byPrefix) return byPrefix;
+    for (const x of values) {
+      const aliases = ENUM_ALIASES_AR[x] ?? [];
+      if (aliases.some((a) => raw.includes(a))) return x;
+    }
+    return fallback;
+  });
+}
+
 /**
  * مصفوفة نصوص متسامحة: النماذج تعيد أحيانًا كائنات {claim:"…"} أو أرقامًا —
  * نطبّع كل عنصر إلى نص بدل رفض المخرج كله (مع حد للطول).

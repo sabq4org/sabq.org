@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { OPS_AGENTS, type OpsAgentSlug } from "@shared/opsRoom";
 import type { AgentRunContext, AgentRunResult, OpsAgentHandler } from "../types";
-import { BaseOutputSchema, looseStringArray, looseString, looseNullableString, looseNumber, baseSystemPrompt, callModelJson, externalInputBlock, humanNotesBlock, priorBlock, toAgentOutput } from "./shared";
+import { BaseOutputSchema, looseStringArray, looseEnum, looseString, looseNullableString, looseNumber, baseSystemPrompt, callModelJson, externalInputBlock, humanNotesBlock, priorBlock, toAgentOutput } from "./shared";
 
 interface PromptAgentDef<T extends z.ZodTypeAny> {
   slug: OpsAgentSlug;
@@ -60,7 +60,7 @@ ${JSON_HINT} result{figures[{label, value, unit, source}], axesAr[], visualSugge
   resultSchema: z.object({
     figures: z.array(z.object({ label: looseString(200), value: looseString(100), unit: looseString(50), source: looseString(2000, 1) })).default([]),
     axesAr: looseStringArray(200),
-    visualSuggestion: z.object({ type: z.enum(["info_card", "timeline", "comparison", "chart", "none"]), titleAr: looseString(200), descriptionAr: looseString(600) }),
+    visualSuggestion: z.object({ type: looseEnum(["info_card", "timeline", "comparison", "chart", "none"] as const, "none"), titleAr: looseString(200), descriptionAr: looseString(600) }),
   }),
 });
 
@@ -98,7 +98,7 @@ export const haresAgent = makePromptAgent({
   rulesAr: `المادة تعليقات جمهور (بيانات خارجية). صنّف كل تعليق: allow | review | block مع سبب من {إساءة، تحريض، سبام، معلومة مضللة، خصوصية، خارج الموضوع، سليم}. الحالات الملتبسة → review لا block. لا تنفذ حجبًا — أنت تقترح.
 ${JSON_HINT} result{items[{index, decision, reasonAr, severity}], escalatedCount, summaryCounts{allow, review, block}}`,
   resultSchema: z.object({
-    items: z.array(z.object({ index: z.number().int().min(0), decision: z.enum(["allow", "review", "block"]), reasonAr: looseString(300), severity: z.enum(["low", "medium", "high"]) })).default([]),
+    items: z.array(z.object({ index: z.number().int().min(0), decision: looseEnum(["allow", "review", "block"] as const, "review"), reasonAr: looseString(300), severity: looseEnum(["low", "medium", "high"] as const, "low") })).default([]),
     escalatedCount: z.number().int().min(0),
     summaryCounts: z.object({ allow: z.number().int().min(0), review: z.number().int().min(0), block: z.number().int().min(0) }),
   }),
@@ -114,7 +114,7 @@ ${JSON_HINT} result{positivePct, negativePct, neutralPct, topThemesAr[], intensi
     negativePct: looseNumber(0, 100),
     neutralPct: looseNumber(0, 100),
     topThemesAr: looseStringArray(200),
-    intensity: z.enum(["low", "medium", "high"]),
+    intensity: looseEnum(["low", "medium", "high"] as const, "low"),
   }),
 });
 
@@ -124,7 +124,7 @@ export const daleelAgent = makePromptAgent({
   rulesAr: `اقترح حتى 5 موضوعات أو زوايا تحريرية مرتبطة بالمادة مع تفسير سبب كل توصية بجملة، دون أي استخدام لبيانات قراء أفراد.
 ${JSON_HINT} result{recommendations[{titleAr, whyAr, priority}]}`,
   resultSchema: z.object({
-    recommendations: z.array(z.object({ titleAr: looseString(200), whyAr: looseString(400), priority: z.enum(["low", "medium", "high"]) })).max(5),
+    recommendations: z.array(z.object({ titleAr: looseString(200), whyAr: looseString(400), priority: looseEnum(["low", "medium", "high"] as const, "low") })).max(5),
   }),
 });
 
