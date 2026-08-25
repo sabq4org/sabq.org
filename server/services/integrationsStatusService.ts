@@ -102,6 +102,19 @@ const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    key: "bevatel",
+    name: "بيفاتل (رسائل OTP باسم SABQ)",
+    nameEn: "Bevatel SMS",
+    category: "messaging",
+    requiredVars: ["BEVATEL_API_KEY"],
+    liveCheck: async () => {
+      const base = (process.env.BEVATEL_API_BASE || "https://sms-api.bevatel.com").replace(/\/+$/, "");
+      await probeFetch(`${base}/users/me`, {
+        headers: { Authorization: `Bearer ${process.env.BEVATEL_API_KEY!}` },
+      });
+    },
+  },
+  {
     key: "sendgrid",
     name: "سيندجريد (البريد)",
     nameEn: "SendGrid",
