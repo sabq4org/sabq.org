@@ -403,7 +403,8 @@ export class OpsRoomEngine {
       const target = byKey.get(result.returnToStepKey);
       const mainRow = (await this.store.getTask(mainId))!;
       if (target && mainRow.autoReturnCount < OPS_MAX_AUTO_RETURNS) {
-        await this.transition(current, "waiting", { type: "agent", id: slug }, `أعاد ${this.agentName(slug)} المادة إلى ${this.agentName(target.agentSlug)}: ${result.returnReasonAr ?? ""}`, basePatch, "needs_changes", { durationMs });
+        // الخطوة العائدة تبدأ بعدّاد محاولات جديد — العودة قرار لا تعثر
+        await this.transition(current, "waiting", { type: "agent", id: slug }, `أعاد ${this.agentName(slug)} المادة إلى ${this.agentName(target.agentSlug)}: ${result.returnReasonAr ?? ""}`, { ...basePatch, attempts: 0 }, "needs_changes", { durationMs });
         await this.store.updateTask(target.id, {
           status: "ready",
           output: null,

@@ -141,7 +141,7 @@ export const OPS_AGENTS: Record<OpsAgentSlug, OpsAgentMeta> = {
   nabd:     { slug: "nabd",     nameAr: "نبض",   roleAr: "مؤشرات تفاعل الجمهور والمشاعر مجمعة", tools: ["model"], forbiddenAr: ["اعتبار المشاعر دليلًا على صحة الخبر"], maxAttempts: 2, timeoutMs: 90_000, avatarUrl: "/ai-team/nabd.jpg" },
   daleel:   { slug: "daleel",   nameAr: "دليل",  roleAr: "اقتراح موضوعات وتوصيات مع تفسير كل توصية", tools: ["model"], forbiddenAr: ["تجاوز سياسات الخصوصية"], maxAttempts: 2, timeoutMs: 90_000, avatarUrl: "/ai-team/daleel.jpg" },
   saai:     { slug: "saai",     nameAr: "ساعي",  roleAr: "تجهيز الإشعار: عنوان ونص وجمهور وتوقيت", tools: ["model"], forbiddenAr: ["إرسال الإشعار"], maxAttempts: 2, timeoutMs: 60_000, avatarUrl: "/ai-team/saai.jpg" },
-  mizan:    { slug: "mizan",    nameAr: "ميزان", roleAr: "فحص الجودة والمصادر والمخاطر بنتيجة منظمة", tools: ["model", "editorial_task"], forbiddenAr: ["التعديل المباشر على النص"], maxAttempts: 2, timeoutMs: 120_000, avatarUrl: "/ai-team/mizan.jpg" },
+  mizan:    { slug: "mizan",    nameAr: "ميزان", roleAr: "فحص الجودة والمصادر والمخاطر بنتيجة منظمة", tools: ["model", "editorial_task"], forbiddenAr: ["التعديل المباشر على النص"], maxAttempts: 2, timeoutMs: 240_000, avatarUrl: "/ai-team/mizan.jpg" },
   omq:      { slug: "omq",      nameAr: "عمق",   roleAr: "تحليل استراتيجي يفصل الحقائق عن الاستنتاج", tools: ["model"], forbiddenAr: ["خلط الحقيقة بالتحليل"], maxAttempts: 2, timeoutMs: 150_000, avatarUrl: "/ai-team/omq.jpg" },
 };
 

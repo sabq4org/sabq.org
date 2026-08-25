@@ -251,6 +251,9 @@ describe("المحرك — الأعطال والحدود", () => {
     expect(crew.qalam.calls.length).toBe(2);
     expect(crew.mizan.calls.length).toBe(2);
     expect((await store.getTask(main.id))!.status).toBe("awaiting_approval");
+    // الخطوة العائدة لا تحرق محاولتها: إعادة التشغيل بعد العودة محاولة أولى جديدة
+    const qa = (await store.listSteps(main.id)).find((s) => s.stepKey === "qa")!;
+    expect(qa.attempts).toBe(1);
   });
 
   it("يحدّ إعادة التكليف البشري ويعيد الخطوات التابعة", async () => {
