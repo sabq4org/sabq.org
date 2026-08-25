@@ -16,6 +16,7 @@ import { fenceExternal, isHttpUrl, sanitizeExternalText } from "../sanitize";
 import {
   BaseOutputSchema,
   looseStringArray,
+  looseEnum,
   looseNumber,
   looseNullableString,
   looseString,
@@ -86,7 +87,7 @@ const VerifyResult = z.object({
   unverifiedClaims: looseStringArray(600),
   contradictions: looseStringArray(600),
   sourceAssessments: z
-    .array(z.object({ title: looseString(300), url: looseString(2000), freshness: looseString(120), reliability: z.enum(["high", "medium", "low", "unknown"]) }))
+    .array(z.object({ title: looseString(300), url: looseString(2000), freshness: looseString(120), reliability: looseEnum(["high", "medium", "low", "unknown"] as const, "unknown") }))
     .default([]),
   sufficient: z.boolean(),
   verdictAr: looseString(800),
@@ -271,12 +272,12 @@ export const qalamAgent: OpsAgentHandler = {
 // ── ميزان: فحص الجودة والمصادر والمخاطر ──
 
 const QaResult = z.object({
-  verdict: z.enum(["pass", "needs_fix", "blocked"]),
+  verdict: looseEnum(["pass", "needs_fix", "blocked"] as const, "blocked"),
   checks: z.object({
-    sources: z.enum(["ok", "weak", "missing"]),
-    headline: z.enum(["ok", "needs_fix"]),
-    content: z.enum(["ok", "needs_fix"]),
-    risk: z.enum(["low", "medium", "high"]),
+    sources: looseEnum(["ok", "weak", "missing"] as const, "weak"),
+    headline: looseEnum(["ok", "needs_fix"] as const, "needs_fix"),
+    content: looseEnum(["ok", "needs_fix"] as const, "needs_fix"),
+    risk: looseEnum(["low", "medium", "high"] as const, "low"),
   }),
   issues: looseStringArray(500),
   corrections: looseStringArray(500),
@@ -355,7 +356,7 @@ export const mizanAgent: OpsAgentHandler = {
 const ImageResult = z.object({
   analyzed: z.boolean(),
   imageUrl: looseNullableString(2000),
-  suitability: z.enum(["suitable", "questionable", "unsuitable", "no_image"]),
+  suitability: looseEnum(["suitable", "questionable", "unsuitable", "no_image"] as const, "questionable"),
   captionAr: looseString(400),
   altTextAr: looseString(300),
   qualityScore: looseNumber(0, 100).nullable().default(null),
@@ -425,8 +426,8 @@ export const adasaAgent: OpsAgentHandler = {
 const PushResult = z.object({
   title: looseString(80, 3),
   body: looseString(160, 3),
-  audience: z.enum(["all", "breaking_subscribers", "category_followers", "sports_followers"]),
-  timing: z.enum(["now", "within_15_min", "next_slot", "hold"]),
+  audience: looseEnum(["all", "breaking_subscribers", "category_followers", "sports_followers"] as const, "all"),
+  timing: looseEnum(["now", "within_15_min", "next_slot", "hold"] as const, "hold"),
   rationaleAr: looseString(400),
   sent: z.literal(false),
 });
