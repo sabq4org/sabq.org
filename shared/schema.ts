@@ -14561,6 +14561,92 @@ export const aiStaff = pgTable("ai_staff", {
 export type AiStaffRow = typeof aiStaff.$inferSelect;
 export type InsertAiStaff = typeof aiStaff.$inferInsert;
 
+// ============================================
+// غرفة عمليات سبق الذكية — سجل مهام الوكلاء (إضافي، معزول، بادئة ops_)
+// ============================================
+// النموذج المشترك (الحالات، الأنواع، المسارات، الصلاحيات) في shared/opsRoom.ts.
+// صف واحد لكل «مهمة رئيسية» (parent_id فارغ) ولكل «خطوة وكيل» (parent_id
+// يشير للرئيسية). الوكلاء لا يتحادثون — يتبادلون المخرجات المنظمة هنا.
+// لا يوجد أي عمود نشر/إرسال: القرار النهائي بشري دائمًا.
+export const opsTasks = pgTable("ops_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentId: varchar("parent_id"),                       // null = مهمة رئيسية
+  title: varchar("title", { length: 300 }).notNull(),
+  description: text("description").default("").notNull(),
+  taskType: varchar("task_type", { length: 32 }).notNull(),      // OPS_TASK_TYPES
+  priority: varchar("priority", { length: 16 }).default("normal").notNull(),
+  status: varchar("status", { length: 32 }).default("new").notNull(), // OPS_TASK_STATUSES
+  origin: varchar("origin", { length: 16 }).default("manual").notNull(),
+  createdById: varchar("created_by_id"),
+  articleId: varchar("article_id"),
+  radarItemId: varchar("radar_item_id"),
+  // خطوة الوكيل
+  agentSlug: varchar("agent_slug", { length: 32 }),
+  stepKey: varchar("step_key", { length: 64 }),
+  stepIndex: integer("step_index").default(0).notNull(),
+  dependsOn: jsonb("depends_on").$type<string[]>().default([]).notNull(), // مفاتيح خطوات
+  approvalGate: boolean("approval_gate").default(false).notNull(),
+  // الرئيسية
+  routeType: varchar("route_type", { length: 32 }),
+  currentAgentSlug: varchar("current_agent_slug", { length: 32 }),
+  participants: jsonb("participants").$type<string[]>().default([]).notNull(),
+  // البيانات
+  input: jsonb("input").$type<Record<string, unknown>>().default({}).notNull(),
+  output: jsonb("output").$type<Record<string, unknown> | null>(),
+  sources: jsonb("sources").$type<{ title: string; url: string }[]>().default([]).notNull(),
+  confidence: real("confidence"),
+  riskLevel: varchar("risk_level", { length: 16 }).default("low").notNull(),
+  // التنفيذ
+  attempts: integer("attempts").default(0).notNull(),
+  maxAttempts: integer("max_attempts").default(2).notNull(),
+  timeoutMs: integer("timeout_ms").default(90000).notNull(),
+  retryAfter: timestamp("retry_after"),
+  lastError: text("last_error"),
+  failedAtAgent: varchar("failed_at_agent", { length: 32 }),
+  reassignCount: integer("reassign_count").default(0).notNull(),
+  autoReturnCount: integer("auto_return_count").default(0).notNull(),
+  humanNote: text("human_note"),
+  // الاعتماد البشري
+  approvedById: varchar("approved_by_id"),
+  approvedAt: timestamp("approved_at"),
+  approvalNote: text("approval_note"),
+  humanEdited: boolean("human_edited").default(false).notNull(),
+  // الأوقات
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  dueAt: timestamp("due_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ops_tasks_parent").on(table.parentId),
+  index("idx_ops_tasks_status").on(table.status, table.updatedAt),
+  index("idx_ops_tasks_created").on(table.createdAt),
+]);
+
+// سجل أحداث زمني append-only لكل مهمة — يُعرض كملخص تشغيلي قابل للتدقيق،
+// لا رسائل داخلية ولا أسرار ولا سلسلة تفكير النموذج.
+export const opsTaskEvents = pgTable("ops_task_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull(),                 // المهمة الرئيسية
+  stepId: varchar("step_id"),
+  actorType: varchar("actor_type", { length: 16 }).notNull(), // agent | human | system
+  actor: varchar("actor", { length: 128 }).notNull(),         // agent slug أو معرّف المستخدم
+  eventType: varchar("event_type", { length: 32 }).notNull(), // OPS_EVENT_TYPES
+  statusFrom: varchar("status_from", { length: 32 }),
+  statusTo: varchar("status_to", { length: 32 }),
+  messageAr: text("message_ar").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ops_task_events_task").on(table.taskId, table.createdAt),
+]);
+
+export type OpsTaskRow = typeof opsTasks.$inferSelect;
+export type InsertOpsTask = typeof opsTasks.$inferInsert;
+export type OpsTaskEventRow = typeof opsTaskEvents.$inferSelect;
+export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
+
 // ============================================================================
 // المنصة المركزية لتوقعات سبق الرياضي — Prediction Core
 // ============================================================================

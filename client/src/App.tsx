@@ -463,6 +463,7 @@ const AIManagementDashboard = lazy(() => retryImport(() => import("@/pages/admin
 const AiHubPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiHub")));
 const AiStaffPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff")));
 const AiStaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff/Profile")));
+const OpsRoomPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpsRoom")));
 const IntegrationsSettingsPage = lazy(() => retryImport(() => import("@/pages/dashboard/IntegrationsSettings")));
 const SystemsCatalogPage = lazy(() => retryImport(() => import("@/pages/dashboard/SystemsCatalogPage")));
 const ImageStudio = lazy(() => retryImport(() => import("@/pages/ifox/ImageStudio")));
@@ -795,6 +796,7 @@ function Router() {
         <Route path="/admin/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
         <Route path="/admin/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
         <Route path="/admin/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
+        <Route path="/admin/ops-room">{() => <LazyRoute component={OpsRoomPage} />}</Route>
 
         <Route path="/reporter/:slug">{() => <LazyRoute component={ReporterProfile} />}</Route>
         <Route path="/author/:name">{() => <LazyRoute component={AuthorArticlesPage} />}</Route>
@@ -1051,6 +1053,7 @@ function Router() {
         <Route path="/dashboard/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
         <Route path="/dashboard/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
         <Route path="/dashboard/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
+        <Route path="/dashboard/ops-room">{() => <LazyRoute component={OpsRoomPage} />}</Route>
         <Route path="/dashboard/integrations">{() => <LazyRoute component={IntegrationsSettingsPage} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         

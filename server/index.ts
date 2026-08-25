@@ -1727,6 +1727,9 @@ if (!(globalThis as any).__sabqServer) {
             startAiProviderHealthCheckJob();
             const { startAiUsageRollupJob } = await import("./jobs/aiUsageRollup");
             startAiUsageRollupJob();
+            // غرفة عمليات سبق الذكية — نبضة التوزيع (تجريبية، القائد فقط)
+            const { startOpsRoomJob } = await import("./jobs/opsRoomJob");
+            startOpsRoomJob();
           } catch (error) {
             console.error("[Server] Error starting AI Hub jobs:", error);
           }
