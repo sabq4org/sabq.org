@@ -312,7 +312,12 @@ export const mizanAgent: OpsAgentHandler = {
       }),
     ]);
     const riskFlags = [...new Set([...precheck.riskFlags, ...review.riskFlags])];
-    const corrections = [...new Set([...review.editorNotes, ...precheck.editorNotes])].filter(Boolean);
+    // تصويب = ملاحظة تطلب فعلًا؛ ملاحظات الإطراء («منضبط»، «لا يحتاج») ليست تصويبات
+    const ACTIONABLE = /(خطأ|تصحيح|صحّح|صحح|يجب|ينبغي|غير صحيح|غير دقيق|استبدل|احذف|أضف|أعد صياغة|تعارض|ناقص|مفقود|لا يتطابق|تناقض)/;
+    const NOT_ACTIONABLE = /(منضبط|سليم|لا يحتاج|لا حاجة|كما هو|متوافق|مطابق|جيد|لا تعديل)/;
+    const corrections = [...new Set([...review.editorNotes, ...precheck.editorNotes])]
+      .filter(Boolean)
+      .filter((n) => ACTIONABLE.test(n) && !NOT_ACTIONABLE.test(n));
     const highRisk = riskFlags.some((f) => HIGH_RISK_PATTERN.test(f)) || (ctx.main.riskLevel === "high" && riskFlags.length > 0);
     const sourcesCheck = !verify ? "missing" : verify.confirmedFacts.length === 0 ? "missing" : verify.sourceAssessments.some((s) => s.reliability === "high") ? "ok" : "weak";
     const contentNeedsFix = corrections.length > 0;
