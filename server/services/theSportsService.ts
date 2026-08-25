@@ -50,6 +50,7 @@ export const TS_COMPETITION_IDS: Record<string, string> = {
   // متحقَّق حيًّا من competition/additional/list (2026-07-04) — لا يُخلط مع
   // معرّف النخبة الآسيوية القريب شكلًا (9dn1m1ghjpmoepl):
   "kings-cup": "9dn1m1gh44wmoep",           // كأس خادم الحرمين الشريفين (كأس الملك)
+  // intercontinental-cup: بانتظار معرّف TheSports الرسمي (API-Football 1168 / SportMonks 1452 جاهزان)
 };
 
 // حالات TheSports: 1=لم تبدأ، 2=ش1، 3=استراحة، 4=ش2، 5/6=وقت إضافي، 7=ركلات،

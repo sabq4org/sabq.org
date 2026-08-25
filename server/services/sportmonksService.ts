@@ -1663,6 +1663,7 @@ const SM_PRIORITY_LEAGUE_IDS = new Set([
   950, // King's Cup
   953, // Crown Prince Cup
   1085, // AFC Champions League Elite
+  1452, // FIFA Intercontinental Cup — فئة 4 فتُستبعد بلا هذا الاستثناء
 ]);
 
 export interface SmTodayTeam {

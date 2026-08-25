@@ -341,6 +341,8 @@ export const SPL_COMPETITION_AR: Record<string, string> = {
   "World Cup": "كأس العالم",
   "Club World Cup": "كأس العالم للأندية",
   "FIFA Club World Cup": "كأس العالم للأندية",
+  "FIFA Intercontinental Cup": "كأس الإنتركونتيننتال",
+  "Intercontinental Cup": "كأس الإنتركونتيننتال",
   "Confederations Cup": "كأس القارات",
   "UEFA Champions League": "دوري أبطال أوروبا",
   "Champions League": "دوري الأبطال",
