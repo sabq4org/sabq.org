@@ -68,6 +68,7 @@ import {
   Headphones,
   Briefcase,
   Bot,
+  Radio,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -653,6 +654,17 @@ export const navConfig: NavItem[] = [
     path: "/dashboard/ai/staff",
     icon: Bot,
     roles: ["admin", "system_admin", "editor", "analyst"],
+  },
+
+  // ===== غرفة عمليات سبق الذكية (تجريبية) =====
+  {
+    id: "ops_room",
+    labelKey: "nav.ops_room",
+    labelAr: "غرفة العمليات الذكية",
+    path: "/dashboard/ops-room",
+    icon: Radio,
+    roles: ["admin", "system_admin", "editor"],
+    permissions: ["ops_room.view"],
   },
 
   // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====

@@ -23,6 +23,7 @@ import focusSessionsRouter from "./focusSessions";
 import edgeMetaRouter from "./edgeMeta";
 import aiPublicStatsRouter from "./aiPublicStats";
 import aiStaffRouter from "./aiStaff";
+import opsRoomRouter from "./opsRoom";
 import articleEditLocksRouter from "./articleEditLocks";
 import opinionTicketsRouter from "./opinionTickets";
 import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
@@ -128,6 +129,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(edgeMetaRouter);
   app.use(aiPublicStatsRouter);
   app.use(aiStaffRouter);
+  app.use(opsRoomRouter);
   app.use(articleEditLocksRouter);
   app.use(opinionTicketsRouter);
   app.use(opinionAuthorWorkspaceRouter);

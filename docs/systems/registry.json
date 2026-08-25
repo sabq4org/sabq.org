@@ -956,6 +956,29 @@
         "scripts/seed-ai-staff.ts",
         "client/public/ai-team/**"
       ]
+    },
+    {
+      "id": "ops-room",
+      "nameAr": "غرفة عمليات سبق الذكية",
+      "nameEn": "AI Ops Room",
+      "status": "experimental",
+      "category": "ai",
+      "summary": "نموذج تجريبي معزول: منسق مهام مركزي يوزّع مهامًا تحريرية حقيقية على وكلاء فريق سبق الذكي عبر سجل مهام ومخرجات منظمة وبوابات اعتماد بشري — لا نشر ولا إرسال.",
+      "docPath": "docs/systems/ops-room/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/ai-staff/SYSTEM.md",
+        "docs/systems/ai-hub/SYSTEM.md",
+        "docs/editorial-ai-unified-system-plan-2026-08-03.md"
+      ],
+      "pathGlobs": [
+        "shared/opsRoom.ts",
+        "server/services/opsRoom/**",
+        "server/routes/opsRoom.ts",
+        "server/jobs/opsRoomJob.ts",
+        "scripts/seed-ops-room.ts",
+        "client/src/pages/dashboard/OpsRoom/**",
+        "tests/unit/opsRoomEngine.test.ts"
+      ]
     }
   ]
 }
