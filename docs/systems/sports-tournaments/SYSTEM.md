@@ -1,6 +1,6 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-08-22 (حذف الهدف الملغى من أحداث المركز بعد تصحيح النتيجة) | المالك: sports
+> آخر مراجعة: 2026-08-25 (كأس الإنتركونتيننتال: API-Football 1168 / SportMonks 1452) | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
@@ -213,6 +213,13 @@
   - **Sabq Android (`android-native/app/`):** دعم `RsPlayerNationality` وشارة الكابتن C في `RoshnTeamScreen.kt`.
   - **VARA iOS (`sports app ios/`):** دعم `SpPlayerNationality` وشارة الكابتن C في `TeamPlayerPages.swift`.
   - **VARA Android (`android-native/vara/`):** دعم `TpPlayerNationality` وشارة الكابتن C في `TeamPlayerScreens.kt`.
+
+## كأس الإنتركونتيننتال 2026 (FIFA Intercontinental Cup)
+- **ليست** كأس العالم للأندية الموسّعة (`club-world-cup` / API-Football 15).
+- العمود الفقري: API-Football دوري **1168** موسم **2026** (أول مباراة 26 أغسطس: الأهلي × أوكلاند). تغطية الأحداث/التشكيلات لـ2026 ما زالت `false` حتى تنطلق المباريات.
+- الإثراء: SportMonks دوري **1452** (فئة 4 — يجب أن يبقى في `SM_PRIORITY_LEAGUE_IDS` وإلا يُستبعد من لوحة اليوم).
+- TheSports: بلا معرّف بعد. النتيجة اللحظية تتراجع SportMonks ← API-Football حتى يزوّدنا المزوّد بالـuuid ويُضاف إلى `TS_COMPETITION_IDS`.
+- slug البوابة: `/sports/intercontinental-cup`.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف

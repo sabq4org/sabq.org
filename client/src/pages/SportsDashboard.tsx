@@ -80,7 +80,7 @@ const byRecency = (a: ArticleWithDetails, b: ArticleWithDetails) => articleTime(
 // الدنيا) يبقى حاضرًا في نبض المباشر ولوحة النتائج بترتيب أهمية — لكن لا يتصدّر
 // البوابة أبدًا، فلا تطغى مباراة ثانوية على الواجهة.
 const SPOTLIGHT_MARQUEE_SLUGS = new Set([
-  "world-cup", "club-world-cup", "afc-champions-league",
+  "world-cup", "club-world-cup", "intercontinental-cup", "afc-champions-league",
   "champions-league", "europa-league",
   "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1",
   "gulf-cup", "gulf-club-champions",

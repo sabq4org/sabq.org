@@ -186,6 +186,7 @@ export const COMP_ACCENTS: Record<string, string> = {
   "world-cup": "#0e7c4a",
   "afc-champions-league": "#1258a8",
   "club-world-cup": "#0f766e",
+  "intercontinental-cup": "#0b6e5a",
   // أوروبي
   "premier-league": "#5b2d8f",
   "la-liga": "#c22f2f",
