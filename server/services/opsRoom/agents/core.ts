@@ -275,7 +275,7 @@ const QaResult = z.object({
   verdict: looseEnum(["pass", "needs_fix", "blocked"] as const, "blocked"),
   checks: z.object({
     sources: looseEnum(["ok", "weak", "missing"] as const, "weak"),
-    headline: looseEnum(["ok", "needs_fix"] as const, "weak"),
+    headline: looseEnum(["ok", "needs_fix"] as const, "needs_fix"),
     content: looseEnum(["ok", "needs_fix"] as const, "needs_fix"),
     risk: looseEnum(["low", "medium", "high"] as const, "low"),
   }),
