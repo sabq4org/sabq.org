@@ -117,6 +117,10 @@ nonisolated enum ArticleHtmlParser {
             return parseList(scanner: &scanner, ordered: tag.name == "ol")
         }
 
+        if tag.name == "table" {
+            return parseTable(scanner: &scanner, tag: tag)
+        }
+
         if tag.name == "p" {
             let inner = scanner.consumeContainer()
             if let img = tryExtractInlineImage(inner) { return img }
@@ -144,6 +148,43 @@ nonisolated enum ArticleHtmlParser {
             if !runsAreEmpty(runs) { items.append(runs) }
         }
         return .list(ordered: ordered, items: items)
+    }
+
+    /// `<table class="sabq-table"><tbody><tr><th>…</th></tr><tr><td>…</td></tr>…`
+    /// كان الجدول يسقط إلى «وسم مجهول» فتتناثر خلاياه كفقرات مستقلة.
+    /// الصف الأول يُعدّ رأسًا إذا كانت كل خلاياه <th>. colgroup/thead/tbody تُتجاوز.
+    private static func parseTable(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock? {
+        let inner = scanner.consumeContainer()
+        let cardStyle = tag.classes.contains("sabq-table--card")
+        var header: [[InlineRun]]? = nil
+        var rows: [[[InlineRun]]] = []
+        var s = HTMLScanner(input: inner)
+        while !s.isAtEnd {
+            s.skipWhitespace()
+            guard let t = s.peekTag() else { s.advance(1); continue }
+            guard t.name == "tr", !t.isClosing else { s.consumeTag(); continue }
+            let rowHTML = s.consumeContainer()
+            var cells: [[InlineRun]] = []
+            var allHeader = true
+            var c = HTMLScanner(input: rowHTML)
+            while !c.isAtEnd {
+                c.skipWhitespace()
+                guard let ct = c.peekTag() else { c.advance(1); continue }
+                guard (ct.name == "td" || ct.name == "th"), !ct.isClosing else { c.consumeTag(); continue }
+                if ct.name == "td" { allHeader = false }
+                // فقرات متعددة داخل الخلية → أسطر
+                let cellHTML = c.consumeContainer().replacingOccurrences(of: "</p><p", with: "<br><p")
+                cells.append(parseInlineRuns(cellHTML))
+            }
+            guard !cells.isEmpty else { continue }
+            if allHeader, header == nil, rows.isEmpty {
+                header = cells
+            } else {
+                rows.append(cells)
+            }
+        }
+        guard header != nil || !rows.isEmpty else { return nil }
+        return .table(header: header, rows: rows, cardStyle: cardStyle)
     }
 
     private static func parseImageGallery(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {

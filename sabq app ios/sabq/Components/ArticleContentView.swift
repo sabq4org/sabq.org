@@ -63,6 +63,8 @@ struct ArticleContentView: View {
             videoCard(provider: provider, embedURL: embedURL, sourceURL: sourceURL)
         case .whatsappCta(_, let phrase, let url):
             whatsappCtaCard(phrase: phrase, url: url)
+        case .table(let header, let rows, let cardStyle):
+            tableView(header: header, rows: rows, cardStyle: cardStyle)
         case .divider:
             Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
         }
@@ -195,6 +197,72 @@ struct ArticleContentView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Table
+
+    /// جدول أصلي: صف رؤوس مظلّل، خطوط شعرية بين الصفوف، وأعمدة متساوية.
+    /// إن ضاقت الشاشة عن (عدد الأعمدة × الحد الأدنى) يتحوّل إلى تمرير أفقي
+    /// عبر ViewThatFits بدل هرس النص.
+    private func tableView(header: [[InlineRun]]?, rows: [[[InlineRun]]], cardStyle: Bool) -> some View {
+        let columnCount = max(header?.count ?? 0, rows.map(\.count).max() ?? 0, 1)
+        let minColumnWidth: CGFloat = 84
+        let grid = VStack(alignment: .leading, spacing: 0) {
+            if let header {
+                tableRow(header, columnCount: columnCount, minColumnWidth: minColumnWidth,
+                         isHeader: true, cardStyle: cardStyle)
+                    .background(SabqTheme.paleFill)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { idx, cells in
+                if header != nil || idx > 0 {
+                    Divider().overlay(SabqTheme.outline.opacity(0.6))
+                }
+                tableRow(cells, columnCount: columnCount, minColumnWidth: minColumnWidth,
+                         isHeader: false, cardStyle: cardStyle)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.8), lineWidth: 1)
+        )
+
+        return ViewThatFits(in: .horizontal) {
+            grid.frame(maxWidth: .infinity)
+            ScrollView(.horizontal, showsIndicators: false) {
+                grid.frame(width: minColumnWidth * CGFloat(columnCount) + 20)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tableRow(
+        _ cells: [[InlineRun]],
+        columnCount: Int,
+        minColumnWidth: CGFloat,
+        isHeader: Bool,
+        cardStyle: Bool
+    ) -> some View {
+        let cellSize = CGFloat(max(13, fontSize - 2))
+        return HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { col in
+                let runs = col < cells.count ? cells[col] : []
+                let emphasised = isHeader || (cardStyle && col == 0)
+                renderText(runs: runs, baseSize: cellSize, baseWeight: emphasised ? .bold : .regular)
+                    .foregroundStyle(emphasised ? SabqTheme.ink : SabqTheme.ink.opacity(0.92))
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minWidth: minColumnWidth, maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
+                    .background(cardStyle && col == 0 && !isHeader ? SabqTheme.paleFill.opacity(0.6) : Color.clear)
+                if col < columnCount - 1 {
+                    Divider().overlay(SabqTheme.outline.opacity(0.6))
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func quoteView(_ runs: [InlineRun], attribution: [InlineRun]?) -> some View {
