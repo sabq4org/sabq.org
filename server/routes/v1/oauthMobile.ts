@@ -459,7 +459,8 @@ router.post("/auth/phone/send", phoneSendLimiter, async (req: Request, res: Resp
       });
     }
     const result = await varaSendOtp(e164);
-    return res.status(result.success ? 200 : 502).json(result);
+    // 422 لا 502 — كي تصل رسالة السبب الفعلية للتطبيق بدل «الخادم غير متاح».
+    return res.status(result.success ? 200 : 422).json(result);
   } catch (error) {
     console.error("[v1 OAuth] /auth/phone/send error:", error);
     return res.status(500).json({ success: false, message: "تعذّر إرسال رمز التحقق" });

@@ -1003,7 +1003,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
       const result = await varaSendOtp(e164);
-      return res.status(result.success ? 200 : 502).json(result);
+      // 422 لا 502: العميل يترجم 502 إلى «الخادم غير متاح» ويخفي السبب الحقيقي
+      // (رفض المزوّد، حد الإرسال...). الرسالة في result.message.
+      return res.status(result.success ? 200 : 422).json(result);
     } catch (error) {
       console.error("❌ /api/auth/phone/send error:", error);
       return res.status(500).json({ message: "تعذّر إرسال رمز التحقق" });
