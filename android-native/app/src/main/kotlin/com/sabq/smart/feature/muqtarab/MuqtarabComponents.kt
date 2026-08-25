@@ -426,6 +426,14 @@ private fun MuqBlock(block: BlockNode, accent: Color) {
         is BlockNode.WhatsAppCta -> {
             MuqLinkCard(label = block.phrase, url = block.url, accent = Color(0xFF25D366))
         }
+        is BlockNode.Table -> {
+            com.sabq.smart.ui.components.ArticleTableBlock(
+                block = block,
+                fontSize = 16f,
+                lineSpacing = 6f,
+                useSerif = false,
+            )
+        }
         BlockNode.Divider -> {
             Box(
                 modifier = Modifier

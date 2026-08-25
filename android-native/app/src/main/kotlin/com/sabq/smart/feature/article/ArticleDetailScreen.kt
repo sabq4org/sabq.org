@@ -1557,6 +1557,14 @@ private fun BodyBlock(
             is BlockNode.WhatsAppCta -> {
                 WhatsAppCtaCard(phrase = block.phrase, url = block.url)
             }
+            is BlockNode.Table -> {
+                com.sabq.smart.ui.components.ArticleTableBlock(
+                    block = block,
+                    fontSize = fontSize,
+                    lineSpacing = lineSpacing,
+                    useSerif = useSerif,
+                )
+            }
             is BlockNode.Divider -> {
                 HorizontalDivider(
                     color = SabqTheme.colors.outline.copy(alpha = 0.5f)

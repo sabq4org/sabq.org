@@ -23,6 +23,9 @@ nonisolated enum ArticleBlock {
     case videoEmbed(provider: VideoProvider, embedURL: URL, sourceURL: URL?)
     /// زر تواصل واتساب من المحرر: `<div data-whatsapp-cta data-phone …>`
     case whatsappCta(phone: String, phrase: String, url: URL)
+    /// جدول من المحرر (`<table class="sabq-table">`). header: صف الرؤوس
+    /// (<th>) إن وُجد؛ rows: بقية الصفوف؛ cardStyle: مظهر «بطاقة» للعمودين.
+    case table(header: [[InlineRun]]?, rows: [[[InlineRun]]], cardStyle: Bool)
     case divider
 }
 

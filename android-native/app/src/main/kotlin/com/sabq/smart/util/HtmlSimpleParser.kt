@@ -13,6 +13,12 @@ sealed interface BlockNode {
     data class TwitterEmbed(val tweetUrl: String) : BlockNode
     data class VideoEmbed(val provider: VideoProvider, val embedUrl: String, val sourceUrl: String?) : BlockNode
     data class WhatsAppCta(val phone: String, val phrase: String, val url: String) : BlockNode
+    /** جدول من المحرر (`<table class="sabq-table">`): header صف الرؤوس <th> إن وُجد، rows البقية. */
+    data class Table(
+        val header: List<List<InlineRun>>?,
+        val rows: List<List<List<InlineRun>>>,
+        val cardStyle: Boolean,
+    ) : BlockNode
     object Divider : BlockNode
 }
 
@@ -250,6 +256,10 @@ object HtmlSimpleParser {
             return parseList(scanner, ordered = tag.name == "ol")
         }
 
+        if (tag.name == "table") {
+            return parseTable(scanner, tag)
+        }
+
         if (tag.name == "p") {
             val inner = scanner.consumeContainer()
             val img = tryExtractInlineImage(inner)
@@ -280,6 +290,44 @@ object HtmlSimpleParser {
             }
         }
         return BlockNode.ListBlock(ordered, items)
+    }
+
+    // كان الجدول يسقط إلى «وسم مجهول» فتتناثر خلاياه كفقرات مستقلة.
+    // الصف الأول رأسٌ إذا كانت كل خلاياه <th>؛ colgroup/thead/tbody تُتجاوز.
+    private fun parseTable(scanner: HTMLScanner, tag: HTMLTag): BlockNode? {
+        val inner = scanner.consumeContainer()
+        val cardStyle = tag.classes.contains("sabq-table--card")
+        var header: List<List<InlineRun>>? = null
+        val rows = mutableListOf<List<List<InlineRun>>>()
+        val s = HTMLScanner(inner)
+        while (!s.isAtEnd()) {
+            s.skipWhitespace()
+            val t = s.peekTag()
+            if (t == null) { s.advance(1); continue }
+            if (t.name != "tr" || t.isClosing) { s.consumeTag(); continue }
+            val rowHtml = s.consumeContainer()
+            val cells = mutableListOf<List<InlineRun>>()
+            var allHeader = true
+            val c = HTMLScanner(rowHtml)
+            while (!c.isAtEnd()) {
+                c.skipWhitespace()
+                val ct = c.peekTag()
+                if (ct == null) { c.advance(1); continue }
+                if ((ct.name != "td" && ct.name != "th") || ct.isClosing) { c.consumeTag(); continue }
+                if (ct.name == "td") allHeader = false
+                // فقرات متعددة داخل الخلية → أسطر
+                val cellHtml = c.consumeContainer().replace("</p><p", "<br><p")
+                cells.add(parseInlineRuns(cellHtml))
+            }
+            if (cells.isEmpty()) continue
+            if (allHeader && header == null && rows.isEmpty()) {
+                header = cells
+            } else {
+                rows.add(cells)
+            }
+        }
+        if (header == null && rows.isEmpty()) return null
+        return BlockNode.Table(header = header, rows = rows, cardStyle = cardStyle)
     }
 
     private fun parseImageGallery(scanner: HTMLScanner, tag: HTMLTag): BlockNode {
