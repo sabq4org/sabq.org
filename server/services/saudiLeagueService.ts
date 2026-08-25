@@ -161,7 +161,7 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 17, slug: "afc-champions-league", name: "دوري أبطال آسيا للنخبة", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   { id: 15, slug: "club-world-cup", name: "كأس العالم للأندية", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   // كأس الإنتركونتيننتال السنوية (أبطال القارات) — ليست كأس العالم للأندية الموسّعة.
-  // API-Football 1168 · SportMonks 1452. TheSports بلا معرّف بعد (يُطلب من المزوّد).
+  // API-Football 1168 · SportMonks 1452 · TheSports kjw2r09h26krz84.
   { id: 1168, slug: "intercontinental-cup", name: "كأس الإنتركونتيننتال", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "world" },
   // الدوريات الأوروبية الكبرى الخمسة — تغطية كاملة (ترتيب/هدّافون/تشكيلات/أحداث).
   { id: 39, slug: "premier-league", name: "الدوري الإنجليزي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
