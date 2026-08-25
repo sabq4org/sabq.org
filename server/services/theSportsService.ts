@@ -50,7 +50,8 @@ export const TS_COMPETITION_IDS: Record<string, string> = {
   // متحقَّق حيًّا من competition/additional/list (2026-07-04) — لا يُخلط مع
   // معرّف النخبة الآسيوية القريب شكلًا (9dn1m1ghjpmoepl):
   "kings-cup": "9dn1m1gh44wmoep",           // كأس خادم الحرمين الشريفين (كأس الملك)
-  // intercontinental-cup: بانتظار معرّف TheSports الرسمي (API-Football 1168 / SportMonks 1452 جاهزان)
+  // من دعم TheSports (2026-08-25) — مباراة التحقق: الأهلي × أوكلاند 26 أغسطس 2026
+  "intercontinental-cup": "kjw2r09h26krz84", // كأس الإنتركونتيننتال (موسم 2026: y39mp1h33kzmojx)
 };
 
 // حالات TheSports: 1=لم تبدأ، 2=ش1، 3=استراحة، 4=ش2، 5/6=وقت إضافي، 7=ركلات،
