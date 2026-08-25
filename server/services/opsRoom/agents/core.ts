@@ -171,10 +171,13 @@ function materialFrom(ctx: AgentRunContext): string {
 }
 
 async function editorialDraft(ctx: AgentRunContext, agent: "sabbaq" | "murasil", instructions: string): Promise<AgentRunResult> {
-  await ctx.logTool("editorial_task", { agent, type: "edit" });
+  // العاجل قصير بطبيعته: «نسخة التطبيق» تُخرج 150–200 كلمة بلا حارس نسبة الطول
+  // الذي يرفض مخرج «حرّر» إن قصر عن نصف المادة (editorialOutputGuards).
+  const type = agent === "sabbaq" ? ("app_version" as const) : ("edit" as const);
+  await ctx.logTool("editorial_task", { agent, type });
   const verificationContext = verificationContextFrom(ctx);
   const res = await runEditorialTask({
-    type: "edit",
+    type,
     material: `${materialFrom(ctx)}\n\n${verificationContext}`.slice(0, 60_000),
     instructions: `${instructions}${ctx.humanNotes.length ? `\nملاحظات المحرر البشري: ${ctx.humanNotes.join(" | ")}` : ""}`.slice(0, 2_000),
     verificationContext: verificationContext.slice(0, 30_000) || undefined,
