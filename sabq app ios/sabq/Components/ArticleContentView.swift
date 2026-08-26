@@ -230,7 +230,7 @@ struct ArticleContentView: View {
         return ViewThatFits(in: .horizontal) {
             grid.frame(maxWidth: .infinity)
             ScrollView(.horizontal, showsIndicators: false) {
-                grid.frame(width: minColumnWidth * CGFloat(columnCount) + 20)
+                grid.frame(width: minColumnWidth * CGFloat(columnCount) + CGFloat(columnCount - 1))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -253,9 +253,11 @@ struct ArticleContentView: View {
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(minWidth: minColumnWidth, maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 9)
+                    // الحشو داخل الحد الأدنى — وإلا صار عرض العمود الفعلي
+                    // min+16 فيفشل شرط «يتسع» في ViewThatFits ويُقصّ الطرفان.
+                    .frame(minWidth: minColumnWidth, maxWidth: .infinity, alignment: .leading)
                     .background(cardStyle && col == 0 && !isHeader ? SabqTheme.paleFill.opacity(0.6) : Color.clear)
                 if col < columnCount - 1 {
                     Divider().overlay(SabqTheme.outline.opacity(0.6))
