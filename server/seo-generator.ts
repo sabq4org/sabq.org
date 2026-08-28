@@ -32,10 +32,13 @@ interface ArticleInput {
 }
 
 // Configuration: Primary and fallback models per language (Migrated to gpt-5.1)
-const SEO_MODEL_CONFIG = {
+type SeoModelRef = { provider: "anthropic" | "openai" | "gemini"; model: string };
+const SEO_MODEL_CONFIG: Record<"ar" | "en" | "ur", { primary: SeoModelRef; fallback: SeoModelRef }> = {
+  // العربية: gpt-5.1 أولًا — Sonnet كان يجعل /api/seo/generate أبطأ فرع في
+  // «التوليد الشامل» (9.1ث حيًا) بينما بقية الفروع 1–5ث (تشخيص 2026-08-28).
   ar: {
-    primary: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
-    fallback: { provider: "openai" as const, model: "gpt-5.1" },
+    primary: { provider: "openai" as const, model: "gpt-5.1" },
+    fallback: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
   },
   en: {
     primary: { provider: "openai" as const, model: "gpt-5.1" },
