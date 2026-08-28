@@ -51,6 +51,7 @@ export interface WeeklyStory {
 
 export interface WeeklySpendingStory {
   weekLabelAr: string;
+  weeks: string[];
   periodStart: string;
   periodEnd: string;
   kpis: WeeklyKpi[];
@@ -87,6 +88,8 @@ export interface EconomySnapshot {
     headline: string;
     stories: WeeklyStory[];
     kpis: WeeklyKpi[];
+    topSectors: Array<{ en: string; ar: string; value: number; share: number; changePct: number }>;
+    totalCount: number;
   } | null;
   moneySupply: { asOf: string; m3Billion: number | null; m3WeeklyChangePct: number | null; m3PeriodChangePct: number | null } | null;
   samaNews: SamaNewsItem[];

@@ -68,7 +68,8 @@ export function WeeklySpendingModule({ className }: { className?: string }) {
   const sectorMax = Math.max(...leaves.map((s) => Math.abs(sectorVal(s))), 1);
   const cityMax = Math.max(...cities.map((c) => Math.abs(citySort === "value" ? c.value : citySort === "change" ? c.changePct : c.avgTicket)), 1);
   const selected = selectedSector ? data.sectors.find((s) => s.en === selectedSector) : null;
-  const trend = (selected ?? { series: data.totals.series }).series.map((v, i) => ({ w: `الأسبوع ${i + 1}`, v }));
+  // الزمن في RTL يجري من اليمين إلى اليسار: الأقدم يمينًا — فنعكس الترتيب بدل reversed
+  const trend = (selected ?? { series: data.totals.series }).series.map((v, i) => ({ w: data.weeks[i] ?? `الأسبوع ${i + 1}`, v })).reverse();
   const kpiUp = (k: WeeklySpendingStory["kpis"][number]) => (k.changePct ?? 0) >= 0;
 
   return (
@@ -130,14 +131,18 @@ export function WeeklySpendingModule({ className }: { className?: string }) {
               return (
                 <li key={s.en}>
                   <button type="button" onClick={() => !s.isGroup && setSelectedSector(s.en === selectedSector ? null : s.en)} disabled={s.isGroup}
-                    className={cn("w-full grid items-center gap-x-3 gap-y-1 rounded-md px-2 py-1 text-right text-[13px] grid-cols-[1fr_auto_auto] sm:grid-cols-[190px_1fr_92px_72px]", !s.isGroup && "hover:bg-accent/60", selectedSector === s.en && "bg-accent")}
+                    className={cn("w-full rounded-md px-2 py-1.5 text-right text-[13px] flex flex-col gap-1 sm:grid sm:grid-cols-[190px_1fr_92px_72px] sm:items-center sm:gap-x-3", !s.isGroup && "hover:bg-accent/60", selectedSector === s.en && "bg-accent")}
                     title={`${s.ar}: ${fmtSar(s.value)} ريال · ${fmtCount(s.count)} عملية`}>
-                    <span className={cn("truncate", s.isGroup ? "font-bold" : s.group ? "text-muted-foreground pr-3" : "")}>{s.group ? "↳ " : ""}{s.ar}</span>
-                    <span className="col-span-3 sm:col-span-1 sm:col-start-2 h-2.5 sm:h-3.5 rounded bg-muted overflow-hidden" aria-hidden="true">
-                      {!s.isGroup && <span className={cn("block h-full rounded-r transition-[width] duration-500 motion-reduce:transition-none", metric === "change" ? (v >= 0 ? "bg-emerald-500" : "bg-red-500") : "bg-primary")} style={{ width: `${w}%` }} />}
+                    {/* الهاتف: الاسم يمينًا والشارة يسارًا، ثم الشريط، ثم القيمة — الحاسوب: أربعة أعمدة */}
+                    <span className="flex items-center justify-between gap-2 sm:contents">
+                      <span className={cn("truncate", s.isGroup ? "font-bold" : s.group ? "text-muted-foreground pr-3" : "")}>{s.group ? "↳ " : ""}{s.ar}</span>
+                      <span className="sm:hidden">{!s.isGroup && <ChangeChip value={s.changePct} />}</span>
                     </span>
-                    <span className="text-xs text-muted-foreground tabular-nums text-left sm:col-start-3 row-start-1 sm:row-auto" dir="ltr">{s.isGroup ? "" : label}</span>
-                    <span className="row-start-1 sm:row-auto sm:col-start-4">{!s.isGroup && <ChangeChip value={s.changePct} />}</span>
+                    <span className="block w-full h-2.5 sm:h-3.5 rounded bg-muted overflow-hidden" aria-hidden="true" dir="rtl">
+                      {!s.isGroup && <span className={cn("block h-full rounded-l transition-[width] duration-500 motion-reduce:transition-none", metric === "change" ? (v >= 0 ? "bg-emerald-500" : "bg-red-500") : "bg-primary")} style={{ width: `${w}%` }} />}
+                    </span>
+                    <span className="text-[11px] sm:text-xs text-muted-foreground tabular-nums text-right sm:text-left" dir="ltr">{s.isGroup ? "" : label}</span>
+                    <span className="hidden sm:block">{!s.isGroup && <ChangeChip value={s.changePct} />}</span>
                   </button>
                 </li>
               );
@@ -147,12 +152,12 @@ export function WeeklySpendingModule({ className }: { className?: string }) {
             <div className="text-xs text-muted-foreground mb-1">{selected ? `مسار «${selected.ar}» عبر أربعة أسابيع (ريال)` : "إجمالي الإنفاق الأسبوعي عبر أربعة أسابيع (ريال)"}</div>
             <div className="h-40">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trend} margin={{ top: 14, right: 12, left: 12, bottom: 0 }}>
+                <AreaChart data={trend} margin={{ top: 16, right: 44, left: 44, bottom: 0 }}>
                   <defs>
                     <linearGradient id="wkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.25} /><stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} /></linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="2 4" />
-                  <XAxis dataKey="w" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} reversed />
+                  <XAxis dataKey="w" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                   <YAxis hide domain={["auto", "auto"]} />
                   <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, direction: "rtl" }} formatter={(v) => [`${fmtSar(Number(v))} ريال`, "الإنفاق"]} />
                   <Area type="monotone" dataKey="v" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#wkFill)" dot={{ r: 3, fill: "hsl(var(--card))", strokeWidth: 2 }} activeDot={{ r: 5 }} isAnimationActive={false} label={{ position: "top", fontSize: 10, fill: "hsl(var(--foreground))", formatter: (v: number) => fmtSar(v) }} />

@@ -41,6 +41,8 @@ export interface WeeklyStory {
 
 export interface WeeklySpendingStory {
   weekLabelAr: string;
+  /** تسميات الأسابيع الأربعة بالترتيب الزمني (الأقدم أولًا) */
+  weeks: string[];
   periodStart: string;
   periodEnd: string;
   kpis: WeeklyKpi[];
@@ -264,6 +266,7 @@ export function buildWeeklySpendingStory(report: PosReport): WeeklySpendingStory
 
   return {
     weekLabelAr: week.labelAr,
+    weeks: report.weeks.map((w) => w.labelAr),
     periodStart: week.start,
     periodEnd: week.end,
     kpis,
