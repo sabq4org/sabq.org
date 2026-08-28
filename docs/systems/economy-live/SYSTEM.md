@@ -32,7 +32,7 @@ routes/economyRoutes.ts ──▶ client/src/components/economy/ (EconomyLiveHea
 ## نقاط الدخول
 | الطبقة | المسار |
 |---|---|
-| الواجهة | `/category/economy` (رأس حي) · بلوك «الاقتصاد بالأرقام» في الرئيسية |
+| الواجهة | `/category/business` (slug الإنتاج «أعمال»؛ يقبل `economy` أيضًا) (رأس حي) · بلوك «الاقتصاد بالأرقام» في الرئيسية |
 | API عام | `GET /api/economy/snapshot`، `/weekly-story`، `/series/:key`، `/fx`، `/fx/:code/history?days=`، `/reports/:kind`، `/observations/:source/:key`، `/stream` (SSE) |
 | API إداري | `GET /api/economy/admin/status`، `POST /api/economy/admin/refresh {sources?}` (موظفون) |
 | الجداول | `economy_observations`، `economy_reports` (تحتاج `db:push` في الإنتاج) |

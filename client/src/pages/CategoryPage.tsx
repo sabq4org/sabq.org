@@ -419,7 +419,7 @@ export default function CategoryPage() {
 
       {/* اقتصاد سبق الحي — رأس حي فوق قائمة أخبار قسم الاقتصاد (بيانات البنك المركزي).
           يختفي ذاتيًا إن لم تتوفر بيانات، ولا يلمس بقية التصنيفات. */}
-      {slug === "economy" && (
+      {(slug === "business" || slug === "economy") && (
         <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
             <EconomyLiveHeader />
