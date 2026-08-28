@@ -113,7 +113,7 @@ export function IndicatorDrawer({ target, onClose, snapshot }: { target: DrawerT
                 <div className="h-full grid place-items-center text-sm text-muted-foreground">لا تتوفر سلسلة كافية للرسم</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={shown} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <AreaChart data={[...shown].reverse()} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="econFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
@@ -121,7 +121,7 @@ export function IndicatorDrawer({ target, onClose, snapshot }: { target: DrawerT
                       </linearGradient>
                     </defs>
                     <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="2 4" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(d: string) => (d.startsWith("الأسبوع") ? d : fmtDateAr(d, false))} minTickGap={28} axisLine={false} tickLine={false} reversed />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(d: string) => (d.startsWith("الأسبوع") ? d : fmtDateAr(d, false))} minTickGap={28} axisLine={false} tickLine={false} />
                     <YAxis orientation="right" width={52} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} domain={["auto", "auto"]} axisLine={false} tickLine={false} tickFormatter={(v: number) => (target.kind === "weekly" ? `${trimNum(v / 1e9, 1)}B` : trimNum(v, 2))} />
                     <Tooltip
                       contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, direction: "rtl" }}

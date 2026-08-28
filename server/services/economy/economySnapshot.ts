@@ -10,7 +10,8 @@ import type { SamaNewsItem } from "../sama/samaNews";
 import { getLatestObservationsBySource, getLatestReport, type ObservationSource } from "./economyStore";
 import { ECONOMY_CACHE_PREFIX } from "./economyStream";
 import { isDecisionNight, nextDecisionDate } from "./watchCadence";
-import type { WeeklySpendingStory } from "./weeklyStory";
+import { buildWeeklySpendingStory, type WeeklySpendingStory } from "./weeklyStory";
+import type { PosReport } from "../sama/parsers/posReport";
 import type { MoneySupplyReport } from "../sama/parsers/moneySupplyReport";
 
 export interface SnapshotIndicator extends IndicatorSnapshot {
@@ -31,6 +32,9 @@ export interface EconomySnapshot {
     headline: string;
     stories: WeeklySpendingStory["stories"];
     kpis: WeeklySpendingStory["kpis"];
+    /** أكبر القطاعات الورقية (بلا مجموعات) للرئيسية */
+    topSectors: Array<{ en: string; ar: string; value: number; share: number; changePct: number }>;
+    totalCount: number;
   } | null;
   moneySupply: { asOf: string; m3Billion: number | null; m3WeeklyChangePct: number | null; m3PeriodChangePct: number | null } | null;
   samaNews: SamaNewsItem[];
@@ -38,6 +42,17 @@ export interface EconomySnapshot {
 }
 
 const SNAPSHOT_TTL_MS = 60_000;
+
+/** القصة تُعاد حسابها من التقرير المخزّن عند القراءة، فتحسينات المحرك تسري على التقارير القديمة. */
+function storyFromParsed(parsed: Record<string, unknown> | null | undefined): WeeklySpendingStory | null {
+  if (!parsed) return null;
+  const report = (parsed as { report?: PosReport }).report;
+  if (report?.weeks?.length === 4 && report.total) {
+    try { return buildWeeklySpendingStory(report); } catch { /* نعود للنسخة المخزّنة */ }
+  }
+  return (parsed as { story?: WeeklySpendingStory }).story ?? null;
+}
+
 
 async function latestMap(source: ObservationSource) {
   const rows = await getLatestObservationsBySource(source);
@@ -100,7 +115,7 @@ export async function buildEconomySnapshot(): Promise<EconomySnapshot> {
     .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "") || b.id - a.id)
     .slice(0, 6);
 
-  const story = weeklyReport ? ((weeklyReport.parsed as { story?: WeeklySpendingStory }).story ?? null) : null;
+  const story = weeklyReport ? storyFromParsed(weeklyReport.parsed) : null;
   const ms = msReport ? ((msReport.parsed as { report?: MoneySupplyReport }).report ?? null) : null;
   const m3 = ms?.aggregates.find((a) => a.key === "M3");
 
@@ -119,6 +134,12 @@ export async function buildEconomySnapshot(): Promise<EconomySnapshot> {
           headline: story.lead.headline,
           stories: story.stories,
           kpis: story.kpis,
+          topSectors: story.sectors
+            .filter((x) => !x.isGroup && x.en !== "Others")
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 6)
+            .map((x) => ({ en: x.en, ar: x.ar, value: x.value, share: x.share, changePct: x.changePct })),
+          totalCount: story.totals.count,
         }
       : null,
     moneySupply: ms ? { asOf: ms.asOf, m3Billion: ms.m3Billion, m3WeeklyChangePct: m3?.weeklyChangePct ?? null, m3PeriodChangePct: m3?.periodChangePct ?? null } : null,
@@ -141,7 +162,7 @@ export async function getWeeklyStoryCached(): Promise<WeeklySpendingStory | null
   const hit = memoryCache.get<WeeklySpendingStory | null>(key);
   if (hit) return hit;
   const report = await getLatestReport("pos_weekly");
-  const story = report ? ((report.parsed as { story?: WeeklySpendingStory }).story ?? null) : null;
+  const story = report ? storyFromParsed(report.parsed) : null;
   if (story) memoryCache.set(key, story, 5 * 60_000);
   return story;
 }
