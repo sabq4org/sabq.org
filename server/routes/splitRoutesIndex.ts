@@ -59,6 +59,7 @@ import { registerSportsIntelRoutes } from "./sportsIntel";
 import { registerSportsSnapsRoutes } from "./sportsSnaps";
 import sportsTournamentsRouter from "./sportsTournaments";
 import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
+import { registerEconomyRoutes } from "./economyRoutes";
 import { registerRadarRoutes } from "./radar";
 import { registerCoverageGapRoutes } from "./coverageGaps";
 import { registerSportmonksNewsRoutes } from "./sportmonksNews";
@@ -169,6 +170,8 @@ export function registerSplitRoutes(app: Express) {
   registerSportsSnapsRoutes(app);
   app.use(sportsTournamentsRouter);
   registerSportsLiveStreamRoutes(app);
+  // اقتصاد سبق الحي — بيانات ساما + SSE
+  registerEconomyRoutes(app);
   registerRadarRoutes(app);
   registerCoverageGapRoutes(app);
   registerSportmonksNewsRoutes(app);

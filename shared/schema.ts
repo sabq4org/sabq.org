@@ -15363,3 +15363,50 @@ export const socialPostAttempts = pgTable("social_post_attempts", {
 export type SocialPlatformAccount = typeof socialPlatformAccounts.$inferSelect;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type SocialPostAttempt = typeof socialPostAttempts.$inferSelect;
+
+// ============================================================
+// اقتصاد سبق الحي — بيانات البنك المركزي السعودي (ساما)
+// ============================================================
+
+/** رصد قيمة مؤشر/سعر: يُسجَّل صف عند أول مشاهدة وعند كل تغيّر فقط (لا كل استطلاع). */
+export const economyObservations = pgTable("economy_observations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** sama_indicator | sama_fx | sama_news | sama_report */
+  source: text("source").notNull(),
+  /** repo | inflation | fx:USD | news:1323 … */
+  key: text("key").notNull(),
+  value: real("value"),
+  valueText: text("value_text"),
+  /** تاريخ البيان كما تنشره ساما */
+  asOf: date("as_of"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  previousValue: real("previous_value"),
+  observedAt: timestamp("observed_at").defaultNow().notNull(),
+}, (table) => [
+  index("economy_observations_key_idx").on(table.source, table.key, table.observedAt),
+]);
+
+/** ملفات ساما الدورية (PDF/Excel) بعد تحليلها — الملف الواحد صف واحد. */
+export const economyReports = pgTable("economy_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** pos_weekly | money_supply_weekly | reserve_assets_monthly */
+  kind: text("kind").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  publishedAt: date("published_at"),
+  periodStart: date("period_start"),
+  periodEnd: date("period_end"),
+  parsed: jsonb("parsed").$type<Record<string, unknown>>().notNull(),
+  /** parsed | failed */
+  status: text("status").notNull().default("parsed"),
+  error: text("error"),
+  /** مسودة الخبر الآلي المرتبطة (إن وُلّدت) */
+  articleId: varchar("article_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("economy_reports_file_uidx").on(table.fileName),
+  index("economy_reports_kind_idx").on(table.kind, table.publishedAt),
+]);
+
+export type EconomyObservation = typeof economyObservations.$inferSelect;
+export type EconomyReport = typeof economyReports.$inferSelect;

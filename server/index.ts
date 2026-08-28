@@ -2000,6 +2000,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // رصد البنك المركزي السعودي (اقتصاد سبق الحي): نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSamaWatchJob } = await import("./jobs/samaWatchJob");
+            startSamaWatchJob();
+          } catch (error) {
+            console.error("[Server] Error starting SAMA watch job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // التنبيهات الرياضية الذكية: نفس النمط — فحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
