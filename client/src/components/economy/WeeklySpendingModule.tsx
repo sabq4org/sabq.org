@@ -11,7 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ChangeChip } from "./ChangeChip";
 import { Sparkline } from "./Sparkline";
-import { fmtCount, fmtPct, fmtSar, trimNum } from "./format";
+import { fmtCount, fmtPct, fmtSar, isFresh, trimNum } from "./format";
+import { NewBadge } from "./NewBadge";
 import type { WeeklySpendingStory } from "./types";
 
 type SectorMetric = "value" | "count" | "change";
@@ -76,7 +77,7 @@ export function WeeklySpendingModule({ className }: { className?: string }) {
     <section className={cn("space-y-8", className)} aria-label="إنفاق السعوديين هذا الأسبوع" data-testid="economy-weekly-module">
       {/* العنوان الرئيسي */}
       <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
-        <div className="text-[11px] font-semibold text-primary tracking-wide">إنفاق الأسبوع · نقاط البيع</div>
+        <div className="flex items-center gap-2 text-[11px] font-semibold text-primary tracking-wide">إنفاق الأسبوع · نقاط البيع{isFresh(data.ingestedAt) && <NewBadge label="تقرير جديد" />}</div>
         <h2 className="mt-1 w-full text-xl sm:text-2xl font-bold leading-snug text-foreground">{data.lead.headline}</h2>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-prose">{data.lead.intro}</p>
         <div className="mt-3 text-[11px] text-muted-foreground">الأسبوع {data.weekLabelAr} · المصدر: البنك المركزي السعودي — تقرير عمليات نقاط البيع الأسبوعي</div>

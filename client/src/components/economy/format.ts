@@ -55,3 +55,11 @@ export function relativeAr(iso: string): string {
   const d = Math.round(h / 24);
   return `قبل ${d} ي`;
 }
+
+/** «جديد» لمدة 48 ساعة بعد دخول التقرير — القارئ لا يقرأ التواريخ، يقرأ الوسم. */
+export const FRESH_HOURS = 48;
+export function isFresh(iso: string | null | undefined, hours = FRESH_HOURS): boolean {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) && Date.now() - t < hours * 3600_000;
+}

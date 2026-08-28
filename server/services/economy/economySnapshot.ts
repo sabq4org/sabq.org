@@ -35,6 +35,8 @@ export interface EconomySnapshot {
     /** أكبر القطاعات الورقية (بلا مجموعات) للرئيسية */
     topSectors: Array<{ en: string; ar: string; value: number; share: number; changePct: number }>;
     totalCount: number;
+    /** وقت دخول التقرير إلى سبق — الواجهة تعرض «جديد» 48 ساعة بعده */
+    ingestedAt: string | null;
   } | null;
   moneySupply: { asOf: string; m3Billion: number | null; m3WeeklyChangePct: number | null; m3PeriodChangePct: number | null } | null;
   samaNews: SamaNewsItem[];
@@ -140,6 +142,7 @@ export async function buildEconomySnapshot(): Promise<EconomySnapshot> {
             .slice(0, 6)
             .map((x) => ({ en: x.en, ar: x.ar, value: x.value, share: x.share, changePct: x.changePct })),
           totalCount: story.totals.count,
+          ingestedAt: weeklyReport?.createdAt ? new Date(weeklyReport.createdAt).toISOString() : null,
         }
       : null,
     moneySupply: ms ? { asOf: ms.asOf, m3Billion: ms.m3Billion, m3WeeklyChangePct: m3?.weeklyChangePct ?? null, m3PeriodChangePct: m3?.periodChangePct ?? null } : null,
@@ -162,7 +165,8 @@ export async function getWeeklyStoryCached(): Promise<WeeklySpendingStory | null
   const hit = memoryCache.get<WeeklySpendingStory | null>(key);
   if (hit) return hit;
   const report = await getLatestReport("pos_weekly");
-  const story = report ? storyFromParsed(report.parsed) : null;
+  const base = report ? storyFromParsed(report.parsed) : null;
+  const story = base && report ? { ...base, ingestedAt: new Date(report.createdAt).toISOString() } : base;
   if (story) memoryCache.set(key, story, 5 * 60_000);
   return story;
 }

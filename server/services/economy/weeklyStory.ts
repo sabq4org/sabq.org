@@ -43,6 +43,8 @@ export interface WeeklySpendingStory {
   weekLabelAr: string;
   /** تسميات الأسابيع الأربعة بالترتيب الزمني (الأقدم أولًا) */
   weeks: string[];
+  /** وقت دخول التقرير إلى سبق (ISO) — لوسم «جديد» 48 ساعة؛ تُضاف عند القراءة من القاعدة */
+  ingestedAt?: string;
   periodStart: string;
   periodEnd: string;
   kpis: WeeklyKpi[];
