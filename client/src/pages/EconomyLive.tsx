@@ -68,7 +68,7 @@ export default function EconomyLive() {
         </div>
       </section>
 
-      <main className="container mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-8">
+      <main className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
         {isLoading && <Skeleton className="h-28 w-full rounded-xl" />}
         {!isLoading && (!data || data.indicators.length === 0) && (
           <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">البيانات قيد التحميل من البنك المركزي — عُد بعد دقائق.</div>
