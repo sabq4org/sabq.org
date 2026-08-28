@@ -11,6 +11,10 @@ import {
   SABQ_FALLBACK_EDITOR_MODEL,
 } from "./sabqEditorialPrompt";
 import { assertEditedContentComplete, extractLockedSourceNumbers, restoreSourceNumbers } from "./editorialOutputGuards";
+import { PartialStringFieldTracker } from "./partialJsonString";
+
+/** تقدم إعادة الصياغة أثناء البث: نص جديد من optimized.content، أو إعادة بدء بعد فشل. */
+export type SabqEditorProgress = { type: "delta"; text: string } | { type: "reset" };
 
 // حدود صريحة بدل افتراضات SDK (10 دقائق × 2 retries) — انظر نظيرتها في
 // server/openai.ts. fallback التحرير هنا 8000 توكن فالمهلة أسخى قليلًا.
@@ -261,8 +265,10 @@ interface SabqEditorialResult {
 export async function analyzeAndEditWithSabqStyle(
   text: string,
   language: "ar" | "en" | "ur" = "ar",
-  availableCategories?: Array<{ nameAr: string; nameEn: string }>
+  availableCategories?: Array<{ nameAr: string; nameEn: string }>,
+  opts?: { onProgress?: (event: SabqEditorProgress) => void }
 ): Promise<SabqEditorialResult> {
+  const onProgress = opts?.onProgress;
   try {
     // Normalize language code to ensure it's valid
     const normalizedLang = normalizeLanguageCode(language);
@@ -707,17 +713,34 @@ Professional English news story, ready for immediate publication, presenting Sau
     let result: any;
     try {
       const anthropic = getAnthropicClient();
-      const message = await anthropic.messages.create({
+      // withRetry يعيد استدعاء الدالة كاملة عند الفشل — نبلّغ المستمع ليمسح المعاينة
+      onProgress?.({ type: "reset" });
+      const claudeRequest = {
         model: SABQ_PRIMARY_EDITOR_MODEL,
         max_tokens: 8000,
         temperature: 0.3,
         system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
+        messages: [{ role: "user" as const, content: userPrompt }],
         // Structured Outputs: تضمن JSON صالحاً مطابقاً للمخطط (output_config غير موجود في أنواع SDK 0.68 لكنه GA في الـ API)
         output_config: {
           format: { type: "json_schema", schema: SABQ_EDITORIAL_JSON_SCHEMA },
         },
-      } as any);
+      } as any;
+      let message: Anthropic.Message;
+      if (onProgress) {
+        // بث: نفك optimized.content من JSON الجزئي ونرسل الجديد منه أولًا بأول
+        const stream = anthropic.messages.stream(claudeRequest);
+        const tracker = new PartialStringFieldTracker("content", '"optimized"');
+        let rawSoFar = "";
+        stream.on("text", (delta) => {
+          rawSoFar += delta;
+          const chunk = tracker.next(rawSoFar);
+          if (chunk) onProgress({ type: "delta", text: chunk });
+        });
+        message = await stream.finalMessage();
+      } else {
+        message = await anthropic.messages.create(claudeRequest);
+      }
 
       if (message.stop_reason === "max_tokens") {
         throw new Error("Claude response truncated (stop_reason=max_tokens)");
@@ -739,6 +762,8 @@ Professional English news story, ready for immediate publication, presenting Sau
       console.warn(
         `[Sabq Editor] ${SABQ_PRIMARY_EDITOR_MODEL} failed (${claudeError?.message || claudeError}); falling back to ${SABQ_FALLBACK_EDITOR_MODEL}`
       );
+      // البديل بلا بث — نمسح معاينة كلود الناقصة حتى لا تبقى معلّقة على الشاشة
+      onProgress?.({ type: "reset" });
       const response = await withOpenAIRetry(
         () => openai.chat.completions.create({
           model: SABQ_FALLBACK_EDITOR_MODEL,

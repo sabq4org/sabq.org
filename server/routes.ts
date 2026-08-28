@@ -14644,116 +14644,22 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "يجب توفير محتوى الخبر" });
       }
 
+      // المنطق مشترك مع المسار المبثوث (routes/editAndGenerateStream.ts)
       console.log("[Edit+Generate API] Processing with parallel AI calls for best quality...");
-      
-      // Get available categories for better AI classification
-      const allCategories = await storage.getAllCategories();
-      const categoryList = allCategories.map(c => ({ nameAr: c.nameAr, nameEn: c.nameEn || c.nameAr }));
-      
-      // Run three operations in parallel for better quality:
-      // 1. Smart content generation from ORIGINAL content (same as "توليد ذكي شامل")
-      // 2. Editorial rewrite separately
-      // 3. Newsletter subtitle/excerpt generation
-      const { analyzeAndEditWithSabqStyle } = await import("./ai/contentAnalyzer");
-      
-      // Import retry helper for rate limit handling
-      const { withRetry } = await import("./openai");
-
-      // Run the three AI calls IN PARALLEL — they all consume the same original
-      // `content` with no inter-dependency, so total latency drops from the sum of
-      // three calls to just the slowest one (the Claude rewrite). Each call keeps
-      // its own retry/backoff, which absorbs the occasional 429 under concurrency.
-      // The newsletter subtitle is optional: its failure must not fail the request,
-      // so it resolves to empty values instead of rejecting the Promise.all.
-      console.log("[Edit+Generate API] Running smart content + Sabq edit + newsletter in parallel...");
-      // إسناد الزمن لكل فرع: تشخيص 36071ms (2026-07-27) توقف عند «أبطأ الفروع
-      // الثلاثة» لغياب هذا القياس. يطبع مدة كل فرع عند اكتماله (نجاحًا أو فشلًا).
-      const branchStart = Date.now();
-      const timed = <T>(label: string, p: Promise<T>): Promise<T> =>
-        p.finally(() => console.log(`[Edit+Generate API] ${label} finished in ${Date.now() - branchStart}ms`));
-      const [generatedContent, editResult, newsletterResult] = await Promise.all([
-        timed("SmartContent", withRetry(
-          () => generateSmartContent(content, language as "ar" | "en"),
-          3,
-          "SmartContent"
-        )),
-        timed("EditContent", withRetry(
-          () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
-          3,
-          "EditContent"
-        )),
-        timed("Newsletter", withRetry(
-          () => generateNewsletterSubtitle({
-            title: content.substring(0, 200),
-            content: content,
-            excerpt: undefined
-          }),
-          3,
-          "Newsletter"
-        ).catch((err): { subtitle: string | undefined; excerpt: string | undefined } => {
-          console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
-          return { subtitle: undefined, excerpt: undefined };
-        })),
-      ]);
-
-      console.log("[Edit+Generate API] ✅ All operations completed");
-      console.log("[Edit+Generate API] Quality score:", editResult.qualityScore);
-      console.log("[Edit+Generate API] Title (Claude→GPT fallback):", editResult.optimized.title || generatedContent.mainTitle);
-      console.log("[Edit+Generate API] Newsletter subtitle:", newsletterResult?.subtitle || "N/A");
-      
-      // Return combined result with best of both worlds
-      res.json({
-        // Rewritten content from Sabq editor
-        editedContent: editResult.optimized.content,
-        editedLead: editResult.optimized.lead,
-        qualityScore: editResult.qualityScore,
-        detectedCategory: editResult.detectedCategory,
-        hasNewsValue: editResult.hasNewsValue,
-        issues: editResult.issues,
-        suggestions: editResult.suggestions,
-        // العنوان من محرر الأسلوب المعتمد (Claude) — وعنوان GPT احتياطاً عند فشله
-        mainTitle: editResult.optimized.title || generatedContent.mainTitle,
-        subTitle: generatedContent.subTitle,
-        smartSummary: generatedContent.smartSummary,
-        keywords: generatedContent.keywords,
-        seo: generatedContent.seo,
-        // Newsletter fields
-        newsletterSubtitle: newsletterResult.subtitle,
-        newsletterExcerpt: newsletterResult.excerpt,
-      });
+      const { runEditAndGenerate } = await import("./services/editAndGenerateService");
+      res.json(await runEditAndGenerate({ content, language }));
     } catch (error: any) {
       console.error("[Edit+Generate API] ❌ Error occurred:");
       console.error("[Edit+Generate API] Error name:", error?.name);
       console.error("[Edit+Generate API] Error message:", error?.message);
       console.error("[Edit+Generate API] Error status:", error?.status);
       console.error("[Edit+Generate API] Error code:", error?.code);
-      console.error("[Edit+Generate API] Full error:", JSON.stringify(error, null, 2));
-      
-      // Determine error type for appropriate response
-      const isRateLimit = error?.status === 429 || 
-                          error?.message?.includes("429") || 
-                          error?.message?.includes("rate limit") ||
-                          error?.message?.includes("Rate limit");
-      const isTimeout = error?.message?.includes("timeout") || error?.code === 'ETIMEDOUT';
-      const isNetwork = error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND';
-      
-      let statusCode = 500;
-      let message = "فشل في تحرير وتوليد المحتوى";
-      
-      if (isRateLimit) {
-        statusCode = 429;
-        message = "تم تجاوز حد الطلبات، يرجى المحاولة بعد دقيقة";
-      } else if (isTimeout) {
-        statusCode = 504;
-        message = "انتهت مهلة الاتصال، يرجى المحاولة مرة أخرى";
-      } else if (isNetwork) {
-        statusCode = 503;
-        message = "خطأ في الاتصال بخدمة الذكاء الاصطناعي";
-      }
-      
-      res.status(statusCode).json({ 
+
+      const { editAndGenerateErrorResponse } = await import("./services/editAndGenerateService");
+      const { status, message, errorType } = editAndGenerateErrorResponse(error);
+      res.status(status).json({
         message,
-        errorType: isRateLimit ? "rate_limit" : isTimeout ? "timeout" : isNetwork ? "network" : "unknown",
+        errorType,
         details: process.env.NODE_ENV === 'development' ? error?.message : undefined
       });
     }

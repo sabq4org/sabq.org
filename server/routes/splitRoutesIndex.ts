@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { aiHubRouter } from "./aiHub";
+import { editAndGenerateStreamRouter } from "./editAndGenerateStream";
 import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
 import userDashboardThemeRouter from "./userDashboardTheme";
@@ -108,6 +109,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(systemSettingsRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
+  app.use(editAndGenerateStreamRouter);
   app.use(integrationsStatusRouter);
   app.use(adminActivityLogsRouter);
   app.use(keywordFollowingRouter);
