@@ -22,7 +22,7 @@ interface TickerCard {
   target?: DrawerTarget;
 }
 
-const INDICATOR_ORDER: SnapshotIndicator["key"][] = ["repo", "inflation", "gdp", "m3Growth", "reverseRepo"];
+const INDICATOR_ORDER: SnapshotIndicator["key"][] = ["inflation", "m3Growth", "gdp", "repo", "reverseRepo"];
 
 function indicatorSub(i: SnapshotIndicator): string {
   if (i.cadence === "decision") return i.asOf ? `منذ ${fmtDateAr(i.asOf, false)}` : "";
@@ -40,22 +40,17 @@ function indicatorChange(i: SnapshotIndicator): number | null {
 
 export function buildTickerCards(snap: EconomySnapshot, opts: { fxCodes?: string[]; compact?: boolean; flashKey?: string | null } = {}): TickerCard[] {
   const cards: TickerCard[] = [];
-  const byKey = new Map(snap.indicators.map((i) => [i.key, i]));
-  for (const key of INDICATOR_ORDER) {
-    const i = byKey.get(key);
-    if (!i) continue;
-    if (opts.compact && key === "reverseRepo") continue;
-    const delta = indicatorChange(i);
+  // الترتيب من الأسرع تغيّرًا إلى الأبطأ: الأسبوعي → اليومي (الصرف) → الشهري/الربعي → قرارات الفائدة
+  if (snap.weekly) {
     cards.push({
-      id: `ind:${key}`,
-      label: i.shortAr,
-      value: trimNum(i.value, 2),
-      unit: "%",
-      sub: indicatorSub(i),
-      change: delta,
-      changeSuffix: delta !== null ? " نقطة" : undefined,
-      flash: opts.flashKey === key,
-      target: { kind: "indicator", key: i.key, titleAr: i.titleAr, unit: "%" },
+      id: "weekly",
+      label: "إنفاق الأسبوع",
+      value: fmtSar(snap.weekly.totalValue),
+      unit: "ريال",
+      sub: `نقاط البيع · ${snap.weekly.weekLabelAr}`,
+      change: snap.weekly.totalChangePct,
+      flash: opts.flashKey === "pos_weekly",
+      target: { kind: "weekly", key: "weekly", titleAr: "إجمالي الإنفاق الأسبوعي عبر نقاط البيع", unit: "ريال" },
     });
   }
   const fxCodes = opts.fxCodes ?? ["USD", "EUR", "GBP"];
@@ -74,28 +69,35 @@ export function buildTickerCards(snap: EconomySnapshot, opts: { fxCodes?: string
       target: { kind: "fx", key: code, titleAr: `${f.nameAr} مقابل الريال`, unit: "ريال" },
     });
   }
-  if (snap.weekly) {
+  const byKey = new Map(snap.indicators.map((i) => [i.key, i]));
+  for (const key of INDICATOR_ORDER) {
+    const i = byKey.get(key);
+    if (!i) continue;
+    if (opts.compact && (key === "reverseRepo" || key === "m3Growth")) continue; // البلوك المضغوط = 6 بطاقات بالضبط
+    const delta = indicatorChange(i);
     cards.push({
-      id: "weekly",
-      label: "إنفاق الأسبوع",
-      value: fmtSar(snap.weekly.totalValue),
-      unit: "ريال",
-      sub: `نقاط البيع · ${snap.weekly.weekLabelAr}`,
-      change: snap.weekly.totalChangePct,
-      flash: opts.flashKey === "pos_weekly",
-      target: { kind: "weekly", key: "weekly", titleAr: "إجمالي الإنفاق الأسبوعي عبر نقاط البيع", unit: "ريال" },
+      id: `ind:${key}`,
+      label: i.shortAr,
+      value: trimNum(i.value, 2),
+      unit: "%",
+      sub: indicatorSub(i),
+      change: delta,
+      changeSuffix: delta !== null ? " نقطة" : undefined,
+      flash: opts.flashKey === key,
+      target: { kind: "indicator", key: i.key, titleAr: i.titleAr, unit: "%" },
     });
   }
   return cards;
 }
 
-export function EconomyTicker({ snapshot, compact = false, flashKey, className }: { snapshot: EconomySnapshot; compact?: boolean; flashKey?: string | null; className?: string }) {
+export function EconomyTicker({ snapshot, compact = false, flashKey, className, layout = "grid" }: { snapshot: EconomySnapshot; compact?: boolean; flashKey?: string | null; className?: string; layout?: "grid" | "scroll" }) {
   const [open, setOpen] = useState<DrawerTarget | null>(null);
   const cards = buildTickerCards(snapshot, { compact, flashKey, fxCodes: compact ? ["USD", "EUR"] : ["USD", "EUR", "GBP", "EGP", "INR"] });
+  // شبكة بلا شريط تمرير: 2 على الهاتف، 3 على اللوحي، 6 على الحاسوب (البلوك المضغوط = 6 بطاقات بالضبط)
   if (!cards.length) return null;
   return (
     <>
-      <div className={cn("flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:thin] snap-x", className)} role="list" aria-label="الاقتصاد بالأرقام">
+      <div className={cn(layout === "grid" ? "grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" : "flex gap-2.5 overflow-x-auto pb-1 snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)} role="list" aria-label="الاقتصاد بالأرقام">
         {cards.map((c) => (
           <button
             key={c.id}
@@ -103,7 +105,7 @@ export function EconomyTicker({ snapshot, compact = false, flashKey, className }
             role="listitem"
             onClick={() => c.target && setOpen(c.target)}
             className={cn(
-              "snap-start shrink-0 min-w-[150px] rounded-lg border border-card-border bg-card px-3.5 py-2.5 text-right transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "snap-start shrink-0 min-w-0 rounded-lg border border-card-border bg-card px-3.5 py-2.5 text-right transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               c.flash && "ring-2 ring-primary/70 animate-pulse motion-reduce:animate-none",
             )}
             data-testid={`economy-ticker-${c.id}`}

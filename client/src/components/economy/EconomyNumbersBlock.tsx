@@ -19,11 +19,11 @@ export function EconomyNumbersBlock() {
           <h2 className="text-base font-bold">الاقتصاد بالأرقام</h2>
           <span className="text-[11px] text-muted-foreground hidden sm:inline">البنك المركزي السعودي · يتحدث تلقائيًا</span>
         </div>
-        <Link href="/category/business" className="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:underline">
-          القسم الحي <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <Link href="/economy" className="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:underline">
+          الاقتصاد بالأرقام <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
         </Link>
       </div>
-      <EconomyTicker snapshot={data} compact />
+      <EconomyTicker snapshot={data} compact layout="grid" />
     </section>
   );
 }
