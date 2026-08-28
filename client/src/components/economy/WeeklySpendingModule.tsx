@@ -77,7 +77,7 @@ export function WeeklySpendingModule({ className }: { className?: string }) {
       {/* العنوان الرئيسي */}
       <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
         <div className="text-[11px] font-semibold text-primary tracking-wide">إنفاق الأسبوع · نقاط البيع</div>
-        <h2 className="mt-1 text-xl sm:text-2xl font-bold leading-snug text-foreground [text-wrap:balance]">{data.lead.headline}</h2>
+        <h2 className="mt-1 w-full text-xl sm:text-2xl font-bold leading-snug text-foreground">{data.lead.headline}</h2>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-prose">{data.lead.intro}</p>
         <div className="mt-3 text-[11px] text-muted-foreground">الأسبوع {data.weekLabelAr} · المصدر: البنك المركزي السعودي — تقرير عمليات نقاط البيع الأسبوعي</div>
       </div>
@@ -141,7 +141,7 @@ export function WeeklySpendingModule({ className }: { className?: string }) {
                     <span className="block w-full h-2.5 sm:h-3.5 rounded bg-muted overflow-hidden" aria-hidden="true" dir="rtl">
                       {!s.isGroup && <span className={cn("block h-full rounded-l transition-[width] duration-500 motion-reduce:transition-none", metric === "change" ? (v >= 0 ? "bg-emerald-500" : "bg-red-500") : "bg-primary")} style={{ width: `${w}%` }} />}
                     </span>
-                    <span className="text-[11px] sm:text-xs text-muted-foreground tabular-nums text-right sm:text-left" dir="ltr">{s.isGroup ? "" : label}</span>
+                    <span className="text-[11px] sm:text-xs text-muted-foreground tabular-nums text-right sm:text-left">{s.isGroup ? "" : label}</span>
                     <span className="hidden sm:block">{!s.isGroup && <ChangeChip value={s.changePct} />}</span>
                   </button>
                 </li>

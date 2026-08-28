@@ -40,7 +40,7 @@ export function EconomyNumbersBlock() {
   const top = w.topSectors.slice(0, 5);
 
   return (
-    <section className="container mx-auto px-3 sm:px-6 lg:px-8 py-5" aria-label="أين أنفق السعوديون أموالهم هذا الأسبوع" data-testid="economy-home-block">
+    <section className="py-2" aria-label="أين أنفق السعوديون أموالهم هذا الأسبوع" data-testid="economy-home-block">
       <div className="rounded-2xl border border-card-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
