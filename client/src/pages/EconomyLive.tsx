@@ -50,14 +50,14 @@ export default function EconomyLive() {
         <p className="mx-auto mt-2.5 max-w-2xl text-[14px] font-medium leading-relaxed text-foreground/70 sm:mt-3.5 sm:text-base md:text-lg">
           إنفاق الأسبوع، أسعار الصرف، الفائدة، التضخم والناتج — أرقام رسمية تتحدث تلقائيًا لحظة صدورها من البنك المركزي السعودي.
         </p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-[13px] font-semibold text-foreground/80">
-            <Radio className={connected ? "h-3.5 w-3.5 text-emerald-500 motion-safe:animate-pulse" : "h-3.5 w-3.5 text-muted-foreground"} aria-hidden="true" />
+        <div className="mt-5 flex flex-col items-center gap-2.5 sm:mt-6">
+          <Link href="/category/business" className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-[14px] font-bold text-primary-foreground transition-opacity hover:opacity-90">
+            أخبار الأعمال <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </Link>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Radio className={connected ? "h-3 w-3 text-emerald-500 motion-safe:animate-pulse" : "h-3 w-3"} aria-hidden="true" />
             {connected ? "مباشر" : "تحديث تلقائي"}{latest ? ` · حُدّث ${relativeAr(latest)}` : ""}
           </span>
-          <Link href="/category/business" className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-bold text-primary-foreground transition-opacity hover:opacity-90">
-            أخبار الأعمال <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
         </div>
       </section>
 
