@@ -142,6 +142,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
 
   // ── Media generation (same-provider output differs; chains start empty) ──
   { featureKey: "image-generation", displayName: "توليد الصور", category: "media", primary: GPT_IMAGE, fallbackChain: [] },
+  // وصف مشهد صور الأخبار التلقائية (نص قصير قبل توليد الصورة) — سريع ورخيص
+  { featureKey: "image-scene-brief", displayName: "وصف مشهد صور الأخبار", category: "media", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
   { featureKey: "nano-banana-images", displayName: "صور نانو بنانا", category: "media", primary: NANO_BANANA, fallbackChain: [] },
   { featureKey: "smart-thumbnail", displayName: "الصور المصغرة الذكية", category: "media", primary: GPT_4O, fallbackChain: [] },
   { featureKey: "visual-ai", displayName: "الذكاء البصري", category: "media", primary: GPT_4O, fallbackChain: [] },

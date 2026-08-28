@@ -209,6 +209,8 @@ export async function generateImage(
       "ideogram-2": "gemini-3.1-flash-image-preview",
     };
     const executionModel = GOOGLE_MODEL_MAP[modelUsed] || modelUsed;
+    // وسم السجل «Nano Banana Pro» عام — هذا السطر هو الدليل على النموذج الفعلي
+    console.log(`[Nano Banana Pro] Engine: ${executionModel} (requested: ${request.model || "default"}), grounding=${!!request.enableSearchGrounding}`);
     let response: Awaited<ReturnType<typeof callModel>>;
     try {
       response = await callModel(executionModel);
