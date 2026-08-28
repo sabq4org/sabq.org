@@ -14,7 +14,7 @@ import { EconomyTicker } from "@/components/economy/EconomyTicker";
 import { WeeklySpendingModule } from "@/components/economy/WeeklySpendingModule";
 import { SamaNewsFeed } from "@/components/economy/SamaNewsFeed";
 import { useEconomyStream } from "@/components/economy/useEconomyStream";
-import { fmtDateAr, relativeAr } from "@/components/economy/format";
+import { fmtDateAr } from "@/components/economy/format";
 import type { EconomySnapshot } from "@/components/economy/types";
 
 export default function EconomyLive() {
@@ -32,7 +32,14 @@ export default function EconomyLive() {
   }, [last]);
 
   const repo = data?.indicators.find((i) => i.key === "repo");
-  const latest = data ? data.indicators.reduce((m, i) => (i.observedAt > m ? i.observedAt : m), data.updatedAt) : null;
+  // آخر «بيان» صدر من ساما (لا وقت فحصنا): أحدث asOf بين المؤشرات والصرف وتقرير الأسبوع
+  const latestAsOf = data
+    ? [
+        ...data.indicators.map((i) => i.asOf ?? ""),
+        data.fxAsOf ?? "",
+        data.weekly?.periodEnd ?? "",
+      ].filter(Boolean).sort().pop() ?? null
+    : null;
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -56,7 +63,7 @@ export default function EconomyLive() {
           </Link>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <Radio className={connected ? "h-3 w-3 text-emerald-500 motion-safe:animate-pulse" : "h-3 w-3"} aria-hidden="true" />
-            {connected ? "مباشر" : "تحديث تلقائي"}{latest ? ` · حُدّث ${relativeAr(latest)}` : ""}
+            يتحدث تلقائيًا فور صدور بيانات البنك المركزي{latestAsOf ? ` · آخر بيان: ${fmtDateAr(latestAsOf)}` : ""}
           </span>
         </div>
       </section>
