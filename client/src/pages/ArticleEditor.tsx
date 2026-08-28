@@ -111,6 +111,7 @@ import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
 import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
+import { EditAndGenerateStreamDialog } from "@/components/article-editor/EditAndGenerateStreamDialog";
 import { SabqEditorAssistant } from "@/components/article-editor/SabqEditorAssistant";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
@@ -1787,6 +1788,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     generateSeoMutation,
     generateAllInOneMutation,
     editAndGenerateMutation,
+    editStream,
+    setEditStreamOpen,
     analyzeSEOMutation,
     generateSocialCardsMutation,
     generateSmartContentMutation,
@@ -2429,6 +2432,15 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         setIssues={setProofreadIssues}
         content={content}
         setContent={setContent}
+      />
+
+      {/* معاينة حية لـ«تحرير وتوليد شامل» أثناء البث */}
+      <EditAndGenerateStreamDialog
+        open={editStream.open}
+        onOpenChange={setEditStreamOpen}
+        preview={editStream.preview}
+        phases={editStream.phases}
+        startedAt={editStream.startedAt}
       />
 
       {/* محرر سبق — مهام التحرير الموحد */}
