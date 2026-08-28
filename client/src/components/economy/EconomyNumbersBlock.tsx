@@ -9,7 +9,8 @@ import {
   Briefcase, Cake, Car, ChevronLeft, Fuel, Gem, GraduationCap, Hotel, Landmark, Plane, Shirt, ShoppingBasket, Smartphone, Sofa, Stethoscope, Ticket, Utensils, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
 import { ChangeChip } from "./ChangeChip";
-import { fmtCount, fmtPct, fmtSar } from "./format";
+import { fmtCount, fmtPct, fmtSar, isFresh } from "./format";
+import { NewBadge } from "./NewBadge";
 import type { EconomySnapshot } from "./types";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -47,6 +48,7 @@ export function EconomyNumbersBlock() {
             <div className="flex items-center gap-2 text-[11px] font-semibold text-primary">
               <Landmark className="h-3.5 w-3.5" aria-hidden="true" />
               بيانات البنك المركزي السعودي · الأسبوع {w.weekLabelAr}
+              {isFresh(w.ingestedAt) && <NewBadge label="أرقام جديدة" />}
             </div>
             <h2 className="mt-1 text-xl sm:text-2xl font-extrabold leading-snug [text-wrap:balance]">أين أنفق السعوديون أموالهم هذا الأسبوع؟</h2>
             <p className="mt-1 text-sm text-muted-foreground">{w.headline}</p>
