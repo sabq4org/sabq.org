@@ -17571,111 +17571,22 @@ Respond in valid JSON format only:
   // ============================================================
 
   // Proofread endpoint — spelling/typo detection only, NEVER modifies the text
+  // التدقيق اللغوي: المنطق في services/proofreadService عبر بوابة الذكاء
+  // (مهلة 25ث + بدائل + قاطع دائرة). كان يستدعي OpenAI الخام بمهلة 10 دقائق
+  // وبلا بديل، فتجمّد المحرر 45–68ث في نوافذ تدهور gpt-5.1 (تشخيص 2026-08-28).
   app.post("/api/ai/proofread", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE), async (req: any, res) => {
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
       }
-
-      // Strip HTML to get clean text
-      const cleanText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-      if (cleanText.length < 10) {
-        return res.json({ issues: [] });
-      }
-
-      // Cap input length to avoid token blowups
-      const truncated = cleanText.length > 8000 ? cleanText.substring(0, 8000) : cleanText;
-
-      const { default: OpenAI } = await import("openai");
-      const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const { withRetry } = await import("./openai");
-
-      const response = await withRetry(
-        () => openaiClient.chat.completions.create({
-          model: "gpt-5.1",
-          messages: [
-            {
-              role: "system",
-              content: `أنت مدقق إملائي صارم للنصوص العربية الصحفية. مهمتك الوحيدة هي اكتشاف الأخطاء الإملائية الحقيقية فقط.
-
-✅ اقبل فقط هذه الأنواع من الأخطاء:
-- حروف خاطئة (حذف/إضافة/قلب حرف يغيّر الكلمة فعلياً مثل: "اللذي" بدل "الذي").
-- همزات خاطئة (مثل: "أبتدأ" بدل "ابتدأ"، "هؤلائ" بدل "هؤلاء").
-- خلط بين التاء المربوطة (ة) والتاء المفتوحة (ت).
-- خلط بين الألف المقصورة (ى) والياء (ي).
-- خلط بين الهاء (ه) والتاء المربوطة (ة) في نهاية الكلمة.
-
-❌ ارفض رفضاً قاطعاً (لا تُرجِعها أبداً كأخطاء):
-- علامات التشكيل (فتحة، ضمة، كسرة، شدة، سكون، تنوين). إن كان الفرق الوحيد بين الكلمتين تشكيل، اعتبر الكلمة صحيحة.
-- علامات الترقيم (الفواصل، النقاط، علامات الاستفهام، الأقواس، علامات التنصيص).
-- المسافات الزائدة أو الناقصة.
-- النحو والإعراب والقواعد الإنشائية.
-- الأسلوب وإعادة الصياغة.
-- أسماء الأعلام، الأماكن، الكلمات الأجنبية، الأسماء التجارية، الاختصارات.
-- الكلمات الصحيحة لكنها غير شائعة.
-
-قاعدة ذهبية: إن كان الفرق بين "original" و "suggestion" مجرد تشكيل أو علامة ترقيم أو مسافة، فلا تُرجِعها. إن لم تكن متأكداً 100% من الخطأ، اتركها.
-
-أعد JSON بهذا الشكل بالضبط:
-{ "issues": [ { "original": "الكلمة الخاطئة كما وردت في النص بدون تشكيل", "suggestion": "الكلمة الصحيحة بدون تشكيل", "type": "إملائي", "explanation": "سبب موجز جداً" } ] }
-
-إن لم تجد أي خطأ إملائي حقيقي، أعد: { "issues": [] }`,
-            },
-            {
-              role: "user",
-              content: `دقّق هذا النص إملائياً فقط دون تعديل المعنى:\n\n${truncated}`,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 2048,
-        }),
-        3,
-        "Proofread"
-      );
-
-      const raw = response.choices?.[0]?.message?.content || '{"issues":[]}';
-      let parsed: { issues: Array<{ original: string; suggestion: string; type?: string; explanation?: string }> } = { issues: [] };
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = { issues: [] };
-      }
-
-      // Normalize: strip diacritics, tatweel, and trim/collapse whitespace
-      const normalize = (t: string) =>
-        t
-          .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // diacritics + tatweel
-          .replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "") // zero-width / bidi
-          .replace(/[.,،;؛:!؟?\(\)\[\]"'«»“”]/g, "") // common punctuation
-          .replace(/\s+/g, " ")
-          .trim();
-
-      // Sanitize: drop trivial differences (diacritics-only, punctuation-only, whitespace-only),
-      // keep only issues whose original actually exists in the text.
-      const issues = Array.isArray(parsed.issues) ? parsed.issues : [];
-      const seen = new Set<string>();
-      const filtered = issues
-        .filter((i) => i && typeof i.original === "string" && typeof i.suggestion === "string")
-        .filter((i) => i.original.trim() !== i.suggestion.trim())
-        .filter((i) => normalize(i.original) !== normalize(i.suggestion)) // skip diacritic/punct-only
-        .filter((i) => normalize(i.original).length >= 2) // ignore single chars / empty
-        .filter((i) => cleanText.includes(i.original))
-        .filter((i) => {
-          const key = `${i.original}→${i.suggestion}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .slice(0, 50);
-
-      res.json({ issues: filtered });
+      const { proofreadContent } = await import("./services/proofreadService");
+      res.json(await proofreadContent(content, req.user?.id));
     } catch (error: any) {
       console.error("Error proofreading:", error?.message || error);
-      const isRateLimit = error?.status === 429 || error?.message?.includes("429");
-      res.status(isRateLimit ? 429 : 500).json({
-        message: isRateLimit ? "تم تجاوز حد الطلبات، يرجى المحاولة بعد قليل" : "Failed to proofread content",
-      });
+      const { proofreadErrorResponse } = await import("./services/proofreadService");
+      const { status, message } = proofreadErrorResponse(error);
+      res.status(status).json({ message });
     }
   });
 
@@ -17685,88 +17596,13 @@ Respond in valid JSON format only:
       if (!title || typeof title !== "string") {
         return res.status(400).json({ message: "Title is required" });
       }
-
-      const cleanTitle = title.replace(/\s+/g, " ").trim();
-      if (cleanTitle.length < 3) {
-        return res.json({ original: cleanTitle, suggestion: cleanTitle, hasIssues: false, notes: [] });
-      }
-
-      const truncated = cleanTitle.length > 500 ? cleanTitle.substring(0, 500) : cleanTitle;
-
-      const { default: OpenAI } = await import("openai");
-      const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const { withRetry } = await import("./openai");
-
-      const response = await withRetry(
-        () => openaiClient.chat.completions.create({
-          model: "gpt-5.1",
-          messages: [
-            {
-              role: "system",
-              content: `أنت مدقق لغوي محترف لعناوين الأخبار العربية. مهمتك تصحيح العنوان مع الحفاظ على معناه الأصلي تماماً.
-
-✅ صحّح فقط:
-- الأخطاء الإملائية (همزات، تاء مربوطة/مفتوحة، ألف مقصورة/ياء، حروف خاطئة).
-- الأخطاء النحوية الواضحة (رفع/نصب/جر، تطابق المذكر والمؤنث، تطابق المفرد والجمع).
-- علامات الترقيم الضرورية (إضافة فاصلة بين جملتين متعاطفتين، حذف نقطة من نهاية العنوان).
-- المسافات الزائدة أو الناقصة.
-- الأخطاء الأسلوبية الفجّة فقط (تكرار غير مبرر، ركاكة واضحة).
-
-❌ لا تغيّر:
-- معنى العنوان أو فكرته الأساسية.
-- أسماء الأعلام، الأماكن، المؤسسات، الكلمات الأجنبية، الأسماء التجارية.
-- الأرقام والإحصائيات.
-- علامات التشكيل (لا تُضِف ولا تحذف).
-- ترتيب الكلمات إلا إذا كان النحو خاطئاً.
-
-أعد JSON بهذا الشكل بالضبط:
-{ "suggestion": "العنوان بعد التصحيح", "hasIssues": true/false, "notes": [ { "type": "إملائي|نحوي|ترقيم|أسلوبي", "explanation": "وصف موجز للتصحيح" } ] }
-
-إن كان العنوان سليماً تماماً، أعد suggestion مطابقاً للأصل وhasIssues=false وnotes=[].`,
-            },
-            {
-              role: "user",
-              content: `دقّق هذا العنوان لغوياً:\n\n${truncated}`,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 1024,
-        }),
-        3,
-        "ProofreadTitle"
-      );
-
-      const raw = response.choices?.[0]?.message?.content || '{}';
-      let parsed: { suggestion?: string; hasIssues?: boolean; notes?: Array<{ type?: string; explanation?: string }> } = {};
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = {};
-      }
-
-      const suggestion = (typeof parsed.suggestion === "string" ? parsed.suggestion : cleanTitle).trim();
-      const normalize = (t: string) =>
-        t
-          .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
-          .replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-
-      const isSame = normalize(suggestion) === normalize(cleanTitle) || suggestion.length === 0;
-      const notes = Array.isArray(parsed.notes) ? parsed.notes.filter((n) => n && typeof n.explanation === "string").slice(0, 10) : [];
-
-      res.json({
-        original: cleanTitle,
-        suggestion: isSame ? cleanTitle : suggestion,
-        hasIssues: !isSame,
-        notes: isSame ? [] : notes,
-      });
+      const { proofreadTitle } = await import("./services/proofreadService");
+      res.json(await proofreadTitle(title, req.user?.id));
     } catch (error: any) {
       console.error("Error proofreading title:", error?.message || error);
-      const isRateLimit = error?.status === 429 || error?.message?.includes("429");
-      res.status(isRateLimit ? 429 : 500).json({
-        message: isRateLimit ? "تم تجاوز حد الطلبات، يرجى المحاولة بعد قليل" : "Failed to proofread title",
-      });
+      const { proofreadErrorResponse } = await import("./services/proofreadService");
+      const { status, message } = proofreadErrorResponse(error);
+      res.status(status).json({ message });
     }
   });
 

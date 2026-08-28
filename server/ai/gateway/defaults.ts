@@ -74,6 +74,9 @@ export interface DefaultFeature {
 export const DEFAULT_FEATURES: DefaultFeature[] = [
   // ── Editorial generation ──
   { featureKey: "content-tools", displayName: "أدوات المحتوى الذكية", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
+  // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
+  // تُضبط في proofreadService (25ث) بدل الافتراضي.
+  { featureKey: "proofread", displayName: "التدقيق اللغوي", category: "editorial", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
   { featureKey: "journalist-agent", displayName: "الوكيل الصحفي", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "data-story", displayName: "قصص البيانات", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "deep-analysis", displayName: "التحليل العميق (عمق)", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
@@ -100,7 +103,9 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
 
   // ── Analysis & classification ──
   { featureKey: "meeting-minutes", displayName: "أمين المحضر — محضر الاجتماعات", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 4000 },
-  { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: SONNET, fallbackChain: CHAIN_AFTER_SONNET },
+  // التصنيف مهمة «اختيار من قائمة» لا تحتاج Sonnet (وسيطه 7.6ث مقابل 2.9ث لـgpt-5.1
+  // في ai_usage_logs) — وهو الفرع الأبطأ في «التوليد الشامل» (تشخيص 2026-08-28).
+  { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
   { featureKey: "sentiment-analysis", displayName: "تحليل المشاعر", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "content-analyzer", displayName: "محلل الجودة التحريرية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "smart-categories", displayName: "التصنيفات الذكية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },

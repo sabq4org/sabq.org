@@ -644,17 +644,33 @@ export function useArticleAiTools({
       
       console.log('[Edit+Generate] Starting comprehensive edit and generation...');
       console.log('[Edit+Generate] Original content length:', content.length);
-      
-      const result = await apiRequest("/api/articles/edit-and-generate", {
-        method: "POST",
-        body: JSON.stringify({ 
-          content, 
-          language: "ar" 
-        }),
-      });
-      
-      console.log('[Edit+Generate] Result received:', result);
-      return result;
+
+      // إعادة الصياغة بالنموذج الأساسي تستغرق 20–35 ثانية لمقال كامل (قياس حي
+      // 2026-08-28)؛ بدل شاشة جامدة نعرض عدّادًا يوضح للمحرر أن العملية جارية.
+      const startedAt = Date.now();
+      const progressText = () => {
+        const s = Math.round((Date.now() - startedAt) / 1000);
+        const phase = s < 5 ? "بدء التحليل…" : s < 30 ? "إعادة الصياغة بأسلوب سبق (تأخذ عادة 20–35 ثانية)…" : "لمسات أخيرة…";
+        return `${phase} — ${s} ث`;
+      };
+      const progress = toast({ title: "تحرير وتوليد شامل", description: progressText(), duration: 120_000 });
+      const ticker = setInterval(() => progress.update({ id: progress.id, description: progressText() }), 1000);
+
+      try {
+        const result = await apiRequest("/api/articles/edit-and-generate", {
+          method: "POST",
+          body: JSON.stringify({ 
+            content, 
+            language: "ar" 
+          }),
+        });
+
+        console.log('[Edit+Generate] Result received:', result);
+        return result;
+      } finally {
+        clearInterval(ticker);
+        progress.dismiss();
+      }
     },
     onSuccess: (data: {
       editedContent: string;

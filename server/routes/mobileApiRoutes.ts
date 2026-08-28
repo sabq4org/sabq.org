@@ -8300,64 +8300,15 @@ router.post("/admin/ai/proofread", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
     const content = typeof req.body?.content === "string" ? req.body.content : "";
-    const cleanText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-    if (cleanText.length < 10) {
-      return res.json({ success: true, issues: [] });
-    }
-    const truncated = cleanText.length > 8000 ? cleanText.substring(0, 8000) : cleanText;
-
-    const { default: OpenAI } = await import("openai");
-    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const { withRetry } = await import("../openai");
-
-    const response = await withRetry(
-      () => openaiClient.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          {
-            role: "system",
-            content: `أنت مدقق إملائي صارم للنصوص العربية الصحفية. مهمتك الوحيدة هي اكتشاف الأخطاء الإملائية الحقيقية فقط (حروف خاطئة، همزات، التاء المربوطة/المفتوحة، الألف المقصورة/الياء). ارفض رفضاً قاطعاً علامات التشكيل والترقيم والمسافات والنحو والأسلوب وأسماء الأعلام. إن كان الفرق مجرد تشكيل أو ترقيم أو مسافة فلا تُرجِعه. أعد JSON بهذا الشكل: { "issues": [ { "original": "الكلمة الخاطئة بدون تشكيل", "suggestion": "الكلمة الصحيحة بدون تشكيل", "type": "إملائي", "explanation": "سبب موجز" } ] }. إن لم تجد خطأً حقيقياً أعد { "issues": [] }`,
-          },
-          { role: "user", content: `دقّق هذا النص إملائياً فقط دون تعديل المعنى:\n\n${truncated}` },
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 2048,
-      }),
-      3,
-      "AdminProofread",
-    );
-
-    const raw = response.choices?.[0]?.message?.content || '{"issues":[]}';
-    let parsed: { issues: Array<{ original: string; suggestion: string; type?: string; explanation?: string }> } = { issues: [] };
-    try { parsed = JSON.parse(raw); } catch { parsed = { issues: [] }; }
-
-    const normalize = (t: string) =>
-      t.replace(/[ً-ٰٟـ]/g, "")
-        .replace(/[​-‏‪-‮﻿]/g, "")
-        .replace(/[.,،;؛:!؟?\(\)\[\]"'«»“”]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    const seen = new Set<string>();
-    const issues = (Array.isArray(parsed.issues) ? parsed.issues : [])
-      .filter(i => i && typeof i.original === "string" && typeof i.suggestion === "string")
-      .filter(i => i.original.trim() !== i.suggestion.trim())
-      .filter(i => normalize(i.original) !== normalize(i.suggestion))
-      .filter(i => normalize(i.original).length >= 2)
-      .filter(i => cleanText.includes(i.original))
-      .filter(i => {
-        const key = `${i.original}→${i.suggestion}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 50);
-
+    // نفس خدمة الويب: بوابة الذكاء بمهلة قصيرة وبدائل (كان OpenAI خامًا بمهلة 10 دقائق)
+    const { proofreadContent } = await import("../services/proofreadService");
+    const { issues } = await proofreadContent(content, admin.userId);
     res.json({ success: true, issues });
   } catch (error: any) {
     console.error("[Mobile API] POST /admin/ai/proofread error:", error?.message || error);
-    const isRateLimit = error?.status === 429 || error?.message?.includes("429");
-    res.status(isRateLimit ? 429 : 500).json({ success: false, message: isRateLimit ? "تم تجاوز حد الطلبات، حاول بعد قليل" : "تعذّر التدقيق اللغوي" });
+    const { proofreadErrorResponse } = await import("../services/proofreadService");
+    const { status, message } = proofreadErrorResponse(error);
+    res.status(status).json({ success: false, message });
   }
 });
 
