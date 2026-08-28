@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-08-25",
+  "updatedAt": "2026-08-28",
   "systems": [
     {
       "id": "account-center",
@@ -978,6 +978,30 @@
         "scripts/seed-ops-room.ts",
         "client/src/pages/dashboard/OpsRoom/**",
         "tests/unit/opsRoomEngine.test.ts"
+      ]
+    },
+    {
+      "id": "economy-live",
+      "nameAr": "اقتصاد سبق الحي",
+      "nameEn": "Economy Live (SAMA data)",
+      "status": "active",
+      "category": "content",
+      "summary": "قسم الاقتصاد الحي: رصد بيانات البنك المركزي السعودي (المؤشرات، أسعار الصرف، تقارير نقاط البيع وعرض النقود) بإيقاع ذكي، بث SSE للواجهة، محرك «أرقام الأسبوع» بعناوين صحفية، ومسودة خبر بحارس أرقام.",
+      "docPath": "docs/systems/economy-live/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/ops-room/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "server/services/sama/**",
+        "server/services/economy/**",
+        "server/routes/economyRoutes.ts",
+        "server/jobs/samaWatchJob.ts",
+        "client/src/components/economy/**",
+        "tests/unit/economyWeeklyStory.test.ts",
+        "tests/unit/economyWatchCadence.test.ts",
+        "tests/unit/samaParsers.test.ts",
+        "tests/unit/economyNumberGuard.test.ts",
+        "tests/fixtures/sama/**"
       ]
     }
   ]

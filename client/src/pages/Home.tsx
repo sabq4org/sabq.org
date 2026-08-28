@@ -47,6 +47,7 @@ const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/Asia
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NationalDay96Block = lazyNamed(() => import("@/components/seasonal/NationalDay96Block"), "NationalDay96Block");
 const SahraaTvBlock = lazyNamed(() => import("@/components/SahraaTvBlock"), "SahraaTvBlock");
+const EconomyNumbersBlock = lazyNamed(() => import("@/components/economy/EconomyNumbersBlock"), "EconomyNumbersBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
 // Smart Blocks: معطّلة على واجهة الزائر حالياً (لوحة التحكم فقط).
@@ -514,6 +515,13 @@ export default function Home() {
           <ErrorBoundary fallback={null}>
             <Suspense fallback={null}>
               <NationalDay96Block />
+            </Suspense>
+          </ErrorBoundary>
+
+          {/* الاقتصاد بالأرقام — شريط بيانات البنك المركزي (يختفي ذاتيًا بلا بيانات) */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <EconomyNumbersBlock />
             </Suspense>
           </ErrorBoundary>
 

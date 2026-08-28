@@ -6,6 +6,9 @@ import { signalContentPainted } from "@/lib/contentPaintedSignal";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
+import { lazy, Suspense } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+const EconomyLiveHeader = lazy(() => import("@/components/economy/EconomyLiveHeader"));
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -413,6 +416,16 @@ export default function CategoryPage() {
           )}
         </div>
       </div>
+
+      {/* اقتصاد سبق الحي — رأس حي فوق قائمة أخبار قسم الاقتصاد (بيانات البنك المركزي).
+          يختفي ذاتيًا إن لم تتوفر بيانات، ولا يلمس بقية التصنيفات. */}
+      {slug === "economy" && (
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <EconomyLiveHeader />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       {/* DMS Leaderboard Ad - Desktop only */}
       <div className="container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
