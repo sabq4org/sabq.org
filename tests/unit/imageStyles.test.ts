@@ -238,6 +238,16 @@ describe("resolveImageModel — حسم النموذج", () => {
   });
 });
 
+describe("resolveImageModel — النمط التوضيحي المعتمد", () => {
+  it("التوضيحية تحسم على Nano Banana Pro حتى مع افتراضي عام مختلف (2026-08-28)", () => {
+    const settings = normalizeImageStyleSettings(DEFAULT_IMAGE_STYLE_SETTINGS);
+    const illustration = resolveImageStyle(settings, "illustration");
+    expect(illustration.slug).toBe("illustration");
+    expect(resolveImageModel(settings, illustration)).toBe("gemini-3-pro-image-preview");
+    expect(resolveImageModel(settings, illustration)).not.toBe(DEFAULT_IMAGE_MODEL);
+  });
+});
+
 describe("toEditorImageStyle — الشكل المكشوف للمحرر", () => {
   it("لا يسرّب نصوص البرومبت ويكشف شارات السياق المفعّلة فقط", () => {
     const style = normalizeImageStyleSettings(DEFAULT_IMAGE_STYLE_SETTINGS).styles[0];

@@ -228,6 +228,13 @@ export const DEFAULT_IMAGE_STYLES: ImageStyle[] = [
       "polished magazine-quality illustration",
     negativePrompt:
       "photorealistic, photograph, childish cartoon, clip-art, low quality, distorted anatomy",
+    // النمط المعتمد تحريريًا لصور الأخبار التلقائية. Nano Banana 2 (الافتراضي العام منذ
+    // 2026-08-08) أخرج له رسومًا كرتونية بنصوص إنجليزية مشوّهة رغم تعليمات «بلا نص»
+    // (خبر الأمطار 2026-08-28، خمس محاولات)؛ Pro يلتزم بالبرومبت ويعطي الطابع
+    // التحريري الأنيق نفسه الذي اعتُمد عليه قبل التبديل. الكلفة 0.134$ بدل 0.067$.
+    params: {
+      model: LEGACY_IMAGE_MODEL,
+    },
     contextVariants: [],
   },
   {
