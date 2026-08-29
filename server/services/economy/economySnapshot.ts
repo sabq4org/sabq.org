@@ -13,6 +13,7 @@ import { isDecisionNight, nextDecisionDate } from "./watchCadence";
 import { buildWeeklySpendingStory, type WeeklySpendingStory } from "./weeklyStory";
 import type { PosReport } from "../sama/parsers/posReport";
 import type { MoneySupplyReport } from "../sama/parsers/moneySupplyReport";
+import type { MonthlyStory } from "./monthlyStory";
 
 export interface SnapshotIndicator extends IndicatorSnapshot {
   previousValue: number | null;
@@ -39,6 +40,14 @@ export interface EconomySnapshot {
     ingestedAt: string | null;
   } | null;
   moneySupply: { asOf: string; m3Billion: number | null; m3WeeklyChangePct: number | null; m3PeriodChangePct: number | null } | null;
+  /** «السعوديون في شهر» — بطاقات النشرة الشهرية بلا سلاسل (السلاسل في /monthly-story) */
+  monthly: {
+    month: string;
+    monthLabelAr: string;
+    headline: string;
+    cards: Array<Omit<MonthlyStory["cards"][number], "series">>;
+    ingestedAt: string | null;
+  } | null;
   samaNews: SamaNewsItem[];
   decision: { isDecisionNight: boolean; nextDecisionDate: string | null };
 }
@@ -62,12 +71,13 @@ async function latestMap(source: ObservationSource) {
 }
 
 export async function buildEconomySnapshot(): Promise<EconomySnapshot> {
-  const [ind, fx, news, weeklyReport, msReport] = await Promise.all([
+  const [ind, fx, news, weeklyReport, msReport, monthlyReport] = await Promise.all([
     latestMap("sama_indicator"),
     latestMap("sama_fx"),
     latestMap("sama_news"),
     getLatestReport("pos_weekly"),
     getLatestReport("money_supply_weekly"),
+    getLatestReport("monthly_bulletin"),
   ]);
 
   const indicators: SnapshotIndicator[] = [];
@@ -119,6 +129,7 @@ export async function buildEconomySnapshot(): Promise<EconomySnapshot> {
 
   const story = weeklyReport ? storyFromParsed(weeklyReport.parsed) : null;
   const ms = msReport ? ((msReport.parsed as { report?: MoneySupplyReport }).report ?? null) : null;
+  const monthlyStory = monthlyReport ? ((monthlyReport.parsed as { story?: MonthlyStory }).story ?? null) : null;
   const m3 = ms?.aggregates.find((a) => a.key === "M3");
 
   const now = new Date();
@@ -146,9 +157,29 @@ export async function buildEconomySnapshot(): Promise<EconomySnapshot> {
         }
       : null,
     moneySupply: ms ? { asOf: ms.asOf, m3Billion: ms.m3Billion, m3WeeklyChangePct: m3?.weeklyChangePct ?? null, m3PeriodChangePct: m3?.periodChangePct ?? null } : null,
+    monthly: monthlyStory
+      ? {
+          month: monthlyStory.month,
+          monthLabelAr: monthlyStory.monthLabelAr,
+          headline: monthlyStory.lead.headline,
+          cards: monthlyStory.cards.map(({ series: _s, ...rest }) => rest),
+          ingestedAt: monthlyReport?.createdAt ? new Date(monthlyReport.createdAt).toISOString() : null,
+        }
+      : null,
     samaNews,
     decision: { isDecisionNight: isDecisionNight(now), nextDecisionDate: nextDecisionDate(now) },
   };
+}
+
+export async function getMonthlyStoryCached(): Promise<(MonthlyStory & { ingestedAt?: string }) | null> {
+  const key = `${ECONOMY_CACHE_PREFIX}monthly`;
+  const hit = memoryCache.get<MonthlyStory & { ingestedAt?: string }>(key);
+  if (hit) return hit;
+  const report = await getLatestReport("monthly_bulletin");
+  const story = report ? ((report.parsed as { story?: MonthlyStory }).story ?? null) : null;
+  const out = story && report ? { ...story, ingestedAt: new Date(report.createdAt).toISOString() } : null;
+  if (out) memoryCache.set(key, out, 10 * 60_000);
+  return out;
 }
 
 export async function getEconomySnapshotCached(): Promise<EconomySnapshot> {

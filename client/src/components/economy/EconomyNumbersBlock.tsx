@@ -12,6 +12,7 @@ import { ChangeChip } from "./ChangeChip";
 import { fmtCount, fmtPct, fmtSar, isFresh } from "./format";
 import { NewBadge } from "./NewBadge";
 import type { EconomySnapshot } from "./types";
+import { MonthlyCardView } from "./MonthlyModule";
 
 const ICONS: Record<string, LucideIcon> = {
   "Restaurants & Cafés": Utensils,
@@ -37,6 +38,35 @@ const ICONS: Record<string, LucideIcon> = {
 export function EconomyNumbersBlock() {
   const { data } = useQuery<EconomySnapshot | null>({ queryKey: ["/api/economy/snapshot"], staleTime: 5 * 60_000, refetchInterval: 10 * 60_000 });
   const w = data?.weekly;
+  const m = data?.monthly;
+
+  // نشرة شهرية جديدة (48 ساعة) → البلوك يتحول إلى «السعوديون في شهر»
+  if (m && isFresh(m.ingestedAt) && m.cards.length >= 3) {
+    return (
+      <section className="py-2" aria-label={`السعوديون في ${m.monthLabelAr} بالأرقام`} data-testid="economy-home-block">
+        <div className="rounded-2xl border border-card-border bg-card p-4 sm:p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-primary">
+                <Landmark className="h-3.5 w-3.5" aria-hidden="true" />
+                النشرة الإحصائية الشهرية · البنك المركزي السعودي
+                <NewBadge label="نشرة جديدة" />
+              </div>
+              <h2 className="mt-1 text-xl sm:text-2xl font-extrabold leading-snug [text-wrap:balance]">السعوديون في {m.monthLabelAr} بالأرقام</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{m.headline}</p>
+            </div>
+            <Link href="/economy" className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-[13px] font-bold text-primary-foreground transition-opacity hover:opacity-90">
+              كل أرقام الشهر <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {m.cards.slice(0, 6).map((c) => <MonthlyCardView key={c.key} c={{ ...c, series: [] }} compact />)}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (!w || !w.topSectors?.length) return null;
   const top = w.topSectors.slice(0, 5);
 

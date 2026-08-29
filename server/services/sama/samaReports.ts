@@ -5,7 +5,7 @@
  */
 import { parseSamaDate, samaGetText, SAMA_ORIGIN } from "./samaClient";
 
-export const REPORT_KINDS = ["pos_weekly", "money_supply_weekly", "reserve_assets_monthly"] as const;
+export const REPORT_KINDS = ["pos_weekly", "money_supply_weekly", "reserve_assets_monthly", "monthly_bulletin"] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 export const REPORT_INDEX: Record<ReportKind, { indexPath: string; filePattern: RegExp; titleAr: string }> = {
@@ -23,6 +23,11 @@ export const REPORT_INDEX: Record<ReportKind, { indexPath: string; filePattern: 
     indexPath: "/en-US/Statistics/Indices/Pages/reserve_assets.aspx",
     filePattern: /Reserve_Assets.*\.xlsx$/i,
     titleAr: "الأصول الاحتياطية",
+  },
+  monthly_bulletin: {
+    indexPath: "/ar-sa/Statistics/Pages/MonthlyStatistics.aspx",
+    filePattern: /Monthly_Bulletin.*\.xlsx$/i,
+    titleAr: "النشرة الإحصائية الشهرية",
   },
 };
 
