@@ -5,7 +5,7 @@
  * تاريخ نهاية الشهر (Date) أو "Q1" مع السنة في العمود B. نقرأ أعمدة محددة من أوراق
  * محددة إلى سلاسل شهرية/ربعية موحّدة، ولا نلمس الجداول الفنية.
  */
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 export type Period = string; // "2026-06" | "2026-Q2" | "2026"
 
@@ -136,10 +136,31 @@ function periodOf(row: Row): { kind: "month" | "quarter" | "year"; period: Perio
   return null;
 }
 
-function sheetRows(wb: XLSX.WorkBook, name: string): Row[] {
-  const ws = wb.Sheets[name];
+/** يحوّل قيمة خلية exceljs إلى قيمة بدائية (تاريخ/رقم/نص) أو null. */
+function cellValue(v: ExcelJS.CellValue): unknown {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date || typeof v === "number" || typeof v === "string" || typeof v === "boolean") return v;
+  if (typeof v === "object") {
+    if ("result" in v) return cellValue(v.result as ExcelJS.CellValue);
+    if ("richText" in v) return v.richText.map((t) => t.text).join("");
+    if ("text" in v) return typeof v.text === "string" ? v.text : cellValue(v.text as ExcelJS.CellValue);
+    if ("error" in v) return null;
+  }
+  return null;
+}
+
+function sheetRows(wb: ExcelJS.Workbook, name: string): Row[] {
+  const ws = wb.getWorksheet(name);
   if (!ws) throw new Error(`Monthly bulletin: sheet "${name}" missing — layout changed?`);
-  return XLSX.utils.sheet_to_json<Row>(ws, { header: 1, raw: true, defval: null });
+  const rows: Row[] = [];
+  ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    const values = row.values as ExcelJS.CellValue[]; // exceljs: الفهرس 1 = العمود A
+    const out: unknown[] = [];
+    for (let c = 1; c < values.length; c++) out[c - 1] = cellValue(values[c]);
+    rows[rowNumber - 1] = out;
+  });
+  for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
+  return rows;
 }
 
 function columnSeries(rows: Row[], col: number, scale: number, kind: "month" | "quarter"): SeriesPoint[] {
@@ -185,8 +206,9 @@ function bopSeries(rows: Row[], labelRe: RegExp): SeriesPoint[] {
   return Array.from(out, ([period, value]) => ({ period, value })).sort((a, b) => a.period.localeCompare(b.period));
 }
 
-export function parseMonthlyBulletin(buffer: Buffer | Uint8Array): MonthlyBulletin {
-  const wb = XLSX.read(buffer, { cellDates: true });
+export async function parseMonthlyBulletin(buffer: Buffer | Uint8Array): Promise<MonthlyBulletin> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(Buffer.from(buffer) as unknown as Parameters<typeof wb.xlsx.load>[0]);
   const cache = new Map<string, Row[]>();
   const rowsOf = (name: string) => {
     if (!cache.has(name)) cache.set(name, sheetRows(wb, name));
