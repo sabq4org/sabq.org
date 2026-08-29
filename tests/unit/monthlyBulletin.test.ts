@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { parseMonthlyBulletin } from "../../server/services/sama/parsers/monthlyBulletin";
@@ -7,7 +7,8 @@ import { buildMonthlyStory, monthLabelAr } from "../../server/services/economy/m
 const fixture = fs.readFileSync(path.join(__dirname, "..", "fixtures", "sama", "monthly-bulletin-2026-06.trimmed.xlsx"));
 
 describe("النشرة الإحصائية الشهرية (Excel)", () => {
-  const b = parseMonthlyBulletin(fixture);
+  let b: Awaited<ReturnType<typeof parseMonthlyBulletin>>;
+  beforeAll(async () => { b = await parseMonthlyBulletin(fixture); });
 
   it("يحدد آخر شهر ويقرأ الأعمدة المستهدفة بوحداتها الطبيعية", () => {
     expect(b.latestMonth).toBe("2026-06");

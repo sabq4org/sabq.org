@@ -120,7 +120,7 @@ async function watchReport(kind: ReportKind): Promise<number> {
       parsed = { report };
     } else if (kind === "monthly_bulletin") {
       // النشرة ضخمة (100 ورقة) — نخزّن السلاسل المستخرجة لا الملف
-      const bulletin = parseMonthlyBulletin(buf);
+      const bulletin = await parseMonthlyBulletin(buf);
       const story = buildMonthlyStory(bulletin);
       periodStart = `${bulletin.latestMonth}-01`;
       periodEnd = `${bulletin.latestMonth}-28`;
