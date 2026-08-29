@@ -3,9 +3,9 @@
  * المبدأ: استطلاع خفيف في العادة، وكثيف فقط في النوافذ التي يُتوقع فيها التغيير.
  * كل الأوقات بتوقيت الرياض (UTC+3 بلا توقيت صيفي).
  */
-export type WatchSource = "indicators" | "fx" | "pos_weekly" | "money_supply_weekly" | "reserve_assets_monthly" | "news";
+export type WatchSource = "indicators" | "fx" | "pos_weekly" | "money_supply_weekly" | "reserve_assets_monthly" | "monthly_bulletin" | "news";
 
-export const WATCH_SOURCES: WatchSource[] = ["indicators", "fx", "pos_weekly", "money_supply_weekly", "reserve_assets_monthly", "news"];
+export const WATCH_SOURCES: WatchSource[] = ["indicators", "fx", "pos_weekly", "money_supply_weekly", "reserve_assets_monthly", "monthly_bulletin", "news"];
 
 /** أيام قرارات الفيدرالي 2026 (اليوم الثاني من الاجتماع) — قابلة للتجاوز بـ FOMC_DECISION_DATES=yyyy-mm-dd,… */
 export const DEFAULT_FOMC_DECISION_DATES = [
@@ -62,6 +62,10 @@ export function intervalMinutes(source: WatchSource, now: Date, fomc: Set<string
       return 360;
     case "reserve_assets_monthly":
       if ((r.dayOfMonth <= 8 || r.dayOfMonth >= 28) && r.hour >= 8 && r.hour <= 18) return 60;
+      return 1440;
+    case "monthly_bulletin":
+      // النشرة الشهرية تصدر آخر أيام الشهر التالي (يونيو صدرت 30 يوليو)
+      if ((r.dayOfMonth >= 27 || r.dayOfMonth <= 3) && r.hour >= 8 && r.hour <= 18) return 60;
       return 1440;
     case "news":
       return 15;

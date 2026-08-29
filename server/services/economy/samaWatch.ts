@@ -10,6 +10,8 @@ import { listReportFiles, REPORT_INDEX, type ReportKind } from "../sama/samaRepo
 import { samaGetBuffer, isSamaEnabled } from "../sama/samaClient";
 import { parsePosReport } from "../sama/parsers/posReport";
 import { parseMoneySupplyReport } from "../sama/parsers/moneySupplyReport";
+import { parseMonthlyBulletin } from "../sama/parsers/monthlyBulletin";
+import { buildMonthlyStory } from "./monthlyStory";
 import { buildWeeklySpendingStory, type WeeklySpendingStory } from "./weeklyStory";
 import { createWeeklySpendingDraft, isEconomyAutoDraftsEnabled } from "./economyNewsGenerator";
 import { insertReport, observe, reportExists } from "./economyStore";
@@ -116,6 +118,13 @@ async function watchReport(kind: ReportKind): Promise<number> {
       const report = await parseMoneySupplyReport(buf);
       periodEnd = report.asOf;
       parsed = { report };
+    } else if (kind === "monthly_bulletin") {
+      // النشرة ضخمة (100 ورقة) — نخزّن السلاسل المستخرجة لا الملف
+      const bulletin = parseMonthlyBulletin(buf);
+      const story = buildMonthlyStory(bulletin);
+      periodStart = `${bulletin.latestMonth}-01`;
+      periodEnd = `${bulletin.latestMonth}-28`;
+      parsed = { bulletin, story };
     } else {
       // الأصول الاحتياطية (Excel) — تُحفظ خامًا في هذه المرحلة، والتحليل في مرحلة لاحقة
       parsed = { rawSize: buf.length };
@@ -153,6 +162,7 @@ const RUNNERS: Record<WatchSource, () => Promise<number>> = {
   pos_weekly: () => watchReport("pos_weekly"),
   money_supply_weekly: () => watchReport("money_supply_weekly"),
   reserve_assets_monthly: () => watchReport("reserve_assets_monthly"),
+  monthly_bulletin: () => watchReport("monthly_bulletin"),
 };
 
 export async function runSamaWatchCycle(now = new Date(), force: WatchSource[] = []): Promise<WatchCycleResult> {

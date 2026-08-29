@@ -11,6 +11,7 @@
 | JSON حي (غير موثّق رسميًا — ما تستدعيه صفحة ساما نفسها) | `PortalHandler.ashx?op=getMultiListItems / LoadItems / exchangeRates / exchangeHistoryByCode` | الريبو، الريبو العكسي، التضخم، الناتج، عرض النقود، أسعار الصرف (~30 عملة) وتاريخها، إعلانات ساما |
 | فهارس الملفات (`WPQ1ListData` مُصيَّرة في HTML) | `/ar-sa/Statistics/Indices/Pages/POS.aspx` وغيرها | اكتشاف ملف PDF/Excel جديد بتاريخ نشره (لا نخمّن الاسم) |
 | PDF | نقاط البيع الأسبوعي (الثلاثاء)، عرض النقود الأسبوعي (الخميس) | تحليل بـ`pdfjs-dist` → جداول منظّمة |
+| Excel | النشرة الإحصائية الشهرية (آخر أيام الشهر التالي، ~100 ورقة) | `parsers/monthlyBulletin.ts` يقرأ 14 ورقة إلى 60 سلسلة شهرية/ربعية → `monthlyStory.ts` «السعوديون في شهر» (10 بطاقات + 4 مؤشرات دائمة) |
 | API رسمي (`GetStatistcalById`) | مرحلة لاحقة — يحتاج ID يُولَّد من منصة البيانات | توسّع (مدى، التحويلات، سايبور…) |
 
 **فخ موثّق:** ساما تُسقط IPv6 → العميل يفرض `family: 4` (`server/services/sama/samaClient.ts`).
@@ -33,7 +34,7 @@ routes/economyRoutes.ts ──▶ client/src/components/economy/ (صفحة /econ
 | الطبقة | المسار |
 |---|---|
 | الواجهة | صفحة مستقلة `/economy` («الاقتصاد بالأرقام» — `client/src/pages/EconomyLive.tsx`) · بلوك «الاقتصاد بالأرقام» في الرئيسية يربط إليها · قسم «أعمال» يبقى للأخبار فقط |
-| API عام | `GET /api/economy/snapshot`، `/weekly-story`، `/series/:key`، `/fx`، `/fx/:code/history?days=`، `/reports/:kind`، `/observations/:source/:key`، `/stream` (SSE) |
+| API عام | `GET /api/economy/snapshot`، `/weekly-story`، `/monthly-story`، `/series/:key`، `/fx`، `/fx/:code/history?days=`، `/reports/:kind`، `/observations/:source/:key`، `/stream` (SSE) |
 | API إداري | `GET /api/economy/admin/status`، `POST /api/economy/admin/refresh {sources?}` (موظفون) |
 | الجداول | `economy_observations`، `economy_reports` (تحتاج `db:push` في الإنتاج) |
 | البيئة | `SAMA_ENABLED` (افتراضي on)، `ECONOMY_AUTO_DRAFTS`، `FOMC_DECISION_DATES`، `SAMA_HTTP_TIMEOUT_MS`، `SAMA_FILE_TIMEOUT_MS` |

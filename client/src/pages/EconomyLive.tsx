@@ -12,6 +12,7 @@ import { Footer } from "@/components/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EconomyTicker } from "@/components/economy/EconomyTicker";
 import { WeeklySpendingModule } from "@/components/economy/WeeklySpendingModule";
+import { MonthlyModule } from "@/components/economy/MonthlyModule";
 import { SamaNewsFeed } from "@/components/economy/SamaNewsFeed";
 import { useEconomyStream } from "@/components/economy/useEconomyStream";
 import { fmtDateAr } from "@/components/economy/format";
@@ -55,7 +56,7 @@ export default function EconomyLive() {
           <span className="text-primary">من البنك المركزي إلى شاشتك</span>
         </h1>
         <p className="mx-auto mt-2.5 max-w-2xl text-[14px] font-medium leading-relaxed text-foreground/70 sm:mt-3.5 sm:text-base md:text-lg">
-          إنفاق الأسبوع، أسعار الصرف، الفائدة، التضخم والناتج — أرقام رسمية تتحدث تلقائيًا لحظة صدورها من البنك المركزي السعودي.
+          إنفاق الأسبوع، السعوديون في شهر، أسعار الصرف، الفائدة والتضخم — أرقام رسمية تتحدث تلقائيًا لحظة صدورها من البنك المركزي السعودي.
         </p>
         <div className="mt-5 flex flex-col items-center gap-2.5 sm:mt-6">
           <Link href="/category/business" className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-[14px] font-bold text-primary-foreground transition-opacity hover:opacity-90">
@@ -91,6 +92,8 @@ export default function EconomyLive() {
             </section>
 
             {data.weekly && <WeeklySpendingModule />}
+
+            {data.monthly && <MonthlyModule />}
 
             <SamaNewsFeed items={data.samaNews} />
           </>

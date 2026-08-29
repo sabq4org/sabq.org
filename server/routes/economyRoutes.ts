@@ -4,7 +4,7 @@
  */
 import { Router, type Request, type Response, type Express } from "express";
 import { memoryCache } from "../memoryCache";
-import { getEconomySnapshotCached, getWeeklyStoryCached } from "../services/economy/economySnapshot";
+import { getEconomySnapshotCached, getMonthlyStoryCached, getWeeklyStoryCached } from "../services/economy/economySnapshot";
 import { ECONOMY_CACHE_PREFIX, registerEconomyStreamRoute } from "../services/economy/economyStream";
 import { getObservationHistory, listReports } from "../services/economy/economyStore";
 import { ECONOMY_INDICATOR_KEYS, fetchIndicatorSeries, type EconomyIndicatorKey } from "../services/sama/samaIndicators";
@@ -46,6 +46,17 @@ router.get("/api/economy/weekly-story", async (_req: Request, res: Response) => 
     res.json(story);
   } catch (e) {
     res.status(500).json({ message: "تعذّر جلب قصة الأسبوع", error: (e as Error).message });
+  }
+});
+
+router.get("/api/economy/monthly-story", async (_req: Request, res: Response) => {
+  try {
+    const story = await getMonthlyStoryCached();
+    if (!story) { res.status(404).json({ message: "لا توجد نشرة شهرية بعد" }); return; }
+    publicCache(res, 600);
+    res.json(story);
+  } catch (e) {
+    res.status(500).json({ message: "تعذّر جلب قصة الشهر", error: (e as Error).message });
   }
 });
 

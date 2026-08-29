@@ -94,6 +94,38 @@ export interface EconomySnapshot {
     ingestedAt: string | null;
   } | null;
   moneySupply: { asOf: string; m3Billion: number | null; m3WeeklyChangePct: number | null; m3PeriodChangePct: number | null } | null;
+  monthly: {
+    month: string;
+    monthLabelAr: string;
+    headline: string;
+    cards: Array<Omit<MonthlyCard, "series">>;
+    ingestedAt: string | null;
+  } | null;
   samaNews: SamaNewsItem[];
   decision: { isDecisionNight: boolean; nextDecisionDate: string | null };
+}
+
+export interface SeriesPoint { period: string; value: number }
+
+export interface MonthlyCard {
+  key: string;
+  cardTitle: string;
+  headline: string;
+  figure: string;
+  detailAr: string;
+  tone: "up" | "down" | "neutral";
+  weight: number;
+  facts: Record<string, number | string>;
+  series: SeriesPoint[];
+  seriesLabelAr: string;
+  unit: "sar" | "count" | "pct" | "index";
+}
+
+export interface MonthlyStory {
+  month: string;
+  monthLabelAr: string;
+  cards: MonthlyCard[];
+  lead: { headline: string; intro: string };
+  trackers: Array<{ key: string; titleAr: string; unit: MonthlyCard["unit"]; series: SeriesPoint[] }>;
+  ingestedAt?: string;
 }
