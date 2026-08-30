@@ -58,6 +58,7 @@ import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
 import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService";
 import { getMeetingByInviteToken } from "../services/meetingsService";
 import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
+import { paginationOrReject } from "../utils/pagination";
 
 const router = Router();
 
@@ -2783,7 +2784,9 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
   try {
     const slug = safeDecode(String(req.params.slug || ""));
     if (!slug) return res.status(400).json({ error: "missing slug" });
-    const limit = Math.min(parseInt(String(req.query.limit || "30"), 10) || 30, 60);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 30, maxLimit: 60 });
+    if (!pg) return;
+    const limit = pg.limit;
 
     const where = or(eq(categories.englishSlug, slug), eq(categories.slug, slug));
     const [cat] = await db

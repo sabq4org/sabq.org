@@ -6,6 +6,7 @@ import { requireAuth, requirePermission, requireRole } from "../rbac";
 import { detectImageFocalPoint, FocalPointResult } from "../openai";
 import { memoryCache } from "../memoryCache";
 import { extractGeoLocations } from "../services/geoExtractionService";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router: Router = Router();
 
@@ -163,8 +164,8 @@ router.post("/api/admin/focal-points/detect/:id", requireAuth, requirePermission
 // List articles needing focal point review
 router.get("/api/admin/focal-points/needs-review", requireAuth, requirePermission("articles.edit_any"), async (req: any, res) => {
   try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const page = parsePage(req.query.page);
+    const limit = parseLimit(req.query.limit, 20, 50);
     const offset = (page - 1) * limit;
 
     const reviewArticles = await db

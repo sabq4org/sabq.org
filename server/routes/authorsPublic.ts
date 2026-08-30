@@ -4,6 +4,7 @@
  */
 import { Router } from "express";
 import { getAuthorPageByName } from "../services/authorProfileService";
+import { paginationOrReject } from "../utils/pagination";
 
 const router = Router();
 
@@ -13,8 +14,10 @@ router.get("/api/authors/by-name", async (req, res) => {
     if (!rawName.trim()) {
       return res.status(400).json({ message: "اسم الكاتب مطلوب" });
     }
-    const page = parseInt(String(req.query.page || "1"), 10) || 1;
-    const limit = parseInt(String(req.query.limit || "12"), 10) || 12;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50, allowPage: true, defaultPage: 1 });
+    if (!pg) return;
+    const page = pg.page;
+    const limit = pg.limit;
 
     const result = await getAuthorPageByName(rawName, { page, limit });
     if (!result) {

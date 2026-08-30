@@ -20,6 +20,7 @@ import {
   withdrawEntry,
 } from "../services/predictions/predictionCoreService";
 import { PREDICTION_ERROR_CODES, type SourcePlatform } from "@shared/predictions";
+import { parseLimit, paginationOrReject } from "../utils/pagination";
 
 const router = Router();
 
@@ -136,7 +137,7 @@ router.get("/api/v1/predictions/me/ledger", async (req, res) => {
     res.json(await getUserLedger(session.userId, {
       competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
       cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      limit: req.query.limit ? parseLimit(req.query.limit, 20, 50) : undefined,
     }));
   } catch (error) {
     handleError(res, error);
@@ -151,7 +152,7 @@ router.get("/api/v1/predictions/me/entries", async (req, res) => {
     res.json(await getUserEntries(session.userId, {
       competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
       cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      limit: req.query.limit ? parseLimit(req.query.limit, 30, 100) : undefined,
     }));
   } catch (error) {
     handleError(res, error);
@@ -167,11 +168,13 @@ router.get("/api/v1/predictions/leaderboards", async (req, res) => {
       res.status(400).json({ error: PREDICTION_ERROR_CODES.CONTEST_NOT_FOUND });
       return;
     }
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+    if (!pg) return;
     res.json(await getLeaderboard({
       competitionSlug,
       userId: session?.userId,
-      offset: req.query.offset ? Number(req.query.offset) : 0,
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      offset: pg.offset,
+      limit: req.query.limit ? pg.limit : undefined,
     }));
   } catch (error) {
     handleError(res, error);

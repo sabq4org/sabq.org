@@ -70,6 +70,7 @@ import {
   type TsLiveStats,
 } from "../services/theSportsService";
 import { resolveTsEventPlayerName } from "../services/sportsPlayerNameFixes";
+import { paginationOrReject } from "../utils/pagination";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -356,7 +357,9 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/news", async (req, res) => {
     if (!guard(res)) return;
     try {
-      const limit = Number(req.query.limit) || 6;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
       res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
       res.json({ news: await getWorldCupNews(limit) });
     } catch (error) {

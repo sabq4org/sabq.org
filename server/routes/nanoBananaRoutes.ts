@@ -21,6 +21,7 @@ import {
   resolveGenerationStyle,
 } from "../services/imageStyleService";
 import { resolveImageModel } from "@shared/imageStyles";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 // Request body schema (excludes userId - taken from session)
 const generateImageRequestSchema = insertAiImageGenerationSchema.omit({ 
@@ -260,8 +261,8 @@ router.get("/generations", requireAuth, async (req: Request, res: Response) => {
     
     const generations = await query
       .orderBy(desc(aiImageGenerations.createdAt))
-      .limit(Number(limit))
-      .offset(Number(offset));
+      .limit(parseLimit(limit, 20, 200))
+      .offset(parseOffset(offset));
     
     res.json({
       generations,

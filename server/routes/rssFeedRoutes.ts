@@ -3,6 +3,7 @@ import { db } from '../db';
 import { eq, desc, and, isNotNull, sql } from 'drizzle-orm';
 import { audioNewsletters, audioNewsletterArticles, articles, categories } from '@shared/schema';
 import { cacheControl, CACHE_DURATIONS } from '../cacheMiddleware';
+import { paginationOrReject } from '../utils/pagination';
 
 const router = express.Router();
 
@@ -264,7 +265,9 @@ router.get('/audio-newsletters.opml', cacheControl({ maxAge: 300, staleWhileReva
 // Main articles RSS feed
 router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 }), async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+    if (!pg) return;
+    const limit = pg.limit;
     const baseUrl = process.env.APP_URL || 'https://sabq.org';
     const currentDate = new Date().toUTCString();
 
@@ -345,7 +348,9 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
 router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 }), async (req, res) => {
   try {
     const { slug } = req.params;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+    if (!pg) return;
+    const limit = pg.limit;
     const baseUrl = process.env.APP_URL || 'https://sabq.org';
     const currentDate = new Date().toUTCString();
 
@@ -428,7 +433,9 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
 // JSON Feed for articles (modern alternative to RSS)
 router.get('/articles.json', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 }), async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+    if (!pg) return;
+    const limit = pg.limit;
     const baseUrl = process.env.APP_URL || 'https://sabq.org';
 
     const publishedArticles = await db
