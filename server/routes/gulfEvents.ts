@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { requireAuth, requirePermission, requireRole } from "../rbac";
 import { memoryCache } from "../memoryCache";
+import { paginationOrReject } from "../utils/pagination";
 
 // SSE broadcasting removed — clients now poll /api/gulf-events to avoid
 // long-lived connections pinning Autoscale instances awake.
@@ -31,7 +32,9 @@ export function registerGulfEventRoutes(app: Express) {
 
   app.get("/api/gulf-events", async (req, res) => {
     try {
-      const { country, limit = "100", offset = "0" } = req.query;
+      const { country } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 100, maxLimit: 200 });
+      if (!pg) return;
       const conditions = [eq(gulfEvents.status, "published")];
       if (country && country !== "all") {
         conditions.push(eq(gulfEvents.country, country as string));
@@ -42,8 +45,8 @@ export function registerGulfEventRoutes(app: Express) {
         .from(gulfEvents)
         .where(and(...conditions))
         .orderBy(desc(gulfEvents.isPinned), desc(gulfEvents.publishedAt))
-        .limit(Math.min(Number(limit), 500))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const [countResult] = await db
         .select({ count: sql<number>`count(*)` })
@@ -102,7 +105,9 @@ export function registerGulfEventRoutes(app: Express) {
 
   app.get("/api/gulf-events/latest", async (req, res) => {
     try {
-      const limit = Math.min(Number(req.query.limit || 3), 10);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 3, maxLimit: 10 });
+      if (!pg) return;
+      const limit = pg.limit;
       const cacheKey = `gulf-events:latest:${limit}`;
       const cached = memoryCache.get<any[]>(cacheKey);
       if (cached) {

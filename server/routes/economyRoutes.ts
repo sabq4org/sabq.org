@@ -12,6 +12,7 @@ import { fetchFxHistory, fetchFxToday } from "../services/sama/samaFx";
 import { getSamaWatchStatus, runSamaWatchCycle } from "../services/economy/samaWatch";
 import { WATCH_SOURCES, type WatchSource } from "../services/economy/watchCadence";
 import { isAuthenticated } from "../auth";
+import { paginationOrReject } from "../utils/pagination";
 
 const router = Router();
 
@@ -97,7 +98,9 @@ router.get("/api/economy/fx/:code/history", async (req: Request, res: Response) 
 
 router.get("/api/economy/reports/:kind", async (req: Request, res: Response) => {
   try {
-    const rows = await listReports(String(req.params.kind), Math.min(52, Number(req.query.limit) || 12));
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 52 });
+    if (!pg) return;
+    const rows = await listReports(String(req.params.kind), pg.limit);
     publicCache(res, 300);
     res.json(rows.map((r) => ({ id: r.id, kind: r.kind, fileName: r.fileName, fileUrl: r.fileUrl, publishedAt: r.publishedAt, periodStart: r.periodStart, periodEnd: r.periodEnd })));
   } catch (e) {

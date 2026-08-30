@@ -18,6 +18,7 @@ import { eq, desc, sql, count, gte, and, or, ilike } from "drizzle-orm";
 import { sendImmediatePush } from "../jobs/pushWorker";
 import { isFcmConfigured, sendToTopic, getPushStats, subscribeToTopic, sendToMultipleDevices } from "../services/fcmService";
 import { isApnsConfigured, sendBatchPushNotifications as sendApnsBatch, createCustomNotificationPayload } from "../services/apnsService";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
 
@@ -260,8 +261,8 @@ router.get("/campaigns", async (req: Request, res: Response) => {
       .select()
       .from(pushCampaigns)
       .orderBy(desc(pushCampaigns.createdAt))
-      .limit(parseInt(limit as string))
-      .offset(parseInt(offset as string));
+      .limit(parseLimit(limit, 20, 200))
+      .offset(parseOffset(offset));
 
     const [{ total }] = await db
       .select({ total: count() })
@@ -636,8 +637,8 @@ router.get("/campaigns/:id/events", async (req: Request, res: Response) => {
       .from(pushCampaignEvents)
       .where(eq(pushCampaignEvents.campaignId, id))
       .orderBy(desc(pushCampaignEvents.createdAt))
-      .limit(parseInt(limit as string))
-      .offset(parseInt(offset as string));
+      .limit(parseLimit(limit, 100, 200))
+      .offset(parseOffset(offset));
 
     res.json(events);
   } catch (error) {
@@ -713,15 +714,15 @@ router.get("/logs", async (req: Request, res: Response) => {
       .from(pushNotificationLogs)
       .where(and(...conditions))
       .orderBy(desc(pushNotificationLogs.createdAt))
-      .limit(parseInt(limit as string))
-      .offset(parseInt(offset as string));
+      .limit(parseLimit(limit, 50, 200))
+      .offset(parseOffset(offset));
     
     const [{ total }] = await db
       .select({ total: count() })
       .from(pushNotificationLogs)
       .where(and(...conditions));
     
-    res.json({ logs, total, limit: parseInt(limit as string), offset: parseInt(offset as string) });
+    res.json({ logs, total, limit: parseLimit(limit, 50, 200), offset: parseOffset(offset) });
   } catch (error) {
     console.error("[Push API] logs error:", error);
     res.status(500).json({ error: "Server error" });
@@ -764,7 +765,7 @@ router.get("/logs/errors", async (req: Request, res: Response) => {
         )
       )
       .orderBy(desc(pushNotificationLogs.createdAt))
-      .limit(parseInt(limit as string));
+      .limit(parseLimit(limit, 50, 200));
     
     // تصنيف الأخطاء
     const errorSummary = await db

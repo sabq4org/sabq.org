@@ -4,13 +4,16 @@ import { db } from "../db";
 import { cacheControl } from "../cacheMiddleware";
 import { withSWR } from "../memoryCache";
 import { articles, categories, comments } from "@shared/schema";
+import { paginationOrReject } from "../utils/pagination";
 
 const router: Router = Router();
 
 // GET /api/live/updates - Get live news updates (published & updated articles)
 router.get("/api/live/updates", cacheControl({ maxAge: 30, staleWhileRevalidate: 60 }), async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 20);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 20 });
+    if (!pg) return;
+    const limit = pg.limit;
     const cursor = req.query.cursor as string | undefined;
     const filter = req.query.filter as string | undefined;
 

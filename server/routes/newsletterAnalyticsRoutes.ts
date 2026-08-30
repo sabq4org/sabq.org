@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { requireAuth } from "../rbac";
 import { isSafeRedirectUrl } from "../utils/safeRedirect";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
 
@@ -16,8 +17,8 @@ const TRANSPARENT_1X1_GIF = Buffer.from(
 
 router.get("/campaigns", requireAuth, async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseLimit(req.query.limit, 50, 200);
+    const offset = parseOffset(req.query.offset);
 
     const campaigns = await db
       .select()

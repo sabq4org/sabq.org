@@ -3,6 +3,7 @@ import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
+import { parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -228,7 +229,7 @@ router.get("/paths",
   async (req: any, res: Response) => {
     try {
       const range = (req.query.range as string) || "7d";
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = parseLimit(req.query.limit, 50, 200);
       const paths = await storage.getNavigationPaths(range, limit);
       res.json(paths);
     } catch (error) {
@@ -287,7 +288,7 @@ router.get("/engagement-scores",
   requireAnyPermission("analytics.view", "articles.view"),
   async (req: any, res: Response) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 20;
+      const limit = parseLimit(req.query.limit, 20, 200);
       const sortBy = (req.query.sortBy as string) || "overallScore";
       const scores = await storage.getTopEngagementScores(limit, sortBy);
       res.json(scores);

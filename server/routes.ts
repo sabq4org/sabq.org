@@ -485,6 +485,7 @@ import {
   type InsertTaskAttachment,
 } from "@shared/schema";
 import { pool } from "./db";
+import { paginationOrReject, parseLimit, parseOffset, parsePage } from "./utils/pagination";
 
 function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean }; shouldSave: boolean } {
   const data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean } = {
@@ -1720,9 +1721,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         limit = 20,
       } = req.query;
 
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const pageNum = parsePage(page, 1);
       // radix MUST be 10 (was 20 → "20" parsed as base-20 = 40, corrupting paging).
-      const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 20));
+      const limitNum = parseLimit(limit, 20, 100);
       const offset = (pageNum - 1) * limitNum;
 
       // Build where conditions
@@ -3145,7 +3146,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Sort by score descending and take top N
       scoredResults.sort((a, b) => b.score - a.score);
-      const topResults = scoredResults.slice(0, Number(limit));
+      const topResults = scoredResults.slice(0, parseLimit(limit, 10, 50));
 
       // Determine confidence level based on number of matches and scores
       let confidence: "high" | "medium" | "low" = "low";
@@ -3716,7 +3717,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/categories/:slug/articles", cacheControl({ maxAge: CACHE_DURATIONS.SHORT, sMaxAge: 300, staleWhileRevalidate: 120 }), async (req, res) => {
     try {
       const slug = req.params.slug;
-      const requestedLimit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 100) : 50;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
+      const requestedLimit = pg.limit;
 
       const result = await withSWR(
         `category-articles:${slug}:${requestedLimit}`,
@@ -5235,7 +5238,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Execute main query
       const userList = await usersListQuery
         .orderBy(desc(users.createdAt))
-        .limit(isPaginated ? pageSize : parseInt(limit as string, 10))
+        .limit(isPaginated ? pageSize : Math.max(1, parseInt(limit as string, 10) || 500))
         .offset(isPaginated ? offset : 0);
 
       const userIds = userList.map(u => u.id);
@@ -7055,8 +7058,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // If user cannot view all articles, ALWAYS filter to their own content
       // Ignore any authorId parameter to prevent privilege escalation
       const shouldFilterByUser = !canViewAllArticles;
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 30, 100);
       const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
@@ -10064,8 +10067,8 @@ Respond in valid JSON format only:
       } = req.query;
 
       // Hard cap: never return more than 20 rows per page (keeps this admin tool light).
-      const limitNum = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 20);
-      const offsetNum = Math.max(parseInt(String(offset), 10) || 0, 0);
+      const limitNum = parseLimit(limit, 20, 20);
+      const offsetNum = parseOffset(offset);
 
       const whereConditions = [];
 
@@ -10887,7 +10890,9 @@ Respond in valid JSON format only:
 
   app.get("/api/activities", async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       const cursor = req.query.cursor as string | undefined;
       const typeFilter = req.query.type ? (Array.isArray(req.query.type) ? req.query.type : [req.query.type]) : undefined;
       const importanceFilter = req.query.importance as string | undefined;
@@ -12321,8 +12326,8 @@ Respond in valid JSON format only:
       }
       
       const status = req.query.status as string;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 10, 100);
       const offset = (page - 1) * limit;
       
       let whereConditions = [eq(articles.authorId, user.id)];
@@ -12692,14 +12697,16 @@ Respond in valid JSON format only:
         limit = '12',
         page = '1'
       } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
 
       // Fetch iFox articles from the 5 designated categories + AI-generated only
       const result = await storage.listIFoxArticles({ 
         status: status as any,
         categorySlug: categorySlug as string | undefined,
         search: search as string | undefined,
-        limit: parseInt(limit as string, 10),
-        page: parseInt(page as string, 10)
+        limit: pg.limit,
+        page: pg.page
       });
       
       res.json(result);
@@ -12853,13 +12860,15 @@ Respond in valid JSON format only:
     return cacheControl({ maxAge: 30, sMaxAge: 120, staleWhileRevalidate: 60 })(req, res, next);
   }, async (req: any, res) => {
     try {
-      const { category, search, status, author, limit, orderBy } = req.query;
+      const { category, search, status, author, orderBy } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
       const userId = req.user?.id;
       const userRole = req.user?.role;
 
       // userId is part of the key so each user gets their own per-user flags
       // and they never cross-contaminate. Anonymous shares one 'anon' entry.
-      const cacheKey = `articles:list:${category || ''}:${search || ''}:${status || ''}:${author || ''}:${limit || ''}:${orderBy || ''}:${userRole || ''}:${userId || 'anon'}`;
+      const cacheKey = `articles:list:${category || ''}:${search || ''}:${status || ''}:${author || ''}:${pg.limit}:${orderBy || ''}:${userRole || ''}:${userId || 'anon'}`;
 
       const result = await withSWR(cacheKey, CACHE_TTL.SHORT, CACHE_TTL.SHORT * 2, async () => {
         const articles = await storage.getArticles({
@@ -12869,7 +12878,7 @@ Respond in valid JSON format only:
           authorId: author as string,
           userRole: userRole,
           includeAI: false,
-          limit: limit ? Math.min(parseInt(limit as string), 100) : 50,
+          limit: pg.limit,
           orderBy: orderBy as string,
         });
 
@@ -12925,8 +12934,10 @@ Respond in valid JSON format only:
   // Paginated news for "load more" functionality on homepage
   app.get("/api/news/paginated", cacheControl({ maxAge: 0, sMaxAge: 15, staleWhileRevalidate: 15 }), async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 8, 50);
-      const offset = parseInt(req.query.offset as string) || 0;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 8, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
+      const offset = pg.offset;
       
       const total = await withSWR('news-paginated-total', CACHE_TTL.SHORT, CACHE_TTL.SHORT * 2, async () => {
         const [countResult] = await db
@@ -13254,7 +13265,9 @@ Respond in valid JSON format only:
   // Recent articles endpoint for sidebar widgets
   app.get("/api/articles/recent", cacheControl({ maxAge: CACHE_DURATIONS.SHORT, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req: any, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
       const excludeId = req.query.excludeId as string | undefined;
       const excludeOpinion = req.query.excludeOpinion === "true";
 
@@ -13664,7 +13677,9 @@ Respond in valid JSON format only:
   app.get("/api/articles/:slug/related-infographics", cacheControl(CACHE_DURATIONS.SHORT as any), async (req: any, res) => {
     try {
       const { slug } = req.params;
-      const limit = parseInt(req.query.limit as string) || 6;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       // First get the current article to exclude it
       const [currentArticle] = await db
@@ -13726,7 +13741,9 @@ Respond in valid JSON format only:
   app.get("/api/articles/:slug/infographics", cacheControl(CACHE_DURATIONS.SHORT as any), async (req: any, res) => {
     try {
       const { slug } = req.params;
-      const limit = parseInt(req.query.limit as string) || 6;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       // First get the current article to exclude it
       const [currentArticle] = await db
@@ -14995,8 +15012,8 @@ Respond in valid JSON format only:
   app.get("/api/en/dashboard/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
       const { search, status, articleType, categoryId, authorId, featured, newsType, translated, page = "1", limit = "30" } = req.query;
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 30, 100);
       const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
@@ -16885,8 +16902,8 @@ Respond in valid JSON format only:
         status: req.query.status as string | undefined,
         search: req.query.search as string | undefined,
         source: req.query.source as string | undefined,
-        page: parseInt(req.query.page) || 1,
-        limit: parseInt(req.query.limit) || 20,
+        page: parsePage(req.query.page, 1),
+        limit: parseLimit(req.query.limit, 20, 100),
       });
       res.json(result);
     } catch (error) {
@@ -17063,8 +17080,8 @@ Respond in valid JSON format only:
     try {
       const { category, severity, isActive, search } = req.query;
 
-      const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 20, 200);
       const offset = (page - 1) * limit;
 
       const conditions: any[] = [];
@@ -17983,8 +18000,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log("📋 [USERS] Fetching users with filters:", req.query);
       
       const params = {
-        page: req.query.page ? parseInt(req.query.page) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit) : undefined,
+        page: req.query.page ? parsePage(req.query.page, 1) : undefined,
+        limit: req.query.limit ? parseLimit(req.query.limit, 20, 200) : undefined,
         status: req.query.status,
         role: req.query.role,
         verificationBadge: req.query.verificationBadge,
@@ -18692,8 +18709,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const userId = req.user.id;
       const { page = 1, limit = 20, action, entityType } = req.query;
       
-      const pageNum = parseInt(page as string) || 1;
-      const limitNum = Math.min(parseInt(limit as string) || 20, 100);
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 20, 100);
       const offset = (pageNum - 1) * limitNum;
       
       // Build conditions
@@ -19453,7 +19470,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.json({ recommendations: [], hasInteractions: false });
       }
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 5, 10);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 10 });
+      if (!pg) return;
+      const limit = pg.limit;
       const recommendations = await recommendationService.getFeedRecommendations(userId, limit);
 
       res.json({
@@ -19476,7 +19495,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.json({ articles: [] });
       }
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 5, 10);
+      const limit = parseLimit(req.query.limit, 5, 10);
       const articles = await storage.getContinueReading(userId, limit);
 
       res.json({ 
@@ -19598,8 +19617,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const userId = req.user.id;
       
       // Validate and sanitize pagination parameters
-      const rawLimit = parseInt(req.query.limit as string) || 20;
-      const rawOffset = parseInt(req.query.offset as string) || 0;
+      const rawLimit = parseLimit(req.query.limit, 20, 100);
+      const rawOffset = parseOffset(req.query.offset);
       const limit = Math.min(Math.max(rawLimit, 1), 100); // Clamp between 1 and 100
       const offset = Math.max(rawOffset, 0); // Minimum 0
       
@@ -19989,7 +20008,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/behavior/interests", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+      const limit = parseLimit(req.query.limit, 10, 50);
       
       const { behaviorSignalService } = await import('./notificationMemoryService');
       const interests = await behaviorSignalService.getTopInterests(userId, limit);
@@ -20228,7 +20247,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/loyalty/history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = parseLimit(req.query.limit, 50, 100);
       const history = await storage.getUserLoyaltyHistory(userId, limit);
       res.json(history);
     } catch (error) {
@@ -20273,7 +20292,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Get loyalty leaderboard
   app.get("/api/loyalty/leaderboard", async (req: any, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 100;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 100, maxLimit: 100 });
+      if (!pg) return;
+      const limit = pg.limit;
       const topUsers = await storage.getTopUsers(limit);
       res.json(topUsers);
     } catch (error) {
@@ -20308,7 +20329,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Get latest published topics for homepage block
   app.get("/api/muqtarab/latest-topics", async (req, res) => {
     try {
-      const limit = Number(req.query.limit) || 3;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 3, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       const topics = await storage.getLatestPublishedTopics(limit);
       res.json({ topics });
     } catch (error) {
@@ -20320,7 +20343,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/muqtarab/topics/featured - Get featured topics for homepage showcase
   app.get("/api/muqtarab/topics/featured", async (req, res) => {
     try {
-      const limit = Number(req.query.limit) || 8;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 8, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       const topicsWithAngles = await storage.getLatestPublishedTopics(limit);
       
       // Transform to match frontend expected format
@@ -20364,7 +20389,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/muqtarab/angles/:slug", async (req, res) => {
     try {
       const { slug } = req.params;
-      const limit = parseInt(req.query.limit as string) || 12;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       
       const angle = await storage.getAngleBySlug(slug);
       if (!angle) {
@@ -20390,7 +20417,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/muqtarab/angles/:angleSlug/topics", async (req, res) => {
     try {
       const { angleSlug } = req.params;
-      const limit = Number(req.query.limit) || 20;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       
       const topics = await storage.getPublishedTopicsByAngle(angleSlug, limit);
       res.json({ topics });
@@ -20819,8 +20848,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       const result = await storage.getTopicsByAngle(angleId, {
         status: status as 'draft' | 'published' | 'archived' | undefined,
-        limit: limit ? Number(limit) : 200,
-        offset: offset ? Number(offset) : 0,
+        limit: parseLimit(limit, 200, 200),
+        offset: parseOffset(offset),
         listOnly: true,
       });
       
@@ -21164,7 +21193,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const userId = req.user.id;
         console.log(`[API] GET /api/recommendations/personalized - User: ${userId}`);
 
-        const rawLimit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+        const rawLimit = parseLimit(req.query.limit, 20, 50);
         const limit = Math.min(Math.max(rawLimit, 1), 50);
         
         console.log(`[API] Requested limit: ${rawLimit}, Sanitized limit: ${limit}`);
@@ -21191,7 +21220,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(401).json({ message: "يجب تسجيل الدخول للحصول على التوصيات" });
       }
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+      const limit = parseLimit(req.query.limit, 10, 50);
       const recommendations = await hybridRecommendationEngine.getRecommendations(userId, limit);
 
       res.json({
@@ -21214,7 +21243,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/recommendations/similar/:articleId", async (req, res) => {
     try {
       const { articleId } = req.params;
-      const limit = parseInt(req.query.limit as string) || 5;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       const { findSimilarArticles } = await import('./similarityEngine');
       const similar = await findSimilarArticles(articleId, limit);
@@ -21231,7 +21262,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Get trending articles
   app.get("/api/recommendations/trending", async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 10;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       const { getTrendingArticles } = await import('./similarityEngine');
       const trending = await getTrendingArticles(limit);
@@ -21341,7 +21374,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/recommendations/log", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = parseLimit(req.query.limit, 50, 200);
       const { recommendationLog } = await import('@shared/schema');
 
       const logs = await db.query.recommendationLog.findMany({
@@ -22655,13 +22688,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/smart-blocks/query/articles - Query articles by keyword
   app.get("/api/smart-blocks/query/articles", async (req: any, res) => {
     try {
-      const { keyword, limit = 6, categories, dateFrom, dateTo } = req.query;
+      const { keyword, categories, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 30 });
+      if (!pg) return;
 
       if (!keyword) {
         return res.status(400).json({ message: "الكلمة المفتاحية مطلوبة" });
       }
 
-      console.log(`🔍 [Smart Block] Searching for keyword: "${keyword}", limit: ${limit}`);
+      console.log(`🔍 [Smart Block] Searching for keyword: "${keyword}", limit: ${pg.limit}`);
 
       const filters: any = {};
       if (categories) {
@@ -22676,7 +22711,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const articles = await storage.queryArticlesByKeyword(
         keyword,
-        parseInt(limit as string) || 6,
+        pg.limit,
         filters
       );
 
@@ -22842,13 +22877,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/en/smart-blocks/query/articles - Query English articles by keyword
   app.get("/api/en/smart-blocks/query/articles", async (req: any, res) => {
     try {
-      const { keyword, limit = 6, categories, dateFrom, dateTo } = req.query;
+      const { keyword, categories, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 30 });
+      if (!pg) return;
 
       if (!keyword) {
         return res.status(400).json({ message: "Keyword is required" });
       }
 
-      console.log(`🔍 [EN Smart Block] Searching for keyword: "${keyword}", limit: ${limit}`);
+      console.log(`🔍 [EN Smart Block] Searching for keyword: "${keyword}", limit: ${pg.limit}`);
 
       const conditions: any[] = [
         eq(enArticles.status, 'published'),
@@ -22877,7 +22914,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .leftJoin(users, eq(enArticles.authorId, users.id))
         .where(and(...conditions))
         .orderBy(desc(enArticles.publishedAt))
-        .limit(parseInt(limit as string) || 6);
+        .limit(pg.limit);
 
       // Map results to include category and author information
       const articles = results.map(result => {
@@ -22927,8 +22964,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         featured
       } = req.query;
 
-      const limitNum = Math.min(parseInt(limit as string), 200);
-      const offsetNum = parseInt(offset as string);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 200 });
+      if (!pg) return;
+      const limitNum = pg.limit;
+      const offsetNum = pg.offset;
 
       let query = db
         .select({
@@ -23055,8 +23094,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/v1/weekly-photos", async (req, res) => {
     try {
       const { page = '1', limit = '10' } = req.query;
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = Math.max(1, Math.min(50, parseInt(limit as string, 10) || 10));
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
+      const pageNum = pg.page;
+      const limitNum = pg.limit;
       const offset = (pageNum - 1) * limitNum;
 
       const results = await db
@@ -23297,7 +23338,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ message: "Search query 'q' is required" });
       }
 
-      const limitNum = Math.min(parseInt(limit as string), 100);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100 });
+      if (!pg) return;
+      const limitNum = pg.limit;
       const searchQuery = q as string;
 
       let query = db
@@ -23374,7 +23417,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/v1/breaking", async (req, res) => {
     try {
       const { limit = "10" } = req.query;
-      const limitNum = Math.min(parseInt(limit as string), 50);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50 });
+      if (!pg) return;
+      const limitNum = pg.limit;
 
       const results = await db
         .select({
@@ -25087,7 +25132,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Public: Get all published opinion articles
   app.get("/api/opinion", async (req, res) => {
     try {
-      const { page = 1, limit = 12, authorId, search, sort } = req.query;
+      const { authorId, search, sort } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
+      const page = pg.page;
+      const limit = pg.limit;
       // `sort=views`     — order by all-time view count desc.
       // `sort=trending`  — restrict to articles published in the last 24h
       //                    and order by views desc. Powers the iOS "ترند
@@ -25105,7 +25154,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.json(cached);
       }
 
-      const offset = (Number(page) - 1) * Number(limit);
+      const offset = pg.offset;
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
@@ -25188,7 +25237,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           sortByViews    ? desc(articles.views) :
                            desc(articles.publishedAt)
         )
-        .limit(Number(limit))
+        .limit(limit)
         .offset(offset);
 
       const formattedArticles = results.map((row) => ({
@@ -25207,10 +25256,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const result = {
         articles: formattedArticles,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page,
+          limit,
           total: count,
-          totalPages: Math.ceil(count / Number(limit)),
+          totalPages: Math.ceil(count / limit),
         },
       };
       // Cache the result before sending - TTL 20 seconds
@@ -25299,7 +25348,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/opinion/related/category/:categoryId", async (req, res) => {
     try {
       const { categoryId } = req.params;
-      const { excludeId, limit = 5 } = req.query;
+      const { excludeId } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 20 });
+      if (!pg) return;
 
       // Build query for opinion articles in the same category
       let query = db
@@ -25350,7 +25401,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           )
         )
         .orderBy(sql`score DESC`)
-        .limit(Number(limit));
+        .limit(pg.limit);
 
       const results = await query;
 
@@ -25382,7 +25433,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const userId = req.user?.id;
       const userPermissions = await getEffectiveUserPermissions(userId);
       const { page = 1, limit = 20, status, reviewStatus, search } = req.query;
-      const offset = (Number(page) - 1) * Number(limit);
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 20, 200);
+      const offset = (pageNum - 1) * limitNum;
 
       // رؤية كل مواد الرأي للمكتب فقط؛ غيرهم يرى مواده هو. (القديم كان fail-open:
       // الفلتر كان يُطبَّق فقط على حاملي opinion.edit_own)
@@ -25429,7 +25482,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .leftJoin(users, eq(articles.authorId, users.id))
         .where(and(...conditions))
         .orderBy(desc(articles.createdAt))
-        .limit(Number(limit))
+        .limit(limitNum)
         .offset(offset);
 
       const formattedArticles = results.map((row) => ({
@@ -25459,8 +25512,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         articles: formattedArticles,
         metrics,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page: pageNum,
+          limit: limitNum,
         },
       });
     } catch (error) {
@@ -26419,7 +26472,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/smart-entities/:slug/articles", async (req: any, res) => {
     try {
       const { slug } = req.params;
-      const { limit = 10 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50 });
+      if (!pg) return;
       
       // جلب الكيان أولاً
       const entities = await storage.getSmartEntities({ status: 'active' });
@@ -26436,7 +26490,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       
       // تحديد عدد النتائج
-      const limitedArticles = articlesData.slice(0, parseInt(limit as string));
+      const limitedArticles = articlesData.slice(0, pg.limit);
       
       res.json({ articles: limitedArticles, total: articlesData.length });
     } catch (error: any) {
@@ -26451,7 +26505,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/smart-terms/:identifier/articles", async (req: any, res) => {
     try {
       const { identifier } = req.params;
-      const { limit = 10 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50 });
+      if (!pg) return;
       
       // جلب المصطلح أولاً
       const terms = await storage.getSmartTerms({ status: 'active' });
@@ -26471,7 +26526,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       
       // تحديد عدد النتائج
-      const limitedArticles = articlesData.slice(0, parseInt(limit as string));
+      const limitedArticles = articlesData.slice(0, pg.limit);
       
       res.json({ articles: limitedArticles, total: articlesData.length });
     } catch (error: any) {
@@ -27174,7 +27229,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET English Articles by Category ID
   app.get("/api/en/categories/:id/articles", async (req, res) => {
     try {
-      const { limit = 50, offset = 0 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
       
       // Create alias for reporter
       const reporterAlias = aliasedTable(users, 'reporter');
@@ -27193,8 +27249,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         )
         .orderBy(desc(enArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       // Map results to include category, author and reporter information
       const articles = results.map((result: any) => {
@@ -27407,7 +27463,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET English Articles (with filters)
   app.get("/api/en/articles", async (req, res) => {
     try {
-      const { categoryId, limit = 20, offset = 0 } = req.query;
+      const { categoryId } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100 });
+      if (!pg) return;
 
       // SECURITY: `status` is NOT taken from the query here.
       // It used to be (`status = "published"` was only a default), so
@@ -27432,8 +27490,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .leftJoin(reporterAlias, eq(enArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(enArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       // Map results to include category, author and reporter information
       const articles = results.map((result: any) => {
@@ -28681,7 +28739,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Get Urdu articles (published)
   app.get("/api/ur/articles", async (req, res) => {
     try {
-      const { categoryId, limit = 20, offset = 0 } = req.query;
+      const { categoryId } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100 });
+      if (!pg) return;
 
       // Same as the English twin: `status` is never taken from the query on
       // this public listing. Staff filtering lives on
@@ -28701,8 +28761,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(urArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -29031,7 +29091,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Get Urdu category articles by slug
   app.get("/api/ur/category/:slug/articles", async (req, res) => {
     try {
-      const { limit = 50, offset = 0 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
       
       const [category] = await db
         .select()
@@ -29058,8 +29119,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         )
         .orderBy(desc(urArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -29142,7 +29203,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.get("/api/ur/categories/:id/articles", async (req, res) => {
     try {
       const categoryId = req.params.id;
-      const { limit = 50, offset = 0 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
@@ -29159,8 +29221,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         )
         .orderBy(desc(urArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -29609,8 +29671,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(urArticles.createdAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(parseLimit(limit, 50, 200))
+        .offset(parseOffset(offset));
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -30307,13 +30369,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET /api/ur/smart-blocks/query/articles - Query Urdu articles by keyword
   app.get("/api/ur/smart-blocks/query/articles", async (req: any, res) => {
     try {
-      const { keyword, limit = 6, categories, dateFrom, dateTo } = req.query;
+      const { keyword, categories, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 30 });
+      if (!pg) return;
 
       if (!keyword) {
         return res.status(400).json({ message: "مطلوبہ مطلوبہ لفظ" });
       }
 
-      console.log(`🔍 [Urdu Smart Block] Searching for keyword: "${keyword}", limit: ${limit}`);
+      console.log(`🔍 [Urdu Smart Block] Searching for keyword: "${keyword}", limit: ${pg.limit}`);
 
       const filters: any = {};
       if (categories) {
@@ -30328,7 +30392,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       const articles = await storage.queryUrArticlesByKeyword(
         keyword,
-        parseInt(limit as string) || 6,
+        pg.limit,
         filters
       );
 
@@ -30744,8 +30808,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         createdBy: createdBy as string | undefined,
         status: effectiveStatus,
         categoryId: categoryId as string | undefined,
-        limit: limit ? parseInt(limit as string) : 20,
-        offset: offset ? parseInt(offset as string) : 0,
+        limit: parseLimit(limit, 20, 100),
+        offset: parseOffset(offset),
       });
 
       res.json(result);
@@ -30915,15 +30979,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET /api/omq - قائمة التحليلات المنشورة (public)
   app.get("/api/omq", async (req, res) => {
     try {
-      const { status, keyword, category, dateFrom, dateTo, page, limit } = req.query;
+      const { status, keyword, category, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
       
       // Parse filters
       const filters: any = {
         status: status as string | undefined,
         keyword: keyword as string | undefined,
         category: category as string | undefined,
-        page: page ? parseInt(page as string) : 1,
-        limit: limit ? parseInt(limit as string) : 20,
+        page: pg.page,
+        limit: pg.limit,
       };
       
       // Parse date range if provided
@@ -31375,7 +31441,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.get("/api/accessibility/recent", requireAuth, requirePermission('admin.manage_settings'), async (req, res) => {
     try {
       const { limit = '50', eventType } = req.query;
-      const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+      const limitNum = parseLimit(limit, 50, 100);
       
       // Build where conditions
       const conditions = [];
@@ -31495,8 +31561,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         const result = await storage.getAllNewsletterSubscriptions({
           status: status as string,
           language: language as string,
-          limit: limit ? parseInt(limit as string) : 50,
-          offset: offset ? parseInt(offset as string) : 0,
+          limit: parseLimit(limit, 50, 200),
+          offset: parseOffset(offset),
         });
         res.json(result);
       } catch (error: any) {
@@ -31613,8 +31679,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
         const { page, limit, isActive } = req.query;
         const result = await storage.getAllPublishers({
-          page: page ? parseInt(page as string) : 1,
-          limit: limit ? parseInt(limit as string) : 20,
+          page: parsePage(page, 1),
+          limit: parseLimit(limit, 20, 100),
           isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         });
         res.json(result);
@@ -31808,8 +31874,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         const { page, limit } = req.query;
         const result = await storage.getPublisherCreditLogs(
           req.params.id,
-          page ? parseInt(page as string) : 1,
-          limit ? parseInt(limit as string) : 50
+          parsePage(page, 1),
+          parseLimit(limit, 50, 100)
         );
 
         res.json(result);
@@ -31833,8 +31899,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           return res.status(404).json({ message: "الناشر غير موجود" });
         }
 
-        const page = Math.max(1, parseInt(req.query.page as string) || 1);
-        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
+        const page = parsePage(req.query.page, 1);
+        const limit = parseLimit(req.query.limit, 10, 50);
         const result = await getPortalArticles(publisher, {
           page,
           limit,
@@ -31862,8 +31928,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
         const { page, limit, isActive } = req.query;
         const result = await storage.getAllPublishers({
-          page: page ? parseInt(page as string) : 1,
-          limit: limit ? parseInt(limit as string) : 20,
+          page: parsePage(page, 1),
+          limit: parseLimit(limit, 20, 100),
           isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         });
         res.json(result);
@@ -33986,8 +34052,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
       
       const result = await storage.getOpinionAuthorApplications(
         status as string,
-        parseInt(page as string),
-        parseInt(limit as string)
+        parsePage(page, 1),
+        parseLimit(limit, 10, 100)
       );
 
       res.json(result);
@@ -34549,8 +34615,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // List all contact messages with pagination and filtering
   app.get("/api/admin/contact-messages", requireAuth, requireRole("admin", "editor"), async (req: any, res) => {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 20, 100);
       const status = req.query.status as string;
       const search = req.query.search as string;
       const offset = (page - 1) * limit;
@@ -35961,8 +36027,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.get("/api/search", async (req, res) => {
     try {
       const q = String(req.query.q || "").trim();
-      const limit = Math.min(parseInt(String(req.query.limit || "20")), 50);
-      const page = Math.max(0, parseInt(String(req.query.page || "0")));
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
+      const page = parseOffset(req.query.page);
       const offset = page * limit;
 
       if (!q || q.length < 2) {

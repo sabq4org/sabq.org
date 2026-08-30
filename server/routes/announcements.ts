@@ -15,6 +15,7 @@ import {
   insertInternalAnnouncementSchema,
   updateInternalAnnouncementSchema,
 } from "@shared/schema";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 export function registerAnnouncementRoutes(app: Express) {
   async function findUnknownAudienceRoles(audienceRoles: string[] | null | undefined) {
@@ -158,8 +159,8 @@ export function registerAnnouncementRoutes(app: Express) {
         if (channel) filters.channel = channel;
         if (tags) filters.tags = Array.isArray(tags) ? tags : [tags];
         if (search) filters.search = search;
-        if (limit) filters.limit = parseInt(limit as string);
-        if (offset) filters.offset = parseInt(offset as string);
+        if (limit) filters.limit = parseLimit(limit, 50, 200);
+        if (offset) filters.offset = parseOffset(offset);
 
         const announcements = await storage.getAllInternalAnnouncements(filters);
 
