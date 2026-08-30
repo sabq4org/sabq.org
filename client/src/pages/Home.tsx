@@ -538,15 +538,12 @@ export default function Home() {
           )}
         </div>
 
-        {/* AI Section with soft gradient background - Lazy loaded */}
+        {/* AI Summary Section with soft gradient background - Lazy loaded */}
         <LazySection>
           <div className="bg-ai-gradient-soft py-8">
-            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="scroll-fade-in">
                 <SmartSummaryBlock />
-              </div>
-              <div className="scroll-fade-in">
-                <AIInsightsBlock enabled={true} />
               </div>
             </div>
           </div>
@@ -578,6 +575,17 @@ export default function Home() {
         {/* Quad Categories Block - 4 category columns - Below Smart News */}
         <LazySection>
           <QuadCategoriesBlock enabled={true} />
+        </LazySection>
+
+        {/* Weekly AI Insights - directly below the quad categories block */}
+        <LazySection>
+          <div className="bg-ai-gradient-soft py-8">
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="scroll-fade-in">
+                <AIInsightsBlock enabled={true} />
+              </div>
+            </div>
+          </div>
         </LazySection>
 
         {/* Trending Week Section - Top viewed articles - Below All News */}
