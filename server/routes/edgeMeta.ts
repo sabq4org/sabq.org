@@ -1822,6 +1822,51 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
+  // اقتصاد سبق الحي — /economy (بيانات البنك المركزي). بدونها كانت مشاركة
+  // الرابط في واتساب تُظهر «سبق الذكية» + الأيقونة بدل هوية اقتصادية بصورة OG.
+  {
+    pattern: /^\/economy\/?$/,
+    handle: async () => {
+      const description =
+        "الاقتصاد السعودي بالأرقام: إنفاق الأسبوع، السعوديون في شهر، أسعار الصرف، الفائدة والتضخم — أرقام رسمية تتحدث تلقائيًا لحظة صدورها من البنك المركزي السعودي.";
+      const image = `${SITE_URL}/branding/economy-og-image.jpg`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>اقتصاد سبق — الاقتصاد السعودي بالأرقام</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "الاقتصاد بالأرقام — بيانات البنك المركزي السعودي حيًا | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/economy`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "اقتصاد سبق",
+              description,
+              url: `${SITE_URL}/economy`,
+              inLanguage: "ar",
+              isPartOf: { "@type": "WebSite", name: "صحيفة سبق الإلكترونية", url: SITE_URL },
+              primaryImageOfPage: { "@type": "ImageObject", url: image, width: 1200, height: 630 },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                { "@type": "ListItem", position: 2, name: "الاقتصاد", item: `${SITE_URL}/economy` },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
   // World days landing
   {
     pattern: /^\/world-days\/?$/,
