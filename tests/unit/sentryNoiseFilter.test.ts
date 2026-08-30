@@ -110,6 +110,29 @@ describe("shouldSendSentryEvent — أخطاء الطرف الثالث تسقط"
     expect(shouldSendSentryEvent(event)).toBe(false);
   });
 
+  it("JAVASCRIPT-REACT-3B/3C/1S: إضافة fetch داخل مكدس مختلط تسقط", () => {
+    // الأحداث الحقيقية تبدأ وتنتهي بإطارات من حزمتنا لأن الإضافة لفّت fetch
+    // ثم مرّ الخطأ عبر غلاف SDK. فحص «آخر إطار» وحده كان يمررها رغم وجود
+    // injectScriptAdjust.js صراحةً في المنتصف.
+    const event = eventWith(
+      [
+        { filename: OUR_BUNDLE },
+        { filename: "chrome-extension://bkkbcggnhapdmkeljlodobbkopceiche/injectScriptAdjust.js" },
+        { filename: OUR_VENDOR },
+      ],
+      "auto.browser.global_handlers.onunhandledrejection",
+    );
+    expect(shouldSendSentryEvent(event)).toBe(false);
+  });
+
+  it("وجود عدة إطارات من حزمتنا بلا إضافة لا يزال يمرّ", () => {
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }, { filename: OUR_VENDOR }, { filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onerror",
+    );
+    expect(shouldSendSentryEvent(event)).toBe(true);
+  });
+
   it("كل الإطارات صناعية → لا موضع رمي يُنسب إلينا", () => {
     const event = eventWith(
       [{ filename: "[native code]" }, { filename: "[wasm code]" }],

@@ -48,6 +48,10 @@ export const FIRST_PARTY_FRAME =
 /** إطارات تُنتجها المنصّة لا ملف لها — تُتخطّى نزولًا في المكدس. */
 const SYNTHETIC_FILENAMES = new Set(["[native code]", "[wasm code]"]);
 
+/** Browser-extension schemes can never belong to the Sabq application. */
+const BROWSER_EXTENSION_FRAME =
+  /^(?:chrome|moz|safari(?:-web)?)-extension:\/\//i;
+
 /**
  * آليات الالتقاط التلقائي في متصفح Sentry: `auto.browser.global_handlers.*`
  * (window.onerror / onunhandledrejection) و`auto.browser.browserapierrors.*`
@@ -60,6 +64,15 @@ export function isAutoCapturedMechanism(mechanismType: unknown): boolean {
 
 export function isFirstPartyFilename(filename: unknown): boolean {
   return typeof filename === "string" && FIRST_PARTY_FRAME.test(filename);
+}
+
+function hasBrowserExtensionFrame(event: MinimalSentryEvent): boolean {
+  return Boolean(event.exception?.values?.some((value) =>
+    value.stacktrace?.frames?.some((frame) =>
+      typeof frame.filename === "string" &&
+      BROWSER_EXTENSION_FRAME.test(frame.filename),
+    ),
+  ));
 }
 
 /**
@@ -99,7 +112,11 @@ export interface MinimalSentryEvent {
  *
  * القواعد بالترتيب:
  *   1. لا استثناء في الحدث (رسالة صريحة منّا) → يمرّ.
- *   1.5 إطار غلاف `browserApiErrors` وحيدًا → يسقط (انظر isLoneWrapperFrame).
+ *   1.5 أي إطار صريح لإضافة متصفح → يسقط. إضافات مثل
+ *       `injectScriptAdjust.js` تلفّ `window.fetch`، فيصبح المكدس مختلطًا
+ *       (إطار من حزمتنا + الإضافة + غلاف SDK من حزمتنا) ويفلت من فحص موضع
+ *       الرمي وحده رغم أن الطرف الدخيل مثبت داخل المكدس.
+ *   1.6 إطار غلاف `browserApiErrors` وحيدًا → يسقط (انظر isLoneWrapperFrame).
  *   2. له إطارات → نمشي من موضع الرمي (آخر إطار) إلى الأعلى:
  *      - `[native code]` / `[wasm code]` تُتخطّى،
  *      - إطار بلا اسم ملف = كود eval محقون → يسقط (حزمة Vite الإنتاجية لا
@@ -112,6 +129,8 @@ export interface MinimalSentryEvent {
  *      - نداء صريح منّا (`generic` أو بلا mechanism) → يمرّ.
  */
 export function shouldSendSentryEvent(event: MinimalSentryEvent): boolean {
+  if (hasBrowserExtensionFrame(event)) return false;
+
   const exceptionValue = event.exception?.values?.[0];
   if (!exceptionValue) return true;
 
