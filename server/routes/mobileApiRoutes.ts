@@ -20,6 +20,7 @@ import { recordFailure, isLockedOut, clearFailures } from "../services/authAttem
 import { createWebResetLink, sendPasswordResetCodeEmail } from "../services/passwordResetService";
 import { normalizePhone } from "../services/phoneAuth";
 import { isUniqueViolation } from "../utils/pgError";
+import { parseLimit, paginationOrReject, boundedLimit } from "../utils/pagination";
 import { EMAIL_FORMAT_REGEX } from "../services/phoneRegistrationService";
 import {
   canSelfAssignSchedule,
@@ -800,6 +801,22 @@ const mobileActivationLimiter = rateLimit({
   keyGenerator: cfKeyGenerator,
   validate: cfValidate,
   message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
+// Public list endpoints: the global limiter skips GETs, so a bare loop over
+// /articles, /search, /news/paginated, /breaking, /live can still hammer Neon.
+// 300 req/min per real client IP — generous for one device, fatal for a scrape loop.
+// Mobile apps hit api.sabq.org directly, so carrier-grade NAT can pool many users
+// behind one IP; do not tighten below ~200 without checking app request rates.
+// Key resolution: docs/ratelimit-edge-ip-fix-2026-06-03.md.
+const publicListLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, error: "طلبات كثيرة جدًا. حاول لاحقًا." },
 });
 
 // Helper: Generate 6-digit verification code.
@@ -3063,11 +3080,11 @@ function wantsFreshData(req: Request): boolean {
 }
 
 // GET /api/v1/articles (list)
-router.get("/articles", async (req: Request, res: Response) => {
+router.get("/articles", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const page = parseInt(req.query.page as string) || 0;
-    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset } = pg;
     const section = req.query.section as string | undefined;
     const breaking = req.query.breaking as string | undefined;
     const featured = req.query.featured as string | undefined;
@@ -3153,7 +3170,7 @@ router.get("/articles", async (req: Request, res: Response) => {
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
-      .limit(limit)
+      .limit(boundedLimit(limit))
       .offset(offset);
 
     res.json({
@@ -3180,11 +3197,11 @@ router.get("/articles", async (req: Request, res: Response) => {
 // `/articles` endpoint (decoded by iOS `APIPaginatedList<APIArticle>` via the
 // `articles` key). The filter mirrors the web `/api/news/paginated`: published,
 // shown on homepage, excluding opinion pieces and AI-sourced items.
-router.get("/news/paginated", async (req: Request, res: Response) => {
+router.get("/news/paginated", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const page = parseInt(req.query.page as string) || 0;
-    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset } = pg;
 
     const conditions = [
       eq(articles.status, "published"),
@@ -3228,7 +3245,7 @@ router.get("/news/paginated", async (req: Request, res: Response) => {
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
-      .limit(limit)
+      .limit(boundedLimit(limit))
       .offset(offset);
 
     res.json({
@@ -3442,9 +3459,11 @@ router.get("/sections", async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/breaking
-router.get("/breaking", async (req: Request, res: Response) => {
+router.get("/breaking", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 10, maxLimit: 30 }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit } = pg;
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const results = await db
@@ -3466,7 +3485,7 @@ router.get("/breaking", async (req: Request, res: Response) => {
         )
       )
       .orderBy(desc(articles.publishedAt))
-      .limit(limit);
+      .limit(boundedLimit(limit));
 
     res.json({
       articles: results.map((r) => formatArticleForMobile(r, BASE_URL)),
@@ -3481,11 +3500,12 @@ router.get("/breaking", async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/search
-router.get("/search", async (req: Request, res: Response) => {
+router.get("/search", publicListLimiter, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || "";
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const offset = parseInt(req.query.offset as string) || 0;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 20, maxLimit: 50 }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset } = pg;
 
     if (!q.trim()) {
       return res.json({ query: q, articles: [], total: 0, hasMore: false });
@@ -3516,7 +3536,7 @@ router.get("/search", async (req: Request, res: Response) => {
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
-      .limit(limit)
+      .limit(boundedLimit(limit))
       .offset(offset);
 
     res.json({
@@ -3643,9 +3663,9 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
       });
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 30;
-    const offset = (page - 1) * limit;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 30, maxLimit: 100, allowPage: true, defaultPage: 1 }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset, page } = pg;
 
     const cacheKey = `mobile:author:${rawName.toLowerCase()}:p${page}:l${limit}`;
     const cached = getCached(cacheKey);
@@ -3730,7 +3750,7 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
           )
         )
         .orderBy(desc(articles.publishedAt))
-        .limit(limit)
+        .limit(boundedLimit(limit))
         .offset(offset),
     ]);
 
@@ -3840,11 +3860,13 @@ function formatGulfEvent(e: any) {
 }
 
 // GET /api/v1/live - Full live coverage feed with timeline, filters, and stats
-router.get("/live", async (req: Request, res: Response) => {
+router.get("/live", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const { country, limit: qLimit, offset: qOffset, since } = req.query;
-    const lim = Math.min(parseInt(qLimit as string) || 50, 200);
-    const off = parseInt(qOffset as string) || 0;
+    const { country, since } = req.query;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 50, maxLimit: 200 }, (m) => log.warn(m));
+    if (!pg) return;
+    const lim = pg.limit;
+    const off = pg.offset;
 
     const conditions = [eq(gulfEvents.status, "published")];
     if (country && country !== "all") {
@@ -3862,7 +3884,7 @@ router.get("/live", async (req: Request, res: Response) => {
         .from(gulfEvents)
         .where(and(...conditions))
         .orderBy(desc(gulfEvents.isPinned), desc(gulfEvents.publishedAt))
-        .limit(lim)
+        .limit(boundedLimit(lim))
         .offset(off),
       db.select({ count: sql<number>`count(*)` })
         .from(gulfEvents)
@@ -6338,7 +6360,7 @@ router.get("/notifications", async (req: Request, res: Response) => {
     }
 
     const { editorialNotifications } = await import("@shared/schema");
-    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const limit = parseLimit(req.query.limit, 50, 100);
 
     const rows = await db
       .select()
