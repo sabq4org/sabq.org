@@ -99,8 +99,11 @@ function isLoneWrapperFrame(
 
 /** الشكل الأدنى الذي نحتاجه من حدث Sentry — يُبقي الوحدة قابلة للاختبار بلا SDK. */
 export interface MinimalSentryEvent {
+  message?: string;
   exception?: {
     values?: Array<{
+      type?: string;
+      value?: string;
       mechanism?: { type?: string } | null;
       stacktrace?: { frames?: Array<{ filename?: string }> } | null;
     }>;
@@ -108,9 +111,125 @@ export interface MinimalSentryEvent {
 }
 
 /**
+ * سكربتات إعلانات/تحليلات وإضافات متصفح — ليست أخطاءنا. تُمرَّر إلى
+ * `denyUrls` في `Sentry.init` حتى يُسقطها الـSDK قبل beforeSend.
+ */
+export const SENTRY_DENY_URLS: RegExp[] = [
+  /googletagmanager|googlesyndication|doubleclick|adservice|novatiq|permutive|google-analytics|googletagservices|googleadservices|analytics\.google/i,
+  /^chrome-extension:\/\//,
+  /^moz-extension:\/\//,
+  /^safari(-web)?-extension:\/\//,
+];
+
+/**
+ * رسائل ضجيج العميل غير القابلة للإصلاح من جهتنا.
+ *
+ * تُمرَّر إلى `ignoreErrors` في التهيئة (يسقطها الـSDK مبكرًا) وتُعاد
+ * فحصها في `shouldSendSentryEvent` حتى تُختبَر بالوحدة. مطابقة السلاسل
+ * كـSentry: السلسلة جزء من الرسالة، والتعبير النمطي `RegExp.test`.
+ *
+ * لا تُدرج هنا أخطاء الـchunks المفقودة («Failed to fetch dynamically
+ * imported module») — تلك إنذار الشاشة البيضاء بعد النشر.
+ */
+export const SENTRY_IGNORE_ERRORS: Array<string | RegExp> = [
+  "ResizeObserver loop limit exceeded",
+  "ResizeObserver loop completed with undelivered notifications.",
+  // تتبّع خارجي محجوب بمانع إعلانات — السلسلة ليست في كودنا أصلًا
+  "Failed to track Pageview",
+  // سكربت إعلانات محقون (GTM/DMS) يمشّط DOM الصفحة بحثًا عن البطاقة
+  // الرابعة ليحقن إعلانًا داخل الشبكة — في الصفحات التي تعرض أقل من 4
+  // بطاقات يرمي TypeError. ليس في مستودعنا إطلاقًا (السيلكتور لا يظهر
+  // إلا كـtestid في NewsArticleCard)، لكنه أكبر مصدر ضجيج في Sentry
+  // (3,400+ حدث/أسبوع) وقد يصل بلا إطارات فلا يسقطه allowUrls.
+  /card-article-grid/,
+  /reading 'parentNode'/,
+  // GPT غير محمّل (مانع إعلانات) وسكربت خارجي يستدعيه بلا حارس —
+  // كودنا (DmsAdSlot) يفحص window.googletag.pubads قبل أي استدعاء
+  /googletag\.pubads is not a function/,
+  // ماسح روابط Outlook (SafeLinks) يرفض Promise بكائن ليس Error —
+  // نمط عالمي معروف، يصل بلا إطارات فلا يسقطه beforeSend أدناه
+  "Object Not Found Matching Id",
+  // إضافة «تعبئة تلقائية» في متصفحات أندرويد تستدعي دالة غير معرّفة
+  // (بصيغتي Chrome وSafari/WebKit)
+  /xbrowser is not defined|Can't find variable: xbrowser/,
+  // إضافة متصفح / سكربت محقون يفترض متغيّرًا عامًا اسمه selector
+  // (JAVASCRIPT-REACT-4). لا يوجد ReferenceError بهذا الاسم في كودنا.
+  /selector is not defined|Can't find variable: selector/,
+  // fetch فاشل نحو مضيف ليس لنا — منذ SDK v8 تُلحق الرسالة بمضيف الطلب
+  // الفاشل فنطابق عليه. كودنا لا ينادي أي مضيف خارجي بـfetch من المتصفح
+  // (تحقُّق 2026-08-17: صفر نداءات خارجية في client/src)، فكل فشل موسوم
+  // بمضيف غير sabq مصدره سكربت محقون: إضافات (frame_ant نحو
+  // www.google.com في JAVASCRIPT-REACT-1C، injectScriptAdjust في 35/37)،
+  // أدواري (utq.vvipquan.com في 36)، ووسوم إعلانات. كانت القاعدة قائمة
+  // بمضيفي الإعلانات المعروفين — لعبة قط وفأر انتهت بقلب المنطق.
+  // الفشل بلا لاحقة "(host)" أو نحو مضيف sabq يمرّ كما هو.
+  /(?:Failed to fetch|Load failed|NetworkError)[^(]*\((?!(?:[a-z0-9-]+\.)*sabq\.(?:org|news)\))/i,
+  // polyfill الـmodulepreload من Vite يجلب chunks مسبقًا بـfetch — فشله
+  // (شبكة متقطعة، إغلاق الصفحة أثناء الجلب، دوران build بعد النشر) لا
+  // يكسر شيئًا: الاستيراد الفعلي له مسار خطئه وdeployRecovery يعالج
+  // الشاشة البيضاء. 1,428 حدثًا في 16 يومًا (JAVASCRIPT-REACT-D) صفر
+  // مستخدم متأثر. إنذار CDN الحقيقي محفوظ: رسائل فشل الاستيراد
+  // الديناميكي (Failed to fetch dynamically imported module /
+  // Importing a module script failed) بلا لاحقة "(host)" فلا تطابق.
+  /(?:Failed to fetch|Load failed|NetworkError)[^(]*\(cdn\.sabq\.org\)/,
+  // إلغاء داخلي في TanStack Query: حين يُفكَّك آخر مكوّن يراقب استعلامًا
+  // جاريًا يستدعي removeObserver → cancel({revert}) فيجهض الجلب عبر
+  // AbortController، ورفض retryer الداخلي يصعد كـunhandled rejection من
+  // vendor-core — سلوك مقصود في المكتبة لا خطأ عندنا. صفر مستخدم متأثر
+  // في 157 حدثًا خلال أسبوعين (JAVASCRIPT-REACT-2W و2V).
+  "signal is aborted without reason",
+  // سفاري/WebKit يرمي TypeError برسالة «مُلغى» (المعرّب) أو "cancelled"
+  // (الإنجليزي) — مكافئ Load failed — حين يُجهض fetch بمغادرة الصفحة
+  // أثناء الجلب. ضجيج شبكة لا خطأ كود (JAVASCRIPT-REACT-38).
+  // مطابقة تامة حتى لا تُسقط رسالة حقيقية تحتوي الكلمة.
+  /^مُلغى$/,
+  /^cancelled$/,
+  // سفاري/WebKit المعرّب: «تم فقدان اتصال الشبكة.» = CFNetwork
+  // NSURLErrorNetworkConnectionLost. يصل من fetch في حزمتنا فيمرّ
+  // فحص موضع الرمي — لذلك تُدرَج هنا لا في beforeSend وحدها.
+  // JAVASCRIPT-REACT-2T: https://sabq.sentry.io/issues/7619514545/
+  /^تم فقدان اتصال الشبكة\.?$/,
+  /^The network connection was lost\.?$/i,
+  /^The Internet connection appears to be offline\.?$/i,
+  // رفض إذن المتصفح (تشغيل تلقائي، حافظة، إشعارات، كاميرا) — قرار
+  // المستخدم أو سياسة المنصّة، لا خلل في الكود. الرسائل تختلف حسب
+  // اللغة لذلك نطابق النوع أيضًا في isClientNoiseException.
+  /^NotAllowedError/,
+];
+
+/** مطابقة `ignoreErrors` كما يفعل Sentry: السلسلة جزءًا، والتعبير النمطي اختبارًا. */
+export function isIgnoredClientErrorMessage(message: unknown): boolean {
+  if (typeof message !== "string" || !message) return false;
+  return SENTRY_IGNORE_ERRORS.some((pattern) =>
+    typeof pattern === "string" ? message.includes(pattern) : pattern.test(message),
+  );
+}
+
+/**
+ * ضجيج عميل واضح من نوع الاستثناء أو نصّه.
+ *
+ * `NotAllowedError` يُسقط بالنوع لأن نص الرفض يختلف حسب اللغة والسياق.
+ * بقية الأنماط تمرّ عبر قائمة `SENTRY_IGNORE_ERRORS`.
+ */
+export function isClientNoiseException(
+  exception: { type?: string; value?: string } | undefined,
+  fallbackMessage?: string,
+): boolean {
+  const type = exception?.type ?? "";
+  if (type === "NotAllowedError") return true;
+
+  const value = exception?.value ?? fallbackMessage ?? "";
+  if (isIgnoredClientErrorMessage(value)) return true;
+  if (type && value && isIgnoredClientErrorMessage(`${type}: ${value}`)) return true;
+  return false;
+}
+
+/**
  * القرار: هل نرسل هذا الحدث إلى Sentry؟
  *
  * القواعد بالترتيب:
+ *   0. نوع/نص معروف كضجيج عميل (شبكة، إلغاء، رفض إذن، إضافات) → يسقط.
+ *      هذه الأحداث غالبًا من fetch في حزمتنا فتمرّ فحص موضع الرمي.
  *   1. لا استثناء في الحدث (رسالة صريحة منّا) → يمرّ.
  *   1.5 أي إطار صريح لإضافة متصفح → يسقط. إضافات مثل
  *       `injectScriptAdjust.js` تلفّ `window.fetch`، فيصبح المكدس مختلطًا
@@ -127,11 +246,16 @@ export interface MinimalSentryEvent {
  *      - التقاط تلقائي (`auto.*`) → يسقط؛ لا دليل واحد على أنه خطؤنا، وكل
  *        حالة من هذا الشكل في آخر 30 يومًا كانت طرفًا ثالثًا.
  *      - نداء صريح منّا (`generic` أو بلا mechanism) → يمرّ.
+ *
+ * querySelectorAll على undefined من سكربت مجهول (JAVASCRIPT-REACT-K)
+ * يسقط بالقاعدة 2 (`<anonymous>`) — لا تُضاف رسالته إلى ignoreErrors حتى
+ * لا تُكتم علة حقيقية في كودنا.
  */
 export function shouldSendSentryEvent(event: MinimalSentryEvent): boolean {
   if (hasBrowserExtensionFrame(event)) return false;
 
   const exceptionValue = event.exception?.values?.[0];
+  if (isClientNoiseException(exceptionValue, event.message)) return false;
   if (!exceptionValue) return true;
 
   const frames = exceptionValue.stacktrace?.frames;

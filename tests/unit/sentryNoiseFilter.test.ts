@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   isAutoCapturedMechanism,
   isFirstPartyFilename,
+  isIgnoredClientErrorMessage,
+  isClientNoiseException,
   shouldSendSentryEvent,
   sentryBeforeSend,
+  SENTRY_DENY_URLS,
   type MinimalSentryEvent,
 } from "../../client/src/lib/sentryNoiseFilter";
 
@@ -17,11 +20,14 @@ import {
 function eventWith(
   frames: Array<{ filename?: string }> | undefined,
   mechanismType?: string,
+  extras?: { type?: string; value?: string },
 ): MinimalSentryEvent {
   return {
     exception: {
       values: [
         {
+          type: extras?.type,
+          value: extras?.value,
           mechanism: mechanismType ? { type: mechanismType } : undefined,
           stacktrace: frames ? { frames } : undefined,
         },
@@ -221,5 +227,157 @@ describe("المساعدات", () => {
     const drop = eventWith([{ filename: "<anonymous>" }], "auto.browser.global_handlers.onerror");
     expect(sentryBeforeSend(keep)).toBe(keep);
     expect(sentryBeforeSend(drop)).toBeNull();
+  });
+});
+
+describe("ضجيج العميل غير القابل للإصلاح — يسقط ولو كان الإطار من حزمتنا", () => {
+  it("JAVASCRIPT-REACT-2T: تم فقدان اتصال الشبكة (سفاري معرّب)", () => {
+    // https://sabq.sentry.io/issues/7619514545/
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "TypeError", value: "تم فقدان اتصال الشبكة." },
+    );
+    expect(shouldSendSentryEvent(event)).toBe(false);
+    expect(isIgnoredClientErrorMessage("تم فقدان اتصال الشبكة.")).toBe(true);
+    expect(isIgnoredClientErrorMessage("تم فقدان اتصال الشبكة")).toBe(true);
+  });
+
+  it("The network connection was lost — النسخة الإنجليزية لنفس خطأ WebKit", () => {
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onerror",
+      { type: "TypeError", value: "The network connection was lost." },
+    );
+    expect(shouldSendSentryEvent(event)).toBe(false);
+    expect(isIgnoredClientErrorMessage("The Internet connection appears to be offline.")).toBe(
+      true,
+    );
+  });
+
+  it("JAVASCRIPT-REACT-2W: AbortError signal is aborted without reason", () => {
+    const event = eventWith(
+      [{ filename: OUR_VENDOR }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "AbortError", value: "signal is aborted without reason" },
+    );
+    expect(shouldSendSentryEvent(event)).toBe(false);
+  });
+
+  it("TypeError cancelled / مُلغى — إلغاء fetch عند مغادرة الصفحة", () => {
+    expect(
+      shouldSendSentryEvent(
+        eventWith([{ filename: OUR_BUNDLE }], "auto.browser.global_handlers.onerror", {
+          type: "TypeError",
+          value: "cancelled",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldSendSentryEvent(
+        eventWith([{ filename: OUR_BUNDLE }], "auto.browser.global_handlers.onerror", {
+          type: "TypeError",
+          value: "مُلغى",
+        }),
+      ),
+    ).toBe(false);
+    // كلمة cancelled داخل رسالة حقيقية لا تُسقط
+    expect(isIgnoredClientErrorMessage("request was cancelled by editor")).toBe(false);
+  });
+
+  it("Failed to fetch لمضيف طرف ثالث يسقط، وفشل استيراد الـchunk يمرّ", () => {
+    expect(
+      isIgnoredClientErrorMessage("Failed to fetch (pagead2.googlesyndication.com)"),
+    ).toBe(true);
+    expect(isIgnoredClientErrorMessage("Failed to fetch (www.google.com)")).toBe(true);
+    expect(isIgnoredClientErrorMessage("Failed to fetch (www.google-analytics.com)")).toBe(true);
+    expect(isIgnoredClientErrorMessage("Load failed (cdn.sabq.org)")).toBe(true);
+    // إنذار الشاشة البيضاء بعد النشر — بلا لاحقة (host)
+    expect(
+      isIgnoredClientErrorMessage("Failed to fetch dynamically imported module: /assets/x.js"),
+    ).toBe(false);
+    expect(
+      shouldSendSentryEvent(
+        eventWith([{ filename: OUR_BUNDLE }], "auto.browser.global_handlers.onunhandledrejection", {
+          type: "TypeError",
+          value: "Failed to fetch dynamically imported module: https://sabq.org/assets/x.js",
+        }),
+      ),
+    ).toBe(true);
+    // فشل نحو API سبق بدون لاحقة مضيف خارجي يمرّ
+    expect(isIgnoredClientErrorMessage("Failed to fetch")).toBe(false);
+  });
+
+  it("NotAllowedError — رفض إذن المتصفح بالنوع لا بالنص", () => {
+    expect(
+      isClientNoiseException({
+        type: "NotAllowedError",
+        value: "The request is not allowed by the user agent or the platform in the current context.",
+      }),
+    ).toBe(true);
+    expect(
+      shouldSendSentryEvent(
+        eventWith([{ filename: OUR_BUNDLE }], "auto.browser.global_handlers.onerror", {
+          type: "NotAllowedError",
+          value: "play() failed because the user didn't interact with the document first.",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("إضافات المتصفح: xbrowser و selector is not defined", () => {
+    expect(isIgnoredClientErrorMessage("xbrowser is not defined")).toBe(true);
+    expect(isIgnoredClientErrorMessage("Can't find variable: xbrowser")).toBe(true);
+    expect(isIgnoredClientErrorMessage("selector is not defined")).toBe(true);
+    expect(isIgnoredClientErrorMessage("Can't find variable: selector")).toBe(true);
+    expect(
+      shouldSendSentryEvent(
+        eventWith([{ filename: OUR_BUNDLE }], "auto.browser.global_handlers.onerror", {
+          type: "ReferenceError",
+          value: "selector is not defined",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("querySelectorAll على undefined من سكربت مجهول يسقط، ومن حزمتنا يمرّ", () => {
+    const fromAnonymous = eventWith(
+      [{ filename: "<anonymous>" }],
+      "auto.browser.global_handlers.onerror",
+      {
+        type: "TypeError",
+        value: "Cannot read properties of undefined (reading 'querySelectorAll')",
+      },
+    );
+    const fromOurCode = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onerror",
+      {
+        type: "TypeError",
+        value: "Cannot read properties of undefined (reading 'querySelectorAll')",
+      },
+    );
+    expect(shouldSendSentryEvent(fromAnonymous)).toBe(false);
+    expect(shouldSendSentryEvent(fromOurCode)).toBe(true);
+  });
+
+  it("خطأ تطبيق حقيقي لا تطابقه القائمة يمرّ", () => {
+    expect(isIgnoredClientErrorMessage("Cannot read properties of undefined (reading 'id')")).toBe(
+      false,
+    );
+    expect(isClientNoiseException({ type: "TypeError", value: "foo is not a function" })).toBe(
+      false,
+    );
+  });
+
+  it("denyUrls يغطي إعلانات وتحليلات Google وإضافات المتصفح", () => {
+    const matchesDeny = (url: string) => SENTRY_DENY_URLS.some((pattern) => pattern.test(url));
+    expect(matchesDeny("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js")).toBe(
+      true,
+    );
+    expect(matchesDeny("https://www.google-analytics.com/g/collect")).toBe(true);
+    expect(matchesDeny("https://www.googletagmanager.com/gtm.js")).toBe(true);
+    expect(matchesDeny("chrome-extension://abcd/inject.js")).toBe(true);
+    expect(matchesDeny("https://sabq.org/assets/index.js")).toBe(false);
   });
 });
