@@ -5,7 +5,11 @@ import "./index.css";
 import "./mobile.css";
 import { installDeployRecovery } from "./lib/deployRecovery";
 import { startBuildVersionPolling } from "./lib/buildVersion";
-import { sentryBeforeSend } from "./lib/sentryNoiseFilter";
+import {
+  sentryBeforeSend,
+  SENTRY_DENY_URLS,
+  SENTRY_IGNORE_ERRORS,
+} from "./lib/sentryNoiseFilter";
 
 // Sentry — أخطاء فقط (بلا tracing/replay/logs: تستهلك الحصة وتضخّم الحزمة).
 // PROD فقط حتى لا يضج التطوير. الـDSN عام بطبيعته (يظهر في حزمة المتصفح مهما
@@ -54,63 +58,10 @@ if (import.meta.env.PROD) {
     // فتمرّ. ملاحظة: أحداث بلا إطارات (captureMessage/رفض غير-Error) لا يسقطها
     // allowUrls — لذلك تبقى ignoreErrors لنصوصها المعروفة.
     allowUrls: [/sabq\.org\/assets\//, /\.pages\.dev\/assets\//],
-    denyUrls: [
-      /googletagmanager|googlesyndication|doubleclick|adservice|novatiq|permutive/i,
-      /^chrome-extension:\/\//,
-      /^moz-extension:\/\//,
-      /^safari(-web)?-extension:\/\//,
-    ],
-    ignoreErrors: [
-      "ResizeObserver loop limit exceeded",
-      "ResizeObserver loop completed with undelivered notifications.",
-      // تتبّع خارجي محجوب بمانع إعلانات — السلسلة ليست في كودنا أصلًا
-      "Failed to track Pageview",
-      // سكربت إعلانات محقون (GTM/DMS) يمشّط DOM الصفحة بحثًا عن البطاقة
-      // الرابعة ليحقن إعلانًا داخل الشبكة — في الصفحات التي تعرض أقل من 4
-      // بطاقات يرمي TypeError. ليس في مستودعنا إطلاقًا (السيلكتور لا يظهر
-      // إلا كـtestid في NewsArticleCard)، لكنه أكبر مصدر ضجيج في Sentry
-      // (3,400+ حدث/أسبوع) وقد يصل بلا إطارات فلا يسقطه allowUrls.
-      /card-article-grid/,
-      /reading 'parentNode'/,
-      // GPT غير محمّل (مانع إعلانات) وسكربت خارجي يستدعيه بلا حارس —
-      // كودنا (DmsAdSlot) يفحص window.googletag.pubads قبل أي استدعاء
-      /googletag\.pubads is not a function/,
-      // ماسح روابط Outlook (SafeLinks) يرفض Promise بكائن ليس Error —
-      // نمط عالمي معروف، يصل بلا إطارات فلا يسقطه beforeSend أدناه
-      "Object Not Found Matching Id",
-      // إضافة «تعبئة تلقائية» في متصفحات أندرويد تستدعي دالة غير معرّفة
-      // (بصيغتي Chrome وSafari/WebKit)
-      /xbrowser is not defined|Can't find variable: xbrowser/,
-      // fetch فاشل نحو مضيف ليس لنا — منذ SDK v8 تُلحق الرسالة بمضيف الطلب
-      // الفاشل فنطابق عليه. كودنا لا ينادي أي مضيف خارجي بـfetch من المتصفح
-      // (تحقُّق 2026-08-17: صفر نداءات خارجية في client/src)، فكل فشل موسوم
-      // بمضيف غير sabq مصدره سكربت محقون: إضافات (frame_ant نحو
-      // www.google.com في JAVASCRIPT-REACT-1C، injectScriptAdjust في 35/37)،
-      // أدواري (utq.vvipquan.com في 36)، ووسوم إعلانات. كانت القاعدة قائمة
-      // بمضيفي الإعلانات المعروفين — لعبة قط وفأر انتهت بقلب المنطق.
-      // الفشل بلا لاحقة "(host)" أو نحو مضيف sabq يمرّ كما هو.
-      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\((?!(?:[a-z0-9-]+\.)*sabq\.(?:org|news)\))/i,
-      // polyfill الـmodulepreload من Vite يجلب chunks مسبقًا بـfetch — فشله
-      // (شبكة متقطعة، إغلاق الصفحة أثناء الجلب، دوران build بعد النشر) لا
-      // يكسر شيئًا: الاستيراد الفعلي له مسار خطئه وdeployRecovery يعالج
-      // الشاشة البيضاء. 1,428 حدثًا في 16 يومًا (JAVASCRIPT-REACT-D) صفر
-      // مستخدم متأثر. إنذار CDN الحقيقي محفوظ: رسائل فشل الاستيراد
-      // الديناميكي (Failed to fetch dynamically imported module /
-      // Importing a module script failed) بلا لاحقة "(host)" فلا تطابق.
-      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\(cdn\.sabq\.org\)/,
-      // إلغاء داخلي في TanStack Query: حين يُفكَّك آخر مكوّن يراقب استعلامًا
-      // جاريًا يستدعي removeObserver → cancel({revert}) فيجهض الجلب عبر
-      // AbortController، ورفض retryer الداخلي يصعد كـunhandled rejection من
-      // vendor-core — سلوك مقصود في المكتبة لا خطأ عندنا. صفر مستخدم متأثر
-      // في 157 حدثًا خلال أسبوعين (JAVASCRIPT-REACT-2W و2V).
-      "signal is aborted without reason",
-      // سفاري/WebKit يرمي TypeError برسالة «مُلغى» (المعرّب) أو "cancelled"
-      // (الإنجليزي) — مكافئ Load failed — حين يُجهض fetch بمغادرة الصفحة
-      // أثناء الجلب. ضجيج شبكة لا خطأ كود (JAVASCRIPT-REACT-2T و38).
-      // مطابقة تامة حتى لا تُسقط رسالة حقيقية تحتوي الكلمة.
-      /^مُلغى$/,
-      /^cancelled$/,
-    ],
+    // القوائم الكاملة والتعليل في lib/sentryNoiseFilter.ts — مصدر واحد
+    // يستهلكه الـSDK هنا ويُعاد فحصه في beforeSend مع اختبارات الوحدة.
+    denyUrls: SENTRY_DENY_URLS,
+    ignoreErrors: SENTRY_IGNORE_ERRORS,
     // الحسم بموضع الرمي: أعلى إطار ذي ملف يجب أن يكون من أصولنا، وإلا أُسقط
     // الحدث قبل الإرسال فلا يستهلك من الحصة أصلًا. والأحداث بلا مكدس التي
     // التقطها المتصفح تلقائيًا (auto.*) تسقط كذلك — لا دليل واحد على أنها
