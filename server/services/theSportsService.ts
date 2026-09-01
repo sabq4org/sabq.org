@@ -104,6 +104,10 @@ export type TsMqttStatus = {
   lastError: string | null;
   messagesReceived: number;
   matchesTracked: number;
+  /** عدد محاولات إعادة الاتصال المتتالية الفاشلة (صفر بعد نجاح الاتصال). */
+  reconnectAttempts: number;
+  /** التباعد الحالي بين المحاولات بالمللي — يتصاعد أسّيًا حتى سقف. */
+  retryDelayMs: number;
 };
 
 let mqttStatus: TsMqttStatus = {
@@ -113,6 +117,8 @@ let mqttStatus: TsMqttStatus = {
   lastError: null,
   messagesReceived: 0,
   matchesTracked: 0,
+  reconnectAttempts: 0,
+  retryDelayMs: 0,
 };
 
 export function setTheSportsMqttStatus(patch: Partial<TsMqttStatus>): void {
