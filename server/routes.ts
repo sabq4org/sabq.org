@@ -1961,6 +1961,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
   app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
+    const uploadStartedAt = Date.now();
     try {
       const userId = req.user.id;
 
@@ -2034,6 +2035,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         size: req.file.size,
       });
 
+      // Per-phase timings land in one log line at the end so Railway logs
+      // show where a slow upload spent its time (verify/transcode vs provider
+      // vs DB) without guessing.
+      const uploadTimings: Record<string, number> = {};
+      uploadTimings.verify = Date.now() - uploadStartedAt;
+      let phaseStartedAt = Date.now();
+
+      // Perceptual hash (dedup warning) needs a decode pass over the source.
+      // Start it now so it overlaps the network upload instead of running
+      // serially after the DB insert. Best-effort: a failure just means no
+      // duplicate warning.
+      const uploadBufferForHash = req.file.buffer;
+      const perceptualHashPromise: Promise<string | null> = req.file.mimetype.startsWith('image/')
+        ? import("./services/mediaHashService")
+            .then((m) => m.computeDHash(uploadBufferForHash))
+            .catch(() => null)
+        : Promise.resolve(null);
+
       // Generate unique filename with year/month structure
       const now = new Date();
       const year = now.getFullYear();
@@ -2052,6 +2071,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Only explicit article purposes join the R2 rollout; every other image
       // keeps the existing Cloudflare Images behavior.
       let cloudflareUrl: string | null = null;
+      let providerWidth: number | undefined;
+      let providerHeight: number | undefined;
       const uploadPurpose = String(req.body?.purpose || req.body?.entityType || '').trim();
       const isEditorialImage = isNewsImagePurpose(uploadPurpose);
       if (
@@ -2075,16 +2096,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               { uploadedBy: userId.toString(), type: 'media' },
               req.file.mimetype,
             );
+        uploadTimings.provider = Date.now() - phaseStartedAt;
         if (imageResult.success && imageResult.deliveryUrl) {
           cloudflareUrl = imageResult.deliveryUrl;
+          const providerDims = imageResult as { width?: number; height?: number };
+          if (typeof providerDims.width === 'number' && typeof providerDims.height === 'number') {
+            providerWidth = providerDims.width;
+            providerHeight = providerDims.height;
+          }
           console.log("[Media Upload] Image upload successful:", {
             provider: ('provider' in imageResult && imageResult.provider) || 'cloudflare-images',
             imageId: imageResult.imageId,
+            ms: uploadTimings.provider,
           });
         } else {
           console.log("[Media Upload] Primary image upload failed, will try GCS fallback:", imageResult.error);
         }
       }
+      phaseStartedAt = Date.now();
 
       // GCS path — used only when CF didn't claim the upload. Wrapped in
       // try/catch so a missing/misconfigured GCS doesn't kill the request
@@ -2165,10 +2194,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Extract real dimensions for images via sharp (the columns existed but
       // were always left NULL before). Best-effort — a metadata failure must
       // not block the upload.
-      let width: number | undefined;
-      let height: number | undefined;
+      let width: number | undefined = providerWidth;
+      let height: number | undefined = providerHeight;
 
-      if (req.file.mimetype.startsWith('image/')) {
+      if (!width && req.file.mimetype.startsWith('image/')) {
         try {
           const meta = await sharp(req.file.buffer).metadata();
           width = meta.width;
@@ -2177,6 +2206,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           console.log("[Media Upload] Could not extract image dimensions:", err);
         }
       }
+      uploadTimings.storage = Date.now() - phaseStartedAt;
+      phaseStartedAt = Date.now();
 
       // Upload is image-only (the multer fileFilter rejects everything else),
       // so the type is always "image". Real video/document support is a
@@ -2364,15 +2395,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Phase 7: perceptual-hash dedup — persist the hash and surface an
       // existing visually-identical file so the client can warn the uploader.
       // assignPerceptualHash is already best-effort (swallows missing-column).
+      uploadTimings.db = Date.now() - phaseStartedAt;
+      phaseStartedAt = Date.now();
       let duplicateOf = null;
       if (fileType === 'image') {
         try {
           const { assignPerceptualHash } = await import("./services/mediaHashService");
-          duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer);
+          // Hash was computed concurrently with the provider upload; only the
+          // two indexed queries (UPDATE + duplicate lookup) remain here.
+          duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer, await perceptualHashPromise);
         } catch (hashErr) {
           console.warn("[Media Upload] Hash step failed:", hashErr instanceof Error ? hashErr.message : hashErr);
         }
       }
+      uploadTimings.hash = Date.now() - phaseStartedAt;
+      uploadTimings.total = Date.now() - uploadStartedAt;
+      console.log(
+        `[Media Upload] timings ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} purpose=${uploadPurpose || '-'} size=${req.file.size}`,
+      );
 
       res.json({
         ...mediaFileWithDetails,

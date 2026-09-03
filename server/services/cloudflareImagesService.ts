@@ -114,8 +114,14 @@ class CloudflareImagesService {
     buffer: Buffer,
     filename: string,
     metadata?: Record<string, string>,
-    mimeType?: string
+    mimeType?: string,
+    options?: { timeoutMs?: number }
   ): Promise<CloudflareUploadResult> {
+    // Callers running inside a request deadline (media upload → R2 failed →
+    // fallback here) pass the budget they have left. Clamp to [3s, 25s]: below
+    // 3s a real upload cannot finish, above 25s Railway's edge gives up first.
+    const timeoutMs = Math.max(3_000, Math.min(options?.timeoutMs ?? 25_000, 25_000));
+    const startedAt = Date.now();
     if (!this.isCloudflareConfigured()) {
       const error = 'Cloudflare Images service is not configured. Check environment variables.';
       console.error('[Cloudflare Images]', error);
@@ -164,14 +170,21 @@ class CloudflareImagesService {
         },
         // TS 6+: Buffer<ArrayBufferLike> is not assignable to BodyInit; Uint8Array is.
         body: new Uint8Array(body),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
-      // Handle rate limiting with bounded backoff. Capped at 15s so
-      // the retry still fits inside the edge timeout budget.
+      // Handle rate limiting with bounded backoff. The wait + retry must fit
+      // inside whatever budget the caller has left; if it cannot, fail fast so
+      // the editor sees an error in seconds instead of a minute-long hang.
       if (response.status === 429) {
         const retryAfter = parseInt(response.headers.get('Retry-After') || '15', 10);
         const waitMs = Math.min(Math.max(retryAfter * 1000, 5_000), 15_000);
+        const remainingMs = timeoutMs - (Date.now() - startedAt);
+        const retryTimeoutMs = Math.min(20_000, remainingMs - waitMs);
+        if (retryTimeoutMs < 3_000) {
+          console.warn(`[Cloudflare Images] Rate limited (429) with ${Math.max(0, remainingMs)}ms left — not retrying`);
+          return { success: false, error: 'rate_limited_429' };
+        }
         console.warn(`[Cloudflare Images] Rate limited (429). Waiting ${waitMs/1000}s before retry...`);
         await new Promise(r => setTimeout(r, waitMs));
         // Retry once after waiting
@@ -179,7 +192,7 @@ class CloudflareImagesService {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
           body: new Uint8Array(body),
-          signal: AbortSignal.timeout(20_000),
+          signal: AbortSignal.timeout(retryTimeoutMs),
         });
         if (!retryResp.ok) {
           const errText = await retryResp.text();
