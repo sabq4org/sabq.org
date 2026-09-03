@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-14T08:16:23.916Z",
+  "generatedAt": "2026-09-03T04:18:06.098Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 120,
+      "fileCount": 137,
       "samplePaths": [
         "client/src/components/staff/MyStaffProfileCard.tsx",
         "client/src/components/staff/MyServicesHomeLink.tsx",
@@ -157,7 +157,7 @@
     },
     {
       "id": "sports-tournaments",
-      "fileCount": 119,
+      "fileCount": 127,
       "samplePaths": [
         "server/services/gulfCupData.ts",
         "server/services/gulfCupFixtureIdentity.ts",
@@ -199,7 +199,7 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 18,
+      "fileCount": 27,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
@@ -227,16 +227,16 @@
     },
     {
       "id": "comments",
-      "fileCount": 11,
+      "fileCount": 12,
       "samplePaths": [
         "server/services/commentInsightsService.ts",
         "server/services/commentModerationService.ts",
         "server/services/commentReactionsService.ts",
+        "server/routes/commentAppeals.ts",
         "server/routes/commentModeration.ts",
         "server/routes/commentReactions.ts",
         "server/routes/topicComments.ts",
-        "server/ai/commentModeration.ts",
-        "server/sentiment-analyzer.ts"
+        "server/ai/commentModeration.ts"
       ]
     },
     {
@@ -262,7 +262,7 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 34,
+      "fileCount": 37,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -270,8 +270,8 @@
         "docs/systems/account-center/SYSTEM.md",
         "docs/systems/ads/SYSTEM.md",
         "docs/systems/ai-hub/SYSTEM.md",
-        "docs/systems/audio-newsletter/OPERATIONS.md",
-        "docs/systems/audio-newsletter/SYSTEM.md"
+        "docs/systems/ai-staff/SYSTEM.md",
+        "docs/systems/audio-newsletter/OPERATIONS.md"
       ]
     },
     {
@@ -290,7 +290,7 @@
     },
     {
       "id": "social-publishing",
-      "fileCount": 17,
+      "fileCount": 19,
       "samplePaths": [
         "shared/socialPostText.ts",
         "server/services/socialPublishing/imageResolver.ts",
@@ -314,6 +314,48 @@
         "client/src/components/SahraaTvBlock.tsx",
         "client/src/pages/dashboard/SahraaTvBlockSettings.tsx",
         "attached_assets/al-sahraa-channel-logo.png"
+      ]
+    },
+    {
+      "id": "ai-staff",
+      "fileCount": 23,
+      "samplePaths": [
+        "shared/aiStaffRoster.ts",
+        "server/services/aiStaffService.ts",
+        "server/routes/aiStaff.ts",
+        "client/src/pages/dashboard/AiStaff/Profile.tsx",
+        "client/src/pages/dashboard/AiStaff/index.tsx",
+        "client/src/pages/dashboard/AiStaff/shared.ts",
+        "scripts/seed-ai-staff.ts",
+        "client/public/ai-team/adasa.jpg"
+      ]
+    },
+    {
+      "id": "ops-room",
+      "fileCount": 19,
+      "samplePaths": [
+        "shared/opsRoom.ts",
+        "server/services/opsRoom/agents/core.ts",
+        "server/services/opsRoom/agents/index.ts",
+        "server/services/opsRoom/agents/prompted.ts",
+        "server/services/opsRoom/agents/shared.ts",
+        "server/services/opsRoom/engine.ts",
+        "server/services/opsRoom/index.ts",
+        "server/services/opsRoom/memoryStore.ts"
+      ]
+    },
+    {
+      "id": "economy-live",
+      "fileCount": 39,
+      "samplePaths": [
+        "server/services/sama/parsers/moneySupplyReport.ts",
+        "server/services/sama/parsers/monthlyBulletin.ts",
+        "server/services/sama/parsers/posLabels.ts",
+        "server/services/sama/parsers/posReport.ts",
+        "server/services/sama/pdfText.ts",
+        "server/services/sama/samaClient.ts",
+        "server/services/sama/samaFx.ts",
+        "server/services/sama/samaIndicators.ts"
       ]
     }
   ]
