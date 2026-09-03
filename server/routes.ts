@@ -145,6 +145,7 @@ import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selec
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
+import { resolveUniqueArticleSlug } from "./services/articleSlugService";
 import path from "path";
 import { fileURLToPath } from "url";
 import passport from "passport";
@@ -7564,27 +7565,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         articleData.displayOrder = Math.floor(Date.now() / 1000);
       }
 
-      // Check for duplicate slug and append suffix if needed
-      let finalSlug = articleData.slug;
-      let slugSuffix = 1;
-      let slugExists = true;
-      
-      while (slugExists) {
-        const [existingArticle] = await db
-          .select({ id: articles.id })
-          .from(articles)
-          .where(eq(articles.slug, finalSlug))
-          .limit(1);
-        
-        if (existingArticle) {
-          slugSuffix++;
-          finalSlug = `${articleData.slug}-${slugSuffix}`;
-        } else {
-          slugExists = false;
-        }
-      }
-      
-      articleData.slug = finalSlug;
+      // Ensure unique slug (appends -2, -3 if duplicate exists)
+      articleData.slug = await resolveUniqueArticleSlug(articleData.slug);
       articleData.englishSlug = generateEnglishSlug(parsed.data.title);
 
       // من ٣١ يوليو: لا نشر/إرسال بلا ترخيص مهني ساري لصاحب الاسم
@@ -8196,6 +8178,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
+      if (updateData.slug) {
+        updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
+      }
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
@@ -8563,8 +8550,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       } else {
         console.log(`⏸️ [UPDATE ARTICLE] No notification sent - Status unchanged or not published`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "رابط المقال (slug) مستخدم بالفعل لمقال آخر. يرجى تعديل العنوان أو الرابط.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update article" });
     }
   });
@@ -15254,6 +15248,11 @@ Respond in valid JSON format only:
         authorId,
       };
 
+      // Ensure unique slug
+      if (articleData.slug) {
+        articleData.slug = await resolveUniqueArticleSlug(articleData.slug, undefined, enArticles);
+      }
+
       [newArticle] = await db
         .insert(enArticles)
         .values([{
@@ -15276,8 +15275,15 @@ Respond in valid JSON format only:
       });
 
       res.status(201).json(newArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating English article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       // Log article created event
       logArticleEvent({
         articleId: newArticle.id,
@@ -15389,6 +15395,11 @@ Respond in valid JSON format only:
         updateData.thumbnailUrl = null;
       }
 
+      // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
+      if (updateData.slug) {
+        updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId, enArticles);
+      }
+
       const [updatedArticle] = await db
         .update(enArticles)
         .set({
@@ -15422,8 +15433,15 @@ Respond in valid JSON format only:
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating English article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update English article" });
     }
   });
@@ -25557,6 +25575,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         englishSlug: parsed.data.englishSlug || generateEnglishSlug(parsed.data.title),
       };
 
+      // Ensure unique slug
+      if (articleData.slug) {
+        articleData.slug = await resolveUniqueArticleSlug(articleData.slug);
+      }
+
       const [newArticle] = await db
         .insert(articles)
         .values(articleData)
@@ -25593,8 +25616,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       res.status(201).json(newArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating opinion article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "رابط المقال (slug) مستخدم بالفعل لمقال آخر. يرجى تعديل العنوان أو الرابط.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to create opinion article" });
     }
   });
@@ -25673,6 +25703,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         aiBulletsInFlight.delete(articleId);
       }
 
+      // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
+      if (updateData.slug) {
+        updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
+      }
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
@@ -25705,8 +25740,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating opinion article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "رابط المقال (slug) مستخدم بالفعل لمقال آخر. يرجى تعديل العنوان أو الرابط.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update opinion article" });
     }
   });
@@ -29800,14 +29842,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
       }
 
-      const [existingArticle] = await db
-        .select()
-        .from(urArticles)
-        .where(eq(urArticles.slug, parsed.data.slug))
-        .limit(1);
-
-      if (existingArticle) {
-        return res.status(409).json({ message: "Article slug already exists" });
+      let finalSlug = parsed.data.slug;
+      if (finalSlug) {
+        finalSlug = await resolveUniqueArticleSlug(finalSlug, undefined, urArticles);
       }
 
       // The old check sat INSIDE the block above, after its unconditional
@@ -29821,6 +29858,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .insert(urArticles)
         .values({
           ...parsed.data,
+          slug: finalSlug,
           authorId: userId,
         } as any)
         .returning();
@@ -29838,8 +29876,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
       });
 
       res.json(article);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating Urdu article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to create Urdu article" });
     }
   });
@@ -29882,16 +29927,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
       }
 
-      if (parsed.data.slug && parsed.data.slug !== oldArticle.slug) {
-        const [existingArticle] = await db
-          .select()
-          .from(urArticles)
-          .where(eq(urArticles.slug, parsed.data.slug))
-          .limit(1);
-
-        if (existingArticle && existingArticle.id !== articleId) {
-          return res.status(409).json({ message: "Article slug already exists" });
-        }
+      if (parsed.data.slug) {
+        parsed.data.slug = await resolveUniqueArticleSlug(parsed.data.slug, articleId, urArticles);
       }
 
       // No publish gate existed here.
@@ -29925,8 +29962,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
       });
 
       res.json(article);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating Urdu article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update Urdu article" });
     }
   });

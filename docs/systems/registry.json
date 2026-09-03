@@ -273,6 +273,8 @@
         "client/src/components/admin/publishers/**",
         "client/src/pages/publisher/**",
         "client/src/components/publisher/**",
+        "server/services/articleSlugService.ts",
+        "tests/unit/articleSlugService.test.ts",
         "docs/editorial/**"
       ],
       "aiFeatureKeys": [
@@ -308,7 +310,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-08-22"
+      "lastReviewed": "2026-09-03"
     },
     {
       "id": "ifox",

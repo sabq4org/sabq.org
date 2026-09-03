@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-08-22 (خلفية هدهد لخريطة الأخبار في الرئيسية) | المالك: editorial
+> آخر مراجعة: 2026-09-03 (حل تعارض تفرّد روابط المقالات slug uniqueness تلقائياً) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -120,6 +120,7 @@
 - **لوحة مقالات EN (`/en/dashboard/articles`):** المنشورات تُرتَّب زمنياً `publishedAt DESC` (مثل `/api/en/articles` العامة) — **لا** تقدّم `displayOrder` وإلا تُدفن الترجمات الحديثة تحت مقالات قديمة أُعيد سحبها. المسودة/المجدول/الأرشيف بـ`updatedAt`/`scheduledAt`. المقاييس تشمل `scheduled`. فلاتر: `newsType=breaking|regular` و`translated=true|false`. الواجهة تعرض تاريخ النشر وشارة Translated. الترجمة تفضّل `englishSlug` العربي لنفس الرمز القصير، تطابق التصنيف عبر slug/`nameEn` (`enArticleTranslationService`)، وتنسخ `newsType`/`isFeatured`/`reporterId`/`imageFocalPoint`، وتُبطل كاش `sitemap-en-articles`. تبديل العاجل ثنائي الاتجاه (AR↔EN عبر `sourceArticleId`). Backfill: `tsx scripts/backfill-en-translation-meta.ts --apply`.
 
 - **خريطة الأخبار في الرئيسية:** `/api/news-map` + `NewsMap`. البلاطات الافتراضية OSM. إن وُجد `VITE_HUDHUD_PUBLISHABLE_KEY` (`pk_`) تُرسم الخلفية من أسلوب هدهد عبر MapLibre يُحمَّل من CDN (لا يُضمَّن في حزمة Vite). `VITE_HUDHUD_MAP_ID` أو `default`، عربي RTL، فاتح/داكن حسب الثيم. فشل الأسلوب أو التحميل يرجع إلى OSM. النقاط من `geo_locations`. المفتاح وقت بناء Vite على Pages — لا يُكتب في المستودع.
+- **تفرّد روابط المقالات وتفادي تعارض slug (`articles_slug_unique`):** عند إنشاء أو تعديل المقالات (العربية، الرأي، الإنجليزية، الأردية عبر POST أو PATCH)، يتم فحص تفرّد الرابط وتجاوز معرّف المقال الحالي وحل أي تعارض تلقائياً عبر `resolveUniqueArticleSlug` في `server/services/articleSlugService.ts` بإضافة لاحقة رقمية تصاعدية (`-2`, `-3`) مع الحفاظ على سقف 150 حرفاً المعتمد في Zod. خطأ 23505 يُعالج في كتل catch ليرجع 409 نظيفاً بدلاً من خطأ 500.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
