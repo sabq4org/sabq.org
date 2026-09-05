@@ -310,7 +310,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-03"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "ifox",
@@ -453,7 +453,7 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "النشرة البريدية المجدولة الباقية؛ منتج النشرات الصوتية أُوقف في 2026-07-25 مع مسارات توافقية للعملاء القدامى.",
+      "summary": "موجز المقال الصوتي بأصوات HUMAIN السعودية وإعدادات إدارة واحتياط ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
         "docs/AUDIO_NEWSLETTER_SYSTEM.md"
@@ -468,16 +468,31 @@
         "server/routes/smartNewsletterRoutes.ts",
         "server/routes/newsletterAnalyticsRoutes.ts",
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
-        "docs/AUDIO_NEWSLETTER_SYSTEM.md"
+        "docs/AUDIO_NEWSLETTER_SYSTEM.md",
+        "server/services/humainTts.ts",
+        "server/services/summaryAudioSettings.ts",
+        "server/services/summaryAudioService.ts",
+        "server/services/elevenlabs.ts",
+        "server/services/googleTts.ts",
+        "server/routes/summaryAudioSettings.ts",
+        "client/src/components/admin/SummaryAudioSettings.tsx",
+        "tests/unit/humainTts.test.ts",
+        "tests/unit/summaryAudio*.test.ts",
+        "e2e/summary-audio-settings.spec.ts",
+        "e2e/fixtures/summary-audio.*",
+        "docs/systems/audio-newsletter/HUMAIN.md",
+        "tests/unit/ttsDeadlines.test.ts",
+        "client/src/hooks/useArticleSummaryAudio.ts",
+        "client/src/components/SummaryAudioAttribution.tsx"
       ],
       "aiFeatureKeys": [
         "audio-newsletter"
       ],
-      "dashboardPath": "/dashboard/audio-newsletters",
+      "dashboardPath": "/dashboard/system-settings",
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-08-01"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "media-library",

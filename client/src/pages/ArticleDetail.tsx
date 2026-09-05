@@ -1,3 +1,5 @@
+import { SummaryAudioAttribution } from "@/components/SummaryAudioAttribution";
+import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
 import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -86,11 +88,7 @@ export default function ArticleDetail() {
   const { logBehavior } = useBehaviorTracking();
   const [, setLocation] = useLocation();
   
-  // Audio player state
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  
+
   // الموجز مطوي افتراضياً (3 أسطر) عند فتح الخبر — مثل iOS/Android
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   useEffect(() => {
@@ -915,108 +913,9 @@ export default function ArticleDetail() {
     commentMutation.mutate({ content, parentId });
   }, [commentMutation]);
 
-  const handlePlayAudio = useCallback(async () => {
-    if (!article?.aiSummary && !article?.excerpt) {
-      toast({
-        title: "لا يوجد محتوى",
-        description: "الموجز الذكي غير متوفر لهذا المقال",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // If currently playing, stop playback
-    if (audioRef.current && !audioRef.current.paused) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0; // Reset to beginning
-      setIsPlaying(false);
-      return;
-    }
-
-    // If audio is already loaded but paused, resume playback
-    if (audioRef.current && audioRef.current.src) {
-      try {
-        await audioRef.current.play();
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Error resuming audio:', error);
-        toast({
-          title: "خطأ",
-          description: "فشل تشغيل الموجز الصوتي",
-          variant: "destructive",
-        });
-      }
-      return;
-    }
-
-    // Load and play new audio
-    try {
-      setIsLoadingAudio(true);
-      
-      // Cache busting: include article updatedAt + TTS version (bump when normalize/provider changes)
-      const timestamp = article?.updatedAt ? new Date(article.updatedAt).toISOString() : new Date().toISOString();
-      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=tafqit-v2`;
-      
-      // Create audio element
-      audioRef.current = new Audio(audioUrl);
-      
-      // Add event listeners
-      audioRef.current.addEventListener('ended', () => {
-        setIsPlaying(false);
-      });
-      
-      audioRef.current.addEventListener('error', (e) => {
-        console.error('Audio playback error:', e);
-        toast({
-          title: "خطأ",
-          description: "فشل تشغيل الموجز الصوتي",
-          variant: "destructive",
-        });
-        setIsPlaying(false);
-        setIsLoadingAudio(false);
-      });
-      
-      // Wait for audio to be ready, then play
-      audioRef.current.addEventListener('canplaythrough', async () => {
-        if (audioRef.current) {
-          try {
-            await audioRef.current.play();
-            setIsPlaying(true);
-            setIsLoadingAudio(false);
-          } catch (playError) {
-            console.error('Error playing audio:', playError);
-            toast({
-              title: "خطأ",
-              description: "فشل تشغيل الموجز الصوتي",
-              variant: "destructive",
-            });
-            setIsLoadingAudio(false);
-          }
-        }
-      }, { once: true }); // Only fire once
-      
-      // Start loading the audio
-      audioRef.current.load();
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      toast({
-        title: "خطأ",
-        description: "فشل تحميل الموجز الصوتي",
-        variant: "destructive",
-      });
-      setIsLoadingAudio(false);
-    }
-  }, [article?.aiSummary, article?.excerpt, article?.updatedAt, slug, toast]);
-
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, [slug]);
+  const { isLoadingAudio, isPlaying, provider: audioProvider, handlePlayAudio } = useArticleSummaryAudio(
+    slug, String(article?.updatedAt ?? ''), Boolean(article?.aiSummary || article?.excerpt),
+  );
 
   const timeAgo = article?.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: 'relative', locale: 'ar' })
@@ -1384,6 +1283,8 @@ export default function ArticleDetail() {
                       <h3 className="text-sm font-bold" data-testid="text-ai-summary-title">
                         الموجز
                       </h3>
+                      <div className="flex items-center gap-2">
+                      <SummaryAudioAttribution provider={audioProvider} />
                       <Button
                         variant={isPlaying ? "default" : "ghost"}
                         size="sm"
@@ -1401,6 +1302,7 @@ export default function ArticleDetail() {
                           <Volume2 className="h-3 w-3" />
                         )}
                       </Button>
+                      </div>
                     </div>
 
                     {shouldFetchBullets && isLoadingBullets && aiBullets.length === 0 ? (
