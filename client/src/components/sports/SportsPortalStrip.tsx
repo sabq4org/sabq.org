@@ -6,6 +6,7 @@
  * سلّم أهمية النص ومبرّراته في sportsPortalHeadline.ts (منطق نقي مُغطّى باختبار).
  * الارتفاع ثابت دائمًا فلا يزحزح الشريط ما تحته عند وصول البيانات.
  */
+import { useSportsHomeQuery, sportsLastFetchLabel, type SportsFreshness } from "@/hooks/useSportsHomeQuery";
 import { useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -22,18 +23,10 @@ export default function SportsPortalStrip() {
 
   // مباريات اليوم تحمل حالة المباشر أصلًا، فنكتفي بها ونتجنّب نداء /api/sports/live
   // بنبضه السريع (7ث) على الرئيسية. النبض يبقى داخل البوابة نفسها.
-  const { data: todayData } = useQuery<{ today: SpLiveItem[] }>({
-    queryKey: ["/api/sports/today"],
-    staleTime: 60_000,
-    // لا نُشغّل التحديث الدوري إلا في يوم فيه مباريات — أغلب أيام ما قبل الموسم
-    // لا تستحق نبضًا متكرّرًا على الرئيسية.
-    refetchInterval: (query) => {
-      const rows = query.state.data?.today;
-      return Array.isArray(rows) && rows.length > 0 ? 60_000 : false;
-    },
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-  });
+  const { data: todayData, stale, unavailable } = useSportsHomeQuery<{ configured?: boolean; today: SpLiveItem[]; freshness?: SportsFreshness }>(
+    "/api/sports/today",
+    d => d?.configured === false ? false : Array.isArray(d?.today) && d.today.length > 0 ? 60_000 : 5 * 60_000,
+  );
   const todayMatches = Array.isArray(todayData?.today) ? todayData.today : [];
 
   const headline = useMemo<Headline>(
@@ -49,7 +42,7 @@ export default function SportsPortalStrip() {
           className="group flex h-12 items-center gap-2.5 text-sm no-underline"
           data-testid="link-sports-portal"
         >
-          {headline.live ? (
+          {headline.live && !stale ? (
             <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-black text-red-600 dark:text-red-400">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
               مباشر
@@ -80,7 +73,7 @@ export default function SportsPortalStrip() {
               <span className="truncate font-bold text-foreground">{headline.text}</span>
             )}
             {/* الذيل يختفي على الجوال حيث لا يتّسع السطر للاسمين والدعوة معًا */}
-            <span className="hidden truncate text-muted-foreground sm:inline">· {headline.tail}</span>
+            <span className="hidden truncate text-muted-foreground sm:inline">· {stale ? "آخر نتيجة متاحة" : headline.tail}</span>
           </span>
 
           <span className="flex shrink-0 items-center gap-0.5 font-bold text-primary">
@@ -88,6 +81,8 @@ export default function SportsPortalStrip() {
             <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.2} />
           </span>
         </Link>
+        {stale && todayData?.freshness && <p role="status" className="pb-2 text-xs text-muted-foreground" dir="rtl">{sportsLastFetchLabel(todayData.freshness.updatedAt)}</p>}
+        {unavailable && <p role="status" className="pb-2 text-xs text-muted-foreground" dir="rtl">تعذّر تحديث مباريات اليوم مؤقتًا.</p>}
       </div>
     </div>
   );

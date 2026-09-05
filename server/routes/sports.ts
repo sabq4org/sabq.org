@@ -1,3 +1,6 @@
+import { currentSportsLang } from "../services/sportsLang";
+import { SportsComponentSnapshot, ComponentSnapshotUnavailable, sportsComponentDay } from "../services/sportsComponentSnapshot";
+import { getApiFootballRetryAfterMs } from "../services/apiFootballClient";
 /**
  * البوابة الرياضية العامة — تُغذّي قسم /sports في الويب.
  *
@@ -223,6 +226,11 @@ function bucketFixtures(fixtures: SplFixture[]) {
 
   return { live, today, upcoming, results };
 }
+
+const todayHomeSnapshot = new SportsComponentSnapshot<Awaited<ReturnType<typeof getGlobalTodayFixtures>>>({
+  blockedForMs: getApiFootballRetryAfterMs,
+  freshMs: 30_000,
+});
 
 export function registerSportsRoutes(app: Express) {
   // تسخين كاش معلومات البطولات على كل pod — يمنع دفع أول مستخدم بعد deploy
@@ -461,16 +469,30 @@ export function registerSportsRoutes(app: Express) {
     // ?date=YYYY-MM-DD اختياري للتنقّل بين الأيام (لوحة "مباريات اليوم").
     const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
+    const resilient = req.query.resilient === "1";
     try {
-      const today = (await overlayLiveBoardList(await getGlobalTodayFixtures(date))).map(withClockAnchor);
+      const load = async () => (await overlayLiveBoardList(await getGlobalTodayFixtures(date))).map(withClockAnchor);
+      const snapshot = resilient
+        ? await todayHomeSnapshot.get(`today:${currentSportsLang()}:${sportsComponentDay(date)}`, load)
+        : { data: await load(), freshness: undefined };
+      const today = snapshot.data;
       res.set(
         "Cache-Control",
         today.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
-      res.json({ configured: true, date: date ?? null, today });
+      if (resilient) res.set("Cache-Control", "no-store");
+      res.json({ configured: true, date: date ?? null, today,
+        ...(snapshot.freshness ? { freshness: snapshot.freshness } : {}),
+      });
     } catch (error) {
+      if (resilient) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", String(error instanceof ComponentSnapshotUnavailable ? error.retryAfterSeconds : 15));
+        res.status(503).json({ message: "تعذر تحديث مباريات اليوم مؤقتًا" });
+        return;
+      }
       console.error("[Sports] global today failed:", error);
       res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
     }

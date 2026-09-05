@@ -1,6 +1,7 @@
 import { SummaryAudioAttribution } from "@/components/SummaryAudioAttribution";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
+import { useArticleInsights, useArticleRecommendations } from "@/hooks/useArticleSidebarData";
 import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
@@ -9,7 +10,7 @@ import { Footer } from "@/components/Footer";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
-import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
+import { AIRecommendationsPanel } from "@/components/AIRecommendationsBlock";
 import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
 import { Paywall } from "@/components/Paywall";
 import StoryTimeline from "@/components/StoryTimeline";
@@ -84,6 +85,9 @@ const AiArticleStats = lazy(() =>
 
 export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>();
+  // Start sidebar data before the article-loading return (the chart can stay lazy).
+  const insightsQuery = useArticleInsights(slug);
+  const recommendationsQuery = useArticleRecommendations(slug);
   const { toast } = useToast();
   const { logBehavior } = useBehaviorTracking();
   const [, setLocation] = useLocation();
@@ -1677,14 +1681,14 @@ export default function ArticleDetail() {
           <aside className="space-y-6">
             {/* AI Article Analytics */}
             <Suspense fallback={<Skeleton className="h-48 w-full" />}>
-              <AiArticleStats slug={slug} />
+              <AiArticleStats query={insightsQuery} />
             </Suspense>
 
             {/* Advertisement Slot - Article Sidebar */}
             <AdSlot slotId="sidebar" className="my-6" />
 
             {/* AI-Powered Smart Recommendations */}
-            <AIRecommendationsBlock articleSlug={slug} />
+            <AIRecommendationsPanel query={recommendationsQuery} />
 
             {/* Related Opinion Articles */}
             {article?.category && (

@@ -37,6 +37,15 @@ import {
   isBlockHidden,
 } from "../services/tournamentBlockSettings";
 
+import { SportsComponentSnapshot, ComponentSnapshotUnavailable, sportsComponentDay } from "../services/sportsComponentSnapshot";
+import { getApiFootballRetryAfterMs } from "../services/apiFootballClient";
+import { currentSportsLang } from "../services/sportsLang";
+
+const homeSnapshot = new SportsComponentSnapshot<{
+  ov: Awaited<ReturnType<typeof getKcOverview>>;
+  fixtures: Awaited<ReturnType<typeof getKcFixtures>>;
+}>({ blockedForMs: getApiFootballRetryAfterMs });
+
 const NOT_CONFIGURED = {
   configured: false,
   message: "تغطية كأس خادم الحرمين الشريفين غير مفعّلة حاليًا",
@@ -53,14 +62,28 @@ export function registerKingsCupRoutes(app: Express) {
 
   // نظرة عامة — تُستهلك من بانر الرئيسية ورأس صفحة القسم. blockHidden يخفي
   // بلوك الواجهة فقط (لا نفرّغ الحمولة كي تعمل صفحة /kings-cup نفسها).
-  app.get("/api/kings-cup/overview", async (_req, res) => {
+  app.get("/api/kings-cup/overview", async (req, res) => {
+    const resilient = req.query.resilient === "1";
+    if (resilient && !isKingsCupConfigured()) {
+      res.set("Cache-Control", "no-store");
+      res.json(NOT_CONFIGURED);
+      return;
+    }
     if (!guard(res)) return;
     try {
-      const [ov, fixtures, settings] = await Promise.all([
-        getKcOverview(),
-        getKcFixtures().catch(() => []),
+      const load = async () => {
+        const [ov, fixtures] = await Promise.all([getKcOverview(), getKcFixtures()]);
+        return { ov, fixtures };
+      };
+      // Cache provider data only: editorial hide/manual-champion settings must
+      // still be read on every request, including during an upstream outage.
+      const [snapshot, settings] = await Promise.all([
+        resilient
+          ? homeSnapshot.get(`kc:${currentSportsLang()}:${sportsComponentDay()}:${process.env.KC_SEASON ?? "auto"}`, load)
+          : Promise.all([getKcOverview(), getKcFixtures().catch(() => [])]).then(([ov, fixtures]) => ({ data: { ov, fixtures }, freshness: undefined })),
         getTournamentBlockSettings("kings-cup"),
       ]);
+      const { ov, fixtures } = snapshot.data;
       // البطل اليدوي من اللوحة يتقدّم على المكتشف تلقائيًّا
       let champion = ov.champion;
       if (settings.manualChampionTeamId && champion?.team.id !== settings.manualChampionTeamId) {
@@ -99,8 +122,17 @@ export function registerKingsCupRoutes(app: Express) {
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
       );
-      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion, matchday });
+      if (resilient) res.set("Cache-Control", "no-store");
+      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion, matchday,
+        ...(snapshot.freshness ? { freshness: snapshot.freshness } : {}),
+      });
     } catch (error) {
+      if (resilient) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", String(error instanceof ComponentSnapshotUnavailable ? error.retryAfterSeconds : 15));
+        res.status(503).json({ message: "تعذر تحديث كأس الملك مؤقتًا" });
+        return;
+      }
       console.error("[KingsCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة كأس الملك حاليًا" });
     }

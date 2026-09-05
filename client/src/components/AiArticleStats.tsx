@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import type { ArticleSidebarQuery } from "@/hooks/useArticleSidebarData";
+import type { ArticleInsights } from "@/hooks/useArticleSidebarData";
+import { ArticleSidebarRecovery } from "@/components/ArticleSidebarRecovery";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Brain, Clock, Heart, MessageCircle, TrendingUp, Sparkles, Eye, Flame } from "lucide-react";
@@ -6,19 +8,8 @@ import { motion } from "framer-motion";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import type { ElementType } from "react";
 
-interface AiInsights {
-  avgReadTime: number;
-  totalReads: number;
-  totalReactions: number;
-  totalComments: number;
-  totalViews: number;
-  engagementRate: number;
-  completionRate: number;
-  totalInteractions: number;
-}
-
 interface AiArticleStatsProps {
-  slug: string;
+  query: ArticleSidebarQuery<ArticleInsights>;
 }
 
 function formatReadTime(seconds: number): string {
@@ -76,13 +67,13 @@ function StatItem({
   );
 }
 
-export function AiArticleStats({ slug }: AiArticleStatsProps) {
-  const { data: insights, isLoading } = useQuery<AiInsights>({
-    queryKey: ["/api/articles", slug, "ai-insights"],
-    refetchInterval: 60000, // Refresh every minute
-  });
+export function AiArticleStats({ query }: AiArticleStatsProps) {
+  const { data: insights, isLoading } = query;
+  if (!insights && (query.isError || query.fetchStatus === "paused" || query.sessionUnavailable)) {
+    return <ArticleSidebarRecovery label="إحصائيات الخبر" onRetry={query.retrySidebar} busy={query.isFetching} />;
+  }
 
-  if (isLoading) {
+  if (isLoading || query.waitingForSession) {
     return (
       <Card className="p-4 rounded-2xl" data-testid="ai-stats-loading">
         <div className="flex items-center justify-between mb-4">
@@ -126,6 +117,8 @@ export function AiArticleStats({ slug }: AiArticleStatsProps) {
   ];
 
   return (
+    <>
+      {query.isError && <ArticleSidebarRecovery label="إحصائيات الخبر" hasData onRetry={query.retrySidebar} busy={query.isFetching} />}
     <Card className="p-3 rounded-xl" data-testid="ai-stats-panel">
       <motion.div
         initial={{ opacity: 0 }}
@@ -233,5 +226,6 @@ export function AiArticleStats({ slug }: AiArticleStatsProps) {
           </div>
       </motion.div>
     </Card>
+    </>
   );
 }
