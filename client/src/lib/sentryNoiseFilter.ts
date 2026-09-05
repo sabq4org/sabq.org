@@ -191,6 +191,13 @@ export const SENTRY_IGNORE_ERRORS: Array<string | RegExp> = [
   /^تم فقدان اتصال الشبكة\.?$/,
   /^The network connection was lost\.?$/i,
   /^The Internet connection appears to be offline\.?$/i,
+  // خنق 429 المتعمّد للزائر المجهول: throwIfResNotOk يرمي
+  // Error("RATE_LIMITED") وisRetriableError يعيد المحاولة. الضجيج يصل
+  // إلى Sentry لأن موضع الرمي إطار من حزمتنا فيمرّ فحص الأصول.
+  // ليس علّة تطبيق — صفر مستخدم متأثر في الحدث الإنتاجي.
+  // JAVASCRIPT-REACT-3E: https://sabq.sentry.io/issues/7712549097/
+  // مطابقة تامة حتى لا تُسقط رسالة حقيقية تحتوي الكلمة.
+  /^RATE_LIMITED$/,
   // رفض إذن المتصفح (تشغيل تلقائي، حافظة، إشعارات، كاميرا) — قرار
   // المستخدم أو سياسة المنصّة، لا خلل في الكود. الرسائل تختلف حسب
   // اللغة لذلك نطابق النوع أيضًا في isClientNoiseException.

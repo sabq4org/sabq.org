@@ -243,6 +243,31 @@ describe("ضجيج العميل غير القابل للإصلاح — يسقط 
     expect(isIgnoredClientErrorMessage("تم فقدان اتصال الشبكة")).toBe(true);
   });
 
+  it("JAVASCRIPT-REACT-3E: RATE_LIMITED من خنق 429 المتعمّد", () => {
+    // https://sabq.sentry.io/issues/7712549097/
+    // الرمي من queryClient.throwIfResNotOk — إطار أول طرف فيمرّ فحص الأصول
+    // لولا قائمة الضجيج.
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "Error", value: "RATE_LIMITED" },
+    );
+    expect(isClientNoiseException({ type: "Error", value: "RATE_LIMITED" })).toBe(true);
+    expect(shouldSendSentryEvent(event)).toBe(false);
+    expect(isIgnoredClientErrorMessage("RATE_LIMITED")).toBe(true);
+    // مطابقة تامة — لا تُسقط رسالة تحتوي الكلمة عرضًا
+    expect(isIgnoredClientErrorMessage("request was RATE_LIMITED by upstream")).toBe(false);
+    // خطأ تطبيق حقيقي من نفس الإطار يبقى يمرّ
+    expect(
+      shouldSendSentryEvent(
+        eventWith([{ filename: OUR_BUNDLE }], "auto.browser.global_handlers.onerror", {
+          type: "TypeError",
+          value: "Cannot read properties of undefined (reading 'id')",
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("The network connection was lost — النسخة الإنجليزية لنفس خطأ WebKit", () => {
     const event = eventWith(
       [{ filename: OUR_BUNDLE }],
