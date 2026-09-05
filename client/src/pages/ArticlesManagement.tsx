@@ -126,6 +126,14 @@ type Category = {
   nameEn: string;
 };
 
+type ArticlesPage = {
+  articles: Article[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
 // جوال = عرض أقل من md، أو هاتف بالوضع الأفقي (شاشة لمس قصيرة الارتفاع
 // يتجاوز عرضها 768 فتُعامَل خطأً كديسكتوب لو اعتمدنا على العرض وحده)
 function isMobileViewport() {
@@ -277,12 +285,25 @@ export default function ArticlesManagement() {
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  
-  // State for pagination
-  const [currentPage, setCurrentPage] = useState(1);
+  // Commit filters and page together: never fetch a new filter on the old page.
+  const [listParams, setListParams] = useState({
+    search: "",
+    status: "published" as "published" | "scheduled" | "draft" | "archived",
+    type: "all",
+    category: "all",
+    page: 1,
+  });
+  const { status: activeStatus, type: typeFilter, category: categoryFilter, page: currentPage } = listParams;
+  const changeFilters = (filters: Partial<Omit<typeof listParams, "page">>) => {
+    setListParams(previous => ({ ...previous, search: searchTerm, ...filters, page: 1 }));
+  };
+  useEffect(() => {
+    if (searchTerm === listParams.search) return;
+    const timer = window.setTimeout(() => {
+      setListParams(previous => ({ ...previous, search: searchTerm, page: 1 }));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm, listParams.search]);
   
   // State for bulk selection
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
@@ -292,9 +313,6 @@ export default function ArticlesManagement() {
   const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
   const [bulkArchiveReason, setBulkArchiveReason] = useState("");
   const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
-
-  // State for drag and drop
-  const [localArticles, setLocalArticles] = useState<Article[]>([]);
 
   // State for AI classification
   const [classificationResult, setClassificationResult] = useState<any>(null);
@@ -341,23 +359,18 @@ export default function ArticlesManagement() {
     enabled: !!user,
   });
 
-  // Reset page to 1 when filters change
+  // Selection belongs only to the visible account/filter/page.
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, activeStatus, typeFilter, categoryFilter]);
+    setSelectedArticles(new Set());
+  }, [user?.id, searchTerm, activeStatus, typeFilter, categoryFilter, currentPage]);
 
   // Fetch articles with filters and pagination
-  const { data: articlesData, isLoading: articlesLoading } = useQuery<{
-    articles: Article[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>({
-    queryKey: ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage],
-    queryFn: async () => {
+  const articlesQueryKey = ["/api/admin/articles", user?.id, listParams.search, activeStatus, typeFilter, categoryFilter, currentPage];
+  const { data: articlesData, isLoading: articlesLoading, isFetching: articlesFetching, isPlaceholderData, isError: articlesError, refetch: refetchArticles } = useQuery<ArticlesPage>({
+    queryKey: articlesQueryKey,
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
-      if (searchTerm) params.append("search", searchTerm);
+      if (listParams.search) params.append("search", listParams.search);
       if (activeStatus) params.append("status", activeStatus);
       if (typeFilter && typeFilter !== "all") params.append("articleType", typeFilter);
       if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
@@ -365,16 +378,22 @@ export default function ArticlesManagement() {
       params.append("limit", "30");
       
       const url = `/api/admin/articles?${params.toString()}`;
-      const response = await fetch(url, { credentials: "include" });
+      const response = await fetch(apiUrl(url), { credentials: "include", signal });
       if (!response.ok) {
-        throw new Error(`Failed to fetch articles: ${response.statusText}`);
+        // Preserve the HTTP status for the shared retry policy (4xx must fail fast).
+        throw new Error(`${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
-    enabled: !!user,
+    enabled: !!canViewArticles,
+    // Keep the table in place during transitions, but never carry another account's rows.
+    placeholderData: (previousData, previousQuery) =>
+      user?.id && previousQuery?.queryKey[1] === user.id ? previousData : undefined,
   });
 
-  const articles = useMemo(() => articlesData?.articles || [], [articlesData?.articles]);
+  const articles = useMemo(() => canViewArticles && Array.isArray(articlesData?.articles) ? articlesData.articles : [], [canViewArticles, articlesData?.articles]);
+  const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
+  const displayedPage = articlesData?.page ?? currentPage;
   const totalPages = articlesData?.totalPages || 1;
 
   // Fetch categories for filter
@@ -383,13 +402,6 @@ export default function ArticlesManagement() {
     enabled: !!user,
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
-
-  // Update local articles when articles change
-  useEffect(() => {
-    if (articlesData?.articles) {
-      setLocalArticles(articlesData.articles);
-    }
-  }, [articlesData?.articles]);
 
   // Publish mutation
   const publishMutation = useMutation({
@@ -543,22 +555,22 @@ export default function ArticlesManagement() {
     },
     onMutate: async ({ id, currentState }) => {
       // Store the exact query key being modified
-      const queryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter];
+      const queryKey = articlesQueryKey;
       
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
       
       // Snapshot the previous value with its query key
-      const previousArticles = queryClient.getQueryData(queryKey);
+      const previousArticles = queryClient.getQueryData<ArticlesPage>(queryKey);
       
       // Optimistically update to the new value
-      queryClient.setQueryData(queryKey, (old: Article[] | undefined) => {
+      queryClient.setQueryData(queryKey, (old: ArticlesPage | undefined) => {
         if (!old) return old;
-        return old.map(article => 
+        return { ...old, articles: old.articles.map(article =>
           article.id === id 
             ? { ...article, newsType: currentState ? "regular" : "breaking" }
             : article
-        );
+        ) };
       });
       
       return { previousArticles, queryKey };
@@ -668,15 +680,14 @@ export default function ArticlesManagement() {
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
 
       // Store the previous state for rollback
-      const previousData = queryClient.getQueryData<{ articles: Article[]; total: number; page: number; limit: number; totalPages: number }>(data.queryKey);
-      const previousLocalArticles = [...localArticles];
+      const previousData = queryClient.getQueryData<ArticlesPage>(data.queryKey);
 
       // Optimistically update the cache, preserving the paginated response shape
       if (previousData) {
         queryClient.setQueryData(data.queryKey, { ...previousData, articles: [...data.newOrderedArticles] });
       }
 
-      return { previousData, previousLocalArticles, queryKey: data.queryKey };
+      return { previousData, queryKey: data.queryKey };
     },
     onSuccess: () => {
       // Invalidate homepage and related caches for instant update
@@ -693,9 +704,6 @@ export default function ArticlesManagement() {
       // Rollback to the previous state with fresh copies
       if (context?.previousData && context?.queryKey) {
         queryClient.setQueryData(context.queryKey, { ...context.previousData, articles: [...context.previousData.articles] });
-      }
-      if (context?.previousLocalArticles) {
-        setLocalArticles([...context.previousLocalArticles]);
       }
       toast({
         title: "خطأ في حفظ الترتيب",
@@ -781,6 +789,7 @@ export default function ArticlesManagement() {
 
   // Selection handlers
   const toggleArticleSelection = (articleId: string) => {
+    if (articlesBusy) return;
     setSelectedArticles(prev => {
       const newSet = new Set(prev);
       if (newSet.has(articleId)) {
@@ -793,6 +802,7 @@ export default function ArticlesManagement() {
   };
 
   const toggleSelectAll = () => {
+    if (articlesBusy) return;
     if (selectedArticles.size === articles.length) {
       setSelectedArticles(new Set());
     } else {
@@ -801,39 +811,40 @@ export default function ArticlesManagement() {
   };
 
   const handleBulkArchive = () => {
-    if (selectedArticles.size === 0) return;
+    if (articlesBusy || selectedArticles.size === 0) return;
     setBulkArchiveReason("");
     setBulkArchiveReasonError(null);
     setShowBulkArchiveDialog(true);
   };
 
   const handleBulkPermanentDelete = () => {
-    if (selectedArticles.size === 0) return;
+    if (articlesBusy || selectedArticles.size === 0) return;
     setShowBulkDeleteDialog(true);
   };
 
   const handleEdit = (article: Article) => {
+    if (articlesBusy) return;
     setLocation(`/dashboard/articles/${article.id}`);
   };
 
   // Drag end handler
   const handleDragEnd = (event: DragEndEvent) => {
+    if (articlesBusy || updateOrderMutation.isPending) return;
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
       return;
     }
 
-    const oldIndex = localArticles.findIndex((article) => article.id === active.id);
-    const newIndex = localArticles.findIndex((article) => article.id === over.id);
+    const oldIndex = articles.findIndex((article) => article.id === active.id);
+    const newIndex = articles.findIndex((article) => article.id === over.id);
 
     if (oldIndex === -1 || newIndex === -1) {
       return;
     }
 
     // Create a new array with the reordered items
-    const newArticles = arrayMove([...localArticles], oldIndex, newIndex);
-    setLocalArticles(newArticles);
+    const newArticles = arrayMove([...articles], oldIndex, newIndex);
 
     // Generate unique descending displayOrder values using high-precision timestamp
     // Each article gets a unique value: baseTimestamp * 1000 - (index * 1000) ensures no collisions
@@ -844,7 +855,7 @@ export default function ArticlesManagement() {
     }));
 
     // Build the current query key at call time to avoid stale closures
-    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage];
+    const currentQueryKey = articlesQueryKey;
 
     updateOrderMutation.mutate({
       articleOrders,
@@ -1167,7 +1178,7 @@ export default function ArticlesManagement() {
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setActiveStatus(card.key)}
+                  onClick={() => changeFilters({ status: card.key })}
                   className={cn(
                     "rounded-2xl border p-3.5 sm:p-4 text-start transition-all duration-200 cursor-pointer select-none",
                     isActive ? card.active : card.idle,
@@ -1209,7 +1220,7 @@ export default function ArticlesManagement() {
               className="h-10 flex-1 text-sm"
             />
             <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <Select value={typeFilter} onValueChange={type => changeFilters({ type })}>
                 <SelectTrigger data-testid="select-type-filter" className="h-10 lg:w-[140px]">
                   <SelectValue placeholder="النوع" />
                 </SelectTrigger>
@@ -1222,7 +1233,7 @@ export default function ArticlesManagement() {
                 </SelectContent>
               </Select>
 
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select value={categoryFilter} onValueChange={category => changeFilters({ category })}>
                 <SelectTrigger data-testid="select-category-filter" className="h-10 lg:w-[150px]">
                   <SelectValue placeholder="التصنيف" />
                 </SelectTrigger>
@@ -1241,8 +1252,7 @@ export default function ArticlesManagement() {
                 className="h-10"
                 onClick={() => {
                   setSearchTerm("");
-                  setTypeFilter("all");
-                  setCategoryFilter("all");
+                  changeFilters({ search: "", type: "all", category: "all" });
                 }}
                 data-testid="button-clear-filters"
               >
@@ -1260,10 +1270,25 @@ export default function ArticlesManagement() {
               <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
                 {articlesLoading
                   ? "جاري التحميل…"
-                  : `${articlesTotal.toLocaleString("en-US")} نتيجة · الصفحة ${currentPage.toLocaleString("en-US")}`}
+                  : `${articlesTotal.toLocaleString("en-US")} نتيجة · الصفحة ${displayedPage.toLocaleString("en-US")}`}
               </p>
             </div>
           </div>
+
+          {articlesBusy && !articlesLoading && (
+            <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="articles-updating">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              جارٍ تحديث النتائج…
+            </div>
+          )}
+          {articlesError && (
+            <div role="alert" className="flex items-center gap-3 text-sm text-destructive">
+              تعذّر تحديث قائمة المقالات. حاول مرة أخرى.
+              <Button variant="outline" size="sm" disabled={articlesBusy} onClick={() => void refetchArticles()}>
+                إعادة المحاولة
+              </Button>
+            </div>
+          )}
 
           {/* Bulk Actions Toolbar — الجوال يكتفي بالشريط السفلي الثابت */}
           {selectedArticles.size > 0 && !isMobile && (
@@ -1278,7 +1303,7 @@ export default function ArticlesManagement() {
                       variant="outline"
                       size="sm"
                       onClick={handleBulkArchive}
-                      disabled={bulkArchiveMutation.isPending}
+                      disabled={articlesBusy || bulkArchiveMutation.isPending}
                       data-testid="button-bulk-archive"
                       className="gap-2"
                     >
@@ -1291,7 +1316,7 @@ export default function ArticlesManagement() {
                       variant="destructive"
                       size="sm"
                       onClick={handleBulkPermanentDelete}
-                      disabled={bulkPermanentDeleteMutation.isPending}
+                      disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
                       data-testid="button-bulk-delete-permanent"
                       className="gap-2"
                     >
@@ -1314,14 +1339,16 @@ export default function ArticlesManagement() {
 
           {/* Articles Table - Desktop View */}
           {!isMobile && (
-          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none">
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none"
+            data-testid="articles-desktop-results" aria-busy={articlesBusy}
+            {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
               </div>
-            ) : localArticles.length === 0 ? (
+            ) : articles.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
-                لا توجد مقالات
+                {articlesError ? "تعذّر تحميل المقالات" : "لا توجد مقالات"}
               </div>
             ) : (
               <DndContext
@@ -1335,7 +1362,7 @@ export default function ArticlesManagement() {
                       <th className="w-8 px-1 py-3 text-center" data-testid="header-drag"></th>
                       <th className="w-10 px-2 py-3 text-center">
                         <Checkbox
-                          checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
+                          checked={articles.length > 0 && selectedArticles.size === articles.length}
                           onCheckedChange={toggleSelectAll}
                           data-testid="checkbox-select-all"
                         />
@@ -1348,10 +1375,10 @@ export default function ArticlesManagement() {
                   </thead>
                   <tbody>
                     <SortableContext
-                      items={localArticles.map((a) => a.id)}
+                      items={articles.map((a) => a.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {localArticles.map((article) => (
+                      {articles.map((article) => (
                         <SortableRow
                           key={article.id}
                           article={article}
@@ -1494,14 +1521,16 @@ export default function ArticlesManagement() {
 
           {/* Articles Cards - Mobile View (عمود واحد رأسيًا، وعمودان على الجوال الأفقي) */}
           {isMobile && (
-          <div className="grid grid-cols-1 items-start gap-2.5 min-[820px]:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-2.5 min-[820px]:grid-cols-2"
+            data-testid="articles-mobile-results" aria-busy={articlesBusy}
+            {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
               <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
                 جاري التحميل...
               </div>
             ) : articles.length === 0 ? (
               <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
-                لا توجد مقالات
+                {articlesError ? "تعذّر تحميل المقالات" : "لا توجد مقالات"}
               </div>
             ) : (
               articles.map((article) => (
@@ -1810,21 +1839,21 @@ export default function ArticlesManagement() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1 || articlesLoading}
+                onClick={() => setListParams(previous => ({ ...previous, page: Math.max(1, previous.page - 1) }))}
+                disabled={currentPage === 1 || articlesBusy || articlesLoading}
                 data-testid="button-pagination-prev"
               >
                 <ChevronRight className="h-4 w-4 ml-1" />
                 السابق
               </Button>
               <span className="text-sm tabular-nums text-muted-foreground" data-testid="text-pagination-info">
-                الصفحة {currentPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
+                الصفحة {displayedPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages || totalPages <= 1 || articlesLoading}
+                onClick={() => setListParams(previous => ({ ...previous, page: Math.min(totalPages, previous.page + 1) }))}
+                disabled={currentPage >= totalPages || totalPages <= 1 || articlesBusy || articlesLoading}
                 data-testid="button-pagination-next"
               >
                 التالي
@@ -1857,7 +1886,7 @@ export default function ArticlesManagement() {
                 size="default"
                 variant="outline"
                 onClick={handleBulkArchive}
-                disabled={bulkArchiveMutation.isPending}
+                disabled={articlesBusy || bulkArchiveMutation.isPending}
                 className="flex-1"
                 data-testid="button-bulk-archive-mobile"
               >
@@ -1869,8 +1898,9 @@ export default function ArticlesManagement() {
               <Button
                 size="default"
                 variant="destructive"
-                onClick={() => setShowBulkDeleteDialog(true)}
+                onClick={handleBulkPermanentDelete}
                 className="flex-1"
+                disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
                 data-testid="button-bulk-delete-mobile"
               >
                 <Trash className="ml-2 h-4 w-4" />
@@ -2066,7 +2096,7 @@ export default function ArticlesManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-archive">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkArchiveMutation.isPending}
+              disabled={articlesBusy || bulkArchiveMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
                 const trimmed = bulkArchiveReason.trim();
@@ -2135,7 +2165,7 @@ export default function ArticlesManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-delete">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkPermanentDeleteMutation.isPending}
+              disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
                 const trimmed = bulkDeleteReason.trim();
