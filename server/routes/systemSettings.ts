@@ -1,3 +1,4 @@
+import summaryAudioSettingsRouter from "./summaryAudioSettings";
 import { Router } from "express";
 import { storage } from "../storage";
 import { requireAuth, requirePermission } from "../rbac";
@@ -11,6 +12,7 @@ import {
 } from "@shared/dashboard-theme";
 
 const router: Router = Router();
+router.use(summaryAudioSettingsRouter);
 
 // Get system announcement (public)
 router.get("/api/system/announcement", async (req, res) => {

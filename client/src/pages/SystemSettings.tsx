@@ -1,3 +1,4 @@
+import { SummaryAudioSettings } from "@/components/admin/SummaryAudioSettings";
 import { useEffect, useState, useId } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -1004,6 +1005,8 @@ export default function SystemSettings() {
               </Badge>
             </div>
           </header>
+
+          <SummaryAudioSettings />
 
           {/* Section: Tournament Blocks */}
           <div className="space-y-4">

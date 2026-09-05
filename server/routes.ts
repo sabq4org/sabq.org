@@ -13935,6 +13935,11 @@ Respond in valid JSON format only:
 
   // Get smart summary audio for an article
   app.get("/api/articles/:slug/summary-audio", async (req: any, res) => {
+    // Settings changes must reach the origin; generated audio remains cached on the server.
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("CDN-Cache-Control", "no-store");
+    res.setHeader("Vercel-CDN-Cache-Control", "no-store");
+    res.append("Access-Control-Expose-Headers", "X-TTS-Provider, X-TTS-Cache");
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
@@ -13951,95 +13956,13 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "الموجز غير متوفر لهذا المقال" });
       }
 
-      // كاش صوت جاهز — بدون must-revalidate حتى لا يُعاد التوليد في كل زيارة.
-      const updatedKey = article.updatedAt instanceof Date
-        ? article.updatedAt.toISOString()
-        : String(article.updatedAt ?? "");
-      // v3: صوت علي السعودي + eleven_multilingual_v2 — تخطّي أي كاش قديم بصوت Flash/Google.
-      const audioCacheKey = `summary-audio:v3:${article.id}:${updatedKey}`;
-      const cachedAudio = memoryCache.get<{ buffer: Buffer; provider: string }>(audioCacheKey);
-      if (cachedAudio) {
-        res.setHeader("X-TTS-Provider", cachedAudio.provider);
-        res.setHeader("X-TTS-Cache", "HIT");
-        res.setHeader("Content-Type", "audio/mpeg");
-        res.setHeader("Content-Length", cachedAudio.buffer.length.toString());
-        res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400");
-        res.setHeader("ETag", `"${article.id}-${updatedKey}-${cachedAudio.provider}"`);
-        return res.send(cachedAudio.buffer);
-      }
-
-      const explicit = (process.env.TTS_PROVIDER || '').toLowerCase();
-      let audioBuffer: Buffer | null = null;
-      let usedProvider = '';
-
-      const timeoutPromise = (ms: number) => new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TTS timeout')), ms)
-      );
-
-      if (explicit !== 'google') {
-        const { getElevenLabsService, isElevenLabsQuotaCoolingDown } = await import("./services/elevenlabs");
-        if (isElevenLabsQuotaCoolingDown()) {
-          // تخطٍ فوري — كان كل طلب ينتظر فشل ElevenLabs ثم Google (~1.2ث+).
-        } else {
-          const elevenLabsService = getElevenLabsService();
-          if (elevenLabsService) {
-            try {
-              // multilingual_v2 أعلى جودة عربية بكثير من Flash، والكاش 24 ساعة
-              // يجعل كلفة المهلة الأطول تُدفع مرة واحدة لكل مقال فقط.
-              audioBuffer = await Promise.race([
-                elevenLabsService.textToSpeech({
-                  text: textToConvert,
-                  model: 'eleven_multilingual_v2',
-                  voiceId: process.env.ELEVENLABS_NEWS_VOICE_ID || 'MI88rOZjXbH22N8KHXUo', // علي — سعودي عميق هادئ
-                  language: 'ar',
-                  voiceSettings: {
-                    stability: 0.50,          // أقل = تلوين نبري إذاعي بدل الرتابة
-                    similarity_boost: 0.80,
-                    style: 0.15,              // رصانة نشرة دون مبالغة درامية
-                    use_speaker_boost: true,
-                    speed: 0.95               // إبطاء بسيط = وقار المذيع
-                  }
-                }, 20_000),
-                timeoutPromise(20_000)
-              ]);
-              usedProvider = 'elevenlabs';
-            } catch (eErr) {
-              const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
-              if (eMsg.includes('quota_exceeded') || /quota|payment_required|credits/i.test(eMsg)) {
-                console.warn('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
-              } else {
-                console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
-              }
-            }
-          }
-        }
-      }
-
-      if (!audioBuffer) {
-        const { getGoogleTTSService } = await import("./services/googleTts");
-        const google = getGoogleTTSService();
-        if (!google) {
-          throw new Error('No TTS provider available');
-        }
-        audioBuffer = await Promise.race([
-          google.textToSpeech({
-            text: textToConvert,
-            voiceId: 'ar-XA-Wavenet-C',
-            voiceSettings: { stability: 0.6, speed: 1.0 }
-          }),
-          timeoutPromise(15000)
-        ]);
-        usedProvider = 'google';
-      }
-
-      memoryCache.set(audioCacheKey, { buffer: audioBuffer, provider: usedProvider }, CACHE_TTL.LONG);
-      res.setHeader("X-TTS-Provider", usedProvider);
-      res.setHeader("X-TTS-Cache", "MISS");
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Content-Length", audioBuffer.length.toString());
-      res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400");
-      res.setHeader("ETag", `"${article.id}-${updatedKey}-${usedProvider}"`);
-      res.send(audioBuffer);
+      const { getSummaryAudio } = await import("./services/summaryAudioService");
+      const audio = await getSummaryAudio(String(article.id), textToConvert);
+      res.setHeader("X-TTS-Provider", audio.provider);
+      res.setHeader("X-TTS-Cache", audio.cache);
+      res.setHeader("Content-Type", audio.contentType);
+      res.setHeader("Content-Length", audio.buffer.length.toString());
+      res.send(audio.buffer);
     } catch (error) {
       console.error("Error generating summary audio:", error);
       const errorMessage = error instanceof Error && error.message === 'ElevenLabs timeout' 
