@@ -153,6 +153,11 @@
         "docs/ai-prompts-article-editor.md"
       ],
       "pathGlobs": [
+        "client/src/pages/ArticleDetail.tsx",
+        "client/src/components/AiArticleStats.tsx",
+        "client/src/components/AIRecommendationsBlock.tsx",
+        "client/src/components/ArticleSidebarRecovery.tsx",
+        "client/src/hooks/useArticleSidebarData.ts",
         "client/src/components/staff/MyStaffProfileCard.tsx",
         "client/src/components/staff/MyServicesHomeLink.tsx",
         "client/src/components/staff/StaffProfileForm.tsx",
@@ -536,6 +541,11 @@
         "docs/MATCH_EVENT_ALERTS.md"
       ],
       "pathGlobs": [
+        "server/services/sportsComponentSnapshot.ts",
+        "client/src/hooks/useSportsHomeQuery.ts",
+        "client/src/components/kingscup/KingsCupHomeSection.tsx",
+        "client/src/components/sports/SportsPortalStrip.tsx",
+        "client/src/components/tournaments/CupHomeStrip.tsx",
         "server/services/gulfCup*.ts",
         "server/services/asianCup*.ts",
         "server/services/kingsCup*.ts",
@@ -618,7 +628,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-25"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "push-notifications",

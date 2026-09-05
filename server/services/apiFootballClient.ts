@@ -105,6 +105,10 @@ let consecutiveTransportFailures = 0;
 let transportFailureTimes: number[] = [];
 /** لا محاولات إطلاقًا قبل هذا الوقت — يُرفع عندما نعتبر المزوّد ساقطًا. */
 let outageUntil = 0;
+/** Read-only hint for homepage fallbacks; never bypasses the provider guards. */
+export function getApiFootballRetryAfterMs(): number {
+  return Math.max(0, cooldownUntil - Date.now(), outageUntil - Date.now());
+}
 /** عدد المنتظرين حاليًا داخل acquireSlot — حارس استنفاد المقابس. */
 let pendingWaiters = 0;
 

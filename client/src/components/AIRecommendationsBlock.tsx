@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import type { ArticleSidebarQuery } from "@/hooks/useArticleSidebarData";
+import { useArticleRecommendations, type ArticleRecommendation } from "@/hooks/useArticleSidebarData";
+import { ArticleSidebarRecovery } from "@/components/ArticleSidebarRecovery";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,27 +15,6 @@ import {
   Eye
 } from "lucide-react";
 
-interface AIRecommendation {
-  id: string;
-  title: string;
-  slug: string;
-  englishSlug?: string | null;
-  excerpt?: string;
-  imageUrl?: string;
-  views?: number;
-  publishedAt?: string;
-  category?: {
-    nameAr: string;
-    icon?: string;
-  };
-  aiMetadata: {
-    reason: string;
-    icon: string;
-    aiLabel: string;
-    relevanceScore: number;
-  };
-}
-
 interface AIRecommendationsBlockProps {
   articleSlug: string;
 }
@@ -47,12 +28,18 @@ const iconMap: Record<string, any> = {
 };
 
 export function AIRecommendationsBlock({ articleSlug }: AIRecommendationsBlockProps) {
-  const { data: recommendationsRaw, isLoading, error } = useQuery<AIRecommendation[]>({
-    queryKey: ["/api/articles", articleSlug, "ai-recommendations"],
-  });
+  const query = useArticleRecommendations(articleSlug);
+  return <AIRecommendationsPanel query={query} />;
+}
+
+export function AIRecommendationsPanel({ query }: { query: ArticleSidebarQuery<ArticleRecommendation[]> }) {
+  const { data: recommendationsRaw, isLoading, error } = query;
+  if (!recommendationsRaw && (error || query.fetchStatus === "paused" || query.sessionUnavailable)) {
+    return <ArticleSidebarRecovery label="التوصيات" onRetry={query.retrySidebar} busy={query.isFetching} />;
+  }
   const recommendations = Array.isArray(recommendationsRaw) ? recommendationsRaw : [];
 
-  if (isLoading) {
+  if (isLoading || query.waitingForSession) {
     return (
       <Card className="overflow-hidden border-2 border-primary/20">
         <CardHeader className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 pb-4">
@@ -76,15 +63,13 @@ export function AIRecommendationsBlock({ articleSlug }: AIRecommendationsBlockPr
     );
   }
 
-  if (error) {
-    return null;
-  }
-
   if (recommendations.length === 0) {
     return null;
   }
 
   return (
+    <>
+      {error && <ArticleSidebarRecovery label="التوصيات" hasData onRetry={query.retrySidebar} busy={query.isFetching} />}
     <Card 
       className="overflow-hidden border-2 border-primary/20 shadow-lg hover:shadow-xl transition-shadow duration-300" 
       data-testid="card-ai-recommendations"
@@ -199,5 +184,6 @@ export function AIRecommendationsBlock({ articleSlug }: AIRecommendationsBlockPr
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }
