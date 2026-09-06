@@ -7261,8 +7261,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         // Get total count for pagination — عند البحث يكفينا عدد المرشحين
         // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح. في القائمة
         // العادية لا يعتمد العد على صفوف الصفحة، لذلك نشغّلهما بالتوازي.
+        const requestedMetricsStatus: 'published' | 'draft' | 'archived' | null =
+          status === 'published' ? 'published' :
+          status === 'draft' ? 'draft' :
+          status === 'archived' ? 'archived' : null;
+        const metricsTotalStatus = !shouldFilterByUser && whereConditions.length === 1
+          ? requestedMetricsStatus
+          : null;
         const totalPromise = searchCandidateTotal !== null
           ? Promise.resolve(searchCandidateTotal)
+          : metricsTotalStatus
+            ? storage.getArticlesMetrics().then((metrics) => metrics[metricsTotalStatus])
           : (async () => {
               let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
               if (whereConditions.length > 0) {
