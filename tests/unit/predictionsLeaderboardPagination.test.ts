@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { isPredictionRateLimitError } from "../../client/src/components/predictions/predictionRequestError";
 
 const SERVICE = readFileSync(
   path.resolve(import.meta.dirname, "../../server/services/predictions/predictionCoreService.ts"),
@@ -51,5 +52,18 @@ describe("تبويب المتصدرين في الويب — PredictionCenter", (
     expect(PAGE).toContain("مشارك");
     expect(PAGE).toContain("loadMoreLeaders");
     expect(PAGE).toContain("عرض المزيد من المتصدرين");
+  });
+
+  it("يعالج 429 المتوقع دون إخفاء أخطاء التطبيق الأخرى", () => {
+    expect(isPredictionRateLimitError(new Error("RATE_LIMITED"))).toBe(true);
+    expect(isPredictionRateLimitError(new Error("request was RATE_LIMITED by upstream"))).toBe(false);
+    expect(isPredictionRateLimitError(new TypeError("Cannot read properties of undefined"))).toBe(false);
+
+    const loadMoreBody = PAGE.slice(
+      PAGE.indexOf("const loadMoreLeaders"),
+      PAGE.indexOf("// توقعاتي"),
+    );
+    expect(loadMoreBody).toContain("if (!isPredictionRateLimitError(error)) throw error");
+    expect(loadMoreBody).toContain("وصلت إلى حد الطلبات مؤقتًا");
   });
 });
