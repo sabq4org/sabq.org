@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { withQueryDeadline } from "../../client/src/lib/queryDeadline";
+import {
+  QUERY_DEADLINE_ERROR_MESSAGE,
+  QUERY_DEADLINE_ERROR_NAME,
+  withQueryDeadline,
+} from "../../client/src/lib/queryDeadline";
 afterEach(() => vi.useRealTimers());
 function stalled(signal: AbortSignal): Promise<never> {
   return new Promise((_, reject) => {
@@ -13,7 +17,10 @@ it("bounds the entire response body read, not just receiving headers", async () 
     await Promise.resolve({ status: 200 });
     return stalled(signal);
   }, new AbortController().signal, 6_000);
-  const rejection = expect(query).rejects.toMatchObject({ name: "TimeoutError" });
+  const rejection = expect(query).rejects.toMatchObject({
+    name: QUERY_DEADLINE_ERROR_NAME,
+    message: QUERY_DEADLINE_ERROR_MESSAGE,
+  });
   await vi.advanceTimersByTimeAsync(6_000); await rejection;
   expect(vi.getTimerCount()).toBe(0);
 });

@@ -1,3 +1,8 @@
+import {
+  QUERY_DEADLINE_ERROR_MESSAGE,
+  QUERY_DEADLINE_ERROR_NAME,
+} from "./queryDeadline";
+
 /**
  * فرز أحداث Sentry في المتصفح: هل هذا خطأ من كودنا فعلًا؟
  *
@@ -217,6 +222,18 @@ export function isClientNoiseException(
 ): boolean {
   const type = exception?.type ?? "";
   if (type === "NotAllowedError") return true;
+
+  // `withQueryDeadline` deliberately aborts optional component requests so
+  // React Query can expose the existing recovery UI. TanStack's internal
+  // cancellation may still reach `unhandledrejection`, but this exact,
+  // application-owned sentinel is already handled product behavior. Do not
+  // broaden this to generic TimeoutError/"Request timed out" events.
+  if (
+    type === QUERY_DEADLINE_ERROR_NAME &&
+    exception?.value === QUERY_DEADLINE_ERROR_MESSAGE
+  ) {
+    return true;
+  }
 
   const value = exception?.value ?? fallbackMessage ?? "";
   if (isIgnoredClientErrorMessage(value)) return true;
