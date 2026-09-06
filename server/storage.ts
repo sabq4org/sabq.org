@@ -2,7 +2,7 @@
 import { db } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
-import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
+import { memoryCache, CACHE_TTL, withCache, withSWR } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
@@ -4599,17 +4599,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }> {
-    // استعلام واحد بدل 4 COUNT متتالية + كاش قصير (كان يُسجَّل ~2.5s في APM)
-    return withCache("admin:articles:metrics", CACHE_TTL.SHORT, async () => {
+    // كل عدّ مستقل يدفع شرط status إلى فهرسه. صيغة FILTER الواحدة كانت تمسح
+    // صف المقال كاملًا (~199k blocks في قياس الإنتاج) كلما انتهى الكاش.
+    // المفتاح يبدأ بـ articles: كي تمسحه بوابة إبطال المقالات بعد أي كتابة.
+    return withSWR("articles:admin:metrics:v2", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, async () => {
       const now = new Date();
-      const [row] = await db
-        .select({
-          published: sql<number>`count(*) filter (where ${articles.status} = 'published')`,
-          draft: sql<number>`count(*) filter (where ${articles.status} = 'draft')`,
-          archived: sql<number>`count(*) filter (where ${articles.status} = 'archived')`,
-          scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled' and ${articles.scheduledAt} >= ${now})`,
-        })
-        .from(articles);
+      const result = await db.execute<{
+        published: number | string;
+        draft: number | string;
+        archived: number | string;
+        scheduled: number | string;
+      }>(sql`
+        select
+          (select count(*) from ${articles} where ${articles.status} = 'published') as published,
+          (select count(*) from ${articles} where ${articles.status} = 'draft') as draft,
+          (select count(*) from ${articles} where ${articles.status} = 'archived') as archived,
+          (select count(*) from ${articles} where ${articles.status} = 'scheduled' and ${articles.scheduledAt} >= ${now}) as scheduled
+      `);
+      const row = result.rows[0];
 
       return {
         published: Number(row?.published ?? 0),
