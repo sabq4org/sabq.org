@@ -7091,8 +7091,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { search, status, articleType, categoryId, authorId, featured, includeAI, page = '1', limit = '30' } = req.query;
       
       // Auto-filter for reporters: they should only see their own articles
-      const userPermissions = await getUserPermissions(req.user.id);
-      const canViewAllArticles = userPermissions.includes('articles.view_all') || 
+      // The permission middleware has already populated the effective RBAC cache.
+      // Reuse it instead of querying users/roles/permissions again on every list load.
+      const userPermissions = await getEffectiveUserPermissions(req.user.id);
+      const canViewAllArticles = userPermissions.includes('*') ||
+        userPermissions.includes('articles.view_all') ||
         userPermissions.includes('articles.manage') ||
         ['admin', 'system_admin', 'editor', 'chief_editor', 'content_manager'].includes(req.user.role);
       
@@ -7256,22 +7259,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
 
         // Get total count for pagination — عند البحث يكفينا عدد المرشحين
-        // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح.
-        let totalCount: number;
-        if (searchCandidateTotal !== null) {
-          totalCount = searchCandidateTotal;
-        } else {
-          let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
-          if (whereConditions.length > 0) {
-            countQuery = countQuery.where(and(...whereConditions));
-          }
-          const [countResult] = await countQuery;
-          totalCount = Number(countResult?.count || 0);
-        }
+        // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح. في القائمة
+        // العادية لا يعتمد العد على صفوف الصفحة، لذلك نشغّلهما بالتوازي.
+        const totalPromise = searchCandidateTotal !== null
+          ? Promise.resolve(searchCandidateTotal)
+          : (async () => {
+              let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
+              if (whereConditions.length > 0) {
+                countQuery = countQuery.where(and(...whereConditions));
+              }
+              const [countResult] = await countQuery;
+              return Number(countResult?.count || 0);
+            })();
 
-        const rows = await query.orderBy(...orderClauses)
+        const rowsPromise = query.orderBy(...orderClauses)
           .limit(limitNum)
           .offset(offset);
+        const [totalCount, rows] = await Promise.all([totalPromise, rowsPromise]);
 
         return { results: rows, total: totalCount };
       })();
