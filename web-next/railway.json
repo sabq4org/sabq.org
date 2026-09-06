@@ -9,7 +9,7 @@
   },
   "deploy": {
     "startCommand": "node server.js",
-    "healthcheckPath": "/",
+    "healthcheckPath": "/health",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE"
   }

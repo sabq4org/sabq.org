@@ -20,6 +20,7 @@
     "test:load": "k6 run load-test/breaking-point.js",
     "db:push": "drizzle-kit push",
     "db:push:local": "bash scripts/db-push-local.sh",
+    "db:push:staging": "bash scripts/db-push-staging.sh",
     "db:up": "docker compose up -d postgres redis",
     "db:down": "docker compose stop postgres redis",
     "systems:inventory": "node scripts/systems-inventory.mjs --write-snapshot"

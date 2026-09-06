@@ -30,6 +30,15 @@ export const metadata: Metadata = {
     default: "سبق",
     template: "%s | سبق",
   },
+  ...(process.env.STAGING_NO_INDEX === "true"
+    ? {
+        robots: {
+          index: false,
+          follow: false,
+          nocache: true,
+        },
+      }
+    : {}),
 };
 
 // Default to Arabic/RTL; localized (en/ur) route groups override lang/dir on

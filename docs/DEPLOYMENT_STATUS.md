@@ -41,6 +41,79 @@
 
 ---
 
+## Railway staging المعزول
+
+بيئة Railway الدائمة `staging` منفصلة عن `production` ولا تُنشأ بالنسخ منه.
+مصدر النشر هو فرع GitHub الدائم `staging`، وليس `main`.
+
+| الخدمة | المصدر | قاعدة البيانات/السلوك |
+|--------|--------|------------------------|
+| `sabq-staging-api` | جذر المستودع · `/railway.json` | شبكة Railway الداخلية فقط؛ PostgreSQL staging مستقل؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
+| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | API داخلي؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
+| `Postgres` | Railway Postgres 18 + pgvector | volume مستقل، ولا يوجد `NEON_DATABASE_URL` |
+
+لا توجد خدمات `newsletter-worker` أو `meetings-agent` أو `sabq-mirror` في
+staging. لا تُنسخ قيم أسرار production؛ تُنشأ أسرار الجلسة/JWT خاصة بـ staging،
+وتُترك تكاملات الطرف الثالث غير مضبوطة. الاستثناء الوحيد هو
+`OPENAI_API_KEY=staging-disabled-invalid-key`: قيمة حارسة غير صالحة وليست مفتاحاً،
+لأن استيراد عميل embeddings القديم يرفض الإقلاع عند غياب الاسم كلياً؛ وتظل كل
+مهام AI الخلفية معطّلة. كذلك يستخدم `PRIVATE_OBJECT_DIR` مجلداً مؤقتاً داخل
+حاوية staging بدلاً من أي مفاتيح R2 أو bucket إنتاجي.
+
+### ترقية commit إلى staging
+
+بعد نجاح فحوصات الفرع، ادفع commit المطلوب إلى فرع `staging` ثم راقب خدمتي
+staging. لا تعدّل `main` ولا بيئة production في هذا الاختبار:
+
+```bash
+git push origin <COMMIT_SHA>:staging
+```
+
+فحوصات القبول:
+
+```bash
+railway ssh --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service sabq-staging-web-next \
+  node -e 'fetch(process.env.API_ORIGIN + "/health").then(async r => { \
+    const j = await r.json(); console.log(r.status, j.status, j.database); \
+    if (!r.ok || j.database !== "connected") process.exit(1); })'
+read -rsp "STAGING_ACCESS_TOKEN: " STAGING_ACCESS_TOKEN; echo
+curl -fsSI https://sabq-staging-web-next-staging.up.railway.app/ \
+  -u "sabq:${STAGING_ACCESS_TOKEN}" \
+  | grep -iE 'HTTP/|x-robots-tag|cache-control'
+```
+
+المتوقع: API يعيد `200` و`database=connected`، والويب يعيد `200` مع
+`X-Robots-Tag: noindex, nofollow, noarchive` و`Cache-Control: private, no-store`.
+بدون Basic Auth يجب أن يعيد الويب `401`، بينما يبقى `/health` عاماً لـ Railway.
+
+### تطبيق المخطط على staging أولاً
+
+يُستخدم فقط مع متغيرات خدمة `Postgres` داخل بيئة Railway `staging`:
+
+```bash
+# افتح TCP مؤقتاً وسجّل id الناتج
+railway tcp-proxy create --port 5432 \
+  --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres --json
+
+railway run --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres --no-local \
+  npm run db:push:staging
+
+# أغلق المنفذ العام فور نجاح Drizzle
+railway tcp-proxy delete <PROXY_ID> --yes \
+  --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres
+```
+
+السكربت يرفض أي بيئة غير `staging`، ويرفض Neon، ويتحقق من مشروع Railway
+والخدمة، ثم يفعّل pgvector قبل Drizzle. لا تترك TCP proxy فعالاً بعد العملية؛
+الوضع الطبيعي لقاعدة staging هو الشبكة الداخلية فقط. راجع أيضاً
+[`docs/setup/LOCAL_POSTGRES_AR.md`](setup/LOCAL_POSTGRES_AR.md).
+
+---
+
 ## Railway Watch Paths — خدمات المستودع الواحد
 
 خدمات Railway المرتبطة بفرع `main` تستخدم `build.watchPatterns` داخل ملفات

@@ -66,6 +66,31 @@ npm run db:push:local
 
 للإنتاج: `./push-to-production.sh '<PROD_URL>'` فقط.
 
+### Railway staging (ليس تطويراً محلياً)
+
+قاعدة `staging` على Railway مستقلة عن Neon والإنتاج. لتجربة تغيير المخطط قبل
+production استخدم خدمة `Postgres` في البيئة `staging` فقط:
+
+```bash
+# مؤقتاً فقط: أنشئ TCP proxy وسجّل id الناتج
+railway tcp-proxy create --port 5432 \
+  --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres --json
+
+railway run --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres --no-local \
+  npm run db:push:staging
+
+# ثم أغلقه فوراً؛ قاعدة staging داخلية في الوضع الطبيعي
+railway tcp-proxy delete <PROXY_ID> --yes \
+  --project 49260270-79b7-40af-9e91-2599a6161f46 \
+  --environment staging --service Postgres
+```
+
+`db:push:staging` يرفض التشغيل إن لم تكن `RAILWAY_ENVIRONMENT_NAME=staging`،
+أو كان المشروع/الخدمة مختلفين، أو ظهر `NEON_DATABASE_URL`، أو لم يكن المضيف
+Railway Postgres. كما يفعّل امتداد `vector` المطلوب قبل تطبيق مخطط Drizzle.
+
 ### 4) Seed (اختياري)
 
 ```bash
@@ -111,4 +136,5 @@ npm run db:down
 | `npm run db:up` | تشغيل Postgres + Redis |
 | `npm run db:down` | إيقافهما مع إبقاء البيانات |
 | `npm run db:push:local` | schema → محلي فقط |
+| `npm run db:push:staging` | schema → Railway staging المعزول فقط |
 | `docker compose --profile full up -d` | اختياري: حاوية التطبيق كاملة |
