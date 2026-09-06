@@ -180,6 +180,7 @@ import {
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
+import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -243,6 +244,7 @@ export default function ArticleEditor() {
   const [infographicBannerUrl, setInfographicBannerUrl] = useState("");
   const [isAiGeneratedInfographicBanner, setIsAiGeneratedInfographicBanner] = useState(false);
   const [isUploadingInfographicBanner, setIsUploadingInfographicBanner] = useState(false);
+  const [bannerUploadProgress, setBannerUploadProgress] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
   const [isGeneratingInfographicBanner, setIsGeneratingInfographicBanner] = useState(false);
   
   // Debug: Track reporterId changes
@@ -293,6 +295,7 @@ export default function ArticleEditor() {
   const [republish, setRepublish] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
   const [isAnalyzingSEO, setIsAnalyzingSEO] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
   const [isGeneratingSocialCards, setIsGeneratingSocialCards] = useState(false);
@@ -1218,6 +1221,7 @@ export default function ArticleEditor() {
 
   const uploadFeaturedImageFile = async (file: File): Promise<boolean> => {
     setIsUploadingImage(true);
+    setImageUploadProgress({ phase: "preparing", percent: 0 });
 
     try {
       type UploadedImage = {
@@ -1231,11 +1235,7 @@ export default function ArticleEditor() {
         formData.append("file", uploadFileValue);
         formData.append("purpose", "article-hero");
         formData.append("entityType", "article");
-        return (await apiRequest("/api/media/upload", {
-          method: "POST",
-          body: formData,
-          isFormData: true,
-        })) as UploadedImage;
+        return uploadNewsImage<UploadedImage>(formData, setImageUploadProgress);
       };
 
       const declaredFile = isAvifFile(file) && file.type.toLowerCase() !== "image/avif"
@@ -1347,16 +1347,13 @@ export default function ArticleEditor() {
     }
 
     setIsUploadingInfographicBanner(true);
+    setBannerUploadProgress({ phase: "preparing", percent: 0 });
 
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("entityType", "article-infographic-banner");
-      const uploaded = (await apiRequest("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-      })) as { id: string; url: string };
+      const uploaded = await uploadNewsImage<{ id: string; url: string }>(formData, setBannerUploadProgress);
 
       setInfographicBannerUrl(uploaded.url);
       setIsAiGeneratedInfographicBanner(false);
@@ -3186,6 +3183,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Button>
                     )}
                   </div>
+                  {isUploadingImage && (
+                    <div className="space-y-2" role="status" aria-live="polite" data-testid="hero-upload-progress">
+                      <p className="text-xs text-muted-foreground">{newsImageUploadLabel(imageUploadProgress)}</p>
+                      <Progress value={imageUploadProgress.percent} className="h-1.5" />
+                    </div>
+                  )}
                   {!isOpinionAuthor && imageToolsOpen && (
                     <div className="flex flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/30 p-3">
                       {imageUrl && (
@@ -3502,6 +3505,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
                   
+                  {isUploadingInfographicBanner && (
+                    <div className="space-y-2" role="status" aria-live="polite" data-testid="banner-upload-progress">
+                      <p className="text-xs text-muted-foreground">{newsImageUploadLabel(bannerUploadProgress)}</p>
+                      <Progress value={bannerUploadProgress.percent} className="h-1.5" />
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"

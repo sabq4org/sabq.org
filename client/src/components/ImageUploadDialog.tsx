@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Upload, X, Image as ImageIcon, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiUrl, ensureCsrfToken } from "@/lib/queryClient";
+import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 
 export interface GalleryImage {
   src: string;
@@ -35,6 +35,7 @@ interface UploadingFile {
   file: File;
   preview: string;
   progress: number;
+  status?: NewsImageUploadProgress;
   error?: string;
   uploaded?: boolean;
   url?: string;
@@ -140,73 +141,13 @@ export function ImageUploadDialog({
     const formData = new FormData();
     formData.append('file', file);
     if (uploadPurpose) formData.append('entityType', uploadPurpose);
-    const csrfToken = await ensureCsrfToken();
-
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      // Progress tracking
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100);
-          setUploadingFiles(prev => {
-            const newFiles = [...prev];
-            newFiles[index].progress = progress;
-            return newFiles;
-          });
-        }
-      });
-
-      // Success handler
-      xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-          try {
-            const response = JSON.parse(xhr.responseText);
-            const imageUrl = response.url;
-            if (!imageUrl || typeof imageUrl !== 'string') {
-              console.error('[ImageUpload] Invalid URL in response:', response);
-              reject(new Error('رابط الصورة غير صحيح في الاستجابة'));
-              return;
-            }
-            setUploadingFiles(prev => {
-              const newFiles = [...prev];
-              newFiles[index].uploaded = true;
-              newFiles[index].url = imageUrl;
-              return newFiles;
-            });
-            resolve(imageUrl);
-          } catch (error) {
-            console.error('[ImageUpload] Parse error:', error);
-            reject(new Error('فشل في معالجة الاستجابة'));
-          }
-        } else {
-          console.error('[ImageUpload] Upload failed with status:', xhr.status);
-          try {
-            const errorData = JSON.parse(xhr.responseText);
-            reject(new Error(errorData.message || 'فشل في رفع الملف'));
-          } catch {
-            reject(new Error('فشل في رفع الملف'));
-          }
-        }
-      });
-
-      // Error handler
-      xhr.addEventListener('error', () => {
-        reject(new Error('فشل الاتصال بالخادم'));
-      });
-
-      xhr.open('POST', apiUrl('/api/media/upload'));
-      
-      // Include credentials (cookies) for authentication
-      xhr.withCredentials = true;
-      
-      // Add CSRF token for security
-      if (csrfToken) {
-        xhr.setRequestHeader('x-csrf-token', csrfToken);
-      }
-      
-      xhr.send(formData);
+    const result = await uploadNewsImage<{ url: string }>(formData, (status) => {
+      setUploadingFiles(prev => prev.map((item, i) => i === index
+        ? { ...item, progress: status.percent, status, error: undefined } : item));
     });
+    setUploadingFiles(prev => prev.map((item, i) => i === index
+      ? { ...item, uploaded: true, url: result.url, error: undefined } : item));
+    return result.url;
   };
 
   const handleUpload = async () => {
@@ -215,12 +156,12 @@ export function ImageUploadDialog({
     setIsUploading(true);
 
     try {
-      // Upload all files
-      const uploadPromises = uploadingFiles.map((item, index) => 
-        uploadFile(item.file, index)
-      );
-
-      const uploadedUrls = await Promise.all(uploadPromises);
+      // Keep phone memory and the connection bounded. A manual retry reuses
+      // completed files instead of uploading the whole album again.
+      const uploadedUrls: string[] = [];
+      for (const [index, item] of uploadingFiles.entries()) {
+        uploadedUrls.push(item.uploaded && item.url ? item.url : await uploadFile(item.file, index));
+      }
 
       // Success notification
       toast({
@@ -261,7 +202,7 @@ export function ImageUploadDialog({
       setUploadingFiles(prev => 
         prev.map(item => ({
           ...item,
-          error: error instanceof Error ? error.message : "فشل الرفع",
+          error: item.uploaded ? undefined : error instanceof Error ? error.message : "فشل الرفع",
         }))
       );
     } finally {
@@ -392,11 +333,11 @@ export function ImageUploadDialog({
                           </p>
 
                           {/* Progress bar */}
-                          {item.progress > 0 && !item.uploaded && (
+                          {isUploading && !item.uploaded && (
                             <div className="mt-2">
                               <Progress value={item.progress} className="h-1" />
                               <p className="text-xs text-muted-foreground mt-1">
-                                {item.progress}%
+                                {item.status ? newsImageUploadLabel(item.status) : "بانتظار الرفع…"}
                               </p>
                             </div>
                           )}
