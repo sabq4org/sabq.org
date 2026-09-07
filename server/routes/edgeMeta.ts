@@ -60,6 +60,7 @@ import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService"
 import { getMeetingByInviteToken } from "../services/meetingsService";
 import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
 import { paginationOrReject } from "../utils/pagination";
+import { LEGACY_ARTICLE_PREFIXES, resolveLegacyArticlePath, resolveArchiveCanonical } from "../services/archiveSeo";
 
 const router = Router();
 
@@ -118,13 +119,6 @@ const containsArabic = (s: string) => ARABIC_RE.test(s);
 // DELIBERATELY EXCLUDES current features that share the shape: `gulf` (gulf
 // events), `omq` (deep analyses), `category`, `article`, `news`, `opinion`,
 // `en`, `ur`, `world-day(s)`.
-const LEGACY_ARTICLE_PREFIXES = new Set([
-  "saudia", "saudi", "world", "arab", "local", "sport", "sports", "business",
-  "economy", "politics", "society", "culture", "health", "tech", "technology",
-  "cars", "tourism", "media", "entertainment", "accidents", "breaking",
-  "mylife", "stations", "articles",
-]);
-
 // Fast structural test: can this path EVER produce a redirect or gone=true?
 // computeSlugRedirect only matches /article|news/…, /category/…, and the legacy
 // /<prefix>/…/slug shapes; computeArticleGone only matches (en|ur)?/article/….
@@ -135,6 +129,7 @@ const LEGACY_ARTICLE_PREFIXES = new Set([
 // distinct (never-reused) negative entry, pinning the cache at its cap. Being
 // permissive here is safe — a false positive only means we cache as before.
 function isRedirectCandidate(path: string): boolean {
+  if (/^\/home\/?$/i.test(path)) return true;
   if (/^\/(?:en\/|ur\/)?article\//.test(path)) return true;
   if (/^\/news\//.test(path)) return true;
   if (/^\/category\//.test(path)) return true;
@@ -168,10 +163,17 @@ function abs(url: string | null | undefined): string {
 // Resolve the 301 target (or null) for a path. Pure DB logic — wrapped by the
 // route below with an in-process cache. Returns the canonical redirect path.
 async function computeSlugRedirect(path: string): Promise<string | null> {
+  if (/^\/home\/?$/i.test(path)) return "/";
+  const legacyTarget = await resolveLegacyArticlePath(safeDecode(path));
+  if (legacyTarget) {
+    return await resolveArchiveCanonical(safeDecode(legacyTarget.slice("/article/".length))) || legacyTarget;
+  }
   const articleMatch = path.match(/^\/(article|news)\/([^/?#]+)/);
   if (articleMatch) {
     const [, routeType, rawSlug] = articleMatch;
     const decodedSlug = safeDecode(rawSlug);
+    const archiveCanonical = await resolveArchiveCanonical(decodedSlug);
+    if (archiveCanonical) return archiveCanonical;
     const needsLookup = containsArabic(decodedSlug) || routeType === "news";
     if (needsLookup) {
       const where = containsArabic(decodedSlug)
@@ -226,7 +228,7 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
       .limit(1);
     const canonical = row?.englishSlug || row?.slug;
     if (canonical) {
-      return `/article/${canonical}`;
+      return await resolveArchiveCanonical(canonical) || `/article/${encodeURIComponent(canonical)}`;
     }
   }
 
@@ -647,6 +649,7 @@ async function buildArArticlePayload(
   slug: string,
   canonical: string,
 ) {
+  canonical = `${SITE_URL}${await resolveArchiveCanonical(row.englishSlug || row.slug || slug) || new URL(canonical).pathname}`;
   const seoData = (row.seo as any) || {};
   const title = row.title || seoData.metaTitle || "";
   // Description priority mirrors seoInjector.ts: editorial metaDescription, then
