@@ -3,6 +3,16 @@ import rateLimit from "express-rate-limit";
 
 const router: Router = express.Router();
 
+export function sanitizeCspLogValue(value: unknown, fallback = "?"): string {
+  if (typeof value !== "string" || !value) return fallback;
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`.slice(0, 300);
+  } catch {
+    return value.replace(/[\r\n\t]/g, " ").slice(0, 120);
+  }
+}
+
 const cspReportLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 60,
@@ -31,9 +41,9 @@ router.post(
         const report = entry?.["csp-report"] || entry?.body || entry;
         const directive = report?.["violated-directive"] || report?.effectiveDirective;
         if (!directive) continue;
-        const blocked = report?.["blocked-uri"] || report?.blockedURL || "?";
-        const docUri = report?.["document-uri"] || report?.documentURL || "?";
-        console.warn(`[CSP-Report] directive=${directive} blocked=${blocked} doc=${docUri}`);
+        const blocked = sanitizeCspLogValue(report?.["blocked-uri"] || report?.blockedURL);
+        const docUri = sanitizeCspLogValue(report?.["document-uri"] || report?.documentURL);
+        console.warn(`[CSP-Report] directive=${sanitizeCspLogValue(directive)} blocked=${blocked} doc=${docUri}`);
       }
     } catch {
       // Never let a malformed report surface as an error.

@@ -20,7 +20,7 @@ import {
   updateMailerLiteSubscriber,
   unsubscribeFromMailerLite,
   syncUserInterestsToMailerLite,
-  parseMailerLiteWebhook,
+  parseMailerLiteWebhooks,
   isMailerLiteConfigured,
   getMailerLiteGroups,
 } from '../services/mailerlite';
@@ -489,14 +489,14 @@ export function registerSmartNewsletterRoutes(app: Express) {
         return res.status(401).json({ error: 'Unauthorized: invalid webhook signature' });
       }
 
-      const event = parseMailerLiteWebhook(req.body);
-      if (!event) {
+      const events = parseMailerLiteWebhooks(req.body);
+      if (events.length === 0) {
         return res.status(400).json({ error: 'Invalid webhook payload' });
       }
 
-      const { type, data } = event;
+      for (const { type, data } of events) {
 
-      switch (type) {
+       switch (type) {
         case 'subscriber.created':
           if (data.subscriber) {
             console.log('[MailerLite Webhook] subscriber.created processed');
@@ -543,9 +543,10 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
         default:
           console.log(`ℹ️ MailerLite: Unhandled event type ${type}`);
+       }
       }
 
-      res.json({ success: true, received: type });
+      res.json({ success: true, received: events.map(({ type }) => type) });
     } catch (error) {
       console.error('Error processing MailerLite webhook:', error);
       res.status(500).json({ error: 'Webhook processing failed' });
