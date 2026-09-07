@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyHtmlHeaders,
   applyHtmlSecurityHeaders,
   htmlSecurityHeadersForHost,
   isHstsHost,
@@ -35,9 +34,8 @@ describe("Pages HTML security headers", () => {
   });
 
   it("leaves non-HTML responses unchanged", async () => {
-    const response = applyHtmlHeaders(
+    const response = applyHtmlSecurityHeaders(
       new Response('{"ok":true}', { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } }),
-      { "Cache-Control": "public, max-age=60" },
       "sabq.org",
     );
 
