@@ -28,6 +28,7 @@ import { sendNewsletterWelcomeEmail, sendNewsletterUnsubscribeEmail } from '../s
 import { isAuthenticated } from '../auth';
 import { requireRole } from '../rbac';
 import { createMailerLiteWebhookHandler } from './mailerliteWebhookHandler';
+import { cfKeyGenerator, cfValidate } from '../utils/rateLimiting';
 
 /**
  * Resolve which subscription the caller is allowed to act on.
@@ -101,8 +102,8 @@ const newsletterTriggerLimiter = rateLimit({
   message: { success: false, message: 'تم تجاوز حد تشغيل النشرة. يرجى الانتظار دقيقة' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => req.headers['cf-connecting-ip'] as string || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown',
-  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
 });
 
 // Subscription request schema

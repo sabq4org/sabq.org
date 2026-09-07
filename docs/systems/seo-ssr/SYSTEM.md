@@ -27,6 +27,11 @@
 ## عند التعديل
 - [ ] قرأت هذا الملف + `docs/DEPLOYMENT_STATUS.md` عند لمس الطوبولوجيا
 
+## ثقة بروكسي Pages وWorker
+- `functions/_middleware.js` يوقّع عنوان الزائر عند تمرير `/api/*` إلى `API_ORIGIN`، ويحذف أي ترويسات `X-Sabq-*` واردة من العميل قبل إعادة البناء.
+- `cloudflare-worker/wrangler.api.toml` يبقى بلا routes حتى تهيئة السر واختبارات الأصل؛ لا توجّه Worker إلى `api.sabq.org` نفسه لتجنب الحلقة.
+- `web-next` يمرر طلبات SSR العامة إلى `NEXT_ORIGIN` ولا يُستخدم كمصدر عنوان زائر؛ مسارات GET لا تعتمد على Bearer-keying.
+
 ### تصحيح ارتباط خرائط الأرشيف — 2026-09-07
 - جدول البحث الداخلي يستخدم `archive_candidate` صراحة حتى يشير `articles.legacy_slug` إلى الصف الخارجي. تحقق الإنتاج يشمل SQL الفعلي المولّد من Drizzle؛ اختلاف alias في استعلام قياس مستقل لا يكفي لاختبار السلوك.
 

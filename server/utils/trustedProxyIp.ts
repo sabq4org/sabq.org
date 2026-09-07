@@ -11,6 +11,26 @@ type HeaderRequest = {
 };
 
 const SIGNATURE_WINDOW_MS = 60_000;
+export const INTERNAL_SERVICE_IP = "127.0.0.1";
+
+/** Build the same method/path/query-bound headers for trusted server callers. */
+export function signProxyHeaders(
+  method: string,
+  pathAndQuery: string,
+  secret = process.env.EDGE_PROXY_SHARED_SECRET,
+  now = Date.now(),
+): Record<string, string> {
+  if (!secret) return {};
+  const ip = INTERNAL_SERVICE_IP;
+  const timestamp = String(now);
+  const payload = `${timestamp}\n${method}\n${pathAndQuery}\n${ip}`;
+  const signature = createHmac("sha256", secret).update(payload).digest("hex");
+  return {
+    "X-Sabq-Client-IP": ip,
+    "X-Sabq-Proxy-Timestamp": timestamp,
+    "X-Sabq-Proxy-Signature": signature,
+  };
+}
 
 /** Resolve a client address without trusting visitor-controlled forwarding headers. */
 export function verifiedProxyIp(

@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-08-16 | المالك: platform
+> آخر مراجعة: 2026-09-07 | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -47,5 +47,9 @@
   الشقيقة تظل محمية.
 
 ## تمهيد توقيع البوابات — 2026-09-07
-- توقيع HMAC على method/path/query/IP/timestamp من Pages وAPI Worker وweb-next. هذه المرحلة تجهز المرسلين فقط؛ utility التحقق لا تُستخدم في backend بعد.
-- لا يُفعّل رفض الأصل أو resolver الجديد حتى اكتمال نشر المرسلين واختبارهم، وفق `docs/ratelimit-edge-ip-rollout-2026-09-07.md`.
+- طلبات Pages/Worker لا تُرسل `X-Sabq-Client-IP` كقيمة موثوقة إلا مع `EDGE_PROXY_SHARED_SECRET` وتوقيع HMAC حديث مربوط بالطريقة والمسار والاستعلام والعنوان، وبعد تفعيل `EDGE_PROXY_IP_ACCEPT=on` في التشغيل. غياب السر يتجاهل الترويسة المخصصة لكنه قد يسبب انهيار buckets خلف Pages؛ ليس عزلًا للأصل.
+- في API، `EDGE_PROXY_GATE_REQUIRED=on` يرفض طلبات API غير الموقعة قبل محددات المعدل (403)، ويعيد503 عند غياب إعدادات التوقيع. في Pages يحرس تهيئة السر. تبقى health والموارد غير API خارج هذا القيد؛ هذا تقييد على مستوى التطبيق وليس جدار شبكة Railway.
+- الترويسات المخصصة غير الموقعة، و`cf-connecting-ip`، و`X-Forwarded-For` القادمة من العميل لا تُستخدم كمفتاح rate-limit. لا يُستخدم Bearer غير متحقق لتوليد bucket جديد قبل تنفيذ المصادقة داخل المسار.
+- مسار `api.sabq.org` المباشر ومسار Railway generated hostname يعتمدان على سلسلة البروكسي المهيأة في Express عند غياب التوقيع. تفاصيل التهيئة والتراجع في `docs/ratelimit-edge-ip-rollout-2026-09-07.md`.
+- utility التحقق مفعلة الآن في backend عند `EDGE_PROXY_IP_ACCEPT=on`، بينما رفض الأصل يتطلب `EDGE_PROXY_GATE_REQUIRED=on` كعلم مستقل.
+- لا يُفعّل رفض الأصل حتى اكتمال نشر المرسلين واختبارهم، وفق `docs/ratelimit-edge-ip-rollout-2026-09-07.md`.

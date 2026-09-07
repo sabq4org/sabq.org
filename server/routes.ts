@@ -13,6 +13,7 @@ import {
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
+import { getRealIp as getTrustedRealIp } from "./utils/trustedProxyIp";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
 import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
@@ -159,7 +160,7 @@ import { checkUserStatus } from "./userStatusMiddleware";
 import { slugRedirectMiddleware } from "./middleware/slugRedirect";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { getRealIp, cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
+import { cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
 import {
   mediaUploadProbe,
   markMediaUploadStage,
@@ -14227,11 +14228,7 @@ Respond in valid JSON format only:
       // Pages egress doesn't collapse every anonymous visitor into one bucket.
       const viewerKey = req.user?.id
         ? `u:${req.user.id}`
-        : ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
-          || (req.headers['cf-connecting-ip'] as string)
-          || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-          || req.ip
-          || 'unknown';
+        : getTrustedRealIp(req);
       const viewDedupKey = `view:seen:${articleId}:${viewerKey}`;
       if (memoryCache.get<boolean>(viewDedupKey)) {
         return res.json({ success: true, counted: false });
@@ -14249,11 +14246,7 @@ Respond in valid JSON format only:
 
       // Record the per-IP aggregate (hashed IP, buffered) so a counted view can
       // later be broken down by distinct IP. Same precedence as rateLimitKey().
-      const clientIp = ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
-        || (req.headers['cf-connecting-ip'] as string)
-        || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-        || req.ip
-        || 'unknown';
+      const clientIp = getTrustedRealIp(req);
       recordArticleView(articleId, clientIp, userId);
 
       res.json({ success: true, counted: true });
