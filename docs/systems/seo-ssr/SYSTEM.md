@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-07-30 | المالك: platform
+> آخر مراجعة: 2026-09-07 | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -9,6 +9,7 @@
 لا يوجد — مولّد SEO بالذكاء الاصطناعي تحت `editorial` (`seo-generator`).
 
 ## عقود مهمة
+- **قوائم JSON المفهرسة رغم robots (2026-09-07):** `apiListingRobots.ts` يضيف `X-Robots-Tag: noindex, nofollow` إلى GET/HEAD لقائمتي `/api/articles` و`/api/v2/articles` فقط. robots يسمح بمساريهما التامين ومعاملات الاستعلام لرؤية الترويسة؛ التفاصيل وبقية API تبقى محظورة. تبقى بيانات JSON العامة وكاشها وصلاحياتها كما هي؛ قاعدة no-store أدناه تخص قوالب HTML الخاصة، ولا تستلزم إلغاء كاش قوائم API العامة.
 - مسارات noindex → `Cache-Control: private, no-store`.
 - `SSR_ROUTES=on/off` مفتاح تراجع فوري.
 - **`/api/edge/seo-meta` (2026-07-25):** كاش ذاكرة `edgeSeoMetaCache` (MATCH 5د / MISS 30ث) + single-flight لنفس المسار + تطبيع المسار (بدون `?utm_*`) + CDN `s-maxage=300, stale-while-revalidate=600` (كان 60ث فيعيد ضرب الأصل كل دقيقة — ظهر كـ APM بطيء بعد كل إقلاع).

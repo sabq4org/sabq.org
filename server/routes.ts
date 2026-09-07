@@ -15,6 +15,7 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import { apiListingNoindex, apiListingRobotsRules } from "./utils/apiListingRobots";
 import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError, isUniqueViolation } from "./utils/pgError";
@@ -537,6 +538,7 @@ function sanitizeArticleUpdatePayload(body: any) {
 }
 
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
+  app.use(apiListingNoindex);
   const AI_BULLETS_TTL_MS = 30 * 60 * 1000;
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
   const aiBulletsInFlight = new Map<string, Promise<string[]>>();
@@ -27102,6 +27104,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 User-agent: *
 Allow: /
 Disallow: /api/
+${apiListingRobotsRules}
 
 # ملاحظة: صفحات الحساب والمصادقة (login, register, logout, *-password,
 # 2fa-verify, verify-email, profile, bookmarks, reading-history, my-*,
@@ -27111,7 +27114,8 @@ Disallow: /api/
 # Search Console: لأن Google لا يستطيع زحفها، فلا يرى وسم noindex ولا يُسقطها.
 # الآن يستطيع زحفها ويرى X-Robots-Tag: noindex (يضيفه وسيط Cloudflare Pages
 # لكل مسارات noindex — راجع functions/_middleware.js) فيُسقطها من الفهرس.
-# /api/ يبقى محظورًا لأنه نقاط نهاية JSON (ليست HTML) ولا يمكن وسمها بـ noindex.
+# بقية /api/ تبقى محظورة. قائمتا الأخبار المحددتان أعلاه قابلتان للزحف
+# لرؤية X-Robots-Tag: noindex, nofollow؛ الترويسة صالحة لموارد JSON أيضاً.
 
 # Googlebot-News intentionally has NO separate group — a previous
 # "Disallow: /" (with a few Allow exceptions) blocked it from the homepage

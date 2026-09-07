@@ -751,14 +751,15 @@
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
         "web-next/**",
-        "functions/_middleware.js"
+        "functions/_middleware.js",
+        "server/utils/apiListingRobots.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-30"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "comments",
