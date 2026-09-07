@@ -324,23 +324,31 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
 }
 
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
-async function cachedJson(url, ttl) {
+export async function cachedJson(url, ttl, context) {
   const cache = caches.default;
   const key = new Request(url, { method: "GET" });
   const hit = await cache.match(key);
   if (hit) {
     try { return await hit.json(); } catch (_) { /* fall through */ }
   }
-  const res = await fetch(url, { headers: { "User-Agent": "sabq-pages-fn/1.0" } });
+  // Includes body consumption: receiving headers alone does not end the budget.
+  const res = await fetch(url, {
+    headers: { "User-Agent": "sabq-pages-fn/1.0" },
+    signal: AbortSignal.timeout(2500),
+  });
   if (!res.ok) return null;
   const text = await res.text();
-  await cache.put(
+  let payload;
+  try { payload = JSON.parse(text); } catch (_) { return null; }
+  const write = cache.put(
     key,
     new Response(text, {
       headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttl}` },
     }),
-  );
-  try { return JSON.parse(text); } catch (_) { return null; }
+  ).catch((err) => console.warn("[pages-fn] metadata cache write failed:", err));
+  // Cache persistence must not delay an otherwise ready HTML response.
+  context.waitUntil(write);
+  return payload;
 }
 
 function escapeHtml(s) {
@@ -964,6 +972,7 @@ export async function onRequest(context) {
       const slug = await cachedJson(
         `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
         SLUG_REDIRECT_TTL,
+        context,
       );
       const redirectTo = slug && slug.redirect ? slug.redirect : null;
       if (redirectTo && redirectTo !== path) {
@@ -1005,9 +1014,10 @@ export async function onRequest(context) {
       cachedJson(
         `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
         SLUG_REDIRECT_TTL,
+        context,
       ),
       next(),
-      cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL),
+      cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL, context),
     ]);
     const redirectTo = slug && slug.redirect ? slug.redirect : null;
     if (redirectTo && redirectTo !== path) {

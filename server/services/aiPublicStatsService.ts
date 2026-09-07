@@ -7,7 +7,7 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "../db";
-import { memoryCache } from "../memoryCache";
+import { withSWR } from "../memoryCache";
 
 export interface AiPublicStats {
   /** وقت حساب الأرقام فعليًا — تعرضه الواجهة كـ«آخر تحديث» صادق */
@@ -77,10 +77,10 @@ async function computeStats(): Promise<AiPublicStats> {
     `),
     db.execute(sql`SELECT count(*)::bigint AS total FROM stories`),
     db.execute(sql`
-      SELECT count(*)::bigint AS total_published,
-             count(*) FILTER (WHERE published_at >= ${riyadhDayStartUtc})::bigint AS today_published
-      FROM articles
-      WHERE status = 'published'
+      SELECT
+        (SELECT count(*)::bigint FROM articles WHERE status = 'published') AS total_published,
+        (SELECT count(*)::bigint FROM articles
+         WHERE status = 'published' AND published_at >= ${riyadhDayStartUtc}) AS today_published
     `),
     db.execute(sql`
       SELECT coalesce(sum(duration_ms), 0)::bigint AS total_duration_ms
@@ -148,10 +148,8 @@ async function computeStats(): Promise<AiPublicStats> {
 }
 
 export async function getAiPublicStats(): Promise<AiPublicStats> {
-  const cached = memoryCache.get<AiPublicStats>(CACHE_KEY);
-  if (cached !== null) return cached;
-
-  const stats = await computeStats();
-  memoryCache.set(CACHE_KEY, stats, CACHE_TTL_MS);
-  return stats;
+  // One nine-query batch per process, including cold concurrent requests.
+  // Keep the last measured snapshot visible while its replacement is computed;
+  // generatedAt remains the actual measurement time (never refreshed on a hit).
+  return withSWR(CACHE_KEY, CACHE_TTL_MS, CACHE_TTL_MS, computeStats);
 }

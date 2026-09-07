@@ -132,6 +132,7 @@ import { generateSeoMetadata } from './seo-generator';
 import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } from "./cacheMiddleware";
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
+import { getCachedNewsStatistics } from "./services/newsStatisticsService";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import { bestEffortWithin } from "./utils/bestEffortDeadline";
@@ -13280,12 +13281,7 @@ Respond in valid JSON format only:
   // News Statistics Endpoint - Statistics cards data
   app.get("/api/news/stats", async (req, res) => {
     try {
-      const cacheKey = 'news:stats';
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
-      const stats = await storage.getNewsStatistics();
-      memoryCache.set(cacheKey, stats, CACHE_TTL.SHORT);
+      const stats = await getCachedNewsStatistics();
       res.json(stats);
     } catch (error) {
       console.error("Error fetching news stats:", error);
