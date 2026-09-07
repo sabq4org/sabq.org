@@ -47,6 +47,84 @@ async function mockPage(page: Page, signedIn = false) {
   });
 }
 
+test("article remains readable while secondary modules are pending", async ({ page }) => {
+  await mockPage(page);
+  const pending: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const specialModules: string[] = [];
+  page.on("request", request => {
+    if (/\/(Paywall|VideoPlayer|InfographicDetail|DataInfographicPage|WeeklyPhotosDisplay)\.tsx/.test(request.url())) specialModules.push(request.url());
+  });
+  await page.route(/\/components\/(ArticlePoll|CommentSection)\.tsx/, async route => {
+    pending.push(route.request().url());
+    await gate;
+    await route.continue();
+  });
+  await page.goto(`${base}e2e/fixtures/component-loading.html`, { waitUntil: "domcontentloaded" });
+  try {
+    await expect(page.getByText(article.title, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("نص تجريبي لقياس تحميل المكونات بالتوازي.", { exact: true })).toBeVisible();
+    await expect.poll(() => pending.length).toBe(2);
+    expect(specialModules).toEqual([]);
+  } finally { release(); }
+  await expect(page.getByText("جارٍ تحميل المحتوى…", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(article.title, { exact: true }).first()).toBeVisible();
+});
+
+test("paid article stays closed while the paywall module loads", async ({ page }) => {
+  await mockPage(page);
+  const protectedText = "هذا النص محمي ويجب ألا يظهر قبل الشراء";
+  await page.route("**/api/articles/loading-test", route => route.fulfill({ json: {
+    ...article, isPaid: true, priceHalalas: 1000, previewLength: 20,
+    content: `<p>${"تمهيد متاح للقراءة. ".repeat(30)}${protectedText}</p>`,
+  } }));
+  await page.route("**/api/payments/check-purchase/local-test", route => route.fulfill({ json: { hasPurchased: false } }));
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let requested = false;
+  await page.route(/\/components\/Paywall\.tsx/, async route => {
+    requested = true;
+    await gate;
+    await route.continue();
+  });
+  await page.goto(`${base}e2e/fixtures/component-loading.html`, { waitUntil: "domcontentloaded" });
+  try {
+    await expect.poll(() => requested).toBe(true);
+    await expect(page.getByText(article.title, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(protectedText, { exact: false })).toHaveCount(0);
+    await expect(page.getByTestId("card-paywall")).toHaveCount(0);
+  } finally { release(); }
+  await expect(page.getByTestId("card-paywall")).toBeVisible();
+  await expect(page.getByText(protectedText, { exact: false })).toHaveCount(0);
+});
+
+test("video keeps its space and story visible while its module loads", async ({ page }) => {
+  await mockPage(page);
+  await page.route("**/api/articles/loading-test", route => route.fulfill({ json: {
+    ...article, isVideoTemplate: true, videoUrl: `${base}test-video.mp4`,
+  } }));
+  await page.route("**/test-video.mp4", route => route.fulfill({ status: 204 }));
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(/\/components\/VideoPlayer\.tsx/, async route => {
+    await gate;
+    await route.continue();
+  });
+  await page.goto(`${base}e2e/fixtures/component-loading.html`, { waitUntil: "domcontentloaded" });
+  try {
+    await expect(page.getByText(article.title, { exact: true }).first()).toBeVisible();
+    const placeholder = page.getByRole("status").and(page.locator(".aspect-video"));
+    await expect(placeholder).toBeVisible();
+    const box = await placeholder.boundingBox();
+    expect(box!.width / box!.height).toBeCloseTo(16 / 9, 1);
+    await expect(page.getByText("نص تجريبي لقياس تحميل المكونات بالتوازي.", { exact: true })).toBeVisible();
+  } finally { release(); }
+  await expect(page.getByTestId("video-player-thumbnail")).toBeVisible();
+  await page.getByTestId("video-player-thumbnail").click();
+  await expect(page.getByTestId("video-player-direct")).toBeVisible();
+});
+
     for (const signedIn of [false, true]) {
       test(`sidebar starts before a slow article (${signedIn ? "member" : "guest"})`, async ({ page }, info) => {
         await mockPage(page, signedIn);
