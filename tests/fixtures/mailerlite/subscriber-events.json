@@ -1,0 +1,23 @@
+{
+  "events": [
+    {
+      "event": "subscriber.unsubscribed",
+      "id": "fixture-subscriber",
+      "email": "reader@example.invalid",
+      "status": "unsubscribed",
+      "created_at": "2026-09-07T00:00:00.000000Z"
+    },
+    {
+      "type": "subscriber.bounced",
+      "subscriber": {
+        "id": "fixture-bounced",
+        "email": "bounced@example.invalid",
+        "status": "bounced",
+        "created_at": "2026-09-07T00:00:00.000000Z",
+        "updated_at": "2026-09-07T00:00:00.000000Z",
+        "fields": {},
+        "groups": []
+      }
+    }
+  ]
+}

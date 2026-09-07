@@ -4,7 +4,6 @@
  */
 
 import { Express, Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { db } from '../db';
@@ -21,23 +20,18 @@ import {
   updateMailerLiteSubscriber,
   unsubscribeFromMailerLite,
   syncUserInterestsToMailerLite,
-  parseMailerLiteWebhook,
+  parseMailerLiteWebhooks,
   isMailerLiteConfigured,
   getMailerLiteGroups,
 } from '../services/mailerlite';
 import { sendNewsletterWelcomeEmail, sendNewsletterUnsubscribeEmail } from '../services/email';
 import { isAuthenticated } from '../auth';
 import { requireRole } from '../rbac';
+import {
+  readMailerLiteSignature,
+  verifyMailerLiteSignature,
+} from '../services/mailerliteWebhookSignature';
 
-/**
- * Verify MailerLite webhook signature using HMAC-SHA256.
- * MailerLite signs the raw request body with the webhook secret and sends the
- * result in the X-MailerLite-Signature header. The header value may be:
- *   - bare hex digest
- *   - "sha256=<hex>" (GitHub-style prefix)
- *   - base64-encoded digest
- * All three formats are handled and compared using constant-time equality.
- */
 /**
  * Resolve which subscription the caller is allowed to act on.
  *
@@ -101,51 +95,6 @@ async function resolveSubscriber(
   }
 
   return denied;
-}
-
-function verifyMailerLiteSignature(rawBody: Buffer, signatureHeader: string): boolean {
-  const secret = process.env.MAILERLITE_WEBHOOK_SECRET;
-  if (!secret) {
-    console.error('[MailerLite Webhook] CRITICAL: MAILERLITE_WEBHOOK_SECRET is not configured - rejecting webhook');
-    return false;
-  }
-  if (!signatureHeader) {
-    console.error('[MailerLite Webhook] Missing X-MailerLite-Signature header');
-    return false;
-  }
-
-  // Compute HMAC-SHA256 directly from the raw Buffer
-  const computedBuf = crypto
-    .createHmac('sha256', secret)
-    .update(rawBody)
-    .digest();
-
-  // Normalise the received signature to a Buffer, tolerating hex, "sha256=<hex>",
-  // and base64 encodings so provider format changes don't silently break delivery.
-  const rawHeader = signatureHeader.startsWith('sha256=')
-    ? signatureHeader.slice(7)
-    : signatureHeader;
-
-  let receivedBuf: Buffer;
-  // Hex strings for SHA-256 are always exactly 64 chars
-  if (/^[0-9a-fA-F]{64}$/.test(rawHeader)) {
-    receivedBuf = Buffer.from(rawHeader, 'hex');
-  } else {
-    // Assume base64 / base64url
-    receivedBuf = Buffer.from(rawHeader, 'base64');
-  }
-
-  if (computedBuf.length !== receivedBuf.length) {
-    console.error('[MailerLite Webhook] Signature length mismatch');
-    return false;
-  }
-
-  try {
-    return crypto.timingSafeEqual(computedBuf, receivedBuf);
-  } catch {
-    console.error('[MailerLite Webhook] Signature comparison failed');
-    return false;
-  }
 }
 
 // Rate limiter for newsletter trigger (max 2 per minute)
@@ -533,34 +482,31 @@ export function registerSmartNewsletterRoutes(app: Express) {
         return res.status(400).json({ error: 'Unable to verify request signature' });
       }
       const rawBodyBuf: Buffer = req.rawBody;
-      const signatureHeader = (req.headers['x-mailerlite-signature'] as string) || '';
+      const signatureHeader = readMailerLiteSignature(req.headers);
 
       if (!verifyMailerLiteSignature(rawBodyBuf, signatureHeader)) {
         console.error('[MailerLite Webhook] Rejected request with invalid or missing signature');
         return res.status(401).json({ error: 'Unauthorized: invalid webhook signature' });
       }
 
-      // req.body is already parsed by express.json(); use it directly.
-      console.log('Received MailerLite webhook:', JSON.stringify(req.body));
-
-      const event = parseMailerLiteWebhook(req.body);
-      if (!event) {
+      const events = parseMailerLiteWebhooks(req.body);
+      if (events.length === 0) {
         return res.status(400).json({ error: 'Invalid webhook payload' });
       }
 
-      const { type, data } = event;
+      for (const { type, data } of events) {
 
-      switch (type) {
+       switch (type) {
         case 'subscriber.created':
           if (data.subscriber) {
-            console.log(`✅ MailerLite: New subscriber ${data.subscriber.email}`);
+            console.log('[MailerLite Webhook] subscriber.created processed');
             // Could sync back to local DB if needed
           }
           break;
 
         case 'subscriber.unsubscribed':
           if (data.subscriber) {
-            console.log(`🚫 MailerLite: Unsubscribed ${data.subscriber.email}`);
+            console.log('[MailerLite Webhook] subscriber.unsubscribed processed');
             // Update local subscription status
             await db
               .update(newsletterSubscriptions)
@@ -575,7 +521,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
         case 'subscriber.bounced':
           if (data.subscriber) {
-            console.log(`⚠️ MailerLite: Bounced ${data.subscriber.email}`);
+            console.log('[MailerLite Webhook] subscriber.bounced processed');
             // Mark as bounced
             await db
               .update(newsletterSubscriptions)
@@ -597,9 +543,10 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
         default:
           console.log(`ℹ️ MailerLite: Unhandled event type ${type}`);
+       }
       }
 
-      res.json({ success: true, received: type });
+      res.json({ success: true, received: events.map(({ type }) => type) });
     } catch (error) {
       console.error('Error processing MailerLite webhook:', error);
       res.status(500).json({ error: 'Webhook processing failed' });

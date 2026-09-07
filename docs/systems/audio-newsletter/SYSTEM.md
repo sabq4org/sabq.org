@@ -39,3 +39,6 @@
 ## عند التعديل
 - [ ] قرأت هذا الملف + `docs/AUDIO_NEWSLETTER_SYSTEM.md`
 - [ ] قرأت `OPERATIONS.md` قبل تغيير أعلام الإنتاج أو تشغيل Worker
+- Webhook MailerLite يقرأ ترويسة `Signature` الرسمية (مع دعم الاسم التاريخي
+  `X-MailerLite-Signature`) ويتحقق من HMAC على raw body قبل parsing؛ لا تُسجل
+  أجسام webhooks أو عناوين المشتركين.

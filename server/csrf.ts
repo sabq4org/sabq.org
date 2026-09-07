@@ -150,24 +150,38 @@ const EXEMPT_REGEX = [
   /^\/api\/ur\/articles\/[^/]+\/view$/,      // Urdu article view counter (raw fetch)
 ];
 
-function isExemptPath(path: string, originalUrl: string): boolean {
+export function isCsrfExemptRequest(
+  method: string,
+  path: string,
+  originalUrl: string,
+): boolean {
+  const originalPath = originalUrl.split("?", 1)[0];
+
+  // CSP reports are anonymous browser telemetry. Exempt only this exact POST;
+  // sibling paths and other methods remain CSRF-protected.
+  if (method === "POST" &&
+      (path === "/api/security/csp-report" || path === "/security/csp-report" ||
+       originalPath === "/api/security/csp-report")) {
+    return true;
+  }
+
   // Check both req.path and req.originalUrl since middleware mounting affects req.path
   if (EXEMPT_PATHS.some(exempt =>
     path === exempt || path.startsWith(exempt) ||
-    originalUrl === exempt || originalUrl.startsWith(exempt)
+    originalPath === exempt || originalPath.startsWith(exempt)
   )) {
     return true;
   }
 
   // Dev-only test endpoints — never exempt in production (S-08).
   if (process.env.NODE_ENV !== "production" &&
-      (path.startsWith("/api/test/") || originalUrl.startsWith("/api/test/"))) {
+      (path.startsWith("/api/test/") || originalPath.startsWith("/api/test/"))) {
     return true;
   }
 
   // req.path carries no query string, so the $-anchored regexes match it
   // reliably even when originalUrl has a ?query suffix.
-  return EXEMPT_REGEX.some(re => re.test(path) || re.test(originalUrl));
+  return EXEMPT_REGEX.some(re => re.test(path) || re.test(originalPath));
 }
 
 export const validateCsrfToken: RequestHandler = (req, res, next) => {
@@ -175,7 +189,7 @@ export const validateCsrfToken: RequestHandler = (req, res, next) => {
     return next();
   }
 
-  if (isExemptPath(req.path, req.originalUrl)) {
+  if (isCsrfExemptRequest(req.method, req.path, req.originalUrl)) {
     return next();
   }
 

@@ -463,6 +463,16 @@ app.use(express.json({
                  // raw photo, so a couple of phone images need headroom.
                  // Bumped 10mb → 25mb to stop /articles/submit 413s.
   verify: (req: any, _res: any, buf: Buffer) => {
+    // The CSP report endpoint has its own small parser, but this global parser
+    // runs first. Enforce the same cap here so the 25 MB upload limit cannot
+    // be used to bypass the report endpoint's 16 KB budget.
+    const requestPath = String(req.originalUrl || req.url || "").split("?", 1)[0];
+    if (requestPath === "/api/security/csp-report" && buf.length > 16 * 1024) {
+      const error: any = new Error("CSP report payload too large");
+      error.status = 413;
+      error.type = "entity.too.large";
+      throw error;
+    }
     // Stash the exact raw bytes before JSON parsing so webhook handlers
     // can verify HMAC signatures against the original payload.
     req.rawBody = buf;
