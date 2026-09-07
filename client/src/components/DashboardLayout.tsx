@@ -53,6 +53,7 @@ import type { NavItem } from "@/nav/types";
 import { cn } from "@/lib/utils";
 import { MEDIA_LICENSE_DASHBOARD_WARNING } from "@shared/mediaLicense";
 import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
+import { DashboardSessionLoading } from "./DashboardSessionLoading";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -62,7 +63,7 @@ const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
-  const { user, isLoading } = useAuth({ redirectToLogin: true });
+  const { user, isLoading, isUnavailable, isRetrying, retryAuth } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
   
   const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
@@ -197,12 +198,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   if (isLoading || !user) {
     return (
       <DashboardThemeProvider>
-        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
-          </div>
-        </div>
+        <DashboardSessionLoading
+          isUnavailable={isUnavailable}
+          isRetrying={isRetrying}
+          onRetry={() => { void retryAuth(); }}
+          onReload={() => window.location.reload()}
+        />
       </DashboardThemeProvider>
     );
   }
