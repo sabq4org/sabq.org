@@ -266,6 +266,55 @@ const mediaUploadLimiter = rateLimit({
   validate: cfValidate,
 });
 
+type MediaUploadProbe = {
+  requestId: string;
+  startedAt: number;
+  bodyReceivedAt?: number;
+  stage: "body-receive" | "parse" | "verify" | "provider" | "storage" | "database" | "hash" | "response";
+};
+
+function mediaUploadRequestId(req: Request): string {
+  const supplied = String(req.headers["x-request-id"] || "").trim();
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(supplied) ? supplied : randomUUID();
+}
+
+/**
+ * Lightweight lifecycle telemetry for diagnosing client/proxy 499s. It
+ * records only timings, status, and a correlation id; never the
+ * multipart body, filename, email, token, or metadata fields.
+ */
+const mediaUploadProbe = (req: Request, res: Response, next: NextFunction) => {
+  const probe: MediaUploadProbe = {
+    requestId: mediaUploadRequestId(req),
+    startedAt: Date.now(),
+    stage: "body-receive",
+  };
+  (req as any).__mediaUploadProbe = probe;
+  res.setHeader("X-Request-ID", probe.requestId);
+
+  req.on("end", () => {
+    probe.bodyReceivedAt = Date.now();
+    probe.stage = "parse";
+  });
+  req.on("aborted", () => {
+    console.warn(
+      `[Media Upload] lifecycle requestId=${probe.requestId} stage=${probe.stage} event=request-aborted elapsed=${Date.now() - probe.startedAt}ms`,
+    );
+  });
+  res.on("finish", () => {
+    console.log(
+      `[Media Upload] lifecycle requestId=${probe.requestId} stage=response status=${res.statusCode} elapsed=${Date.now() - probe.startedAt}ms body=${probe.bodyReceivedAt ? `${probe.bodyReceivedAt - probe.startedAt}ms` : "pending"}`,
+    );
+  });
+  res.on("close", () => {
+    if (res.writableEnded) return;
+    console.warn(
+      `[Media Upload] lifecycle requestId=${probe.requestId} stage=response event=client-closed elapsed=${Date.now() - probe.startedAt}ms body=${probe.bodyReceivedAt ? `${probe.bodyReceivedAt - probe.startedAt}ms` : "pending"}`,
+    );
+  });
+  next();
+};
+
 const followLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
@@ -1964,8 +2013,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // images, rich editor, angle-writer topic images) — NOT just the media library.
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
-  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
-    const uploadStartedAt = Date.now();
+  app.post("/api/media/upload", mediaUploadProbe, isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
+    const probe = req.__mediaUploadProbe as MediaUploadProbe;
+    const uploadStartedAt = probe?.startedAt ?? Date.now();
+    const uploadTimings: Record<string, number> = {};
     try {
       const userId = req.user.id;
 
@@ -1984,6 +2035,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Verify the file's actual magic bytes match the claimed MIME
       // (security audit M1, 2026-05-11). multer's fileFilter only
       // trusts the client-declared header; sharp reads the real format.
+      probe.stage = "verify";
       if (req.file.mimetype.startsWith('image/')) {
         let verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
         // iPhone / some browsers mislabel HEIC/AVIF as image/jpeg. If the
@@ -2034,7 +2086,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       console.log("[Media Upload] File received:", {
-        originalName: req.file.originalname,
         mimetype: req.file.mimetype,
         size: req.file.size,
       });
@@ -2042,8 +2093,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Per-phase timings land in one log line at the end so Railway logs
       // show where a slow upload spent its time (verify/transcode vs provider
       // vs DB) without guessing.
-      const uploadTimings: Record<string, number> = {};
       uploadTimings.verify = Date.now() - uploadStartedAt;
+      if (probe.bodyReceivedAt) uploadTimings.body = probe.bodyReceivedAt - uploadStartedAt;
       let phaseStartedAt = Date.now();
 
       // Perceptual hash (dedup warning) needs a decode pass over the source.
@@ -2085,6 +2136,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           ? newsImageStorageService.isUploadAvailable()
           : cloudflareImagesService.isCloudflareConfigured())
       ) {
+        probe.stage = "provider";
         const imageResult = isEditorialImage
           ? await newsImageStorageService.upload({
               buffer: req.file.buffer,
@@ -2122,6 +2174,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // GCS path — used only when CF didn't claim the upload. Wrapped in
       // try/catch so a missing/misconfigured GCS doesn't kill the request
       // when CF already has the file.
+      probe.stage = "storage";
       let storagePath: string;
       if (cloudflareUrl) {
         storagePath = cloudflareUrl;
@@ -2212,6 +2265,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       uploadTimings.storage = Date.now() - phaseStartedAt;
       phaseStartedAt = Date.now();
+      probe.stage = "database";
 
       // Upload is image-only (the multer fileFilter rejects everything else),
       // so the type is always "image". Real video/document support is a
@@ -2401,6 +2455,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // assignPerceptualHash is already best-effort (swallows missing-column).
       uploadTimings.db = Date.now() - phaseStartedAt;
       phaseStartedAt = Date.now();
+      probe.stage = "hash";
       let duplicateOf = null;
       if (fileType === 'image') {
         try {
@@ -2415,7 +2470,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       uploadTimings.hash = Date.now() - phaseStartedAt;
       uploadTimings.total = Date.now() - uploadStartedAt;
       console.log(
-        `[Media Upload] timings ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} purpose=${uploadPurpose || '-'} size=${req.file.size}`,
+        `[Media Upload] timings requestId=${probe.requestId} ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} kind=${isEditorialImage ? "editorial" : "generic"} size=${req.file.size}`,
       );
 
       res.json({
@@ -2425,7 +2480,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         duplicateOf,
       });
     } catch (error: any) {
-      console.error("Error uploading media file:", error);
+      console.error("Error uploading media file:", {
+        requestId: probe?.requestId,
+        stage: probe?.stage,
+        errorName: error?.name,
+        errorCode: error?.code,
+        elapsed: Date.now() - uploadStartedAt,
+      });
 
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ message: "الملف كبير جداً. الحد الأقصى 10MB" });
