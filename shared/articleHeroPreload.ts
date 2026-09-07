@@ -8,12 +8,12 @@ export function getCacheBustedImageUrl(
   updatedAt?: string | Date | null
 ): string {
   if (!imageUrl) return '';
-  
+
   // Don't add cache busting to data URLs or blob URLs
   if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
     return imageUrl;
   }
-  
+
   // Generate version based on updatedAt or current time
   let version: string;
   if (updatedAt) {
@@ -23,10 +23,10 @@ export function getCacheBustedImageUrl(
     // If no updatedAt, use a daily cache (changes once per day)
     version = Math.floor(Date.now() / 86400000).toString(36);
   }
-  
+
   // Check if URL already has query parameters
   const separator = imageUrl.includes('?') ? '&' : '?';
-  
+
   return `${imageUrl}${separator}v=${version}`;
 }
 
