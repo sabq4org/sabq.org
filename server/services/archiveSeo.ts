@@ -60,7 +60,8 @@ export function isCanonicalArchiveArticle() {
     ELSE NOT EXISTS (
       SELECT 1 FROM (
         SELECT id, created_at, status, title, content, published_at
-        FROM articles WHERE legacy_slug = ${articles.legacySlug}
+        FROM articles AS archive_candidate
+        WHERE archive_candidate.legacy_slug = ${articles.legacySlug}
         OFFSET 0
       ) AS archive_original
       WHERE CASE WHEN archive_original.status = 'published'
