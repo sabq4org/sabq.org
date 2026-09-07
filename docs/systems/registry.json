@@ -676,14 +676,16 @@
         "server/routes/advertiserPayments.ts",
         "client/src/pages/dashboard/ads/**",
         "client/src/pages/dashboard/NativeAdsManagement.tsx",
-        "client/src/pages/dashboard/AdvertiserDashboard.tsx"
+        "client/src/pages/dashboard/AdvertiserDashboard.tsx",
+        "client/src/hooks/useDmsTopAdsVisibility.ts",
+        "client/src/styles/dms-top-ads.css"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
       "owners": [
         "monetization"
       ],
-      "lastReviewed": "2026-07-25"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "auth-rbac",
