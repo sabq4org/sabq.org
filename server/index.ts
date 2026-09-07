@@ -36,7 +36,7 @@ import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
-import { getRealIp, originGate } from "./utils/trustedProxyIp";
+import { getRealIp, originGate, signProxyHeaders } from "./utils/trustedProxyIp";
 import { isNoindexPath } from "./utils/noindexPaths";
 
 process.on('uncaughtException', (error) => {
@@ -1479,9 +1479,12 @@ if (!(globalThis as any).__sabqServer) {
           try {
             const port = parseInt(process.env.PORT || '5000', 10);
             console.log(`[Cache Warmup] 🔄 Pre-loading homepage cache...`);
+            const warmupHeaders = signProxyHeaders("GET", "/api/homepage-lite");
             const [homepageRes, categoriesRes] = await Promise.all([
-              fetch(`http://localhost:${port}/api/homepage-lite`),
-              fetch(`http://localhost:${port}/api/categories`),
+              fetch(`http://localhost:${port}/api/homepage-lite`, { headers: warmupHeaders }),
+              fetch(`http://localhost:${port}/api/categories`, {
+                headers: signProxyHeaders("GET", "/api/categories"),
+              }),
             ]);
             if (homepageRes.ok) {
               console.log(`[Cache Warmup] ✅ Homepage cache loaded successfully`);

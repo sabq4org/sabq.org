@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import { createServer } from "node:http";
-import { getRealIp, originGate, verifiedProxyIp } from "../../server/utils/trustedProxyIp";
+import { getRealIp, originGate, signProxyHeaders, verifiedProxyIp } from "../../server/utils/trustedProxyIp";
 import { cachedJson, proxyToApi, signProxyRequest } from "../../functions/_middleware.js";
 
 const secret = "test-edge-secret";
@@ -164,6 +164,31 @@ describe("trusted edge IP", () => {
       expect((await fetch(`${base}/health`)).status).toBe(200);
       process.env.EDGE_PROXY_SHARED_SECRET = "";
       expect((await fetch(`${base}/api/test`)).status).toBe(503);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      if (previous.accept === undefined) delete process.env.EDGE_PROXY_IP_ACCEPT; else process.env.EDGE_PROXY_IP_ACCEPT = previous.accept;
+      if (previous.gate === undefined) delete process.env.EDGE_PROXY_GATE_REQUIRED; else process.env.EDGE_PROXY_GATE_REQUIRED = previous.gate;
+      if (previous.secret === undefined) delete process.env.EDGE_PROXY_SHARED_SECRET; else process.env.EDGE_PROXY_SHARED_SECRET = previous.secret;
+    }
+  });
+
+  it("allows the fixed-IP internal warmup signer through the real Express gate", async () => {
+    const previous = { accept: process.env.EDGE_PROXY_IP_ACCEPT, gate: process.env.EDGE_PROXY_GATE_REQUIRED, secret: process.env.EDGE_PROXY_SHARED_SECRET };
+    process.env.EDGE_PROXY_IP_ACCEPT = "on";
+    process.env.EDGE_PROXY_GATE_REQUIRED = "on";
+    process.env.EDGE_PROXY_SHARED_SECRET = secret;
+    const app = express();
+    app.use(originGate);
+    app.get("/api/homepage-lite", (_req, res) => res.status(200).send("ok"));
+    const server = createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("test server did not bind");
+    const base = `http://127.0.0.1:${address.port}`;
+    try {
+      expect((await fetch(`${base}/api/homepage-lite`)).status).toBe(403);
+      expect((await fetch(`${base}/api/homepage-lite`, { headers: signProxyHeaders("GET", "/api/homepage-lite", secret) })).status).toBe(200);
+      expect((await fetch(`${base}/api/categories`, { headers: signProxyHeaders("GET", "/api/categories", secret) })).status).toBe(404);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       if (previous.accept === undefined) delete process.env.EDGE_PROXY_IP_ACCEPT; else process.env.EDGE_PROXY_IP_ACCEPT = previous.accept;
