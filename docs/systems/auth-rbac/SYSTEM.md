@@ -45,3 +45,7 @@
 - تقارير CSP المجهولة مستثناة من CSRF فقط للطريقة `POST` والمسار الدقيق
   `/api/security/csp-report`، مع حد body ‏16KB ومحدد معدل مستقل؛ المسارات
   الشقيقة تظل محمية.
+
+## تمهيد توقيع البوابات — 2026-09-07
+- توقيع HMAC على method/path/query/IP/timestamp من Pages وAPI Worker وweb-next. هذه المرحلة تجهز المرسلين فقط؛ utility التحقق لا تُستخدم في backend بعد.
+- لا يُفعّل رفض الأصل أو resolver الجديد حتى اكتمال نشر المرسلين واختبارهم، وفق `docs/ratelimit-edge-ip-rollout-2026-09-07.md`.

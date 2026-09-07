@@ -295,7 +295,32 @@ function htmlCacheKey(requestUrl, commit, variant) {
   return new Request(u.toString(), { method: "GET" });
 }
 
-async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
+export async function signProxyRequest(request, targetUrl, proxySecret) {
+  const url = new URL(targetUrl);
+  const realIp = request.headers.get("cf-connecting-ip");
+  const headers = new Headers(request.headers);
+  // Client supplied forwarding headers are never forwarded as authority.
+  headers.delete("X-Sabq-Client-IP");
+  headers.delete("X-Sabq-Proxy-Timestamp");
+  headers.delete("X-Sabq-Proxy-Signature");
+  if (!realIp || !proxySecret) return headers;
+  const timestamp = String(Date.now());
+  const payload = `${timestamp}\n${request.method}\n${url.pathname}${url.search}\n${realIp}`;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(proxySecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  const signature = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  headers.set("X-Sabq-Client-IP", realIp);
+  headers.set("X-Sabq-Proxy-Timestamp", timestamp);
+  headers.set("X-Sabq-Proxy-Signature", signature);
+  return headers;
+}
+
+export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
   // Pages Functions re-issue the request with `fetch()` to API_ORIGIN. Cloudflare
@@ -304,9 +329,7 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
   // (symptom: HTTP 429 on login/comments for the whole site). Capture the real
   // client IP from the inbound request (still correct here) and forward it in a
   // trusted header the backend reads first in rateLimitKey() (server/index.ts).
-  const headers = new Headers(request.headers);
-  const realIp = request.headers.get("cf-connecting-ip");
-  if (realIp) headers.set("X-Sabq-Client-IP", realIp);
+  const headers = await signProxyRequest(request, target, proxySecret);
   const init = {
     method: request.method,
     headers,
@@ -324,7 +347,7 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
 }
 
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
-export async function cachedJson(url, ttl, context) {
+export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) {
   const cache = caches.default;
   const key = new Request(url, { method: "GET" });
   const hit = await cache.match(key);
@@ -332,8 +355,17 @@ export async function cachedJson(url, ttl, context) {
     try { return await hit.json(); } catch (_) { /* fall through */ }
   }
   // Includes body consumption: receiving headers alone does not end the budget.
+  // Metadata is always fetched as GET. Build a minimal request so a HEAD HTML
+  // request cannot produce a signature for a different method and browser
+  // credentials never reach the cacheable metadata origin.
+  const sourceHeaders = new Headers();
+  const clientIp = sourceRequest?.headers.get("cf-connecting-ip");
+  if (clientIp) sourceHeaders.set("cf-connecting-ip", clientIp);
+  const metadataRequest = new Request(url, { method: "GET", headers: sourceHeaders });
+  const requestHeaders = await signProxyRequest(metadataRequest, url, proxySecret);
+  requestHeaders.set("User-Agent", "sabq-pages-fn/1.0");
   const res = await fetch(url, {
-    headers: { "User-Agent": "sabq-pages-fn/1.0" },
+    headers: requestHeaders,
     signal: AbortSignal.timeout(2500),
   });
   if (!res.ok) return null;
@@ -637,6 +669,14 @@ export async function onRequest(context) {
   }
 
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
+  const edgeProxyGateRequired = String(env.EDGE_PROXY_GATE_REQUIRED || "").toLowerCase() === "on";
+  if (edgeProxyGateRequired && !env.EDGE_PROXY_SHARED_SECRET && (isProxyPath(path) || isInjectablePath(path))) {
+    console.error("[pages-fn] EDGE_PROXY_GATE_REQUIRED is on but EDGE_PROXY_SHARED_SECRET is missing");
+    return new Response("API proxy is not configured", {
+      status: 503,
+      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
   const nextOrigin = (env.NEXT_ORIGIN || "").replace(/\/+$/, "");
   const ssrEnabled =
@@ -815,6 +855,7 @@ export async function onRequest(context) {
         request,
         apiOrigin,
         useApiCache ? API_PROXY_TIMEOUT_MS : 0,
+        env.EDGE_PROXY_SHARED_SECRET,
       );
 
       // Cacheable anonymous GETs: buffer the FULL body before cloning/caching.
@@ -973,6 +1014,8 @@ export async function onRequest(context) {
         `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
         SLUG_REDIRECT_TTL,
         context,
+        request,
+        env.EDGE_PROXY_SHARED_SECRET,
       );
       const redirectTo = slug && slug.redirect ? slug.redirect : null;
       if (redirectTo && redirectTo !== path) {
@@ -1015,9 +1058,17 @@ export async function onRequest(context) {
         `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
         SLUG_REDIRECT_TTL,
         context,
+        request,
+        env.EDGE_PROXY_SHARED_SECRET,
       ),
       next(),
-      cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL, context),
+      cachedJson(
+        `${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`,
+        SEO_META_TTL,
+        context,
+        request,
+        env.EDGE_PROXY_SHARED_SECRET,
+      ),
     ]);
     const redirectTo = slug && slug.redirect ? slug.redirect : null;
     if (redirectTo && redirectTo !== path) {

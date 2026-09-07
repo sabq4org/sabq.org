@@ -738,14 +738,17 @@
         "server/services/mobileUserRolePayload.ts",
         "server/services/userRoleSync.ts",
         "server/routes/promoteCorrespondent.ts",
-        "scripts/promote-correspondent.ts"
+        "scripts/promote-correspondent.ts",
+        "server/utils/trustedProxyIp.ts",
+        "cloudflare-worker/api-origin-worker.js",
+        "cloudflare-worker/wrangler.api.toml"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-16"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "seo-ssr",
