@@ -1,5 +1,6 @@
 import express, { type Router } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { getRealIp } from "../utils/trustedProxyIp";
 
 const router: Router = express.Router();
 
@@ -18,6 +19,8 @@ const cspReportLimiter = rateLimit({
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(getRealIp(req)),
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
   message: { error: "Too many CSP reports" },
 });
 
