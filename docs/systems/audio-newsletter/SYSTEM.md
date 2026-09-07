@@ -42,3 +42,7 @@
 - Webhook MailerLite يقرأ ترويسة `Signature` الرسمية (مع دعم الاسم التاريخي
   `X-MailerLite-Signature`) ويتحقق من HMAC على raw body قبل parsing؛ لا تُسجل
   أجسام webhooks أو عناوين المشتركين.
+- نقطة webhook الحالية تقبل حدثًا واحدًا فقط من `subscriber.unsubscribed` أو
+  `subscriber.bounced`. التحديث الشرطي يحافظ على الحالات النهائية ولا يغير
+  `updatedAt` عند إعادة الحدث؛ التنفيذ المباشر ينتظر كتابة Postgres بمهلة
+  statement قدرها 1800ms، والفشل يعيد non-2xx كي يعيد MailerLite المحاولة.

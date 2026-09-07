@@ -8,6 +8,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { db } from '../db';
 import { eq, and, desc } from 'drizzle-orm';
+import { withStatementTimeout } from '../db';
 import { 
   newsletterSubscriptions,
   userDynamicInterests,
@@ -20,17 +21,13 @@ import {
   updateMailerLiteSubscriber,
   unsubscribeFromMailerLite,
   syncUserInterestsToMailerLite,
-  parseMailerLiteWebhooks,
   isMailerLiteConfigured,
   getMailerLiteGroups,
 } from '../services/mailerlite';
 import { sendNewsletterWelcomeEmail, sendNewsletterUnsubscribeEmail } from '../services/email';
 import { isAuthenticated } from '../auth';
 import { requireRole } from '../rbac';
-import {
-  readMailerLiteSignature,
-  verifyMailerLiteSignature,
-} from '../services/mailerliteWebhookSignature';
+import { createMailerLiteWebhookHandler } from './mailerliteWebhookHandler';
 
 /**
  * Resolve which subscription the caller is allowed to act on.
@@ -473,85 +470,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
    * req.rawBody is populated by the verify callback on the global express.json()
    * middleware (server/index.ts), giving us the exact bytes MailerLite signed.
    */
-  app.post('/api/webhooks/mailerlite', async (req: any, res) => {
-    try {
-      // req.rawBody is a Buffer set by the express.json verify callback.
-      // Without it we cannot verify the signature — reject immediately.
-      if (!req.rawBody) {
-        console.error('[MailerLite Webhook] Raw body unavailable — cannot verify signature');
-        return res.status(400).json({ error: 'Unable to verify request signature' });
-      }
-      const rawBodyBuf: Buffer = req.rawBody;
-      const signatureHeader = readMailerLiteSignature(req.headers);
-
-      if (!verifyMailerLiteSignature(rawBodyBuf, signatureHeader)) {
-        console.error('[MailerLite Webhook] Rejected request with invalid or missing signature');
-        return res.status(401).json({ error: 'Unauthorized: invalid webhook signature' });
-      }
-
-      const events = parseMailerLiteWebhooks(req.body);
-      if (events.length === 0) {
-        return res.status(400).json({ error: 'Invalid webhook payload' });
-      }
-
-      for (const { type, data } of events) {
-
-       switch (type) {
-        case 'subscriber.created':
-          if (data.subscriber) {
-            console.log('[MailerLite Webhook] subscriber.created processed');
-            // Could sync back to local DB if needed
-          }
-          break;
-
-        case 'subscriber.unsubscribed':
-          if (data.subscriber) {
-            console.log('[MailerLite Webhook] subscriber.unsubscribed processed');
-            // Update local subscription status
-            await db
-              .update(newsletterSubscriptions)
-              .set({
-                status: 'unsubscribed',
-                unsubscribedAt: new Date(),
-                updatedAt: new Date(),
-              })
-              .where(eq(newsletterSubscriptions.email, data.subscriber.email));
-          }
-          break;
-
-        case 'subscriber.bounced':
-          if (data.subscriber) {
-            console.log('[MailerLite Webhook] subscriber.bounced processed');
-            // Mark as bounced
-            await db
-              .update(newsletterSubscriptions)
-              .set({
-                status: 'bounced',
-                updatedAt: new Date(),
-              })
-              .where(eq(newsletterSubscriptions.email, data.subscriber.email));
-          }
-          break;
-
-        case 'subscriber.updated':
-          console.log(`📝 MailerLite: Subscriber updated`);
-          break;
-
-        case 'campaign.sent':
-          console.log(`📧 MailerLite: Campaign sent - ${data.campaign?.name}`);
-          break;
-
-        default:
-          console.log(`ℹ️ MailerLite: Unhandled event type ${type}`);
-       }
-      }
-
-      res.json({ success: true, received: events.map(({ type }) => type) });
-    } catch (error) {
-      console.error('Error processing MailerLite webhook:', error);
-      res.status(500).json({ error: 'Webhook processing failed' });
-    }
-  });
+  app.post('/api/webhooks/mailerlite', createMailerLiteWebhookHandler({ db, withStatementTimeout }));
 
   /**
    * POST /api/smart-newsletter/sync-interests

@@ -495,7 +495,11 @@
         "docs/systems/audio-newsletter/HUMAIN.md",
         "tests/unit/ttsDeadlines.test.ts",
         "client/src/hooks/useArticleSummaryAudio.ts",
-        "client/src/components/SummaryAudioAttribution.tsx"
+        "client/src/components/SummaryAudioAttribution.tsx",
+        "server/routes/mailerliteWebhookHandler.ts",
+        "server/services/mailerlite.ts",
+        "server/services/mailerliteWebhookSignature.ts",
+        "tests/unit/mailerlite*.test.ts"
       ],
       "aiFeatureKeys": [
         "audio-newsletter"
@@ -504,7 +508,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "media-library",
@@ -522,7 +526,9 @@
         "server/services/newsImageStorageService.ts",
         "server/routes/mediaLibrary.ts",
         "server/routes/mediaStoreRoutes.ts",
-        "client/src/pages/dashboard/MediaLibrary.tsx"
+        "client/src/pages/dashboard/MediaLibrary.tsx",
+        "server/utils/mediaUploadDiagnostics.ts",
+        "tests/unit/mediaUploadDiagnostics.test.ts"
       ],
       "aiFeatureKeys": [
         "media-caption"
@@ -531,7 +537,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "sports-tournaments",
