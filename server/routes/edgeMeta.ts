@@ -40,6 +40,7 @@ import {
   normalizeImageSrc,
   HERO_SIZES_ATTR,
 } from "@shared/cdnImage";
+import { buildArticleHeroPreload } from "@shared/articleHeroPreload";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
 import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import {
@@ -613,6 +614,7 @@ async function fetchArArticle(slug: string) {
       aiSummary: articles.aiSummary,
       content: articles.content,
       imageUrl: articles.imageUrl,
+      isVideoTemplate: articles.isVideoTemplate,
       publishedAt: articles.publishedAt,
       updatedAt: articles.updatedAt,
       status: articles.status,
@@ -679,7 +681,7 @@ async function buildArArticlePayload(
 
   const siblingEnSlug = row.id ? await resolveEnSiblingSlug(row.id) : null;
 
-  return articleMetaPayload({
+  const meta = articleMetaPayload({
     lang: "ar",
     title,
     description,
@@ -709,6 +711,7 @@ async function buildArArticlePayload(
         .filter(Boolean)
         .join("") || undefined,
   });
+  return { ...meta, heroPreload: buildArticleHeroPreload(row) };
 }
 
 /** English-table article lookup with byline join. */
