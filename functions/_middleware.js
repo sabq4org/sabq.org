@@ -238,6 +238,34 @@ class HtmlLangSetter {
 // reclaiming crawl budget. Consistent with the human experience: the public
 // article API already returns 404 for archived articles, so this is not
 // cloaking. noindex header is belt-and-suspenders.
+const HTML_SECURITY_CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://securepubads.g.doubleclick.net https://platform.twitter.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.cdnfonts.com",
+  "font-src 'self' https://fonts.gstatic.com https://fonts.cdnfonts.com data:",
+  "img-src 'self' data: blob: https://imagedelivery.net https://media.sabq.org https://cdnjs.cloudflare.com https://tile.openstreetmap.de https://img.youtube.com",
+  "connect-src 'self' https://api.sabq.org wss://api.sabq.org https://*.sentry.io https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net",
+  "frame-src 'self' https://www.googletagmanager.com https://securepubads.g.doubleclick.net https://geo.dailymotion.com https://www.youtube.com https://platform.twitter.com",
+  "report-uri /api/security/csp-report",
+].join('; ');
+
+export function isHstsHost(hostname) {
+  return hostname === "sabq.org" || hostname === "www.sabq.org";
+}
+
+export function htmlSecurityHeadersForHost(hostname) {
+  const headers = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy-Report-Only": HTML_SECURITY_CSP_REPORT_ONLY,
+  };
+  if (isHstsHost(hostname)) headers["Strict-Transport-Security"] = "max-age=86400";
+  return headers;
+}
+
 function goneHtmlResponse() {
   const body =
     '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
@@ -262,7 +290,7 @@ function isHtml(res) {
   return (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
 
-function applyHtmlHeaders(res, headerSet) {
+export function applyHtmlHeaders(res, headerSet) {
   if (!isHtml(res)) return res;
   const headers = new Headers(res.headers);
   // Clear stale freshness hints so a cacheable response never inherits a
@@ -271,6 +299,17 @@ function applyHtmlHeaders(res, headerSet) {
   headers.delete("Expires");
   for (const [k, v] of Object.entries(headerSet)) headers.set(k, v);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function applyHtmlSecurityHeaders(res, hostname) {
+  if (!isHtml(res)) return res;
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(htmlSecurityHeadersForHost(hostname))) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function shouldApplyHtmlSecurityHeaders(pathname, res) {
+  return !isProxyPath(pathname) && isHtml(res);
 }
 
 // Cloudflare does NOT auto-cache text/html from a Pages Function based on
@@ -626,7 +665,7 @@ async function serveApiLastGood(cacheKeyReq, reason) {
 // + the reactive retryImport/deployRecovery layer, which already classifies the
 // MIME/CORS refusal of an HTML response to a .js request as a chunk failure.
 
-export async function onRequest(context) {
+async function handleRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;
@@ -756,10 +795,7 @@ export async function onRequest(context) {
   const finalizeHtml = (res, { cacheable = false } = {}) => {
     // A noindex page (private route) must never be edge-cached as indexable.
     const useCache = cacheable && !noindexHost && !pathIsNoindex;
-    const out = applyHtmlHeaders(
-      res,
-      useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
-    );
+    const out = applyHtmlHeaders(res, useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS);
     // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
     // private routes (login/register/profile/dashboard/search/…). This is the
     // signal that lets Googlebot drop the now-crawlable (un-robots-blocked)
@@ -1119,4 +1155,16 @@ export async function onRequest(context) {
     console.error("[pages-fn] html error:", err);
     return finalizeHtml(await next(), { cacheable: false });
   }
+}
+
+// Security-only outer layer. The inner handler owns routing, caching, redirects,
+// and response headers; this wrapper never rewrites those decisions. API and
+// other proxy responses are deliberately excluded so their existing contract
+// remains byte/header compatible.
+export async function onRequest(context) {
+  const response = await handleRequest(context);
+  const url = new URL(context.request.url);
+  return shouldApplyHtmlSecurityHeaders(url.pathname, response)
+    ? applyHtmlSecurityHeaders(response, url.hostname)
+    : response;
 }
