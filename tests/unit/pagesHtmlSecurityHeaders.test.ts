@@ -8,7 +8,7 @@ import {
 } from "../../functions/_middleware.js";
 
 describe("Pages HTML security headers", () => {
-  it("adds report-only CSP, nosniff, and strict referrer policy to HTML while preserving the stream", async () => {
+  it("adds the HTML security headers while preserving the stream", async () => {
     const body = "<!doctype html><html><body>مرحبا</body></html>";
     const response = applyHtmlSecurityHeaders(
       new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }),
@@ -20,8 +20,7 @@ describe("Pages HTML security headers", () => {
     expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
     expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=86400");
     expect(response.headers.get("Content-Security-Policy")).toBeNull();
-    expect(response.headers.get("Content-Security-Policy-Report-Only")).toContain("report-uri /api/security/csp-report");
-    expect(response.headers.get("Content-Security-Policy-Report-Only")).toContain("frame-ancestors 'self'");
+    expect(response.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
   });
 
   it("scopes HSTS to sabq.org and www.sabq.org, excluding preview and duplicate hosts", () => {

@@ -46,10 +46,10 @@
 
 ## ترويسات HTML الأمنية — 2026-09-07
 
-- كل استجابة `text/html` في Pages، بما فيها cache hit وSSR وSPA و404/410، تمر عبر حارس مشترك يضيف `X-Content-Type-Options: nosniff` و`Referrer-Policy: strict-origin-when-cross-origin` و`Content-Security-Policy-Report-Only`.
-- سياسة CSP في وضع Report-Only فقط، وتستخدم `report-uri /api/security/csp-report`. نطاقاتها مبنية من موارد `client/index.html` والموارد الخارجية الفعلية في واجهة الويب؛ لا تمنع التحميل ولا تغيّر عقد API أو cache.
+- كل استجابة `text/html` في Pages، بما فيها cache hit وSSR وSPA و404/410، تمر عبر حارس مشترك يضيف `X-Content-Type-Options: nosniff` و`Referrer-Policy: strict-origin-when-cross-origin`.
+- لا تُرسل Pages حالياً أي ترويسة CSP أو تقارير CSP؛ أزيلت بعد رصد عاصفة تقارير أدت إلى 429 وارتفاع latency. يبقى `server/routes/cspReport.ts` خارج هذا التغيير.
 - `Strict-Transport-Security: max-age=86400` يضاف فقط للمضيفين `sabq.org` و`www.sabq.org`. لا توجد `includeSubDomains` أو `preload`، ولا يضاف HSTS لمضيفات preview/duplicate.
-- `frame-ancestors` موجود داخل CSP Report-Only للرصد فقط؛ لا يضاف `X-Frame-Options` حتى يثبت احتياج المنتج.
+- لا يضاف `X-Frame-Options` أو `frame-ancestors` حتى تُعاد تهيئة CSP بميزانية وتقارير مضبوطة.
 - فحص smoke لـ`GET /health` يثبت 2xx وJSON خلال 15 ثانية دون login أو كتابة. يستخدم `PW_API_BASE_URL` مستقلاً عن `PW_BASE_URL` لأن Pages قد يعيد HTML عند طلب `/health`; في التشغيل المحلي يكون fallback هو `http://localhost:5000`، والإنتاج يضبطه على `https://api.sabq.org`.
 
 ## DMARC
