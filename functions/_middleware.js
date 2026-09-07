@@ -238,20 +238,6 @@ class HtmlLangSetter {
 // reclaiming crawl budget. Consistent with the human experience: the public
 // article API already returns 404 for archived articles, so this is not
 // cloaking. noindex header is belt-and-suspenders.
-const HTML_SECURITY_CSP_REPORT_ONLY = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'self'",
-  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://securepubads.g.doubleclick.net https://platform.twitter.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.cdnfonts.com",
-  "font-src 'self' https://fonts.gstatic.com https://fonts.cdnfonts.com data:",
-  "img-src 'self' data: blob: https://imagedelivery.net https://media.sabq.org https://cdnjs.cloudflare.com https://tile.openstreetmap.de https://img.youtube.com",
-  "connect-src 'self' https://api.sabq.org wss://api.sabq.org https://*.sentry.io https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net",
-  "frame-src 'self' https://www.googletagmanager.com https://securepubads.g.doubleclick.net https://geo.dailymotion.com https://www.youtube.com https://platform.twitter.com",
-  "report-uri /api/security/csp-report",
-].join('; ');
-
 export function isHstsHost(hostname) {
   return hostname === "sabq.org" || hostname === "www.sabq.org";
 }
@@ -260,7 +246,6 @@ export function htmlSecurityHeadersForHost(hostname) {
   const headers = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Content-Security-Policy-Report-Only": HTML_SECURITY_CSP_REPORT_ONLY,
   };
   if (isHstsHost(hostname)) headers["Strict-Transport-Security"] = "max-age=86400";
   return headers;

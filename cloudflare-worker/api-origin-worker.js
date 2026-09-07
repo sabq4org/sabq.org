@@ -1,9 +1,9 @@
 /**
- * Optional api.sabq.org origin proxy.
+ * Production api.sabq.org origin proxy.
  *
- * Routes intentionally remain empty in wrangler.api.toml until the Railway
- * origin, secret, and smoke tests are configured. The default origin is the
- * Railway generated hostname; never point this Worker at api.sabq.org itself.
+ * The production route is declared in wrangler.api.toml. Keep the shared
+ * secret configured before binding the route. The origin is the Railway
+ * generated hostname; never point this Worker at api.sabq.org itself.
  */
 const DEFAULT_API_ORIGIN = "https://sabqorg-production.up.railway.app";
 async function signedHeaders(request, secret) {

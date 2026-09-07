@@ -29,7 +29,8 @@
 
 ## ثقة بروكسي Pages وWorker
 - `functions/_middleware.js` يوقّع عنوان الزائر عند تمرير `/api/*` إلى `API_ORIGIN`، ويحذف أي ترويسات `X-Sabq-*` واردة من العميل قبل إعادة البناء.
-- `cloudflare-worker/wrangler.api.toml` يبقى بلا routes حتى تهيئة السر واختبارات الأصل؛ لا توجّه Worker إلى `api.sabq.org` نفسه لتجنب الحلقة.
+- `cloudflare-worker/wrangler.api.toml` يثبت route الإنتاج `api.sabq.org/*` مع `zone_name = "sabq.org"` بعد تحقق Railway والأصل. يبقى `EDGE_PROXY_SHARED_SECRET` binding مُداراً خارج الملف؛ غياب السر في Worker يفشل مغلقاً بـ503 ولا يمرر الطلبات. لا توجّه `API_ORIGIN` إلى `api.sabq.org` نفسه لتجنب الحلقة. بوابة قبول عنوان الوكيل الحساس (`EDGE_PROXY_GATE_REQUIRED`) تُدار في خدمة Railway API عبر `server/utils/trustedProxyIp.ts`، وليست متغيراً في Worker.
+- ترتيب التراجع: اضبط `EDGE_PROXY_GATE_REQUIRED=off` في خدمة Railway API وأعد نشرها، وتحقق من مرور الطلبات عبر المسار البديل، ثم أزل route إن لزم. لا تُزل route قبل تعطيل البوابة وإعادة نشر API، ولا تعِد تفعيل route دون secret وsmoke لـ`/health` وطلبات API للقراءة.
 - `web-next` يمرر طلبات SSR العامة إلى `NEXT_ORIGIN` ولا يُستخدم كمصدر عنوان زائر؛ مسارات GET لا تعتمد على Bearer-keying.
 
 ### تصحيح ارتباط خرائط الأرشيف — 2026-09-07
@@ -45,10 +46,10 @@
 
 ## ترويسات HTML الأمنية — 2026-09-07
 
-- كل استجابة `text/html` في Pages، بما فيها cache hit وSSR وSPA و404/410، تمر عبر حارس مشترك يضيف `X-Content-Type-Options: nosniff` و`Referrer-Policy: strict-origin-when-cross-origin` و`Content-Security-Policy-Report-Only`.
-- سياسة CSP في وضع Report-Only فقط، وتستخدم `report-uri /api/security/csp-report`. نطاقاتها مبنية من موارد `client/index.html` والموارد الخارجية الفعلية في واجهة الويب؛ لا تمنع التحميل ولا تغيّر عقد API أو cache.
+- كل استجابة `text/html` في Pages، بما فيها cache hit وSSR وSPA و404/410، تمر عبر حارس مشترك يضيف `X-Content-Type-Options: nosniff` و`Referrer-Policy: strict-origin-when-cross-origin`.
+- لا تضيف Pages ترويسة CSP حالياً؛ أزيل تعميم Report-Only بعد رصد تدفق كثيف للتقارير واستجابات 429. يتطلب تفعيل التقارير لاحقاً جمعاً مستقلاً وميزانية وعينة محدودة. يستمر مسار التقارير الحالي بحد 16KB و60 طلباً في الدقيقة لكل عنوان موثّق عبر `getRealIp` مع تطبيع IPv6، دون الاعتماد على ترويسات الزائر غير المتحققة.
 - `Strict-Transport-Security: max-age=86400` يضاف فقط للمضيفين `sabq.org` و`www.sabq.org`. لا توجد `includeSubDomains` أو `preload`، ولا يضاف HSTS لمضيفات preview/duplicate.
-- `frame-ancestors` موجود داخل CSP Report-Only للرصد فقط؛ لا يضاف `X-Frame-Options` حتى يثبت احتياج المنتج.
+- لا يضاف `X-Frame-Options` أو `frame-ancestors` حتى تُعاد تهيئة CSP بميزانية وتقارير مضبوطة.
 - فحص smoke لـ`GET /health` يثبت 2xx وJSON خلال 15 ثانية دون login أو كتابة. يستخدم `PW_API_BASE_URL` مستقلاً عن `PW_BASE_URL` لأن Pages قد يعيد HTML عند طلب `/health`; في التشغيل المحلي يكون fallback هو `http://localhost:5000`، والإنتاج يضبطه على `https://api.sabq.org`.
 
 ## DMARC
