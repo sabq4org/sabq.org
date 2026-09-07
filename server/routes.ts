@@ -15,6 +15,7 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
 import { apiListingNoindex, apiListingRobotsRules } from "./utils/apiListingRobots";
 import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
@@ -26701,7 +26702,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Stable hash-bucketed article sitemaps:
   // articles partitioned by abs(hashtext(id::text)) % N, lastmod from
   // updated_at || published_at. Bucket assignment is stable for a given id.
-  const SITEMAP_AR_BUCKETS = 50;
+  const SITEMAP_AR_BUCKETS = AR_SITEMAP_BUCKETS;
   const SITEMAP_EN_BUCKETS = 10;
   const SITEMAP_UR_BUCKETS = 10;
 
@@ -26711,7 +26712,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const baseUrl = "https://sabq.org";
       // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
       // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
-      const indexXml = await getOrBuildSitemapXml('index', 30 * 60 * 1000, async () => {
+      const indexXml = await getOrBuildSitemapXml('index_archive_v3', 30 * 60 * 1000, async () => {
         // Most-recent published article → a <lastmod> hint on the
         // frequently-changing news + article-bucket children so Google
         // reprioritizes them on recrawl. One cheap aggregate; index is cached 30m.
@@ -26836,13 +26837,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       .where(
         and(
           eq(spec.status, "published"),
+          spec.table === articles ? isCanonicalArchiveArticle() : undefined,
           isNotNull(spec.publishedAt),
           isNotNull(spec.title),
           ne(spec.title, ""),
           lte(spec.publishedAt, new Date()),
           // المقسوم حرفي (raw) لا باراميتر — شرط مطابقة فهرس التعبير
           // idx_articles_sitemap_bucket؛ لو صار $N يعود المسح الكامل للجدول
-          sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
+          spec.table === articles ? archiveSitemapBucketCondition(bucket)
+            : sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
         ),
       )
       .orderBy(desc(spec.publishedAt))
@@ -26956,7 +26959,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     imageUrl: urArticles.imageUrl,
   } as any;
 
-  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticles", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
+  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticlesCanonicalV3", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
   registerBucketedSitemap("/sitemap-en-articles-:page.xml", "__sitemapEnArticles", enSitemapSpec, "/en/article", SITEMAP_EN_BUCKETS);
   registerBucketedSitemap("/sitemap-ur-articles-:page.xml", "__sitemapUrArticles", urSitemapSpec, "/ur/article", SITEMAP_UR_BUCKETS);
 
