@@ -29,7 +29,8 @@
 
 ## ثقة بروكسي Pages وWorker
 - `functions/_middleware.js` يوقّع عنوان الزائر عند تمرير `/api/*` إلى `API_ORIGIN`، ويحذف أي ترويسات `X-Sabq-*` واردة من العميل قبل إعادة البناء.
-- `cloudflare-worker/wrangler.api.toml` يبقى بلا routes حتى تهيئة السر واختبارات الأصل؛ لا توجّه Worker إلى `api.sabq.org` نفسه لتجنب الحلقة.
+- `cloudflare-worker/wrangler.api.toml` يثبت route الإنتاج `api.sabq.org/*` مع `zone_name = "sabq.org"` بعد تحقق Railway والأصل. يبقى `EDGE_PROXY_SHARED_SECRET` binding مُداراً خارج الملف؛ غياب السر في Worker يفشل مغلقاً بـ503 ولا يمرر الطلبات. لا توجّه `API_ORIGIN` إلى `api.sabq.org` نفسه لتجنب الحلقة. بوابة قبول عنوان الوكيل الحساس (`EDGE_PROXY_GATE_REQUIRED`) تُدار في خدمة Railway API عبر `server/utils/trustedProxyIp.ts`، وليست متغيراً في Worker.
+- ترتيب التراجع: اضبط `EDGE_PROXY_GATE_REQUIRED=off` في خدمة Railway API وأعد نشرها، وتحقق من مرور الطلبات عبر المسار البديل، ثم أزل route إن لزم. لا تُزل route قبل تعطيل البوابة وإعادة نشر API، ولا تعِد تفعيل route دون secret وsmoke لـ`/health` وطلبات API للقراءة.
 - `web-next` يمرر طلبات SSR العامة إلى `NEXT_ORIGIN` ولا يُستخدم كمصدر عنوان زائر؛ مسارات GET لا تعتمد على Bearer-keying.
 
 ### تصحيح ارتباط خرائط الأرشيف — 2026-09-07

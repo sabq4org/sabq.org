@@ -1,13 +1,13 @@
-# Optional API origin proxy. Keep routes empty until the staged rollout is
-# complete; setting a route before the Railway origin and secret are verified
-# can interrupt mobile apps and third-party webhooks.
+# API origin proxy for the verified api.sabq.org cutover. The secret is a
+# dashboard-managed binding and is intentionally absent from this file.
 name = "sabq-api-origin"
 main = "api-origin-worker.js"
 compatibility_date = "2024-09-01"
 account_id = "1ac069d5f5c7a3dd7f4e3c864f51446d"
 workers_dev = false
-routes = []
+routes = [
+  { pattern = "api.sabq.org/*", zone_name = "sabq.org" },
+]
 
 [vars]
 API_ORIGIN = "https://sabqorg-production.up.railway.app"
-EDGE_PROXY_GATE_REQUIRED = "off"
