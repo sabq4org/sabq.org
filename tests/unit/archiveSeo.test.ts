@@ -6,10 +6,24 @@ vi.mock("../../server/db", () => ({ db: {
   execute: mocks.execute,
   select: () => ({ from: () => ({ where: mocks.where }) }),
 } }));
-import { legacyPathVariants, resolveLegacyArticlePath, resolveArchiveCanonical, isCanonicalArchiveArticle } from "../../server/services/archiveSeo";
+import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, legacyPathVariants, resolveLegacyArticlePath, resolveArchiveCanonical, isCanonicalArchiveArticle } from "../../server/services/archiveSeo";
 
 describe("archive canonical and legacy redirects", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("keeps all finer sitemap partitions reachable through the existing index", () => {
+    const dialect = new PgDialect();
+    expect(AR_SITEMAP_BUCKETS).toBe(500);
+    for (let bucket = 1; bucket <= AR_SITEMAP_BUCKETS; bucket++) {
+      const q = dialect.sqlToQuery(archiveSitemapBucketCondition(bucket));
+      expect(q.sql).toContain('% 50 = $1');
+      expect(q.sql).toContain('% 500 = $2');
+      expect(q.params).toEqual([(bucket - 1) % 50, bucket - 1]);
+    }
+    for (const bucket of [0, -1, 501, 1.5, NaN]) {
+      expect(() => archiveSitemapBucketCondition(bucket)).toThrow(RangeError);
+    }
+  });
 
   it("recognizes imported sections without capturing current features or translated articles", () => {
     expect(legacyPathVariants("/regions/j3vneig16j/")).toEqual(["/regions/j3vneig16j", "/j3vneig16j"]);
@@ -53,5 +67,11 @@ describe("archive canonical and legacy redirects", () => {
     const sitemap = new PgDialect().sqlToQuery(isCanonicalArchiveArticle()).sql;
     expect(sitemap).toContain('archive_original.content = "articles"."content"');
     expect(sitemap).toContain("archive_original.status = 'published'");
+    // These barriers prevent the planner from combining two indexes per row
+    // or decompressing article bodies before ruling out unrelated candidates.
+    expect(sitemap).toContain("OFFSET 0");
+    expect(sitemap).toContain("WHERE CASE WHEN archive_original.status");
+    expect(sitemap).toContain("THEN archive_original.content <> ''");
+    expect(sitemap).toContain('"articles"."legacy_slug" IS NULL OR "articles"."legacy_slug" = \'\' THEN true');
   });
 });

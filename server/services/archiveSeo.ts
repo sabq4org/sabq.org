@@ -2,6 +2,18 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { articles, legacyRedirects } from "@shared/schema";
 import { db } from "../db";
 
+// Keep each cold sitemap bounded to ~2,000 candidates. The existing % 50
+// expression index still narrows the heap scan before the finer partition.
+export const AR_SITEMAP_BUCKETS = 500;
+export function archiveSitemapBucketCondition(bucket: number) {
+  if (!Number.isInteger(bucket) || bucket < 1 || bucket > AR_SITEMAP_BUCKETS) {
+    throw new RangeError("Invalid archive sitemap bucket");
+  }
+  const offset = bucket - 1;
+  return sql`abs(hashtext(${articles.id}::text)) % 50 = ${offset % 50}
+    AND abs(hashtext(${articles.id}::text)) % 500 = ${offset}`;
+}
+
 // Include the actual Quintype import sections, including /regions/.
 export const LEGACY_ARTICLE_PREFIXES = new Set([
   "saudia", "saudi", "world", "arab", "local", "sport", "sports", "business",
@@ -37,21 +49,27 @@ export async function resolveLegacyArticlePath(path: string): Promise<string | n
 /**
  * Keep the earliest imported copy only when the original ID, title, full body,
  * and publication timestamp agree. An edited/reused legacy ID remains independent.
- * The legacy_slug index bounds each correlated lookup to the import's tiny group.
- * This predicate is shared by redirects and the Arabic archive sitemap.
+ * OFFSET 0 keeps the lookup on legacy_slug alone instead of a per-row BitmapAnd
+ * with published_at. CASE checks metadata before loading/decompressing TOASTed
+ * content. Both barriers are intentional; cold I/O is additionally bounded by
+ * the smaller archive partitions above rather than relying on warm DB caches.
+ * This uses the same exact-copy decision as the individual URL resolver below.
  */
 export function isCanonicalArchiveArticle() {
-  return sql`NOT EXISTS (
-    SELECT 1 FROM articles AS archive_original
-    WHERE ${articles.legacySlug} IS NOT NULL AND ${articles.legacySlug} <> ''
-      AND ${articles.content} IS NOT NULL AND ${articles.content} <> ''
-      AND archive_original.legacy_slug = ${articles.legacySlug}
-      AND archive_original.status = 'published'
-      AND archive_original.title = ${articles.title}
-      AND archive_original.content = ${articles.content}
-      AND archive_original.published_at = ${articles.publishedAt}
-      AND (archive_original.created_at, archive_original.id) < (${articles.createdAt}, ${articles.id})
-  )`;
+  return sql`CASE WHEN ${articles.legacySlug} IS NULL OR ${articles.legacySlug} = '' THEN true
+    ELSE NOT EXISTS (
+      SELECT 1 FROM (
+        SELECT id, created_at, status, title, content, published_at
+        FROM articles WHERE legacy_slug = ${articles.legacySlug}
+        OFFSET 0
+      ) AS archive_original
+      WHERE CASE WHEN archive_original.status = 'published'
+        AND (archive_original.created_at, archive_original.id) < (${articles.createdAt}, ${articles.id})
+        AND archive_original.title = ${articles.title}
+        AND archive_original.published_at = ${articles.publishedAt}
+        THEN archive_original.content <> '' AND archive_original.content = ${articles.content}
+        ELSE false END
+    ) END`;
 }
 
 export async function resolveArchiveCanonical(slug: string): Promise<string | null> {

@@ -15,7 +15,7 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
-import { isCanonicalArchiveArticle } from "./services/archiveSeo";
+import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
 import { apiListingNoindex, apiListingRobotsRules } from "./utils/apiListingRobots";
 import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
@@ -640,8 +640,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // SETUP ROUTES (Protected, one-time use) — moved to server/routes/setup.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
-  // =====================================================  // AUTH ROUTES
-  // =====================================================
+  // ============================================================
+  // AUTH ROUTES
+  // ============================================================
+
   // Login
   app.post("/api/login", authLimiter, async (req, res, next) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -993,9 +995,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // ===================================  // دخول/تسجيل بالجوال (Twilio Verify) — جلسة كوكيز عبر req.logIn (نفس آلية الويب).
+  // ==========================================
+  // دخول/تسجيل بالجوال (Twilio Verify) — جلسة كوكيز عبر req.logIn (نفس آلية الويب).
   // يعيد استخدام منطق OTP وإنشاء المستخدم المشترك مع الموبايل (services/phoneAuth).
-  // ===================================  app.post("/api/auth/phone/send", phoneOtpSendLimiter, async (req, res) => {
+  // ==========================================
+  app.post("/api/auth/phone/send", phoneOtpSendLimiter, async (req, res) => {
     try {
       const e164 = normalizePhone(req.body?.phone);
       if (!e164) {
@@ -1702,8 +1706,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // MEDIA LIBRARY API ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // MEDIA LIBRARY API ENDPOINTS
+  // ============================================================
+
   // GET /api/media - List all media files with pagination, search, and filtering
   app.get("/api/media", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
@@ -3221,8 +3227,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   });
 
 
-  // =====================================================  // END OF MEDIA LIBRARY API ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // END OF MEDIA LIBRARY API ENDPOINTS
+  // ============================================================
+
   // Simplified avatar upload endpoint - single step upload
   const avatarUpload = multer({
     storage: multer.memoryStorage(),
@@ -3601,8 +3609,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
 
-  // =====================================================  // CATEGORY ROUTES (CMS Module 1)
-  // =====================================================
+  // ============================================================
+  // CATEGORY ROUTES (CMS Module 1)
+  // ============================================================
+
   // Get all categories
   app.get("/api/categories", (req, res, next) => {
     const withStats = req.query.withStats === 'true';
@@ -4583,8 +4593,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   });
 
 
-  // =====================================================  // USERS MANAGEMENT ROUTES
-  // =====================================================
+  // ============================================================
+  // USERS MANAGEMENT ROUTES
+  // ============================================================
+
   // Upload profile image endpoint (for admin/user)
   const profileImageUpload = multer({
     storage: multer.memoryStorage(),
@@ -5953,8 +5965,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   });
 
 
-  // =====================================================  // RBAC ROUTES - User & Role Management
-  // =====================================================
+  // ============================================================
+  // RBAC ROUTES - User & Role Management
+  // ============================================================
+
   // Create new user with roles
   app.post("/api/admin/users", requireAuth, requirePermission("users.create"), async (req: any, res) => {
     try {
@@ -6213,8 +6227,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   });
 
 
-  // =====================================================  // USER PERMISSION OVERRIDES - إدارة الصلاحيات الشخصية للمستخدمين
-  // =====================================================
+  // ============================================================
+  // USER PERMISSION OVERRIDES - إدارة الصلاحيات الشخصية للمستخدمين
+  // ============================================================
+
   // Get user's permission overrides
   app.get("/api/admin/users/:id/permission-overrides", requireAuth, requirePermission("users.view"), async (req: any, res) => {
     try {
@@ -6671,8 +6687,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // ADMIN: ROLES & PERMISSIONS MANAGEMENT  
-  // =====================================================
+  // ============================================================
+  // ADMIN: ROLES & PERMISSIONS MANAGEMENT  
+  // ============================================================
+
   // Get all roles with their permissions
   app.get("/api/admin/roles", requireAuth, requirePermission("system.manage_roles"), async (req: any, res) => {
     try {
@@ -7066,8 +7084,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // =====================================================  // ADMIN ARTICLES ROUTES
-  // =====================================================
+  // ============================================================
+  // ADMIN ARTICLES ROUTES
+  // ============================================================
+
   // Get all articles with filtering (admin only)
   app.get("/api/admin/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
@@ -10077,8 +10097,10 @@ Respond in valid JSON format only:
   // AI FOCAL POINT & GEO-LOCATION BACKFILL ROUTES — moved to server/routes/focalPoints.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
-  // =====================================================  // ARTICLE ANALYTICS DASHBOARD ROUTES
-  // =====================================================
+  // ============================================================
+  // ARTICLE ANALYTICS DASHBOARD ROUTES
+  // ============================================================
+
   // Search and filter articles with analytics
   app.get("/api/admin/article-analytics/search", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     console.log('[Article Analytics] Search request received:', { query: req.query, userId: req.user?.id });
@@ -10864,8 +10886,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // CACHE INVALIDATION POLLING (lightweight alternative to SSE)
-  // =====================================================
+  // ============================================================
+  // CACHE INVALIDATION POLLING (lightweight alternative to SSE)
+  // ============================================================
+
   let _lastCacheInvalidation = Date.now();
   // Bump on every broadcast — local OR cross-pod via Redis pub/sub — so the
   // polling endpoint surfaces invalidations triggered on any instance.
@@ -10878,10 +10902,12 @@ Respond in valid JSON format only:
     res.json({ lastUpdate: _lastCacheInvalidation });
   });
 
-  // =====================================================  // CACHE INVALIDATION SSE STREAM — REMOVED
+  // ============================================================
+  // CACHE INVALIDATION SSE STREAM — REMOVED
   // Replaced by `/api/cache-invalidation/check` polling above to avoid
   // long-lived connections pinning Autoscale instances.
-  // =====================================================  app.get("/api/cache-invalidation/stream", (_req, res) => {
+  // ============================================================
+  app.get("/api/cache-invalidation/stream", (_req, res) => {
     res.status(410).json({
       message: "SSE stream disabled. Poll /api/cache-invalidation/check instead.",
     });
@@ -10908,8 +10934,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // ACTIVITIES ROUTE (Moment by Moment)
-  // =====================================================
+  // ============================================================
+  // ACTIVITIES ROUTE (Moment by Moment)
+  // ============================================================
+
   app.get("/api/activities", async (req, res) => {
     try {
       const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
@@ -11188,8 +11216,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // AI INSIGHTS ROUTE
-  // =====================================================
+  // ============================================================
+  // AI INSIGHTS ROUTE
+  // ============================================================
+
   // Personal Smart Summary (Today's Knowledge Snapshot)
   app.get("/api/ai/insights/today", async (req: any, res) => {
     try {
@@ -11533,8 +11563,10 @@ Respond in valid JSON format only:
 
   // User Behavior Analytics
 
-  // =====================================  // Live Visitor Tracking (Real-time)
-  // =====================================
+  // ============================================
+  // Live Visitor Tracking (Real-time)
+  // ============================================
+
   // POST /api/analytics/visitors/ping - Heartbeat from visitors
   app.post("/api/analytics/visitors/ping", async (req, res) => {
     try {
@@ -12604,8 +12636,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // AI-SPECIFIC ENDPOINTS FOR IFOX SECTION
-  // =====================================================  
+  // ============================================================
+  // AI-SPECIFIC ENDPOINTS FOR IFOX SECTION
+  // ============================================================
+  
   // AI Articles endpoint - fetches only AI articles
   app.get("/api/ai/articles", async (req: any, res) => {
     try {
@@ -12774,8 +12808,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // LITE FEED - Optimized endpoint for swipe cards
-  // =====================================================  
+  // ============================================================
+  // LITE FEED - Optimized endpoint for swipe cards
+  // ============================================================
+  
   // maxAge:0 → the browser / iOS WKWebView always revalidates against the edge
   // instead of serving its own HTTP cache. Without this (max-age=120) the iOS
   // Lite app's WKWebView would keep returning a cached feed for ~2-4 min, so
@@ -12859,8 +12895,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // ARTICLE ROUTES
-  // =====================================================
+  // ============================================================
+  // ARTICLE ROUTES
+  // ============================================================
+
   app.get("/api/articles", (req: any, res, next) => {
     // A logged-in response carries per-user hasReacted / isBookmarked, so it
     // must be `private` — no shared cache (Cloudflare edge) may store it, or
@@ -14620,8 +14658,10 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // ARTICLE MEDIA ASSETS ROUTES
-  // =====================================================
+  // ============================================================
+  // ARTICLE MEDIA ASSETS ROUTES
+  // ============================================================
+
   // POST /api/articles/:articleId/media-assets - Create media asset definition
   app.post("/api/articles/:articleId/media-assets",
     requireAuth,
@@ -14785,8 +14825,10 @@ Respond in valid JSON format only:
     }
   );
 
-  // =====================================================  // DASHBOARD ROUTES (Editors & Admins)
-  // =====================================================
+  // ============================================================
+  // DASHBOARD ROUTES (Editors & Admins)
+  // ============================================================
+
   app.get("/api/dashboard/stats", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -14911,8 +14953,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // ENGLISH DASHBOARD ARTICLES ROUTES
-  // =====================================================
+  // ============================================================
+  // ENGLISH DASHBOARD ARTICLES ROUTES
+  // ============================================================
+
   // Get English articles metrics
   app.get("/api/en/dashboard/articles/metrics", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
@@ -15884,8 +15928,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // ENGLISH CATEGORIES ROUTES
-  // =====================================================
+  // ============================================================
+  // ENGLISH CATEGORIES ROUTES
+  // ============================================================
+
   // Get all English categories (public)
   app.get("/api/en/categories", async (req, res) => {
     try {
@@ -16175,8 +16221,10 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // ARABIC DASHBOARD ARTICLES ROUTES (LEGACY)
-  // =====================================================
+  // ============================================================
+  // ARABIC DASHBOARD ARTICLES ROUTES (LEGACY)
+  // ============================================================
+
   app.get("/api/dashboard/articles", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -16840,7 +16888,8 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
 
   // نظام إدارة التعليقات المتقدم - Advanced Comments Management System
-  // =====================================================
+  // ============================================================
+
   // الحصول على جميع التعليقات مع معلومات المقالات
   app.get("/api/admin/comments", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
@@ -17019,8 +17068,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // نظام الكلمات المشبوهة - Suspicious Words System
-  // =====================================================
+  // ============================================================
+  // نظام الكلمات المشبوهة - Suspicious Words System
+  // ============================================================
+
   // الحصول على قائمة الكلمات المشبوهة
   app.get("/api/admin/suspicious-words", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
@@ -17435,8 +17486,10 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // AI ROUTES (Editors & Admins)
-  // =====================================================
+  // ============================================================
+  // AI ROUTES (Editors & Admins)
+  // ============================================================
+
   // Proofread endpoint — spelling/typo detection only, NEVER modifies the text
   // التدقيق اللغوي: المنطق في services/proofreadService عبر بوابة الذكاء
   // (مهلة 25ث + بدائل + قاطع دائرة). كان يستدعي OpenAI الخام بمهلة 10 دقائق
@@ -17611,8 +17664,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // AI CONTENT TOOLS - Input Validation Schemas
-  // =====================================================
+  // ============================================================
+  // AI CONTENT TOOLS - Input Validation Schemas
+  // ============================================================
+
   const summarizeSchema = z.object({
     text: z.string().min(10, "النص قصير جداً").max(50000, "النص طويل جداً"),
     language: z.enum(["ar", "en", "ur"]).default("ar"),
@@ -17656,8 +17711,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // AI CONTENT TOOLS - Endpoints with Validation
-  // =====================================================
+  // ============================================================
+  // AI CONTENT TOOLS - Endpoints with Validation
+  // ============================================================
+
   // AI Content Tools - Text Summarizer
   app.post("/api/ai-tools/summarize", isAuthenticated, async (req: any, res) => {
     try {
@@ -17793,8 +17850,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // ===================================  // Voice Cloning API Endpoints
-  // ===================================
+  // ==========================================
+  // Voice Cloning API Endpoints
+  // ==========================================
+
   // List all voices
   app.get("/api/elevenlabs/voices", requireAuth, requireRole("system_admin", "admin", "editor", "content_manager"), async (req: any, res) => {
     try {
@@ -17886,8 +17945,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ===================================  // Speech to Text API Endpoints
-  // ===================================
+  // ==========================================
+  // Speech to Text API Endpoints
+  // ==========================================
+
   // Transcribe audio/video
   app.post("/api/elevenlabs/transcribe", requireAuth, requireRole("system_admin", "admin", "editor", "content_manager", "reporter", "opinion_author"), upload.single("file"), async (req: any, res) => {
     try {
@@ -17926,8 +17987,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     }
   });
 
-  // =====================================================  // USER MANAGEMENT ROUTES (Admin Dashboard)
-  // =====================================================
+  // ============================================================
+  // USER MANAGEMENT ROUTES (Admin Dashboard)
+  // ============================================================
+
   // 1. GET /api/dashboard/users - Get users with pagination and filters
   app.get("/api/dashboard/users", requireAuth, requirePermission('users.view'), async (req: any, res) => {
     try {
@@ -18251,8 +18314,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // RSS FEED ROUTES (Admins only)
-  // =====================================================
+  // ============================================================
+  // RSS FEED ROUTES (Admins only)
+  // ============================================================
+
   app.get("/api/rss-feeds", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
@@ -18310,8 +18375,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // USER PROFILE ROUTES
-  // =====================================================
+  // ============================================================
+  // USER PROFILE ROUTES
+  // ============================================================
+
   app.get("/api/profile/bookmarks", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -18351,7 +18418,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ============ USER SEGMENTS & PERSONALIZATION =====
+  // ============ USER SEGMENTS & PERSONALIZATION ============
+
   // Get current user's full preferences
   app.get("/api/user/preferences", requireAuth, async (req: any, res) => {
     try {
@@ -18416,8 +18484,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     }
   });
 
-  // ===================================  // Reading History Sync (cross-device personalization)
-  // ===================================  app.get("/api/me/reading-history", requireAuth, async (req: any, res) => {
+  // ==========================================
+  // Reading History Sync (cross-device personalization)
+  // ==========================================
+  app.get("/api/me/reading-history", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -18764,9 +18834,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // RECOMMENDATIONS
+  // ============================================================
   // RECOMMENDATIONS
-  // =====================================================
+  // RECOMMENDATIONS
+  // ============================================================
+
   app.get("/api/recommendations", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -18780,8 +18852,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // OBJECT STORAGE ROUTES (Protected file uploading)
-  // =====================================================
+  // ============================================================
+  // OBJECT STORAGE ROUTES (Protected file uploading)
+  // ============================================================
+
   app.get("/objects/:objectPath(*)", async (req: any, res) => {
     // Same Replit-sidecar guard as /api/public-media/* — see comment there.
     if (!process.env.REPLIT_DOMAINS && !process.env.REPL_ID) {
@@ -19191,13 +19265,17 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // THEME MANAGEMENT ROUTES
-  // =====================================================
+  // ============================================================
+  // THEME MANAGEMENT ROUTES
+  // ============================================================
+
   // THEME MANAGEMENT ROUTES — moved to server/routes/themes.ts
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // NOTIFICATION ROUTES
-  // =====================================================
+  // ============================================================
+  // NOTIFICATION ROUTES
+  // ============================================================
+
   // Notifications stream — REMOVED
   // Long-lived SSE was replaced with client-side polling of
   // `/api/notifications?limit=20&read=false` to avoid keeping Autoscale
@@ -19324,8 +19402,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // PERSONALIZED RECOMMENDATIONS ROUTES
-  // =====================================================
+  // ============================================================
+  // PERSONALIZED RECOMMENDATIONS ROUTES
+  // ============================================================
+
   // POST /api/recommendations/impressions - Record article impressions
   app.post("/api/recommendations/impressions", async (req: any, res) => {
     try {
@@ -19524,8 +19604,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // NOTIFICATION MANAGEMENT ROUTES (CRUD)
-  // =====================================================
+  // ============================================================
+  // NOTIFICATION MANAGEMENT ROUTES (CRUD)
+  // ============================================================
+
   // GET /api/notifications - Get user's notifications (paginated)
   app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
     try {
@@ -19871,9 +19953,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================
-  // =====================================================  // SMART NOTIFICATION SYSTEM v2.0 - Behavior Tracking Routes
-  // =====================================================
+  // ============================================================
+
+  // ============================================================
+  // SMART NOTIFICATION SYSTEM v2.0 - Behavior Tracking Routes
+  // ============================================================
+
   // POST /api/behavior/signal - Record a user behavior signal
   app.post("/api/behavior/signal", isAuthenticated, async (req: any, res) => {
     try {
@@ -20070,8 +20155,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // LOYALTY SYSTEM ROUTES
-  // =====================================================
+  // ============================================================
+  // LOYALTY SYSTEM ROUTES
+  // ============================================================
+
   // Get user loyalty points
   app.get("/api/loyalty/points", isAuthenticated, async (req: any, res) => {
     try {
@@ -20215,8 +20302,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // MUQTARAB PUBLIC ROUTES
-  // =====================================================
+  // ============================================================
+  // MUQTARAB PUBLIC ROUTES
+  // ============================================================
+
   // Get muqtarab section
   app.get("/api/muqtarab/section", async (req, res) => {
     try {
@@ -20317,8 +20406,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // MUQTARAB TOPICS PUBLIC ROUTES
-  // =====================================================
+  // ============================================================
+  // MUQTARAB TOPICS PUBLIC ROUTES
+  // ============================================================
+
   // GET /api/muqtarab/angles/:angleSlug/topics - Get published topics for an angle
   app.get("/api/muqtarab/angles/:angleSlug/topics", async (req, res) => {
     try {
@@ -20390,8 +20481,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // ANGLE SUBMISSIONS ROUTES - طلبات كتابة الزوايا
-  // =====================================================
+  // ============================================================
+  // ANGLE SUBMISSIONS ROUTES - طلبات كتابة الزوايا
+  // ============================================================
+
   // POST /api/angle-submissions - Public endpoint for submitting angle requests
   app.post("/api/angle-submissions", async (req, res) => {
     try {
@@ -20645,8 +20738,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     }
   });
 
-  // =====================================================  // MUQTARAB ADMIN ROUTES (RBAC Protected)
-  // =====================================================
+  // ============================================================
+  // MUQTARAB ADMIN ROUTES (RBAC Protected)
+  // ============================================================
+
   // Create angle
   app.post("/api/admin/muqtarab/angles", requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
@@ -20738,8 +20833,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     }
   });
 
-  // =====================================================  // MUQTARAB TOPICS ADMIN ROUTES
-  // =====================================================
+  // ============================================================
+  // MUQTARAB TOPICS ADMIN ROUTES
+  // ============================================================
+
   // GET /api/admin/muqtarab/angles/:angleId/topics - List all topics (admin)
   app.get("/api/admin/muqtarab/angles/:angleId/topics", requireAuth, requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
@@ -20986,8 +21083,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // TEST ENDPOINTS - FOR DEVELOPMENT ONLY
-  // =====================================================  
+  // ============================================================
+  // TEST ENDPOINTS - FOR DEVELOPMENT ONLY
+  // ============================================================
+  
 
   // Removed (security audit C2/C3, 2026-05-11): the two
   //   POST /api/test/send-staff-email
@@ -21051,8 +21150,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // RECOMMENDATION & EVENT TRACKING APIs
-  // =====================================================
+  // ============================================================
+  // RECOMMENDATION & EVENT TRACKING APIs
+  // ============================================================
+
   // Track user event (view, click, share, etc.)
   app.post("/api/events/track", requireAuth, async (req: any, res) => {
     try {
@@ -21326,8 +21427,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // DAILY DIGEST APIs
-  // =====================================================
+  // ============================================================
+  // DAILY DIGEST APIs
+  // ============================================================
+
   // Get daily digest preview for user
   app.get("/api/digest/preview", requireAuth, async (req: any, res) => {
     try {
@@ -21389,8 +21492,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // RECOMMENDATION ANALYTICS APIs
-  // =====================================================
+  // ============================================================
+  // RECOMMENDATION ANALYTICS APIs
+  // ============================================================
+
   // Get recommendation analytics (admin only)
   app.get("/api/admin/recommendations/analytics", requireAuth, requireRole("admin"), async (req, res) => {
     try {
@@ -21519,8 +21624,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // PERSONALIZATION ANALYTICS API
-  // =====================================================
+  // ============================================================
+  // PERSONALIZATION ANALYTICS API
+  // ============================================================
+
   app.get("/api/admin/personalization/analytics", requireAuth, requireRole("admin"), async (req, res) => {
     try {
       // Get user segment distribution using the correct tables
@@ -21682,8 +21789,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   });
 
   // News Analytics Endpoint - Smart statistics and insights
-  // =====================================================  // AI ARTICLE CLASSIFICATION ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // AI ARTICLE CLASSIFICATION ENDPOINTS
+  // ============================================================
+
   // POST /api/articles/:id/auto-categorize - Auto-categorize article using AI
   app.post("/api/articles/:id/auto-categorize", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE), async (req: any, res) => {
     try {
@@ -21855,8 +21964,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // SEO GENERATION ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // SEO GENERATION ENDPOINTS
+  // ============================================================
+
   // Zod schema for SEO generation (supports both saved articles and draft data)
   const seoGenerateSchema = z.discriminatedUnion("mode", [
     z.object({
@@ -22019,8 +22130,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // SENTIMENT ANALYSIS ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // SENTIMENT ANALYSIS ENDPOINTS
+  // ============================================================
+
   // POST /api/comments/:id/analyze-sentiment - Analyze single comment
   app.post("/api/comments/:id/analyze-sentiment", requireAuth, requireAnyPermission("comments.moderate", "system.admin"), async (req: any, res) => {
     try {
@@ -22376,8 +22489,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // STORY MANAGEMENT ROUTES — moved to server/routes/stories.ts
   // A/B TESTING ROUTES — moved to server/routes/abTests.ts
-  // ===================================  // Reporter/Staff Routes
-  // ===================================
+  // ==========================================
+  // Reporter/Staff Routes
+  // ==========================================
+
   // GET /api/reporters/:slug - Get reporter profile (Arabic)
   app.get("/api/reporters/:slug", async (req: any, res) => {
     try {
@@ -22431,8 +22546,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ===================================  // Smart Blocks Routes - البلوكات الذكية
-  // ===================================
+  // ==========================================
+  // Smart Blocks Routes - البلوكات الذكية
+  // ==========================================
+
   // NOTE (2026-07-19): Arabic/EN/UR smart-blocks handlers below are superseded by
   // server/routes/smartBlocks.ts (registerSplitRoutes mounts first). Keep temporarily
   // for reference; do not add new logic here — edit smartBlocksService instead.
@@ -22609,8 +22726,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // ENGLISH SMART BLOCKS API - بلوكات النسخة الإنجليزية
-  // =====================================================
+  // ============================================================
+  // ENGLISH SMART BLOCKS API - بلوكات النسخة الإنجليزية
+  // ============================================================
+
   // GET /api/en/smart-blocks - List all English smart blocks
   app.get("/api/en/smart-blocks", async (req: any, res) => {
     try {
@@ -22825,8 +22944,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // AI PUBLISHER API v1 - Machine-readable endpoints for LLMs
-  // =====================================================
+  // ============================================================
+  // AI PUBLISHER API v1 - Machine-readable endpoints for LLMs
+  // ============================================================
+
   // GET /api/v1/articles - List articles with full AI-ready metadata
   app.get("/api/v1/articles", async (req, res) => {
     try {
@@ -23429,7 +23550,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ==================== Smart Categories APIs =============  
+  // ==================== Smart Categories APIs ====================
+  
   // GET /api/admin/categories/smart - Get all smart categories (admin)
   app.get("/api/admin/categories/smart", requireAuth, requireAnyPermission("categories.edit"), async (req, res) => {
     try {
@@ -23572,7 +23694,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ==================== Quad Categories Block APIs =============  
+  // ==================== Quad Categories Block APIs ====================
+  
   // GET /api/blocks/quad-categories - Get quad categories block data for frontend
   app.get("/api/blocks/quad-categories", async (req, res) => {
     try {
@@ -23914,7 +24037,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ==================== English Quad Categories Block APIs =============  
+  // ==================== English Quad Categories Block APIs ====================
+  
   // GET /api/en/blocks/quad-categories - Get English quad categories block data for frontend
   app.get("/api/en/blocks/quad-categories", async (req, res) => {
     try {
@@ -24240,7 +24364,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ==================== Urdu Quad Categories Block APIs =============  
+  // ==================== Urdu Quad Categories Block APIs ====================
+  
   // GET /api/ur/blocks/quad-categories - Get Urdu quad categories block data for frontend
   app.get("/api/ur/blocks/quad-categories", async (req, res) => {
     try {
@@ -24494,8 +24619,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================================  // Analytics Dashboard APIs
-  // =====================================================================
+  // ============================================================================
+  // Analytics Dashboard APIs
+  // ============================================================================
+
   // GET /api/analytics/overview - Get analytics metrics summary with percentage changes
   app.get("/api/analytics/overview", 
     requireAuth, 
@@ -24995,8 +25122,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     }
   );
 
-  // =====================================================================  // Opinion Articles Routes - مقالات الرأي
-  // =====================================================================
+  // ============================================================================
+  // Opinion Articles Routes - مقالات الرأي
+  // ============================================================================
+
   // Public: Get all published opinion articles
   app.get("/api/opinion", async (req, res) => {
     try {
@@ -26137,8 +26266,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // SMART LINKS SYSTEM API ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // SMART LINKS SYSTEM API ENDPOINTS
+  // ============================================================
+
   // GET /api/entity-types - جلب أنواع الكيانات
   app.get("/api/entity-types", requireAuth, async (req: any, res) => {
     try {
@@ -26560,14 +26691,18 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // END SMART LINKS SYSTEM API ENDPOINTS
-  // =====================================================
-  // =====================================================  // SEO ENDPOINTS - Sitemap & Robots.txt
-  // =====================================================
+  // ============================================================
+  // END SMART LINKS SYSTEM API ENDPOINTS
+  // ============================================================
+
+  // ============================================================
+  // SEO ENDPOINTS - Sitemap & Robots.txt
+  // ============================================================
+
   // Stable hash-bucketed article sitemaps:
   // articles partitioned by abs(hashtext(id::text)) % N, lastmod from
   // updated_at || published_at. Bucket assignment is stable for a given id.
-  const SITEMAP_AR_BUCKETS = 50;
+  const SITEMAP_AR_BUCKETS = AR_SITEMAP_BUCKETS;
   const SITEMAP_EN_BUCKETS = 10;
   const SITEMAP_UR_BUCKETS = 10;
 
@@ -26577,7 +26712,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const baseUrl = "https://sabq.org";
       // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
       // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
-      const indexXml = await getOrBuildSitemapXml('index', 30 * 60 * 1000, async () => {
+      const indexXml = await getOrBuildSitemapXml('index_archive_v3', 30 * 60 * 1000, async () => {
         // Most-recent published article → a <lastmod> hint on the
         // frequently-changing news + article-bucket children so Google
         // reprioritizes them on recrawl. One cheap aggregate; index is cached 30m.
@@ -26709,7 +26844,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           lte(spec.publishedAt, new Date()),
           // المقسوم حرفي (raw) لا باراميتر — شرط مطابقة فهرس التعبير
           // idx_articles_sitemap_bucket؛ لو صار $N يعود المسح الكامل للجدول
-          sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
+          spec.table === articles ? archiveSitemapBucketCondition(bucket)
+            : sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
         ),
       )
       .orderBy(desc(spec.publishedAt))
@@ -26823,7 +26959,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     imageUrl: urArticles.imageUrl,
   } as any;
 
-  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticlesCanonicalV2", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
+  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticlesCanonicalV3", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
   registerBucketedSitemap("/sitemap-en-articles-:page.xml", "__sitemapEnArticles", enSitemapSpec, "/en/article", SITEMAP_EN_BUCKETS);
   registerBucketedSitemap("/sitemap-ur-articles-:page.xml", "__sitemapUrArticles", urSitemapSpec, "/ur/article", SITEMAP_UR_BUCKETS);
 
@@ -26947,11 +27083,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     }
   });
 
-  // =====================================================  // IndexNow Key Verification File
+  // ============================================================
+  // IndexNow Key Verification File
   // Search engines fetch /{key}.txt to verify domain ownership.
   // Must return exactly the key as plain text.
   // Only registered when INDEXNOW_KEY is configured (env-only).
-  // =====================================================  if (INDEXNOW_KEY) {
+  // ============================================================
+  if (INDEXNOW_KEY) {
     app.get(`/${INDEXNOW_KEY}.txt`, (_req, res) => {
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -26999,10 +27137,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // END SEO ENDPOINTS
-  // =====================================================
-  // =====================================================  // ENGLISH VERSION API ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // END SEO ENDPOINTS
+  // ============================================================
+
+  // ============================================================
+  // ENGLISH VERSION API ENDPOINTS
+  // ============================================================
+
   // GET English Categories
   app.get("/api/en/categories", async (req, res) => {
     try {
@@ -28342,8 +28484,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         );
 
-      // =====================================================      // 1. GREETING & SUMMARY
-      // =====================================================
+      // ============================================================
+      // 1. GREETING & SUMMARY
+      // ============================================================
+
       const readEvents = todayEvents.filter(e => e.eventType === 'read');
       const uniqueArticlesRead = new Set(readEvents.map(e => e.articleId)).size;
       
@@ -28391,8 +28535,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         readingMood,
       };
 
-      // =====================================================      // 2. PERFORMANCE METRICS
-      // =====================================================
+      // ============================================================
+      // 2. PERFORMANCE METRICS
+      // ============================================================
+
       const articlesBookmarked = todayEvents.filter(e => e.eventType === 'save').length;
       const articlesLiked = todayEvents.filter(e => e.eventType === 'like').length;
       const commentsPosted = todayEvents.filter(e => e.eventType === 'comment').length;
@@ -28418,8 +28564,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         percentChangeFromYesterday,
       };
 
-      // =====================================================      // 3. INTEREST ANALYSIS
-      // =====================================================
+      // ============================================================
+      // 3. INTEREST ANALYSIS
+      // ============================================================
+
       const categoryAnalysis = Object.entries(categoryCounts)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 3)
@@ -28489,8 +28637,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         suggestedArticles,
       };
 
-      // =====================================================      // 4. TIME-BASED ACTIVITY
-      // =====================================================
+      // ============================================================
+      // 4. TIME-BASED ACTIVITY
+      // ============================================================
+
       const hourlyActivity = new Array(24).fill(0);
       todayEvents.forEach(event => {
         const hour = new Date(event.createdAt).getHours();
@@ -28524,8 +28674,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         aiSuggestion,
       };
 
-      // =====================================================      // 5. AI INSIGHTS
-      // =====================================================
+      // ============================================================
+      // 5. AI INSIGHTS
+      // ============================================================
+
       let dailyGoal = "Read 3 articles from a category you haven't visited in a week";
       
       if (uniqueArticlesRead >= 5) {
@@ -28544,8 +28696,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         focusScore,
       };
 
-      // =====================================================      // FINAL RESPONSE
-      // =====================================================
+      // ============================================================
+      // FINAL RESPONSE
+      // ============================================================
+
       res.json({
         hasActivity: true,
         personalizedGreeting,
@@ -28564,10 +28718,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // END ENGLISH VERSION API ENDPOINTS
-  // =====================================================
-  // =====================================================  // URDU VERSION API ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // END ENGLISH VERSION API ENDPOINTS
+  // ============================================================
+
+  // ============================================================
+  // URDU VERSION API ENDPOINTS
+  // ============================================================
+
   // Public Urdu Categories endpoint
   app.get("/api/ur/categories", async (req, res) => {
     try {
@@ -29243,8 +29401,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // URDU DASHBOARD ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // URDU DASHBOARD ENDPOINTS
+  // ============================================================
+
   // Urdu Dashboard Statistics
   app.get("/api/ur/dashboard/stats", isAuthenticated, async (req: any, res) => {
     try {
@@ -29879,8 +30039,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // URDU COMMENTS ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // URDU COMMENTS ENDPOINTS
+  // ============================================================
+
   // Get Urdu article comments
   app.get("/api/ur/article/:id/comments", async (req, res) => {
     try {
@@ -29958,8 +30120,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // URDU ENGAGEMENT ENDPOINTS
-  // =====================================================
+  // ============================================================
+  // URDU ENGAGEMENT ENDPOINTS
+  // ============================================================
+
   // Add reaction to Urdu article
   app.post("/api/ur/article/:id/react", isAuthenticated, async (req: any, res) => {
     try {
@@ -30102,8 +30266,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // URDU SMART BLOCKS - سمارٹ بلاکس
-  // =====================================================
+  // ============================================================
+  // URDU SMART BLOCKS - سمارٹ بلاکس
+  // ============================================================
+
   // GET /api/ur/smart-blocks - List all Urdu smart blocks
   app.get("/api/ur/smart-blocks", async (req: any, res) => {
     try {
@@ -30274,23 +30440,33 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // END URDU VERSION API ENDPOINTS
-  // =====================================================
-  // =====================================================  // ADVERTISING SYSTEM - نظام الإعلانات الذكي
-  // =====================================================  app.use("/api/ads", adsRoutes);
+  // ============================================================
+  // END URDU VERSION API ENDPOINTS
+  // ============================================================
 
-  // =====================================================  // DATA STORY GENERATOR - مولد القصص من البيانات
-  // =====================================================  registerDataStoryRoutes(app, storage as any);
+  // ============================================================
+  // ADVERTISING SYSTEM - نظام الإعلانات الذكي
+  // ============================================================
+  app.use("/api/ads", adsRoutes);
+
+  // ============================================================
+  // DATA STORY GENERATOR - مولد القصص من البيانات
+  // ============================================================
+  registerDataStoryRoutes(app, storage as any);
 
   // INFOGRAPHIC AI - مولد اقتراحات الإنفوجرافيك
   registerInfographicAiRoutes(app);
   registerSmartNewsletterRoutes(app);
   registerTestEmailTemplatesRoutes(app, requireAuth, requireRole);
-  // =====================================================  // SMART JOURNALIST AGENT - وكيل الصحفي الذكي
-  // =====================================================  app.use(journalistAgentRoutes);
+  // ============================================================
+  // SMART JOURNALIST AGENT - وكيل الصحفي الذكي
+  // ============================================================
+  app.use(journalistAgentRoutes);
 
-  // =====================================================  // SHORT LINKS - SOCIAL SHARING
-  // =====================================================  
+  // ============================================================
+  // SHORT LINKS - SOCIAL SHARING
+  // ============================================================
+  
   const shortLinksLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 10, // 10 requests per minute per IP
@@ -30529,8 +30705,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // DEEP ANALYSIS ROUTES
-  // =====================================================
+  // ============================================================
+  // DEEP ANALYSIS ROUTES
+  // ============================================================
+
   // Generate Deep Analysis with SSE (requires authentication)
   app.post("/api/deep-analysis/generate", requireAuth, async (req, res) => {
     try {
@@ -30800,8 +30978,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // OMQ (DEEP ANALYSIS PUBLIC) ROUTES - PHASE 2
-  // =====================================================
+  // ============================================================
+  // OMQ (DEEP ANALYSIS PUBLIC) ROUTES - PHASE 2
+  // ============================================================
+
 
   // GET /api/omq/public-stats - إحصائيات عامة (public - no auth required)
   app.get("/api/omq/public-stats", async (req, res) => {
@@ -31109,28 +31289,36 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // EMAIL AGENT ROUTES
-  // =====================================================
+  // ============================================================
+  // EMAIL AGENT ROUTES
+  // ============================================================
+
   // Mount the email agent webhook routes
   app.use("/api/email-agent", emailAgentRoutes);
 
-  // =====================================================  // WHATSAPP AGENT ROUTES
-  // =====================================================
+  // ============================================================
+  // WHATSAPP AGENT ROUTES
+  // ============================================================
+
   // Mount the WhatsApp agent webhook routes
   app.use("/api/whatsapp", whatsappAgentRoutes);
-  // =====================================================  app.use('/api/moderation', commentModerationRoutes);
+  // ============================================================
+  app.use('/api/moderation', commentModerationRoutes);
 
   // TAP PAYMENT ROUTES
   app.use('/api/payments', tapPaymentRoutes);
   app.use('/api/advertiser-payments', advertiserPaymentsRoutes);
   app.use('/api/admin/payments', paymentAnalyticsRoutes);
   // IFOX AI MANAGEMENT ROUTES
-  // =====================================================  
+  // ============================================================
+  
   // Mount the iFox AI Management System routes
   app.use("/api/ifox/ai-management", ifoxAiManagementRoutes);
 
-  // =====================================================  // AUTO IMAGE GENERATION ROUTES
-  // =====================================================
+  // ============================================================
+  // AUTO IMAGE GENERATION ROUTES
+  // ============================================================
+
   // Mount the auto image generation routes
   app.use("/api/auto-image", autoImageRoutes);
   app.use("/api/native-ads", nativeAdsRouter);
@@ -31142,8 +31330,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.use("/api/admin/push", requireAuth, requireRole("admin"), pushNotificationRoutes);
   app.use(smartInsightsRouter);
 
-  // =====================================================  // ACCESSIBILITY TELEMETRY ROUTES
-  // =====================================================
+  // ============================================================
+  // ACCESSIBILITY TELEMETRY ROUTES
+  // ============================================================
+
   // POST /api/accessibility/track - Track accessibility event
   app.post("/api/accessibility/track", async (req, res) => {
     try {
@@ -31321,8 +31511,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // ==========================================================  // NEWSLETTER SUBSCRIPTION ROUTES
-  // ==========================================================
+  // =================================================================
+  // NEWSLETTER SUBSCRIPTION ROUTES
+  // =================================================================
+
   // POST /api/newsletter/subscribe - Subscribe to newsletter (public)
   app.post("/api/newsletter/subscribe", async (req: any, res) => {
     try {
@@ -31422,8 +31614,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =================================  // Publisher Management Routes (Admin Only)
-  // =================================
+  // ========================================
+  // Publisher Management Routes (Admin Only)
+  // ========================================
+
   // POST /api/admin/publishers - Create new publisher (with user account creation)
   app.post("/api/admin/publishers", 
     requireAuth,
@@ -31749,8 +31943,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =================================  // Publisher Management APIs (/api/publishers)
-  // =================================
+  // ========================================
+  // Publisher Management APIs (/api/publishers)
+  // ========================================
+
   // GET /api/publishers - List all publishers (admin only)
   app.get("/api/publishers",
     requireAuth,
@@ -31858,8 +32054,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =================================  // Publisher Dashboard Routes
-  // =================================
+  // ========================================
+  // Publisher Dashboard Routes
+  // ========================================
+
   // Helper to get publisher for current user (owner or linked staff)
   async function getPublisherForUser(userId: string): Promise<any> {
     // First check if user is the publisher owner
@@ -32110,8 +32308,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =================================  // Article Approval Workflow (/api/admin/publishers/articles)
-  // =================================
+  // ========================================
+  // Article Approval Workflow (/api/admin/publishers/articles)
+  // ========================================
+
   // POST /api/admin/publishers/articles/:id/approve - Approve & publish article (deduct credit)
   app.post("/api/admin/publishers/articles/:id/approve",
     requireAuth,
@@ -32264,8 +32464,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFOX API ROUTES - مسارات API لإدارة قسم آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFOX API ROUTES - مسارات API لإدارة قسم آي فوكس
+  // ============================================================
+
   // Rate limiter for iFox operations
   const ifoxLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
@@ -32277,8 +32479,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================================  // iFox Articles Management - إدارة مقالات آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Articles Management - إدارة مقالات آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/articles - Get iFox articles with filtering
   app.get("/api/admin/ifox/articles",
     requireAuth,
@@ -32665,8 +32869,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox Settings - إعدادات آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Settings - إعدادات آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/settings - Get iFox settings (structured)
   app.get("/api/admin/ifox/settings",
     requireAuth,
@@ -32845,8 +33051,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox Media - وسائط آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Media - وسائط آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/media - List media files
   app.get("/api/admin/ifox/media",
     requireAuth,
@@ -32980,8 +33188,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox Schedule - جدولة آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Schedule - جدولة آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/schedule - List scheduled articles
   app.get("/api/admin/ifox/schedule",
     requireAuth,
@@ -33175,8 +33385,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox Analytics - تحليلات آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Analytics - تحليلات آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/analytics - Get analytics data
   app.get("/api/admin/ifox/analytics",
     requireAuth,
@@ -33289,8 +33501,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox AI Content Tools - أدوات الذكاء الاصطناعي لآي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox AI Content Tools - أدوات الذكاء الاصطناعي لآي فوكس
+  // ============================================================
+
   // POST /api/admin/ifox/ai/generate-title - Generate AI title for iFox article
   app.post("/api/admin/ifox/ai/generate-title",
     requireAuth,
@@ -33401,8 +33615,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox Analytics - تحليلات آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Analytics - تحليلات آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/analytics/overview - Get analytics overview
   app.get("/api/admin/ifox/analytics/overview",
     requireAuth,
@@ -33548,8 +33764,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   );
 
-  // =====================================================  // iFox Categories Management - إدارة فئات آي فوكس
-  // =====================================================
+  // ============================================================
+  // iFox Categories Management - إدارة فئات آي فوكس
+  // ============================================================
+
   // GET /api/admin/ifox/categories - Get all iFox categories with stats
   app.get("/api/admin/ifox/categories",
     requireAuth,
@@ -33700,8 +33918,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
     }
   );
-  // =====================================  // Opinion Author Applications Routes - طلبات كتّاب الرأي
-  // =====================================
+  // ============================================
+  // Opinion Author Applications Routes - طلبات كتّاب الرأي
+  // ============================================
+
   // POST /api/opinion-author-applications - Public registration (photo + license)
   // نفس آلية المراسلين: صورة عبر CF Images، الترخيص عبر تخزين خاص S3/R2 فقط
   // (لا نستخدم Replit sidecar — يكسر التقديم على Railway بـ ECONNREFUSED 127.0.0.1:1106).
@@ -34029,8 +34249,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
 
 
-  // =====================================  // Employee Email Templates Management Routes
-  // =====================================
+  // ============================================
+  // Employee Email Templates Management Routes
+  // ============================================
+
 
   // GET /api/admin/email-templates/defaults - Get all default templates from code
   app.get("/api/admin/email-templates/defaults", requireAuth, requireRole('admin', 'system_admin'), async (req: any, res) => {
@@ -34259,8 +34481,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
 
 
-  // =====================================  // CONTACT FORM API
-  // =====================================
+  // ============================================
+  // CONTACT FORM API
+  // ============================================
+
   // Upload attachment for contact form
   app.post("/api/contact/upload", contactUploadLimiter, upload.single("file"), async (req: any, res) => {
     try {
@@ -34411,8 +34635,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================  // ADMIN CONTACT MESSAGES API
-  // =====================================
+  // ============================================
+  // ADMIN CONTACT MESSAGES API
+  // ============================================
+
   // List all contact messages with pagination and filtering
   app.get("/api/admin/contact-messages", requireAuth, requireRole("admin", "editor"), async (req: any, res) => {
     try {
@@ -34699,8 +34925,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================  // Contact Message Replies - Threaded Conversation
-  // =====================================
+  // ============================================
+  // Contact Message Replies - Threaded Conversation
+  // ============================================
+
   // Get all replies for a message
   app.get("/api/contact-messages/:id/replies", requireAuth, requireRole("admin", "editor"), async (req: any, res) => {
     try {
@@ -34881,8 +35109,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // =====================================  // DASHBOARD ANNOUNCEMENTS SYSTEM
-  // =====================================
+  // ============================================
+  // DASHBOARD ANNOUNCEMENTS SYSTEM
+  // ============================================
+
   // Get active announcements for the current user (excludes dismissed ones)
   app.get("/api/dashboard/announcements", requireAuth, async (req: any, res) => {
     try {
@@ -35081,8 +35311,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // EDITOR ALERTS CONFIGURATION
-  // =====================================================  
+  // ============================================================
+  // EDITOR ALERTS CONFIGURATION
+  // ============================================================
+  
   // Get editor alerts settings
   app.get("/api/admin/editor-alerts/settings", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -35161,8 +35393,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
 
-  // =====================================================  // BREAKING NEWS TICKER API
-  // =====================================================
+  // ============================================================
+  // BREAKING NEWS TICKER API
+  // ============================================================
+
   // Public: Get active breaking ticker (cached). `fresh` mirrors homepage
   // pull-to-refresh so iOS does not keep a stale SWR copy of the red strip.
   app.get("/api/breaking-ticker/active", cacheControl({ maxAge: 60, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req, res) => {
@@ -35338,8 +35572,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
 
 
-  // =====================================  // STAFF COMMUNICATIONS API - نظام التواصل المؤسسي
-  // =====================================
+  // ============================================
+  // STAFF COMMUNICATIONS API - نظام التواصل المؤسسي
+  // ============================================
+
   // Get all communication groups
   app.get("/api/admin/staff-communications/groups", requireAuth, requirePermission("communications.staff"), async (req: any, res) => {
     try {
