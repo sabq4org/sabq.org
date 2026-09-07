@@ -7,7 +7,7 @@ import { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { db } from '../db';
-import { eq, and, desc, notInArray } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { withStatementTimeout } from '../db';
 import { 
   newsletterSubscriptions,
@@ -21,17 +21,13 @@ import {
   updateMailerLiteSubscriber,
   unsubscribeFromMailerLite,
   syncUserInterestsToMailerLite,
-  parseMailerLiteWebhooks,
   isMailerLiteConfigured,
   getMailerLiteGroups,
 } from '../services/mailerlite';
 import { sendNewsletterWelcomeEmail, sendNewsletterUnsubscribeEmail } from '../services/email';
 import { isAuthenticated } from '../auth';
 import { requireRole } from '../rbac';
-import {
-  readMailerLiteSignature,
-  verifyMailerLiteSignature,
-} from '../services/mailerliteWebhookSignature';
+import { createMailerLiteWebhookHandler } from './mailerliteWebhookHandler';
 
 /**
  * Resolve which subscription the caller is allowed to act on.
@@ -108,8 +104,6 @@ const newsletterTriggerLimiter = rateLimit({
   keyGenerator: (req: any) => req.headers['cf-connecting-ip'] as string || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown',
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
 });
-
-const MAILERLITE_WEBHOOK_DB_BUDGET_MS = 1_800;
 
 // Subscription request schema
 const subscribeSchema = z.object({
@@ -476,69 +470,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
    * req.rawBody is populated by the verify callback on the global express.json()
    * middleware (server/index.ts), giving us the exact bytes MailerLite signed.
    */
-  app.post('/api/webhooks/mailerlite', async (req: any, res) => {
-    try {
-      // req.rawBody is a Buffer set by the express.json verify callback.
-      // Without it we cannot verify the signature — reject immediately.
-      if (!req.rawBody) {
-        console.error('[MailerLite Webhook] Raw body unavailable — cannot verify signature');
-        return res.status(400).json({ error: 'Unable to verify request signature' });
-      }
-      const rawBodyBuf: Buffer = req.rawBody;
-      const signatureHeader = readMailerLiteSignature(req.headers);
-
-      if (!verifyMailerLiteSignature(rawBodyBuf, signatureHeader)) {
-        console.error('[MailerLite Webhook] Rejected request with invalid or missing signature');
-        return res.status(401).json({ error: 'Unauthorized: invalid webhook signature' });
-      }
-
-      const events = parseMailerLiteWebhooks(req.body);
-      // This endpoint deliberately accepts one state-changing event at a time.
-      // There is no durable batch queue, and processing a batch would make the
-      // provider's response deadline unpredictable.
-      if (events.length !== 1 ||
-          !['subscriber.unsubscribed', 'subscriber.bounced'].includes(events[0]?.type || '') ||
-          !events[0]?.data.subscriber?.email) {
-        return res.status(422).json({ error: 'Unsupported or invalid webhook event' });
-      }
-
-      const [{ type, data }] = events;
-
-       switch (type) {
-        case 'subscriber.unsubscribed':
-          await withStatementTimeout(MAILERLITE_WEBHOOK_DB_BUDGET_MS, async (tx) => {
-            const changedAt = new Date();
-            await tx
-              .update(newsletterSubscriptions)
-              .set({ status: 'unsubscribed', unsubscribedAt: changedAt, updatedAt: changedAt })
-              .where(and(
-                eq(newsletterSubscriptions.email, data.subscriber!.email),
-                notInArray(newsletterSubscriptions.status, ['unsubscribed', 'bounced']),
-              ));
-          });
-          console.log('[MailerLite Webhook] subscriber.unsubscribed processed');
-          break;
-
-        case 'subscriber.bounced':
-          await withStatementTimeout(MAILERLITE_WEBHOOK_DB_BUDGET_MS, async (tx) => {
-            await tx
-              .update(newsletterSubscriptions)
-              .set({ status: 'bounced', updatedAt: new Date() })
-              .where(and(
-                eq(newsletterSubscriptions.email, data.subscriber!.email),
-                notInArray(newsletterSubscriptions.status, ['unsubscribed', 'bounced']),
-              ));
-          });
-          console.log('[MailerLite Webhook] subscriber.bounced processed');
-          break;
-       }
-
-      res.json({ success: true, received: type });
-    } catch (error) {
-      console.error('Error processing MailerLite webhook:', error);
-      res.status(500).json({ error: 'Webhook processing failed' });
-    }
-  });
+  app.post('/api/webhooks/mailerlite', createMailerLiteWebhookHandler({ db, withStatementTimeout }));
 
   /**
    * POST /api/smart-newsletter/sync-interests

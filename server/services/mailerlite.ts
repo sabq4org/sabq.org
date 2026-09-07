@@ -226,14 +226,6 @@ export interface MailerLiteWebhookEvent {
   created_at: string;
 }
 
-const TERMINAL_SUBSCRIPTION_STATUSES = ['unsubscribed', 'bounced'] as const;
-
-export function shouldApplyMailerLiteStatusTransition(currentStatus: string): boolean {
-  return !TERMINAL_SUBSCRIPTION_STATUSES.includes(
-    currentStatus as (typeof TERMINAL_SUBSCRIPTION_STATUSES)[number],
-  );
-}
-
 export function parseMailerLiteWebhooks(payload: unknown): MailerLiteWebhookEvent[] {
   const input = payload && typeof payload === 'object' &&
     Array.isArray((payload as { events?: unknown }).events)
