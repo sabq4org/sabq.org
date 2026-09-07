@@ -1,12 +1,22 @@
 import express, { type Router } from "express";
+import rateLimit from "express-rate-limit";
 
 const router: Router = express.Router();
+
+const cspReportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many CSP reports" },
+});
 
 // Browsers POST Content-Security-Policy violation reports here while the
 // strict policy runs in Report-Only mode (see server/index.ts). Keep this
 // endpoint cheap and resilient: cap the body size, never throw, always 204.
 router.post(
   "/api/security/csp-report",
+  cspReportLimiter,
   express.json({
     type: ["application/csp-report", "application/reports+json", "application/json"],
     limit: "16kb",
