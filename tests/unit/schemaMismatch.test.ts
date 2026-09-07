@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   articleMediaAssets,
+  enSmartBlocks,
+  insertEnSmartBlockSchema,
   insertArticleMediaAssetSchema,
   insertOpinionAuthorApplicationSchema,
   insertSmartBlockSchema,
+  insertUrSmartBlockSchema,
   opinionAuthorApplications,
   sportsPoolMatchPicks,
   sportsPoolPlayerPicks,
   sportsPoolUserDivisions,
   sportsPoolWeeklyPoints,
+  smartBlocks,
+  urSmartBlocks,
   updateArticleMediaAssetSchema,
 } from "../../shared/schema";
 
@@ -77,6 +82,24 @@ describe("production schema contract alignment", () => {
     ).toBe(false);
   });
 
+  it("matches the live bounded opinion identifier and status columns", () => {
+    expect({
+      id: {
+        length: (opinionAuthorApplications.id as any).length,
+        notNull: (opinionAuthorApplications.id as any).notNull,
+        dataType: (opinionAuthorApplications.id as any).dataType,
+      },
+      status: {
+        length: (opinionAuthorApplications.status as any).length,
+        notNull: (opinionAuthorApplications.status as any).notNull,
+        dataType: (opinionAuthorApplications.status as any).dataType,
+      },
+    }).toEqual({
+      id: { length: 36, notNull: true, dataType: "string" },
+      status: { length: 20, notNull: true, dataType: "string" },
+    });
+  });
+
   it("does not alter nullable production fields", () => {
     expect((articleMediaAssets.captionHtml as any).notNull).toBe(false);
     expect((opinionAuthorApplications.reviewedAt as any).notNull).toBe(false);
@@ -92,5 +115,47 @@ describe("production schema contract alignment", () => {
     };
     expect(insertSmartBlockSchema.safeParse(base).success).toBe(true);
     expect(insertSmartBlockSchema.safeParse({ ...base, backgroundColor: "x".repeat(21) }).success).toBe(false);
+  });
+
+  it("matches all three live smart-block storage shapes and input contracts", () => {
+    const liveColumns = [
+      { table: smartBlocks, schema: insertSmartBlockSchema, backgroundLength: 20 },
+      { table: enSmartBlocks, schema: insertEnSmartBlockSchema, backgroundLength: undefined },
+      { table: urSmartBlocks, schema: insertUrSmartBlockSchema, backgroundLength: undefined },
+    ] as const;
+    const expected = {
+      backgroundColor: { length: "varies" as const, notNull: false, hasDefault: false },
+      sourceType: { length: undefined, notNull: true, hasDefault: true },
+      subtitle: { length: undefined, notNull: false, hasDefault: false },
+      playbook: { length: undefined, notNull: false, hasDefault: false },
+    };
+
+    for (const { table, schema, backgroundLength } of liveColumns) {
+      for (const [name, contract] of Object.entries(expected)) {
+        const column = (table as any)[name];
+        expect({
+          length: name === "backgroundColor" ? column.length ?? "varies" : column.length,
+          notNull: column.notNull,
+          hasDefault: column.hasDefault,
+        }).toEqual({
+          ...contract,
+          length: name === "backgroundColor" ? backgroundLength ?? "varies" : contract.length,
+        });
+      }
+
+      const base = {
+        title: "كتلة",
+        keyword: "خبر",
+        color: "#ffffff",
+        placement: "above_footer",
+      };
+      expect(schema.safeParse(base).success).toBe(true);
+      expect(schema.safeParse({ ...base, sourceType: null }).success).toBe(false);
+      expect(schema.safeParse({ ...base, subtitle: null, playbook: null, backgroundColor: null }).success).toBe(true);
+      expect(schema.safeParse({ ...base, sourceType: "x".repeat(31) }).success).toBe(false);
+      expect(schema.safeParse({ ...base, subtitle: "x".repeat(161) }).success).toBe(false);
+      expect(schema.safeParse({ ...base, playbook: "x".repeat(61) }).success).toBe(false);
+      expect(schema.safeParse({ ...base, backgroundColor: "x".repeat(21) }).success).toBe(false);
+    }
   });
 });
