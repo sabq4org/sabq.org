@@ -50,8 +50,15 @@ describe("production schema contract alignment", () => {
       expect((column as any).getSQLType()).toBe("timestamp with time zone");
     }
 
-    expect(new Date("2026-09-07T12:34:56.789Z").toISOString()).toBe(
+    const driverValue = "2026-09-07 15:34:56.789+03";
+    const mapped = (sportsPoolPlayerPicks.createdAt as any).mapFromDriverValue(driverValue);
+    expect(mapped).toBeInstanceOf(Date);
+    expect(mapped.toISOString()).toBe("2026-09-07T12:34:56.789Z");
+    expect((sportsPoolPlayerPicks.createdAt as any).mapToDriverValue(mapped)).toBe(
       "2026-09-07T12:34:56.789Z",
+    );
+    expect(JSON.stringify({ createdAt: mapped })).toBe(
+      '{"createdAt":"2026-09-07T12:34:56.789Z"}',
     );
   });
 
