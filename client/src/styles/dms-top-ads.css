@@ -1,0 +1,8 @@
+/* The vendor's injected rule uses display:block!important. Include the root
+ * setting to outrank it, even when GTM recreates the slot outside React.
+ * Only the already-disabled top placement is affected; MPU remains available.
+ */
+html[data-sabq-top-ads-disabled] #Leaderboard,
+html[data-sabq-top-ads-disabled] [data-testid="dms-ad-slot-Leaderboard"] {
+  display: none !important;
+}

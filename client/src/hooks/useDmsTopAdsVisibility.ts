@@ -1,5 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLayoutEffect } from "react";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
+import "@/styles/dms-top-ads.css";
 
 interface DmsTopAdsResponse {
   showTopAds: boolean;
@@ -22,9 +24,17 @@ export function useDmsTopAdsEnabled(): boolean | undefined {
     queryFn: getQueryFn<DmsTopAdsResponse>({ on401: "returnNull", silent: true }),
     staleTime: 1000 * 60 * 5,
   });
-  if (isError) return true;
-  if (data === undefined) return undefined;
-  return data?.showTopAds ?? true;
+  const enabled = isError ? true : data === undefined ? undefined : data?.showTopAds ?? true;
+  useLayoutEffect(() => {
+    // GTM recreates #Leaderboard outside React. A once-per-second removal
+    // briefly exposes its 100px slot and then collapses it (two CLS events).
+    // CSS must enforce the existing disabled decision before the next paint.
+    if (enabled !== undefined) {
+      document.documentElement.toggleAttribute("data-sabq-top-ads-disabled", enabled === false);
+    }
+    // Keep the last resolved setting between route unmounts; it is site-wide.
+  }, [enabled]);
+  return enabled;
 }
 
 /** قراءة + حفظ — للوحة إعدادات النظام */
