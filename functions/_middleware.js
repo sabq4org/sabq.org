@@ -323,6 +323,19 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
   return fetch(target, init);
 }
 
+// Read the complete HTML before committing headers. An interrupted SSR stream
+// must reach the existing semantic-HTML fallback, not become a truncated 200.
+export async function fetchSsrHtml(request, origin, timeoutMs = 5000) {
+  const response = await proxyToApi(request, origin, timeoutMs);
+  if (response.status >= 500 || (response.status === 200 && !isHtml(response))) {
+    await response.body?.cancel();
+    throw new Error(`SSR unavailable (${response.status})`);
+  }
+  if (response.status !== 200) return response; // Preserve genuine 404/redirects.
+  const body = await response.arrayBuffer();
+  return new Response(body, { status: response.status, headers: response.headers });
+}
+
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
 async function cachedJson(url, ttl) {
   const cache = caches.default;
@@ -972,9 +985,9 @@ export async function onRequest(context) {
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
       if (slug && slug.gone) return goneHtmlResponse();
-      const ssrRes = await proxyToApi(request, nextOrigin);
-      // Only edge-cache a successful HTML render; Next 404/5xx pass through
-      // no-store so a transient error is never cached as a 200.
+      const ssrRes = await fetchSsrHtml(request, nextOrigin);
+      // Only cache a complete HTML render; genuine 404s pass through no-store.
+      // Transient 5xx/timeouts fall through to semantic HTML injection below.
       const ok = ssrRes.status === 200 && isHtml(ssrRes);
       // web-next renders every route with the root layout's lang="ar" dir="rtl";
       // correct the declared language for the /en|/ur surfaces (crawler-only path).
