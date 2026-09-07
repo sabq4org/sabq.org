@@ -7,9 +7,12 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { CommentSection } from "@/components/CommentSection";
+import { ArticlePoll } from "@/components/ArticlePoll";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
 import { AIRecommendationsPanel } from "@/components/AIRecommendationsBlock";
 import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
+import { Paywall } from "@/components/Paywall";
 import StoryTimeline from "@/components/StoryTimeline";
 import FollowStoryButton from "@/components/FollowStoryButton";
 import { AdSlot } from "@/components/AdSlot";
@@ -21,7 +24,11 @@ import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
 // PassportTrustBadge removed from this page on 2026-05-16 (user request).
 // Kept import out so esbuild doesn't pull the component into the bundle.
 import { ImageWithCaption } from "@/components/ImageWithCaption";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import { InfographicDetail } from "@/components/InfographicDetail";
+import { DataInfographicPage } from "@/components/data-infographic/DataInfographicPage";
 import { RelatedInfographics } from "@/components/RelatedInfographics";
+import { WeeklyPhotosDisplay } from "@/components/WeeklyPhotosDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -68,7 +75,6 @@ import DOMPurify from "isomorphic-dompurify";
 import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH } from "@shared/articleHeroPreload";
-import { retryImport } from "@/lib/retryImport";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
@@ -77,38 +83,6 @@ const SHOW_TOP_AD = true;
 const AiArticleStats = lazy(() =>
   import("@/components/AiArticleStats").then(module => ({ default: module.AiArticleStats }))
 );
-
-// Secondary blocks must not hold the article route behind their module downloads.
-// Each use has a local Suspense boundary so its loading state keeps the story visible.
-const ArticlePoll = lazy(() =>
-  retryImport(() => import("@/components/ArticlePoll").then(module => ({ default: module.ArticlePoll })))
-);
-const CommentSection = lazy(() =>
-  retryImport(() => import("@/components/CommentSection").then(module => ({ default: module.CommentSection })))
-);
-const Paywall = lazy(() =>
-  retryImport(() => import("@/components/Paywall").then(module => ({ default: module.Paywall })))
-);
-const VideoPlayer = lazy(() =>
-  retryImport(() => import("@/components/VideoPlayer").then(module => ({ default: module.VideoPlayer })))
-);
-const InfographicDetail = lazy(() =>
-  retryImport(() => import("@/components/InfographicDetail").then(module => ({ default: module.InfographicDetail })))
-);
-const DataInfographicPage = lazy(() =>
-  retryImport(() => import("@/components/data-infographic/DataInfographicPage").then(module => ({ default: module.DataInfographicPage })))
-);
-const WeeklyPhotosDisplay = lazy(() =>
-  retryImport(() => import("@/components/WeeklyPhotosDisplay").then(module => ({ default: module.WeeklyPhotosDisplay })))
-);
-
-function ArticleBlockLoading({ video = false }: { video?: boolean }) {
-  return (
-    <div role="status" className={`flex items-center justify-center p-6 text-sm text-muted-foreground ${video ? "aspect-video rounded-lg bg-muted" : "min-h-24"}`}>
-      جارٍ تحميل المحتوى…
-    </div>
-  );
-}
 
 export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -1035,37 +1009,31 @@ export default function ArticleDetail() {
           <Header user={user} />
           
           {/* Data Infographic with visual blocks */}
-          <Suspense fallback={<ArticleBlockLoading />}>
-            <DataInfographicPage
-              article={article}
-              onReact={handleReact}
-              onBookmark={handleBookmark}
-              hasReacted={article.hasReacted}
-              isBookmarked={article.isBookmarked}
-              shortLink={shortLink}
-            />
-          </Suspense>
+          <DataInfographicPage 
+            article={article}
+            onReact={handleReact}
+            onBookmark={handleBookmark}
+            hasReacted={article.hasReacted}
+            isBookmarked={article.isBookmarked}
+            shortLink={shortLink}
+          />
           
           {/* Article Poll */}
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
-            <Suspense fallback={<ArticleBlockLoading />}>
-              <ArticlePoll articleId={article.id} />
-            </Suspense>
+            <ArticlePoll articleId={article.id} />
           </div>
 
           {/* Comments Section */}
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
             <Separator className="mb-8" />
-            <Suspense fallback={<ArticleBlockLoading />}>
-              <CommentSection
-                articleId={article.id}
-                comments={comments}
-                currentUser={user}
-                onSubmitComment={handleComment}
-                onLikeComment={handleLikeComment}
-                likedCommentIds={likedCommentIds}
-              />
-            </Suspense>
+            <CommentSection
+              articleId={article.id}
+              comments={comments}
+              currentUser={user}
+              onSubmitComment={handleComment}
+              onLikeComment={handleLikeComment}
+              likedCommentIds={likedCommentIds}
+            />
           </div>
         </div>
       );
@@ -1077,37 +1045,31 @@ export default function ArticleDetail() {
         <Header user={user} />
         
         {/* Full-width Infographic Detail with integrated carousel */}
-        <Suspense fallback={<ArticleBlockLoading />}>
-          <InfographicDetail
-            article={article}
-            onReact={handleReact}
-            onBookmark={handleBookmark}
-            hasReacted={article.hasReacted}
-            isBookmarked={article.isBookmarked}
-            shortLink={shortLink}
-          />
-        </Suspense>
+        <InfographicDetail 
+          article={article}
+          onReact={handleReact}
+          onBookmark={handleBookmark}
+          hasReacted={article.hasReacted}
+          isBookmarked={article.isBookmarked}
+          shortLink={shortLink}
+        />
         
         {/* Article Poll */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
-          <Suspense fallback={<ArticleBlockLoading />}>
-            <ArticlePoll articleId={article.id} />
-          </Suspense>
+          <ArticlePoll articleId={article.id} />
         </div>
 
         {/* Comments Section */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
           <Separator className="mb-8" />
-          <Suspense fallback={<ArticleBlockLoading />}>
-            <CommentSection
-              articleId={article.id}
-              comments={comments}
-              currentUser={user}
-              onSubmitComment={handleComment}
-              onLikeComment={handleLikeComment}
-              likedCommentIds={likedCommentIds}
-            />
-          </Suspense>
+          <CommentSection
+            articleId={article.id}
+            comments={comments}
+            currentUser={user}
+            onSubmitComment={handleComment}
+            onLikeComment={handleLikeComment}
+            likedCommentIds={likedCommentIds}
+          />
         </div>
       </div>
     );
@@ -1271,17 +1233,15 @@ export default function ArticleDetail() {
 
             {/* Featured Image or Video - Clean TailAdmin Style */}
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
-              <Suspense fallback={<ArticleBlockLoading video />}>
-                <VideoPlayer
-                  videoUrl={(article as any).videoUrl}
-                  thumbnailUrl={getCacheBustedImageUrl(
-                    (article as any).videoThumbnailUrl || article.imageUrl,
-                    article.updatedAt,
-                  )}
-                  title={article.title}
-                  className="rounded-lg"
-                />
-              </Suspense>
+              <VideoPlayer
+                videoUrl={(article as any).videoUrl}
+                thumbnailUrl={getCacheBustedImageUrl(
+                  (article as any).videoThumbnailUrl || article.imageUrl,
+                  article.updatedAt,
+                )}
+                title={article.title}
+                className="rounded-lg"
+              />
             ) : article.imageUrl && (() => {
               const heroImageAsset = mediaAssets?.find(
                 (asset: any) => asset.displayOrder === 0
@@ -1438,22 +1398,20 @@ export default function ArticleDetail() {
                   <p className="text-muted-foreground">جاري التحقق من حالة الشراء...</p>
                 </div>
               ) : article.isPaid && !purchaseStatus?.hasPurchased ? (
-                <Suspense fallback={<ArticleBlockLoading />}>
-                  <Paywall
-                    article={{
-                      id: article.id,
-                      title: article.title,
-                      content: article.content,
-                      priceHalalas: article.priceHalalas || 0,
-                      previewLength: article.previewLength ?? undefined,
-                      imageUrl: article.imageUrl,
-                      slug: article.slug
-                    }}
-                    onPurchaseComplete={() => {
-                      queryClient.invalidateQueries({ queryKey: ['/api/payments/check-purchase', article.id] });
-                    }}
-                  />
-                </Suspense>
+                <Paywall 
+                  article={{
+                    id: article.id,
+                    title: article.title,
+                    content: article.content,
+                    priceHalalas: article.priceHalalas || 0,
+                    previewLength: article.previewLength ?? undefined,
+                    imageUrl: article.imageUrl,
+                    slug: article.slug
+                  }}
+                  onPurchaseComplete={() => {
+                    queryClient.invalidateQueries({ queryKey: ['/api/payments/check-purchase', article.id] });
+                  }}
+                />
               ) : (
                 <div 
                   ref={articleBodyRef}
@@ -1467,12 +1425,10 @@ export default function ArticleDetail() {
             {/* Weekly Photos Section */}
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (
               <div className="bg-card border rounded-lg p-6">
-                <Suspense fallback={<ArticleBlockLoading />}>
-                  <WeeklyPhotosDisplay
-                    photos={(article as any).weeklyPhotosData.photos}
-                    title="صور الأسبوع"
-                  />
-                </Suspense>
+                <WeeklyPhotosDisplay 
+                  photos={(article as any).weeklyPhotosData.photos}
+                  title="صور الأسبوع"
+                />
               </div>
             )}
 
@@ -1708,22 +1664,18 @@ export default function ArticleDetail() {
 
             {/* Article Poll */}
             <div className="mb-8">
-              <Suspense fallback={<ArticleBlockLoading />}>
-                <ArticlePoll articleId={article.id} />
-              </Suspense>
+              <ArticlePoll articleId={article.id} />
             </div>
 
             {/* Comments */}
-            <Suspense fallback={<ArticleBlockLoading />}>
-              <CommentSection
-                articleId={article.id}
-                comments={comments}
-                currentUser={user}
-                onSubmitComment={handleComment}
-                onLikeComment={handleLikeComment}
-                likedCommentIds={likedCommentIds}
-              />
-            </Suspense>
+            <CommentSection
+              articleId={article.id}
+              comments={comments}
+              currentUser={user}
+              onSubmitComment={handleComment}
+              onLikeComment={handleLikeComment}
+              likedCommentIds={likedCommentIds}
+            />
           </article>
 
           {/* Sidebar */}
