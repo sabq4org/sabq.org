@@ -42,3 +42,15 @@
 ## توقيع الطلبات إلى الأصل — 2026-09-07
 - Pages يوقّع method/path/query/IP/timestamp بسر تشغيل مستقل، ويحذف ترويسات X-Sabq القادمة من العميل قبل التوقيع. طلبات الميتادات تستخدم GET دون Cookie أو Authorization.
 - web-next يوقّع طلباته الداخلية بهوية خدمة ثابتة. هذه المرحلة تنشر المرسلين فقط؛ تفعيل verifier وحارس API يأتي بعد تحقق المرور عبر جميع البوابات وفق runbook. لا يتغير عقد JSON للمستهلكين.
+
+## ترويسات HTML الأمنية — 2026-09-07
+
+- كل استجابة `text/html` في Pages، بما فيها cache hit وSSR وSPA و404/410، تمر عبر حارس مشترك يضيف `X-Content-Type-Options: nosniff` و`Referrer-Policy: strict-origin-when-cross-origin` و`Content-Security-Policy-Report-Only`.
+- سياسة CSP في وضع Report-Only فقط، وتستخدم `report-uri /api/security/csp-report`. نطاقاتها مبنية من موارد `client/index.html` والموارد الخارجية الفعلية في واجهة الويب؛ لا تمنع التحميل ولا تغيّر عقد API أو cache.
+- `Strict-Transport-Security: max-age=86400` يضاف فقط للمضيفين `sabq.org` و`www.sabq.org`. لا توجد `includeSubDomains` أو `preload`، ولا يضاف HSTS لمضيفات preview/duplicate.
+- `frame-ancestors` موجود داخل CSP Report-Only للرصد فقط؛ لا يضاف `X-Frame-Options` حتى يثبت احتياج المنتج.
+- فحص smoke لـ`GET /health` يثبت 2xx وJSON خلال 15 ثانية دون login أو كتابة.
+
+## DMARC
+
+يبقى إعداد DMARC خارج هذا التغيير: يتطلب عنوان mailbox معتمداً لتقارير `rua/ruf` وجرداً مؤكداً لكل المرسلين الشرعيين قبل رفع السياسة من `p=none`.

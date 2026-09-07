@@ -29,6 +29,14 @@ async function waitForArticleLinks(page: Page) {
 }
 
 test.describe("smoke: public critical paths", () => {
+  test("health endpoint returns a JSON 2xx response", async ({ request }) => {
+    const response = await request.get("/health", { timeout: 15_000 });
+    expect(response.status()).toBeGreaterThanOrEqual(200);
+    expect(response.status()).toBeLessThan(300);
+    expect(response.headers()["content-type"] || "").toContain("application/json");
+    const body = await response.json();
+    expect(body).toMatchObject({ status: expect.any(String) });
+  });
   test("homepage renders with article links", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBeLessThan(400);

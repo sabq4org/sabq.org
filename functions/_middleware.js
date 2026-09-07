@@ -238,7 +238,35 @@ class HtmlLangSetter {
 // reclaiming crawl budget. Consistent with the human experience: the public
 // article API already returns 404 for archived articles, so this is not
 // cloaking. noindex header is belt-and-suspenders.
-function goneHtmlResponse() {
+const HTML_SECURITY_CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://securepubads.g.doubleclick.net https://platform.twitter.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.cdnfonts.com",
+  "font-src 'self' https://fonts.gstatic.com https://fonts.cdnfonts.com data:",
+  "img-src 'self' data: blob: https://imagedelivery.net https://media.sabq.org https://cdnjs.cloudflare.com https://tile.openstreetmap.de https://img.youtube.com",
+  "connect-src 'self' https://api.sabq.org wss://api.sabq.org https://*.sentry.io https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net",
+  "frame-src 'self' https://www.googletagmanager.com https://securepubads.g.doubleclick.net https://geo.dailymotion.com https://www.youtube.com https://platform.twitter.com",
+  "report-uri /api/security/csp-report",
+].join('; ');
+
+export function isHstsHost(hostname) {
+  return hostname === "sabq.org" || hostname === "www.sabq.org";
+}
+
+export function htmlSecurityHeadersForHost(hostname) {
+  const headers = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy-Report-Only": HTML_SECURITY_CSP_REPORT_ONLY,
+  };
+  if (isHstsHost(hostname)) headers["Strict-Transport-Security"] = "max-age=86400";
+  return headers;
+}
+
+function goneHtmlResponse(hostname = "sabq.org") {
   const body =
     '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
     '<meta name="robots" content="noindex, follow">' +
@@ -250,6 +278,7 @@ function goneHtmlResponse() {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "X-Robots-Tag": "noindex, follow",
+      ...htmlSecurityHeadersForHost(hostname),
       // Short cache so a republished (un-archived) article recovers quickly,
       // bounded anyway by the slug-redirect/gone TTL upstream.
       "Cache-Control": "public, max-age=60, s-maxage=120",
@@ -262,7 +291,7 @@ function isHtml(res) {
   return (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
 
-function applyHtmlHeaders(res, headerSet) {
+export function applyHtmlHeaders(res, headerSet, hostname = "sabq.org") {
   if (!isHtml(res)) return res;
   const headers = new Headers(res.headers);
   // Clear stale freshness hints so a cacheable response never inherits a
@@ -270,6 +299,7 @@ function applyHtmlHeaders(res, headerSet) {
   headers.delete("Pragma");
   headers.delete("Expires");
   for (const [k, v] of Object.entries(headerSet)) headers.set(k, v);
+  for (const [k, v] of Object.entries(htmlSecurityHeadersForHost(hostname))) headers.set(k, v);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
@@ -759,6 +789,7 @@ export async function onRequest(context) {
     const out = applyHtmlHeaders(
       res,
       useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
+      url.hostname,
     );
     // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
     // private routes (login/register/profile/dashboard/search/…). This is the
@@ -970,13 +1001,15 @@ export async function onRequest(context) {
       return await proxyToApi(request, nextOrigin);
     } catch (err) {
       console.error("[pages-fn] next asset proxy failed:", err);
-      return next();
+      return deliverHtml(await next(), { cacheable: false });
     }
   }
 
   // 2) Non-GET/HEAD, static assets / noindex screens, or SEO handled elsewhere
   //    (EDGE_SEO off — the standalone worker injects) → serve the shell as-is.
-  if (request.method !== "GET" && request.method !== "HEAD") return next();
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return deliverHtml(await next(), { cacheable: false });
+  }
 
   // Indexable content on the canonical host is edge-cacheable (P1 fix). This
   // decision is based on the PATH (not on seoEnabled), so the cache speed-up
@@ -990,11 +1023,12 @@ export async function onRequest(context) {
   if (edgeHtmlCacheEnabled && htmlCacheable && cacheKey) {
     const hit = await caches.default.match(cacheKey);
     if (hit) {
-      const headers = new Headers(hit.headers);
+      const securedHit = applyHtmlHeaders(hit, {}, url.hostname);
+      const headers = new Headers(securedHit.headers);
       headers.set("x-edge-cache", "HIT");
-      return new Response(hit.body, {
-        status: hit.status,
-        statusText: hit.statusText,
+      return new Response(securedHit.body, {
+        status: securedHit.status,
+        statusText: securedHit.statusText,
         headers,
       });
     }
@@ -1023,7 +1057,7 @@ export async function onRequest(context) {
       }
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
-      if (slug && slug.gone) return goneHtmlResponse();
+      if (slug && slug.gone) return goneHtmlResponse(url.hostname);
       const ssrRes = await proxyToApi(request, nextOrigin);
       // Only edge-cache a successful HTML render; Next 404/5xx pass through
       // no-store so a transient error is never cached as a 200.
@@ -1078,7 +1112,7 @@ export async function onRequest(context) {
     // SSR-crawler path). Humans keep the SPA shell, whose client-side render
     // shows the styled not-found (the public article API already 404s archived),
     // so this stays consistent — not cloaking.
-    if (slug && slug.gone && isCrawler(userAgent)) return goneHtmlResponse();
+    if (slug && slug.gone && isCrawler(userAgent)) return goneHtmlResponse(url.hostname);
 
     // No meta (DB hiccup) → don't long-cache an un-injected generic shell on a
     // content URL; serve it no-store so the next crawl re-tries injection.
