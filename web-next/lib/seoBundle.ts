@@ -1,4 +1,4 @@
-import { serverApiUrl } from "./apiUrl";
+import { serverApiFetch, serverApiUrl } from "./apiUrl";
 
 export interface SeoBundleMeta {
   title: string;
@@ -87,7 +87,7 @@ export async function getArticleSeoBundle(
   const url = serverApiUrl(
     `/api/articles/${encodeURIComponent(slug)}/seo-bundle?lang=${lang}`,
   );
-  const res = await fetch(url, { next: { revalidate } });
+  const res = await serverApiFetch(url, { next: { revalidate } });
 
   if (res.status === 404) return null;
   if (!res.ok) {
@@ -103,7 +103,7 @@ export async function getCategoryBundle(
   const url = serverApiUrl(
     `/api/categories/${encodeURIComponent(slug)}/seo-bundle`,
   );
-  const res = await fetch(url, { next: { revalidate } });
+  const res = await serverApiFetch(url, { next: { revalidate } });
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`category bundle failed: ${res.status} ${res.statusText}`);
@@ -113,7 +113,7 @@ export async function getCategoryBundle(
 
 export async function getHomeBundle(revalidate = 60): Promise<HomeBundle> {
   const url = serverApiUrl(`/api/edge/home-bundle`);
-  const res = await fetch(url, { next: { revalidate } });
+  const res = await serverApiFetch(url, { next: { revalidate } });
   if (!res.ok) {
     throw new Error(`home bundle failed: ${res.status} ${res.statusText}`);
   }
