@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-08-28",
+  "updatedAt": "2026-09-07",
   "systems": [
     {
       "id": "account-center",
@@ -131,14 +131,16 @@
         "sports app ios/SabqSports/Screens/PredictionContestDetailView.swift",
         "android-native/vara/src/main/kotlin/com/sabq/vara/ui/AccountScreens.kt",
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/predictions/**",
-        "docs/PREDICTION_CORE.md"
+        "docs/PREDICTION_CORE.md",
+        "shared/schema.ts",
+        "tests/unit/schemaMismatch.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-16"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "editorial",
@@ -285,7 +287,8 @@
         "tests/unit/articleSlugService.test.ts",
         "docs/editorial/**",
         "server/services/newsStatisticsService.ts",
-        "tests/unit/statisticsSingleFlight.test.ts"
+        "tests/unit/statisticsSingleFlight.test.ts",
+        "shared/schema.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -528,7 +531,9 @@
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx",
         "server/utils/mediaUploadDiagnostics.ts",
-        "tests/unit/mediaUploadDiagnostics.test.ts"
+        "tests/unit/mediaUploadDiagnostics.test.ts",
+        "shared/schema.ts",
+        "tests/unit/schemaMismatch.test.ts"
       ],
       "aiFeatureKeys": [
         "media-caption"

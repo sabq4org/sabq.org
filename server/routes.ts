@@ -14684,6 +14684,11 @@ Respond in valid JSON format only:
         const parsed = insertArticleMediaAssetSchema.safeParse({
           ...req.body,
           articleId,
+          // The ORM contract requires NOT NULL; preserve the existing API
+          // fallback before validation so omitted alt text remains accepted.
+          altText: req.body.altText === undefined || req.body.altText === ""
+            ? "صورة الخبر"
+            : req.body.altText,
         });
 
         if (!parsed.success) {
@@ -14693,10 +14698,7 @@ Respond in valid JSON format only:
           });
         }
         
-        const dataToInsert = {
-          ...parsed.data,
-          altText: parsed.data.altText || "صورة الخبر",
-        };
+        const dataToInsert = parsed.data;
         const asset = await storage.createArticleMediaAsset(dataToInsert);
         memoryCache.invalidatePattern('^article:media-assets:');
         // Purge article HTML/JSON/sidebar at the edge so newly-added photos
@@ -14763,7 +14765,14 @@ Respond in valid JSON format only:
     try {
         const { id } = req.params;
         
-        const parsed = updateArticleMediaAssetSchema.safeParse(req.body);
+        const parsed = updateArticleMediaAssetSchema.safeParse({
+          ...req.body,
+          // Keep the established PATCH behavior for omitted/empty alt text,
+          // while rejecting explicit null before the database write.
+          altText: req.body.altText === undefined || req.body.altText === ""
+            ? "صورة الخبر"
+            : req.body.altText,
+        });
 
         if (!parsed.success) {
           return res.status(400).json({ 
@@ -14778,10 +14787,7 @@ Respond in valid JSON format only:
           return res.status(access.httpStatus).json({ message: access.message });
         }
 
-        const dataToUpdate = {
-          ...parsed.data,
-          altText: parsed.data.altText || "صورة الخبر",
-        };
+        const dataToUpdate = parsed.data;
         const asset = await storage.updateArticleMediaAsset(id, dataToUpdate);
 
         if (!asset) {
