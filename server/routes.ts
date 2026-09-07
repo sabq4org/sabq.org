@@ -14691,7 +14691,7 @@ Respond in valid JSON format only:
         const parsed = insertArticleMediaAssetSchema.safeParse({
           ...req.body,
           articleId,
-          // The production column is NOT NULL; preserve the existing API
+          // The ORM contract requires NOT NULL; preserve the existing API
           // fallback before validation so omitted alt text remains accepted.
           altText: req.body.altText === undefined || req.body.altText === ""
             ? "صورة الخبر"

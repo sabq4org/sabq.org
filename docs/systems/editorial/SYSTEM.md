@@ -138,6 +138,5 @@
 ## عقد مخطط M09 — 2026-09-07
 
 - `opinion_author_applications.reviewed_at` و`created_at` في `shared/schema.ts` يطابقان `timestamptz` الإنتاجي عبر `withTimezone: true`؛ يبقى تحويلهما إلى `timestamp` ممنوعًا لأنه يفقد دلالة المنطقة الزمنية.
-- مسار تسجيل كاتب الرأي يرفع الصورة إلى Cloudflare Images ويتحقق من `profilePhotoUrl` قبل استدعاء التخزين؛ تبقى الكتابة غير قابلة لـ`NULL` في عقد ORM. لا يُنفذ DDL من هذا التغيير.
-- اختلافا `id` و`status` في جدول الطلبات مؤجلان إلى فحص أطوال/قيم الإنتاج، ولا يغيرهما هذا العقد.
-- فحص `schema-check.results.txt` أكد أن `background_color` بقي `varchar(20)` في الجداول الثلاثة؛ أما `source_type` و`subtitle` و`playbook` فتبقى أوسع في الإنتاج، مع إبقاء حدود Zod الحالية وعدم تنفيذ تضييق DDL.
+- مسار تسجيل كاتب الرأي يرفع الصورة إلى Cloudflare Images ويتحقق من `profilePhotoUrl` قبل استدعاء التخزين؛ تبقى الكتابة غير قابلة لـ`NULL` في عقد ORM. إنفاذ NOT NULL منفصل عبر migration إداري محدد بعد التحقق على فرع الاستعادة.
+- تطابق ORM مع أنواع التخزين الحالية دون DDL: `id` بطول 36 و`status` بطول 20 في طلبات الكتّاب، وحقول الكتل الأوسع بلا حد تخزين. حدود إدخال API بقيت صريحة في Zod: sourceType=30، subtitle=160، playbook=60، backgroundColor=20. لون الخلفية العربي يبقى varchar(20)، والإنجليزي والأردي بلا حد تخزين كما في الإنتاج.
