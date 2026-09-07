@@ -13,16 +13,16 @@ on:
     - cron: "17 */6 * * *"
   push:
     branches: [main]
-      workflow_dispatch:
-        inputs:
-          base_url:
-            description: "Base URL to smoke-test"
-            required: false
-            default: "https://sabq.org"
-          api_base_url:
-            description: "API origin for the read-only health probe"
-            required: false
-            default: "https://api.sabq.org"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL to smoke-test"
+        required: false
+        default: "https://sabq.org"
+      api_base_url:
+        description: "API origin for the read-only health probe"
+        required: false
+        default: "https://api.sabq.org"
 
 concurrency:
   group: smoke-${{ github.ref }}
