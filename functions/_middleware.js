@@ -266,7 +266,7 @@ export function htmlSecurityHeadersForHost(hostname) {
   return headers;
 }
 
-function goneHtmlResponse(hostname = "sabq.org") {
+function goneHtmlResponse() {
   const body =
     '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
     '<meta name="robots" content="noindex, follow">' +
@@ -278,7 +278,6 @@ function goneHtmlResponse(hostname = "sabq.org") {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "X-Robots-Tag": "noindex, follow",
-      ...htmlSecurityHeadersForHost(hostname),
       // Short cache so a republished (un-archived) article recovers quickly,
       // bounded anyway by the slug-redirect/gone TTL upstream.
       "Cache-Control": "public, max-age=60, s-maxage=120",
@@ -291,7 +290,7 @@ function isHtml(res) {
   return (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
 
-export function applyHtmlHeaders(res, headerSet, hostname = "sabq.org") {
+export function applyHtmlHeaders(res, headerSet) {
   if (!isHtml(res)) return res;
   const headers = new Headers(res.headers);
   // Clear stale freshness hints so a cacheable response never inherits a
@@ -299,8 +298,18 @@ export function applyHtmlHeaders(res, headerSet, hostname = "sabq.org") {
   headers.delete("Pragma");
   headers.delete("Expires");
   for (const [k, v] of Object.entries(headerSet)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function applyHtmlSecurityHeaders(res, hostname) {
+  if (!isHtml(res)) return res;
+  const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(htmlSecurityHeadersForHost(hostname))) headers.set(k, v);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function shouldApplyHtmlSecurityHeaders(pathname, res) {
+  return !isProxyPath(pathname) && isHtml(res);
 }
 
 // Cloudflare does NOT auto-cache text/html from a Pages Function based on
@@ -656,7 +665,7 @@ async function serveApiLastGood(cacheKeyReq, reason) {
 // + the reactive retryImport/deployRecovery layer, which already classifies the
 // MIME/CORS refusal of an HTML response to a .js request as a chunk failure.
 
-export async function onRequest(context) {
+async function handleRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;
@@ -786,11 +795,7 @@ export async function onRequest(context) {
   const finalizeHtml = (res, { cacheable = false } = {}) => {
     // A noindex page (private route) must never be edge-cached as indexable.
     const useCache = cacheable && !noindexHost && !pathIsNoindex;
-    const out = applyHtmlHeaders(
-      res,
-      useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
-      url.hostname,
-    );
+    const out = applyHtmlHeaders(res, useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS);
     // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
     // private routes (login/register/profile/dashboard/search/…). This is the
     // signal that lets Googlebot drop the now-crawlable (un-robots-blocked)
@@ -1001,15 +1006,13 @@ export async function onRequest(context) {
       return await proxyToApi(request, nextOrigin);
     } catch (err) {
       console.error("[pages-fn] next asset proxy failed:", err);
-      return deliverHtml(await next(), { cacheable: false });
+      return next();
     }
   }
 
   // 2) Non-GET/HEAD, static assets / noindex screens, or SEO handled elsewhere
   //    (EDGE_SEO off — the standalone worker injects) → serve the shell as-is.
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return deliverHtml(await next(), { cacheable: false });
-  }
+  if (request.method !== "GET" && request.method !== "HEAD") return next();
 
   // Indexable content on the canonical host is edge-cacheable (P1 fix). This
   // decision is based on the PATH (not on seoEnabled), so the cache speed-up
@@ -1023,12 +1026,11 @@ export async function onRequest(context) {
   if (edgeHtmlCacheEnabled && htmlCacheable && cacheKey) {
     const hit = await caches.default.match(cacheKey);
     if (hit) {
-      const securedHit = applyHtmlHeaders(hit, {}, url.hostname);
-      const headers = new Headers(securedHit.headers);
+      const headers = new Headers(hit.headers);
       headers.set("x-edge-cache", "HIT");
-      return new Response(securedHit.body, {
-        status: securedHit.status,
-        statusText: securedHit.statusText,
+      return new Response(hit.body, {
+        status: hit.status,
+        statusText: hit.statusText,
         headers,
       });
     }
@@ -1057,7 +1059,7 @@ export async function onRequest(context) {
       }
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
-      if (slug && slug.gone) return goneHtmlResponse(url.hostname);
+      if (slug && slug.gone) return goneHtmlResponse();
       const ssrRes = await proxyToApi(request, nextOrigin);
       // Only edge-cache a successful HTML render; Next 404/5xx pass through
       // no-store so a transient error is never cached as a 200.
@@ -1112,7 +1114,7 @@ export async function onRequest(context) {
     // SSR-crawler path). Humans keep the SPA shell, whose client-side render
     // shows the styled not-found (the public article API already 404s archived),
     // so this stays consistent — not cloaking.
-    if (slug && slug.gone && isCrawler(userAgent)) return goneHtmlResponse(url.hostname);
+    if (slug && slug.gone && isCrawler(userAgent)) return goneHtmlResponse();
 
     // No meta (DB hiccup) → don't long-cache an un-injected generic shell on a
     // content URL; serve it no-store so the next crawl re-tries injection.
@@ -1153,4 +1155,16 @@ export async function onRequest(context) {
     console.error("[pages-fn] html error:", err);
     return finalizeHtml(await next(), { cacheable: false });
   }
+}
+
+// Security-only outer layer. The inner handler owns routing, caching, redirects,
+// and response headers; this wrapper never rewrites those decisions. API and
+// other proxy responses are deliberately excluded so their existing contract
+// remains byte/header compatible.
+export async function onRequest(context) {
+  const response = await handleRequest(context);
+  const url = new URL(context.request.url);
+  return shouldApplyHtmlSecurityHeaders(url.pathname, response)
+    ? applyHtmlSecurityHeaders(response, url.hostname)
+    : response;
 }
