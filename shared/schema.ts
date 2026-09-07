@@ -2795,9 +2795,9 @@ export const sportsPoolPlayerPicks = pgTable("sports_pool_player_picks", {
   teamName: text("team_name"),
   status: text("status").notNull().default("pending"), // pending | correct | incorrect
   pointsAwarded: integer("points_awarded").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  settledAt: timestamp("settled_at"), // حارس التسوية (مثل sports_pool_predictions)
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }), // حارس التسوية (مثل sports_pool_predictions)
 }, (table) => [
   uniqueIndex("uq_pool_player_pick").on(table.fixtureId, table.userId, table.kind),
   index("idx_sp_pool_pick_user").on(table.userId),
@@ -2822,8 +2822,8 @@ export const sportsPoolMatchPicks = pgTable("sports_pool_match_picks", {
   actualScorers: jsonb("actual_scorers").$type<Array<{ playerId: number; name: string; teamId: number; minute: number | null }>>(),
   firstScorerId: integer("first_scorer_id"), // null حتى تنتهي المباراة
   status: text("status").notNull().default("open"), // open | locked | settled
-  settledAt: timestamp("settled_at"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_pool_match_picks_status").on(table.status),
   index("idx_sp_pool_match_picks_comp").on(table.competitionSlug, table.kickoffTs),
@@ -2843,8 +2843,8 @@ export const sportsPoolUserDivisions = pgTable("sports_pool_user_divisions", {
   seasonPoints: integer("season_points").notNull().default(0),
   lastPromotedTo: integer("last_promoted_to"),
   lastRelegatedTo: integer("last_relegated_to"),
-  computedAt: timestamp("computed_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  computedAt: timestamp("computed_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_pool_div_week").on(table.weekId),
   index("idx_sp_pool_div_div").on(table.division, table.seasonPoints),
@@ -2858,8 +2858,8 @@ export const sportsPoolWeeklyPoints = pgTable("sports_pool_weekly_points", {
   points: integer("points").notNull().default(0),
   matchesPlayed: integer("matches_played").notNull().default(0),
   matchesWon: integer("matches_won").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("uq_sp_pool_weekly_user").on(table.userId, table.weekId),
   index("idx_sp_pool_weekly_week").on(table.weekId, sql`${table.points} DESC`),
@@ -9636,7 +9636,7 @@ export const insertArticleMediaAssetSchema = createInsertSchema(articleMediaAsse
   articleId: z.string().min(1, "Article ID is required"),
   mediaFileId: z.string().optional().nullable(),
   locale: z.enum(["ar", "en", "ur"]),
-  altText: z.string().max(125, "Alt text should be concise (max 125 chars)").optional().nullable(),
+  altText: z.string().max(125, "Alt text should be concise (max 125 chars)"),
   captionHtml: z.string().optional().nullable(),
   captionPlain: z.string().max(500, "Caption should be concise (max 500 chars)").optional().nullable(),
   sourceName: z.string().optional().nullable(),
@@ -9648,7 +9648,7 @@ export const insertArticleMediaAssetSchema = createInsertSchema(articleMediaAsse
 
 // Update schema
 export const updateArticleMediaAssetSchema = z.object({
-  altText: z.string().max(125).optional().nullable(),
+  altText: z.string().max(125).optional(),
   captionHtml: z.string().optional().nullable(),
   captionPlain: z.string().max(500).optional().nullable(),
   keywordTags: z.array(z.string()).optional().nullable(),
@@ -12164,13 +12164,13 @@ export const opinionAuthorApplications = pgTable("opinion_author_applications", 
   
   // معلومات المراجعة
   reviewedBy: varchar("reviewed_by").references(() => users.id), // من راجع الطلب
-  reviewedAt: timestamp("reviewed_at"), // تاريخ المراجعة
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }), // تاريخ المراجعة
   reviewNotes: text("review_notes"), // ملاحظات المراجعة (سبب الرفض مثلاً)
   
   // المستخدم الناتج عن الموافقة
   createdUserId: varchar("created_user_id").references(() => users.id), // المستخدم المُنشأ بعد الموافقة
   
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_opinion_author_applications_status").on(table.status),
   index("idx_opinion_author_applications_email").on(table.email),
