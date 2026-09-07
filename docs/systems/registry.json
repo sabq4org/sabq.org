@@ -283,7 +283,9 @@
         "client/src/components/publisher/**",
         "server/services/articleSlugService.ts",
         "tests/unit/articleSlugService.test.ts",
-        "docs/editorial/**"
+        "docs/editorial/**",
+        "server/services/newsStatisticsService.ts",
+        "tests/unit/statisticsSingleFlight.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -376,7 +378,9 @@
         "server/jobs/aiUsageRollup.ts",
         "client/src/pages/dashboard/AiHub/**",
         "client/src/pages/PromptStudio.tsx",
-        "client/src/pages/PromptStudioPublic.tsx"
+        "client/src/pages/PromptStudioPublic.tsx",
+        "server/services/aiPublicStatsService.ts",
+        "server/routes/aiPublicStats.ts"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
@@ -388,7 +392,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-07-19"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "muqtarab",
@@ -759,7 +763,8 @@
         "functions/_middleware.js",
         "server/services/archiveSeo.ts",
         "server/utils/apiListingRobots.ts",
-        "shared/articleHeroPreload.ts"
+        "shared/articleHeroPreload.ts",
+        "tests/unit/edgeMetadataBudget.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
