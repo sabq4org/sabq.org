@@ -7,7 +7,8 @@ import { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { db } from '../db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, notInArray } from 'drizzle-orm';
+import { withStatementTimeout } from '../db';
 import { 
   newsletterSubscriptions,
   userDynamicInterests,
@@ -107,6 +108,8 @@ const newsletterTriggerLimiter = rateLimit({
   keyGenerator: (req: any) => req.headers['cf-connecting-ip'] as string || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown',
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
 });
+
+const MAILERLITE_WEBHOOK_DB_BUDGET_MS = 1_800;
 
 // Subscription request schema
 const subscribeSchema = z.object({
@@ -490,63 +493,47 @@ export function registerSmartNewsletterRoutes(app: Express) {
       }
 
       const events = parseMailerLiteWebhooks(req.body);
-      if (events.length === 0) {
-        return res.status(400).json({ error: 'Invalid webhook payload' });
+      // This endpoint deliberately accepts one state-changing event at a time.
+      // There is no durable batch queue, and processing a batch would make the
+      // provider's response deadline unpredictable.
+      if (events.length !== 1 ||
+          !['subscriber.unsubscribed', 'subscriber.bounced'].includes(events[0]?.type || '') ||
+          !events[0]?.data.subscriber?.email) {
+        return res.status(422).json({ error: 'Unsupported or invalid webhook event' });
       }
 
-      for (const { type, data } of events) {
+      const [{ type, data }] = events;
 
        switch (type) {
-        case 'subscriber.created':
-          if (data.subscriber) {
-            console.log('[MailerLite Webhook] subscriber.created processed');
-            // Could sync back to local DB if needed
-          }
-          break;
-
         case 'subscriber.unsubscribed':
-          if (data.subscriber) {
-            console.log('[MailerLite Webhook] subscriber.unsubscribed processed');
-            // Update local subscription status
-            await db
+          await withStatementTimeout(MAILERLITE_WEBHOOK_DB_BUDGET_MS, async (tx) => {
+            const changedAt = new Date();
+            await tx
               .update(newsletterSubscriptions)
-              .set({
-                status: 'unsubscribed',
-                unsubscribedAt: new Date(),
-                updatedAt: new Date(),
-              })
-              .where(eq(newsletterSubscriptions.email, data.subscriber.email));
-          }
+              .set({ status: 'unsubscribed', unsubscribedAt: changedAt, updatedAt: changedAt })
+              .where(and(
+                eq(newsletterSubscriptions.email, data.subscriber!.email),
+                notInArray(newsletterSubscriptions.status, ['unsubscribed', 'bounced']),
+              ));
+          });
+          console.log('[MailerLite Webhook] subscriber.unsubscribed processed');
           break;
 
         case 'subscriber.bounced':
-          if (data.subscriber) {
-            console.log('[MailerLite Webhook] subscriber.bounced processed');
-            // Mark as bounced
-            await db
+          await withStatementTimeout(MAILERLITE_WEBHOOK_DB_BUDGET_MS, async (tx) => {
+            await tx
               .update(newsletterSubscriptions)
-              .set({
-                status: 'bounced',
-                updatedAt: new Date(),
-              })
-              .where(eq(newsletterSubscriptions.email, data.subscriber.email));
-          }
+              .set({ status: 'bounced', updatedAt: new Date() })
+              .where(and(
+                eq(newsletterSubscriptions.email, data.subscriber!.email),
+                notInArray(newsletterSubscriptions.status, ['unsubscribed', 'bounced']),
+              ));
+          });
+          console.log('[MailerLite Webhook] subscriber.bounced processed');
           break;
-
-        case 'subscriber.updated':
-          console.log(`📝 MailerLite: Subscriber updated`);
-          break;
-
-        case 'campaign.sent':
-          console.log(`📧 MailerLite: Campaign sent - ${data.campaign?.name}`);
-          break;
-
-        default:
-          console.log(`ℹ️ MailerLite: Unhandled event type ${type}`);
        }
-      }
 
-      res.json({ success: true, received: events.map(({ type }) => type) });
+      res.json({ success: true, received: type });
     } catch (error) {
       console.error('Error processing MailerLite webhook:', error);
       res.status(500).json({ error: 'Webhook processing failed' });
