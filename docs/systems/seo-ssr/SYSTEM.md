@@ -49,7 +49,7 @@
 - سياسة CSP في وضع Report-Only فقط، وتستخدم `report-uri /api/security/csp-report`. نطاقاتها مبنية من موارد `client/index.html` والموارد الخارجية الفعلية في واجهة الويب؛ لا تمنع التحميل ولا تغيّر عقد API أو cache.
 - `Strict-Transport-Security: max-age=86400` يضاف فقط للمضيفين `sabq.org` و`www.sabq.org`. لا توجد `includeSubDomains` أو `preload`، ولا يضاف HSTS لمضيفات preview/duplicate.
 - `frame-ancestors` موجود داخل CSP Report-Only للرصد فقط؛ لا يضاف `X-Frame-Options` حتى يثبت احتياج المنتج.
-- فحص smoke لـ`GET /health` يثبت 2xx وJSON خلال 15 ثانية دون login أو كتابة.
+- فحص smoke لـ`GET /health` يثبت 2xx وJSON خلال 15 ثانية دون login أو كتابة. يستخدم `PW_API_BASE_URL` مستقلاً عن `PW_BASE_URL` لأن Pages قد يعيد HTML عند طلب `/health`; في التشغيل المحلي يكون fallback هو `http://localhost:5000`، والإنتاج يضبطه على `https://api.sabq.org`.
 
 ## DMARC
 
