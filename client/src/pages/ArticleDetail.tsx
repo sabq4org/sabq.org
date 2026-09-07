@@ -74,6 +74,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, lazy, Suspense } fro
 import DOMPurify from "isomorphic-dompurify";
 import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
+import { ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH } from "@shared/articleHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
@@ -191,7 +192,7 @@ export default function ArticleDetail() {
     () => (article?.imageUrl ? getCacheBustedImageUrl(article.imageUrl, article.updatedAt) : null),
     [article?.imageUrl, article?.updatedAt],
   );
-  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null);
+  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null, ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH);
 
   const sanitizedArticleHtml = useMemo(() => {
     if (!article?.content) return "";

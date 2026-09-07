@@ -315,7 +315,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-06"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "ifox",
@@ -755,7 +755,8 @@
         "web-next/**",
         "functions/_middleware.js",
         "server/services/archiveSeo.ts",
-        "server/utils/apiListingRobots.ts"
+        "server/utils/apiListingRobots.ts",
+        "shared/articleHeroPreload.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
