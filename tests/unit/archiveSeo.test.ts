@@ -66,6 +66,9 @@ describe("archive canonical and legacy redirects", () => {
     expect(query.sql).toContain("original.published_at = source.published_at");
     const sitemap = new PgDialect().sqlToQuery(isCanonicalArchiveArticle()).sql;
     expect(sitemap).toContain('archive_original.content = "articles"."content"');
+    // The inner table must not shadow Drizzle's outer "articles" qualifier.
+    expect(sitemap).toContain('FROM articles AS archive_candidate');
+    expect(sitemap).toContain('archive_candidate.legacy_slug = "articles"."legacy_slug"');
     expect(sitemap).toContain("archive_original.status = 'published'");
     // These barriers prevent the planner from combining two indexes per row
     // or decompressing article bodies before ruling out unrelated candidates.
