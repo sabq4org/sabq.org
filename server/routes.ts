@@ -160,6 +160,11 @@ import { slugRedirectMiddleware } from "./middleware/slugRedirect";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { getRealIp, cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
+import {
+  mediaUploadProbe,
+  markMediaUploadStage,
+  type MediaUploadProbe,
+} from "./utils/mediaUploadDiagnostics";
 
 // A genuine article view counts ONCE per visitor (logged-in user, else real
 // client IP) per article within this window. Rapid repeats (refresh-mashing,
@@ -265,55 +270,6 @@ const mediaUploadLimiter = rateLimit({
   },
   validate: cfValidate,
 });
-
-type MediaUploadProbe = {
-  requestId: string;
-  startedAt: number;
-  bodyReceivedAt?: number;
-  stage: "body-receive" | "parse" | "verify" | "provider" | "storage" | "database" | "hash" | "response";
-};
-
-function mediaUploadRequestId(req: Request): string {
-  const supplied = String(req.headers["x-request-id"] || "").trim();
-  return /^[A-Za-z0-9._:-]{1,128}$/.test(supplied) ? supplied : randomUUID();
-}
-
-/**
- * Lightweight lifecycle telemetry for diagnosing client/proxy 499s. It
- * records only timings, status, and a correlation id; never the
- * multipart body, filename, email, token, or metadata fields.
- */
-const mediaUploadProbe = (req: Request, res: Response, next: NextFunction) => {
-  const probe: MediaUploadProbe = {
-    requestId: mediaUploadRequestId(req),
-    startedAt: Date.now(),
-    stage: "body-receive",
-  };
-  (req as any).__mediaUploadProbe = probe;
-  res.setHeader("X-Request-ID", probe.requestId);
-
-  req.on("end", () => {
-    probe.bodyReceivedAt = Date.now();
-    probe.stage = "parse";
-  });
-  req.on("aborted", () => {
-    console.warn(
-      `[Media Upload] lifecycle requestId=${probe.requestId} stage=${probe.stage} event=request-aborted elapsed=${Date.now() - probe.startedAt}ms`,
-    );
-  });
-  res.on("finish", () => {
-    console.log(
-      `[Media Upload] lifecycle requestId=${probe.requestId} stage=response status=${res.statusCode} elapsed=${Date.now() - probe.startedAt}ms body=${probe.bodyReceivedAt ? `${probe.bodyReceivedAt - probe.startedAt}ms` : "pending"}`,
-    );
-  });
-  res.on("close", () => {
-    if (res.writableEnded) return;
-    console.warn(
-      `[Media Upload] lifecycle requestId=${probe.requestId} stage=response event=client-closed elapsed=${Date.now() - probe.startedAt}ms body=${probe.bodyReceivedAt ? `${probe.bodyReceivedAt - probe.startedAt}ms` : "pending"}`,
-    );
-  });
-  next();
-};
 
 const followLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -2013,9 +1969,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // images, rich editor, angle-writer topic images) — NOT just the media library.
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
-  app.post("/api/media/upload", mediaUploadProbe, isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
+  app.post("/api/media/upload", mediaUploadProbe, markMediaUploadStage("auth"), isAuthenticated, markMediaUploadStage("rate-limit"), mediaUploadLimiter, markMediaUploadStage("body-receive"), parseMediaUpload, async (req: any, res) => {
     const probe = req.__mediaUploadProbe as MediaUploadProbe;
     const uploadStartedAt = probe?.startedAt ?? Date.now();
+    const handlerStartedAt = Date.now();
     const uploadTimings: Record<string, number> = {};
     try {
       const userId = req.user.id;
@@ -2093,7 +2050,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Per-phase timings land in one log line at the end so Railway logs
       // show where a slow upload spent its time (verify/transcode vs provider
       // vs DB) without guessing.
-      uploadTimings.verify = Date.now() - uploadStartedAt;
+      // Keep transport/auth/multer time separate from application work. The
+      // lifecycle line reports body arrival; this phase starts when the async
+      // upload handler actually begins.
+      uploadTimings.verify = Date.now() - handlerStartedAt;
       if (probe.bodyReceivedAt) uploadTimings.body = probe.bodyReceivedAt - uploadStartedAt;
       let phaseStartedAt = Date.now();
 
@@ -2468,6 +2428,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
       uploadTimings.hash = Date.now() - phaseStartedAt;
+      uploadTimings.handler = Date.now() - handlerStartedAt;
       uploadTimings.total = Date.now() - uploadStartedAt;
       console.log(
         `[Media Upload] timings requestId=${probe.requestId} ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} kind=${isEditorialImage ? "editorial" : "generic"} size=${req.file.size}`,
