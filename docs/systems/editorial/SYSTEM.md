@@ -140,3 +140,4 @@
 - `opinion_author_applications.reviewed_at` و`created_at` في `shared/schema.ts` يطابقان `timestamptz` الإنتاجي عبر `withTimezone: true`؛ يبقى تحويلهما إلى `timestamp` ممنوعًا لأنه يفقد دلالة المنطقة الزمنية.
 - مسار تسجيل كاتب الرأي يرفع الصورة إلى Cloudflare Images ويتحقق من `profilePhotoUrl` قبل استدعاء التخزين؛ تبقى الكتابة غير قابلة لـ`NULL` في عقد ORM. لا يُنفذ DDL من هذا التغيير.
 - اختلافا `id` و`status` في جدول الطلبات مؤجلان إلى فحص أطوال/قيم الإنتاج، ولا يغيرهما هذا العقد.
+- فحص `schema-check.results.txt` أكد أن `background_color` بقي `varchar(20)` في الجداول الثلاثة؛ أما `source_type` و`subtitle` و`playbook` فتبقى أوسع في الإنتاج، مع إبقاء حدود Zod الحالية وعدم تنفيذ تضييق DDL.

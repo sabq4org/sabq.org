@@ -3,6 +3,7 @@ import {
   articleMediaAssets,
   insertArticleMediaAssetSchema,
   insertOpinionAuthorApplicationSchema,
+  insertSmartBlockSchema,
   opinionAuthorApplications,
   sportsPoolMatchPicks,
   sportsPoolPlayerPicks,
@@ -79,5 +80,17 @@ describe("production schema contract alignment", () => {
   it("does not alter nullable production fields", () => {
     expect((articleMediaAssets.captionHtml as any).notNull).toBe(false);
     expect((opinionAuthorApplications.reviewedAt as any).notNull).toBe(false);
+  });
+
+  it("retains ORM input limits while production keeps its wider text columns", () => {
+    const base = {
+      title: "كتلة",
+      keyword: "خبر",
+      color: "#ffffff",
+      placement: "above_footer",
+      backgroundColor: "#" + "a".repeat(19),
+    };
+    expect(insertSmartBlockSchema.safeParse(base).success).toBe(true);
+    expect(insertSmartBlockSchema.safeParse({ ...base, backgroundColor: "x".repeat(21) }).success).toBe(false);
   });
 });
