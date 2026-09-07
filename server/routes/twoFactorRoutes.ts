@@ -9,14 +9,10 @@ import { logActivity } from "../rbac";
 import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
 import { sendSMSOTP, verifySMSOTP } from "../twilio";
 import { generateSecret, generateQRCode, verifyToken, generateBackupCodes, verifyBackupCode } from "../twoFactor";
+import { getRealIp as getTrustedRealIp } from "../utils/trustedProxyIp";
 
 function getRealIp(req: any): string {
-  return (
-    (req.headers['cf-connecting-ip'] as string) ||
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    req.ip ||
-    'unknown'
-  );
+  return getTrustedRealIp(req);
 }
 
 const strictLimiter = rateLimit({

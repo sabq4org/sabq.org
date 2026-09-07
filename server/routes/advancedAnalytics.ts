@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
 import { parseLimit } from "../utils/pagination";
+import { getRealIp as getTrustedRealIp } from "../utils/trustedProxyIp";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ const analyticsIngestionLimiter = rateLimit({
   message: { message: "Too many analytics events, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => req.headers['cf-connecting-ip'] as string || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown',
+  keyGenerator: (req: any) => getTrustedRealIp(req),
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
 });
 
