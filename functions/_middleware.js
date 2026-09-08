@@ -426,6 +426,11 @@ export async function signProxyRequest(request, targetUrl, proxySecret) {
 const STALL_RETRY_MS = 3000;
 const STALL_RETRIES = 2;
 
+function isStallAbort(err) {
+  const name = err?.name || "";
+  return name === "TimeoutError" || name === "AbortError";
+}
+
 export async function fetchWithStallRetry(target, init, opts = {}) {
   const stallMs = opts.stallMs ?? STALL_RETRY_MS;
   const retries = opts.retries ?? STALL_RETRIES;
@@ -448,8 +453,10 @@ export async function fetchWithStallRetry(target, init, opts = {}) {
       return await fetch(target, attemptInit);
     } catch (err) {
       lastErr = err;
-      if (isLast) break;
-      console.warn(`[pages-fn] origin stall/failure, retrying (${attempt + 1}/${retries}):`, target, String(err?.name || err));
+      // Only a stall (our own per-attempt timeout) is retried; a real upstream
+      // error propagates immediately, exactly as before this helper existed.
+      if (isLast || !isStallAbort(err)) throw err;
+      console.warn(`[pages-fn] origin stall, retrying (${attempt + 1}/${retries}):`, target);
     }
   }
   throw lastErr;

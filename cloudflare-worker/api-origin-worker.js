@@ -40,6 +40,11 @@ async function signedHeaders(request, secret) {
 const STALL_RETRY_MS = 3000;
 const STALL_RETRIES = 2;
 
+function isStallAbort(err) {
+  const name = err?.name || "";
+  return name === "TimeoutError" || name === "AbortError";
+}
+
 async function fetchWithStallRetry(target, init) {
   const idempotent = init.method === "GET" || init.method === "HEAD";
   if (!idempotent) return { response: await fetch(target, init), attempts: 1 };
@@ -51,8 +56,10 @@ async function fetchWithStallRetry(target, init) {
       return { response: await fetch(target, attemptInit), attempts: attempt + 1 };
     } catch (err) {
       lastErr = err;
-      if (isLast) break;
-      console.warn(`[api-origin-worker] origin stall/failure, retrying (${attempt + 1}/${STALL_RETRIES}):`, target, String(err?.name || err));
+      // Only a stall (our own per-attempt timeout) is retried; a real upstream
+      // error propagates immediately, as before.
+      if (isLast || !isStallAbort(err)) throw err;
+      console.warn(`[api-origin-worker] origin stall, retrying (${attempt + 1}/${STALL_RETRIES}):`, target);
     }
   }
   throw lastErr;

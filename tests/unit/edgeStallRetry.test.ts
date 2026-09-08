@@ -54,6 +54,15 @@ describe("origin stall retry (Cloudflare→Railway hang, 2026-09-08)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("propagates a real upstream error immediately without retrying", async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("upstream unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      fetchWithStallRetry("https://origin.example/health", { method: "GET" }, { stallMs: 10, retries: 2 }),
+    ).rejects.toThrow("upstream unavailable");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("proxyToApi routes GETs through the retry path", async () => {
     const fetchMock = vi.fn()
       .mockImplementationOnce(hang())
