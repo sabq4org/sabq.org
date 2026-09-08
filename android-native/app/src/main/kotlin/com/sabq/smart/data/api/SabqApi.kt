@@ -501,7 +501,7 @@ interface SabqApi {
     // -- keyword & authors -------------------------------------------
 
     @GET("api/keyword/{keyword}")
-    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): List<ApiArticle>
+    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): ApiArticlesResponse
 
     @GET("api/v1/authors/by-name")
     suspend fun getAuthorPage(

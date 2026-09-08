@@ -161,6 +161,8 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit)
+
     // Core
     implementation(libs.androidx.core.ktx)
     // ترقية صريحة فوق fragment القديمة التي تجرّها play-services/appcompat

@@ -41,8 +41,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Test and assemble debug APK
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sabq-android-unit-tests
+          path: |
+            android-native/app/build/reports/tests/testDebugUnitTest/**
+            android-native/app/build/test-results/testDebugUnitTest/**
+          retention-days: 14
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

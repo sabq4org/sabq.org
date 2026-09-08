@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.explore
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
@@ -63,7 +64,7 @@ class SearchViewModel @Inject constructor(
                             )
                         }
                         .onFailure { e ->
-                            emit(SearchUiState.Error(trimmed, e.localizedMessage ?: "تعذّر البحث"))
+                            emit(SearchUiState.Error(trimmed, readerErrorMessage(e, "تعذّر البحث")))
                         }
                 }
             }

@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.category
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -61,7 +62,7 @@ class CategoryArticlesViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _state.value = CategoryArticlesUiState.Error(
-                        e.localizedMessage ?: "تعذر تحميل مقالات التصنيف"
+                        readerErrorMessage(e, "تعذر تحميل مقالات التصنيف")
                     )
                 }
         }
