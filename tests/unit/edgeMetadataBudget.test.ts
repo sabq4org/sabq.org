@@ -26,6 +26,34 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Pages metadata budget', () => {
+  it.each([
+    ['https://sabq.org/article/story?utm_source=x', '/article/story'],
+    ['https://sabq.org/category/saudi?page=2&utm_source=x', '/category/saudi?page=2'],
+    ['https://sabq.org/author/name?page=0', '/author/name?page=0'],
+  ])('accepts URL, Request and string inputs for %s', (input, expected) => {
+    for (const value of [new URL(input), new Request(input), input]) {
+      expect(seoRequestPath(value)).toBe(expected);
+    }
+  });
+
+  it.each(['/article/khz0oxh', '/', '/category/local?page=2'])('serves valid SSR HTML to Googlebot at %s', async (path) => {
+    const html = '<html><head><script type="application/ld+json">{"@type":"CollectionPage"}</script></head><body><main><h1>خبر الاختبار</h1><p>المحتوى الكامل</p></main></body></html>';
+    fetcher.mockImplementation((target) => String(target).includes('/slug-redirect')
+      ? Promise.resolve(Response.json({}))
+      : Promise.resolve(new Response(html, { headers: { 'Content-Type': 'text/html' } })));
+    const next = vi.fn();
+    const response = await onRequest({
+      ...context,
+      request: new Request(`https://sabq.org${path}`, { headers: { 'User-Agent': 'Googlebot/2.1' } }),
+      env: { SSR_ROUTES: 'on', EDGE_SEO: 'on', NEXT_ORIGIN: 'https://next.sabq.org' },
+      next,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(html);
+    expect(fetcher).toHaveBeenCalledWith(`https://next.sabq.org${path}`, expect.objectContaining({ method: 'GET' }));
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('preserves only positive pagination on category and author SEO paths', () => {
     expect(seoRequestPath('https://sabq.org/category/saudi?page=2&utm_source=x')).toBe('/category/saudi?page=2');
     expect(seoRequestPath('https://sabq.org/author/name?page=0&utm_source=x')).toBe('/author/name?page=0');
