@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:web-next": "vitest run --config vitest.web-next.config.ts",
     "test:smoke": "playwright test e2e/smoke.spec.ts",
     "test:e2e": "playwright test",
     "test:load": "k6 run load-test/breaking-point.js",

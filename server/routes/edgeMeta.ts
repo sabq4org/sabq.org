@@ -32,6 +32,7 @@ import {
   angles,
   topics,
   staff,
+  articleMediaAssets,
 } from "@shared/schema";
 import { eq, or, and, desc, ne, isNull, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
 import {
@@ -41,7 +42,7 @@ import {
   HERO_SIZES_ATTR,
 } from "@shared/cdnImage";
 import { buildArticleHeroPreload } from "@shared/articleHeroPreload";
-import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
+import { buildNewsArticleSchemaExtras, getArticleSchemaType, htmlToPlainText } from "../utils/newsArticleSchema";
 import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import {
   buildArticleAuthorPerson,
@@ -61,6 +62,14 @@ import { getMeetingByInviteToken } from "../services/meetingsService";
 import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
 import { paginationOrReject } from "../utils/pagination";
 import { LEGACY_ARTICLE_PREFIXES, resolveLegacyArticlePath, resolveArchiveCanonical } from "../services/archiveSeo";
+
+import { getAuthorPageByName } from "../services/authorProfileService";
+import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
+
+import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
+import { getSeoCacheGeneration } from "../services/seoCacheInvalidation";
+
+import { seoProjectionCacheMiddleware } from "../middleware/seoProjectionCache";
 
 const router = Router();
 
@@ -100,7 +109,7 @@ const edgeRedirectCache = new MemoryCache(EDGE_REDIRECT_CACHE_MAX, "edgeSlugRedi
 // المطابق (وهو ما تولّده فحوصات الزواحف بعدد غير محدود) يعيش MISS_TTL قصيرًا
 // حتى لا يزاحم المحتوى الحقيقي داخل السقف.
 const EDGE_META_CACHE_MAX = Number(process.env.EDGE_META_CACHE_MAX) || 20_000;
-const EDGE_META_MATCH_TTL = 300_000; // 5 دقائق — كان 120ث؛ يقلّل ضرب الأصل بعد إقلاع بارد
+const EDGE_META_MATCH_TTL = 60_000; // 5 دقائق — كان 120ث؛ يقلّل ضرب الأصل بعد إقلاع بارد
 const EDGE_META_MISS_TTL = 30_000;
 const edgeMetaCache = new MemoryCache(EDGE_META_CACHE_MAX, "edgeSeoMetaCache");
 /** single-flight لنفس المسار — يمنع عاصفة DB عند فوات الكاش المتزامن (CF + زواحف). */
@@ -369,6 +378,10 @@ function buildSemanticHtml(opts: {
   excerpt: string;
   content: string;
   publishedAt?: Date | string | null;
+  modifiedAt?: string | null;
+  author?: string; authorHref?: string; articleType?: string;
+  imageAlt?: string | null; imageCaption?: string | null; imageSource?: string | null;
+  isAiGeneratedImage?: boolean;
 }): string | undefined {
   const safeBody = stripUnsafeHtml(opts.content || "");
   if (!safeBody) return undefined;
@@ -377,7 +390,11 @@ function buildSemanticHtml(opts: {
   const publishedIso = opts.publishedAt
     ? new Date(opts.publishedAt).toISOString()
     : undefined;
-  return `<article style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${safeTitle}</h1>${publishedIso ? `<time datetime="${publishedIso}">${publishedIso}</time>` : ""}<p>${safeExcerpt}</p><div>${safeBody}</div></article>`;
+  const label = opts.articleType === "opinion" || opts.articleType === "column" ? "مقال رأي" : opts.articleType === "analysis" ? "تحليل" : "";
+  const byline = opts.author ? `<p>${opts.authorHref ? `<a href="${escapeHtml(opts.authorHref)}">${escapeHtml(opts.author)}</a>` : escapeHtml(opts.author)}</p>` : "";
+  const caption = [opts.imageCaption, opts.imageSource, opts.isAiGeneratedImage ? "صورة مولدة بالذكاء الاصطناعي" : ""].filter(Boolean).join(" — ");
+  const excerpt = htmlToPlainText(opts.excerpt) === htmlToPlainText(opts.content) ? "" : `<p>${safeExcerpt}</p>`;
+  return `<article style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${safeTitle}</h1>${label ? `<p>${label}</p>` : ""}${byline}${publishedIso ? `<time datetime="${publishedIso}">${publishedIso}</time>` : ""}${opts.modifiedAt ? `<p>آخر تحديث: <time datetime="${escapeHtml(opts.modifiedAt)}">${escapeHtml(opts.modifiedAt)}</time></p>` : ""}${caption ? `<p>${escapeHtml(caption)}</p>` : ""}${excerpt}<div>${safeBody}</div></article>`;
 }
 
 /**
@@ -487,6 +504,8 @@ function articleMetaPayload(opts: {
   semanticHtml?: string;
   /** Raw article HTML — used for articleBody / wordCount in JSON-LD. */
   contentHtml?: string | null;
+  articleType?: string | null;
+  editorialMetadata?: unknown;
 }) {
   const b = ARTICLE_BRAND[opts.lang];
   const publishedTime = opts.publishedAt
@@ -495,12 +514,9 @@ function articleMetaPayload(opts: {
   const updatedIso = opts.updatedAt
     ? new Date(opts.updatedAt).toISOString()
     : publishedTime;
-  const modifiedTime = clampModified(
-    opts.publishedAt,
-    opts.updatedAt,
-    publishedTime,
-    updatedIso,
-  );
+  const modifiedTime = opts.lang === "ar"
+    ? getPublicEditorialModifiedAt(opts.publishedAt, opts.editorialMetadata) || publishedTime
+    : clampModified(opts.publishedAt, opts.updatedAt, publishedTime, updatedIso);
   const keywords = (opts.keywords || []).filter(Boolean);
 
   // hreflang chain — only emit sibling locales when the target URL exists.
@@ -550,7 +566,7 @@ function articleMetaPayload(opts: {
 
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
+    "@type": getArticleSchemaType(opts.articleType),
     mainEntityOfPage: { "@type": "WebPage", "@id": opts.canonical },
     headline: opts.title,
     description: opts.description,
@@ -616,6 +632,10 @@ async function fetchArArticle(slug: string) {
       aiSummary: articles.aiSummary,
       content: articles.content,
       imageUrl: articles.imageUrl,
+      articleType: articles.articleType,
+      seoMetadata: articles.seoMetadata,
+      isAiGeneratedImage: articles.isAiGeneratedImage,
+      isAiGeneratedThumbnail: articles.isAiGeneratedThumbnail,
       isVideoTemplate: articles.isVideoTemplate,
       publishedAt: articles.publishedAt,
       updatedAt: articles.updatedAt,
@@ -637,11 +657,21 @@ async function fetchArArticle(slug: string) {
     .leftJoin(categories, eq(articles.categoryId, categories.id))
     .leftJoin(users, eq(articles.authorId, users.id))
     .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-    .leftJoin(reporterStaff, eq(articles.reporterId, reporterStaff.userId))
-    .leftJoin(authorStaff, eq(articles.authorId, authorStaff.userId))
+    .leftJoin(reporterStaff, and(eq(articles.reporterId, reporterStaff.userId), eq(reporterStaff.isActive, true), inArray(reporterStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
+    .leftJoin(authorStaff, and(eq(articles.authorId, authorStaff.userId), eq(authorStaff.isActive, true), inArray(authorStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
     .where(where!)
     .limit(1);
-  return row || null;
+  if (!row) return null;
+  const [hero] = row.status === "published" ? await db.select({
+    alt: articleMediaAssets.altText, caption: articleMediaAssets.captionPlain,
+    captionHtml: articleMediaAssets.captionHtml, source: articleMediaAssets.sourceName,
+  }).from(articleMediaAssets).where(and(eq(articleMediaAssets.articleId, row.id),
+    eq(articleMediaAssets.locale, "ar"), eq(articleMediaAssets.displayOrder, 0),
+    eq(articleMediaAssets.moderationStatus, "approved"))).orderBy(articleMediaAssets.id).limit(1) : [];
+  return { ...row, imageAlt: hero?.alt || row.seo?.imageAltText || row.title,
+    imageCaption: hero?.caption || htmlToPlainText(hero?.captionHtml || "") || null,
+    imageSource: hero?.source || null };
+
 }
 
 async function buildArArticlePayload(
@@ -695,6 +725,8 @@ async function buildArArticlePayload(
     slug,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
+    editorialMetadata: row.seoMetadata,
+    articleType: row.articleType,
     status: row.status,
     author,
     authorPerson,
@@ -708,6 +740,10 @@ async function buildArArticlePayload(
           excerpt: row.excerpt || row.aiSummary || "",
           content: row.content || "",
           publishedAt: row.publishedAt,
+          modifiedAt: getPublicEditorialModifiedAt(row.publishedAt, row.seoMetadata),
+          author, authorHref: typeof authorPerson.url === "string" ? authorPerson.url : undefined,
+          articleType: row.articleType, imageAlt: row.imageAlt, imageCaption: row.imageCaption,
+          imageSource: row.imageSource, isAiGeneratedImage: row.isAiGeneratedImage,
         }),
         worldCupHubLink,
       ]
@@ -1137,7 +1173,30 @@ async function buildReporterMeta(idOrSlug: string, isEn: boolean) {
   };
 }
 
+/** Existing public author service; never expose a member without published work. */
+async function buildAuthorMeta(name: string, page: number) {
+  const result = await getAuthorPageByName(name, { page, limit: 18 });
+  if (!result || !result.stats.articleCount || (page > 1 && !result.recentArticles.length)) return null;
+  const { author } = result;
+  const path = `/author/${encodeURIComponent(author.name)}`;
+  const canonical = `${SITE_URL}${archiveHref(path, page)}`;
+  const description = trunc(author.bio || `أخبار ومقالات ${author.name} على صحيفة سبق.`, 220);
+  const person = buildPersonJsonLd({ name: author.name, url: `${SITE_URL}${path}`,
+    description, ...(author.avatarUrl ? { image: abs(author.avatarUrl) } : {}) });
+  const links = result.recentArticles.map(a => ({ href: `/article/${a.englishSlug || a.slug}`, title: a.title }));
+  if (page > 1) links.push({ href: archiveHref(path, page - 1), title: "الصفحة السابقة" });
+  if (result.pagination.hasMore) links.push({ href: archiveHref(path, page + 1), title: "الصفحة التالية" });
+  return {
+    title: `${author.name}${page > 1 ? ` — الصفحة ${page}` : ""} | سبق`, description,
+    canonical, image: author.avatarUrl ? abs(author.avatarUrl) : BRAND_OG_IMAGE,
+    robots: "index,follow", type: "profile", locale: "ar_SA",
+    jsonLd: buildProfilePageJsonLd({ name: author.name, url: canonical, description, person }),
+    semanticHtml: `<section style="position:absolute;left:-9999px" aria-hidden="true"><h1>${escapeHtml(author.name)}</h1><p>${escapeHtml(author.bio || "")}</p></section>` + (buildLinkListHtml("مقالات الكاتب", links) || ""),
+  };
+}
+
 const ROUTE_HANDLERS: RouteHandler[] = [
+  { pattern: /^\/author\/([^/?#]+)\/?(?:\?page=(\d+))?$/, handle: async (m) => buildAuthorMeta(safeDecode(m[1]), Number(m[2] || 1)) },
   // Homepage — inject a crawlable list of the most recent article links so
   // Googlebot can DISCOVER new articles by crawling "/" (the SPA shell shows
   // crawlers no links at all). Title/canonical stay the site defaults.
@@ -1535,9 +1594,10 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   },
   // Arabic category: /category/:slug
   {
-    pattern: /^\/category\/([^/?#]+)/,
+    pattern: /^\/category\/([^/?#]+)\/?(?:\?page=(\d+))?$/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
+      const page = Number(m[2] || 1);
       const where = or(eq(categories.englishSlug, slug), eq(categories.slug, slug));
       const [row] = await db
         .select({
@@ -1563,22 +1623,25 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         })
         .from(articles)
         .where(and(eq(articles.categoryId, row.id), eq(articles.status, "published")))
-        .orderBy(desc(articles.publishedAt))
-        .limit(40);
+        .orderBy(desc(articles.publishedAt), desc(articles.id))
+        .offset((page - 1) * SEO_ARCHIVE_PAGE_SIZE)
+        .limit(SEO_ARCHIVE_PAGE_SIZE + 1);
+      if (page > 1 && !sectionArticles.length) return null;
+      const categoryPath = `/category/${row.englishSlug || slug}`;
+      const links = sectionArticles.slice(0, SEO_ARCHIVE_PAGE_SIZE).map(r => ({ href: `/article/${r.englishSlug || r.slug}`, title: r.title || "" }));
+      if (page > 1) links.push({ href: archiveHref(categoryPath, page - 1), title: "الصفحة السابقة" });
+      if (sectionArticles.length > SEO_ARCHIVE_PAGE_SIZE) links.push({ href: archiveHref(categoryPath, page + 1), title: "الصفحة التالية" });
       return {
-        title: `${displayName} | سبق`,
+        title: `${displayName}${page > 1 ? ` — الصفحة ${page}` : ""} | سبق`,
         description: trunc(row.description || `أحدث الأخبار في ${displayName}`, 220),
         image: row.heroImageUrl ? abs(row.heroImageUrl) : BRAND_OG_IMAGE,
-        canonical: `${SITE_URL}/category/${row.englishSlug || slug}`,
+        canonical: `${SITE_URL}${archiveHref(categoryPath, page)}`,
         robots: "index,follow",
         type: "website",
         locale: "ar_SA",
         semanticHtml: buildLinkListHtml(
           `أحدث الأخبار في ${displayName}`,
-          sectionArticles.map((r) => ({
-            href: `/article/${r.englishSlug || r.slug}`,
-            title: r.title || "",
-          })),
+          links,
         ),
       };
     },
@@ -2634,7 +2697,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
  * as the edge seo-meta endpoint, so structured data stays identical across
  * surfaces. Arabic articles only for Phase 1; en/ur added in Phase 2.
  */
-router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
+router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async (req, res) => {
   res.set(
     "Cache-Control",
     "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
@@ -2703,6 +2766,8 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
           slug,
           `${SITE_URL}/article/${r.englishSlug || r.slug}`,
         );
+        reporterHref = typeof meta.jsonLd.author === "object" && meta.jsonLd.author && "url" in meta.jsonLd.author
+          ? String(meta.jsonLd.author.url) : null;
         if (r.status === "published") {
           const tagRows = await db
             .select({
@@ -2766,14 +2831,14 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
       }
     }
 
-    if (!row || !meta) return res.status(404).json({ error: "not_found" });
+    if (!row || !meta) return res.status(404).set("Cache-Control", "no-store").json({ error: "not_found" });
 
     // Unpublished articles have no public representation. This endpoint feeds
     // the SSR renderer, and the edge already serves 410 for these slugs, so
     // returning the row here only created an anonymous read path into drafts,
     // scheduled/embargoed pieces and archived articles.
     if (row.status !== "published") {
-      return res.status(404).json({ error: "not_found" });
+      return res.status(404).set("Cache-Control", "no-store").json({ error: "not_found" });
     }
 
     const seoData = (row.seo as any) || {};
@@ -2789,6 +2854,9 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
           ? withWorldCupHubLink(stripUnsafeHtml(row.content || ""), row.title)
           : stripUnsafeHtml(row.content || ""),
       imageUrl: abs(row.imageUrl),
+      ...("articleType" in row ? { articleType: row.articleType, imageAlt: row.imageAlt,
+        imageCaption: row.imageCaption, imageSource: row.imageSource,
+        isAiGeneratedImage: row.isAiGeneratedImage, isAiGeneratedThumbnail: row.isAiGeneratedThumbnail } : {}),
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
       author: meta.author,
@@ -2817,7 +2885,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
     });
   } catch (err) {
     console.error("[articles/seo-bundle] error:", err);
-    return res.status(500).json({ error: "internal" });
+    return res.status(500).set("Cache-Control", "no-store").json({ error: "internal" });
   }
 });
 
@@ -2827,7 +2895,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
  * returns category meta + a renderable list of recent published articles
  * (title, slug, image, excerpt) so the list paints server-side.
  */
-router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
+router.get("/api/categories/:slug/seo-bundle", seoProjectionCacheMiddleware, async (req, res) => {
   res.set(
     "Cache-Control",
     "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
@@ -2838,6 +2906,8 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
     const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 30, maxLimit: 60 });
     if (!pg) return;
     const limit = pg.limit;
+    const page = archivePage(req.query.page);
+    if (page === null) return res.status(400).set("Cache-Control", "no-store").json({ error: "invalid_page" });
 
     const where = or(eq(categories.englishSlug, slug), eq(categories.slug, slug));
     const [cat] = await db
@@ -2853,12 +2923,13 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
       .from(categories)
       .where(where!)
       .limit(1);
-    if (!cat) return res.status(404).json({ error: "not_found" });
+    if (!cat) return res.status(404).set("Cache-Control", "no-store").json({ error: "not_found" });
 
     const displayName = cat.nameAr || cat.nameEn || "";
     const canonicalSlug = cat.englishSlug || cat.slug;
     const rows = await db
       .select({
+        id: articles.id,
         slug: articles.slug,
         englishSlug: articles.englishSlug,
         title: articles.title,
@@ -2869,17 +2940,22 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
       })
       .from(articles)
       .where(and(eq(articles.categoryId, cat.id), eq(articles.status, "published")))
-      .orderBy(desc(articles.publishedAt))
-      .limit(limit);
+      .orderBy(desc(articles.publishedAt), desc(articles.id))
+      .offset((page - 1) * limit)
+      .limit(limit + 1);
+    if (page > 1 && rows.length === 0) return res.status(404).set("Cache-Control", "no-store").json({ error: "not_found" });
+    const categoryPath = `/category/${canonicalSlug}`;
 
     return res.json({
       slug: cat.slug,
       englishSlug: cat.englishSlug,
       name: displayName,
       description: trunc(cat.description || `أحدث الأخبار في ${displayName}`, 220),
-      canonical: `${SITE_URL}/category/${canonicalSlug}`,
+      canonical: `${SITE_URL}${archiveHref(categoryPath, page)}`,
+      pagination: { page, limit, hasMore: rows.length > limit, previousHref: page > 1 ? archiveHref(categoryPath, page - 1) : null, nextHref: rows.length > limit ? archiveHref(categoryPath, page + 1) : null },
       color: cat.color || null,
-      articles: rows.map((r) => ({
+      articles: rows.slice(0, limit).map((r) => ({
+        id: r.id,
         href: `/article/${r.englishSlug || r.slug}`,
         title: r.title || "",
         excerpt: trunc(r.excerpt || "", 160),
@@ -2892,7 +2968,7 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
     });
   } catch (err) {
     console.error("[categories/seo-bundle] error:", err);
-    return res.status(500).json({ error: "internal" });
+    return res.status(500).set("Cache-Control", "no-store").json({ error: "internal" });
   }
 });
 
@@ -2901,7 +2977,7 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
  * (renderable cards) + the section list. Mirrors the homepage edge handler's
  * queries but returns full card fields instead of a hidden link list.
  */
-router.get("/api/edge/home-bundle", async (_req, res) => {
+router.get("/api/edge/home-bundle", seoProjectionCacheMiddleware, async (_req, res) => {
   res.set(
     "Cache-Control",
     "public, max-age=60, s-maxage=180, stale-while-revalidate=600",
@@ -2959,7 +3035,7 @@ router.get("/api/edge/home-bundle", async (_req, res) => {
     });
   } catch (err) {
     console.error("[edge/home-bundle] error:", err);
-    return res.status(500).json({ error: "internal" });
+    return res.status(500).set("Cache-Control", "no-store").json({ error: "internal" });
   }
 });
 
@@ -2978,26 +3054,32 @@ router.get("/api/edge/indexing-status", async (_req, res) => {
     return res.json(getIndexingDiagnostics());
   } catch (err) {
     console.error("[edge/indexing-status] error:", err);
-    return res.status(500).json({ error: "internal" });
+    return res.status(500).set("Cache-Control", "no-store").json({ error: "internal" });
   }
 });
 
 router.get("/api/edge/seo-meta", async (req, res) => {
   // مثل slug-redirect: CF يمتص التكرار؛ s-maxage=60 كان يعيد ضرب الأصل كل دقيقة.
-  res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+  res.set("Cache-Control", "public, max-age=0, s-maxage=60");
   try {
     const raw = String(req.query.path || "");
     if (!raw.startsWith("/")) return res.json(defaultMeta(raw));
 
     // طبّع المسار (بدون ?utm_*/#) حتى لا يتفتت الكاش — نفس منطق slug-redirect.
-    const path = raw.replace(/[?#].*$/, "");
+    const path = normalizeSeoPath(raw);
+    if (path === null) return res.status(400).set("Cache-Control", "no-store").json({ error: "invalid_page" });
 
-    const cacheKey = `edge:seo-meta:${path}`;
+    const generation = getSeoCacheGeneration();
+    const cacheKey = `edge:seo-meta:${generation}:${path}`;
     const cached = edgeMetaCache.get<Record<string, unknown>>(cacheKey);
     if (cached !== null) return res.json(cached);
 
     const inflight = edgeMetaInflight.get(cacheKey);
-    if (inflight) return res.json(await inflight);
+    if (inflight) {
+      const payload = await inflight;
+      if (generation !== getSeoCacheGeneration()) return res.status(503).set("Cache-Control", "no-store").json({ error: "content_changed_retry" });
+      return res.json(payload);
+    }
 
     const compute = (async (): Promise<Record<string, unknown>> => {
       const staticMeta = staticPageMeta(path);
@@ -3027,13 +3109,15 @@ router.get("/api/edge/seo-meta", async (req, res) => {
 
     edgeMetaInflight.set(cacheKey, compute);
     try {
-      return res.json(await compute);
+      const payload = await compute;
+      if (generation !== getSeoCacheGeneration()) return res.status(503).set("Cache-Control", "no-store").json({ error: "content_changed_retry" });
+      return res.json(payload);
     } finally {
       edgeMetaInflight.delete(cacheKey);
     }
   } catch (err) {
     console.error("[edge/seo-meta] error:", err);
-    return res.status(500).json({ error: "internal" });
+    return res.status(500).set("Cache-Control", "no-store").json({ error: "internal" });
   }
 });
 

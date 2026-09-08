@@ -1,3 +1,4 @@
+import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
@@ -8128,11 +8129,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Handle republish feature
       if (req.body.republish === true) {
-        // User wants to republish with current timestamp
+        // Resurface the article without rewriting its original publication
+        // date. The surfaced timestamp controls ordering only.
         updateData.displayOrder = Math.floor(Date.now() / 1000);
-        // User wants to republish with current timestamp
-        updateData.publishedAt = new Date();
-      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !updateData.publishedAt) {
+        updateData.resurfacedAt = new Date();
+      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !existingArticle.publishedAt && !updateData.publishedAt) {
         // Only set publishedAt automatically when publishing for the first time
         updateData.displayOrder = Math.floor(Date.now() / 1000);
         updateData.publishedAt = new Date();
@@ -15374,10 +15375,11 @@ Respond in valid JSON format only:
 
       // Handle republish feature
       if (req.body.republish === true) {
-        // User wants to republish with current timestamp
+        // Resurface the article without rewriting its original publication
+        // date. The surfaced timestamp controls ordering only.
         updateData.displayOrder = Math.floor(Date.now() / 1000);
-        updateData.publishedAt = new Date();
-      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !updateData.publishedAt) {
+        updateData.resurfacedAt = new Date();
+      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !existingArticle.publishedAt && !updateData.publishedAt) {
         updateData.publishedAt = new Date();
       }
 
@@ -26848,6 +26850,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         title: spec.title,
         publishedAt: spec.publishedAt,
         updatedAt: spec.updatedAt,
+        editorialModifiedAt: spec.table === articles
+          ? sql<string | null>`${articles.seoMetadata}->>'editorialModifiedAt'`
+          : sql<string | null>`NULL`,
         imageUrl: spec.imageUrl,
       })
       .from(spec.table)
@@ -26890,7 +26895,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     for (const row of rows) {
       const canonicalSlug = row.englishSlug || row.slug;
       if (!canonicalSlug) continue;
-      const lastmodSource = row.updatedAt || row.publishedAt || new Date();
+      const lastmodSource = (spec.table === articles ? getPublicEditorialModifiedAt(row.publishedAt, { editorialModifiedAt: row.editorialModifiedAt }) : row.updatedAt) || row.publishedAt;
+      if (!lastmodSource) continue;
       const lastmod = new Date(lastmodSource).toISOString();
       const pubDate = row.publishedAt ? new Date(row.publishedAt) : new Date(0);
       let priority = '0.3';

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Pages middleware has no TypeScript declaration.
-import { cachedJson, onRequest } from '../../functions/_middleware.js';
+import { cachedJson, onRequest, seoRequestPath } from '../../functions/_middleware.js';
 const match = vi.fn();
 const put = vi.fn();
 const fetcher = vi.fn();
@@ -26,6 +26,12 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Pages metadata budget', () => {
+  it('preserves only positive pagination on category and author SEO paths', () => {
+    expect(seoRequestPath('https://sabq.org/category/saudi?page=2&utm_source=x')).toBe('/category/saudi?page=2');
+    expect(seoRequestPath('https://sabq.org/author/name?page=0&utm_source=x')).toBe('/author/name?page=0');
+    expect(seoRequestPath('https://sabq.org/article/story?page=2&utm_source=x')).toBe('/article/story');
+  });
+
   it('serves a cache hit without contacting origin', async () => {
     match.mockResolvedValue(Response.json({ title: 'خبر' }));
     expect(await cachedJson('https://api.sabq.org/meta', 300, context)).toEqual({ title: 'خبر' });
@@ -60,5 +66,21 @@ describe('Pages metadata budget', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toContain('no-store');
     expect(await response.text()).toContain('shell');
+  });
+
+  it('does not cache a generic SPA fallback for a crawler when SSR is invalid', async () => {
+    fetcher.mockImplementation((target) => String(target).includes('/slug-redirect')
+      ? Promise.resolve(Response.json({}))
+      : Promise.resolve(new Response('<html><body><div id="root"></div></body></html>', { headers: { 'Content-Type': 'text/html' } })));
+    const next = vi.fn(async () => new Response('<html><body><div id="root"></div></body></html>', { headers: { 'Content-Type': 'text/html' } }));
+    const response = await onRequest({
+      ...context,
+      request: new Request('https://sabq.org/article/test', { headers: { 'User-Agent': 'OAI-SearchBot/1.0' } }),
+      env: { SSR_ROUTES: 'on', EDGE_SEO: 'on', NEXT_ORIGIN: 'https://next.sabq.org' },
+      next,
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(await response.text()).toContain('SSR temporarily unavailable');
   });
 });

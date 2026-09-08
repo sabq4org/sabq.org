@@ -54,6 +54,7 @@ import { arSA } from "date-fns/locale";
 import type { ArticleWithDetails, CommentWithUser } from "@shared/schema";
 import { useEffect, useState, useRef, useMemo } from "react";
 import DOMPurify from "isomorphic-dompurify";
+import { formatArticleTimestamp } from "@/lib/formatTime";
 
 export default function OpinionDetailPage() {
   useAdTracking('رأي');
@@ -464,6 +465,13 @@ export default function OpinionDetailPage() {
         locale: arSA,
       })
     : null;
+  const publishedDateLabel = article.publishedAt
+    ? formatArticleTimestamp(article.publishedAt, { format: 'absolute', locale: 'ar' })
+    : null;
+  const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;
+  const meaningfulUpdatedDateLabel = editorialModifiedAt
+    ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
+    : null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -548,10 +556,15 @@ export default function OpinionDetailPage() {
                           </p>
                         )}
                         {timeAgo && (
-                          <p className="text-muted-foreground text-xs flex items-center gap-1">
+                          <time dateTime={article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined} title={publishedDateLabel ?? undefined} className="text-muted-foreground text-xs flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {timeAgo}
-                          </p>
+                            {timeAgo}{publishedDateLabel ? ` (${publishedDateLabel})` : ""}
+                          </time>
+                        )}
+                        {meaningfulUpdatedDateLabel && (
+                          <time dateTime={editorialModifiedAt} title={meaningfulUpdatedDateLabel} className="text-muted-foreground text-xs">
+                            آخر تحديث: {meaningfulUpdatedDateLabel}
+                          </time>
                         )}
                       </div>
                     </div>

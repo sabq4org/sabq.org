@@ -2,6 +2,7 @@
 import { db } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
+import { buildEditorialMetadataUpdate } from "./utils/editorialDatesSql";
 import { memoryCache, CACHE_TTL, withCache, withSWR } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
@@ -4398,9 +4399,12 @@ export class DatabaseStorage implements IStorage {
     if (updateData.imageFocalPoint === null || updateData.imageFocalPoint === undefined) {
       delete updateData.imageFocalPoint;
     }
-    // Same sync as createArticle — pick up the AI flag from the
-    // matching media_files row whenever the cover image changes.
+
+    // Derive the public update timestamp atomically from the persisted row.
+    // JSONB merges at UPDATE time, so another writer cannot lose metadata keys.
     await this.applyAiImageFlagFromMedia(updateData);
+    const editorialMetadata = buildEditorialMetadataUpdate(updateData);
+    if (editorialMetadata) updateData.seoMetadata = editorialMetadata;
     const [updated] = await db
       .update(articles)
       .set(updateData)

@@ -1,4 +1,5 @@
-import { useParams } from "wouter";
+import { useParams, useSearch } from "wouter";
+import { CategoryArchivePage } from "@/components/CategoryArchivePage";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useEffect, Fragment } from "react";
 import { useCanonical } from "@/hooks/useCanonical";
@@ -85,6 +86,17 @@ type TimeRange = "today" | "3days" | "7days" | "30days" | "all";
 type ArticleTypeFilter = "all" | "breaking" | "new" | "opinion" | "analysis";
 
 export default function CategoryPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const search = useSearch();
+  const value = new URLSearchParams(search).get("page");
+  if (value !== null) {
+    const page = /^[1-9]\d*$/.test(value) && Number(value) <= 10_000 ? Number(value) : null;
+    return <CategoryArchivePage slug={slug} page={page} />;
+  }
+  return <CategoryLandingPage />;
+}
+
+function CategoryLandingPage() {
   const { slug } = useParams<{ slug: string }>();
 
   // Filter states
@@ -640,6 +652,9 @@ export default function CategoryPage() {
         )}
       </div>
 
+      <nav aria-label="أرشيف القسم" className="container mx-auto px-4 py-8 text-center">
+        <a href={`/category/${encodeURIComponent(category?.englishSlug || slug)}?page=1`} className="text-primary">تصفح أرشيف القسم</a>
+      </nav>
       {/* Footer */}
       <Footer />
     </div>
