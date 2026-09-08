@@ -9,7 +9,7 @@ router.get("/api/keyword/:keyword", async (req, res) => {
   try {
     const keyword = decodeURIComponent(req.params.keyword);
 
-    const cacheKey = `keyword-tag-v2:${keyword}`;
+    const cacheKey = `keyword-tag-v3:${keyword}`;
     const cached = memoryCache.get(cacheKey);
     if (cached) return res.json(cached);
 

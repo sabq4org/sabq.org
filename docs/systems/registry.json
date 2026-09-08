@@ -295,7 +295,11 @@
         "server/utils/editorialDatesSql.ts",
         "tests/unit/editorialDates.test.ts",
         "tests/unit/editorialDatesSql.test.ts",
-        "tests/unit/editorialSources.test.ts"
+        "tests/unit/editorialSources.test.ts",
+        "server/services/keywordService.ts",
+        "server/routes/keywordRoutes.ts",
+        "tests/unit/keywordService.test.ts",
+        "tests/unit/keywordCategoryContract.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",

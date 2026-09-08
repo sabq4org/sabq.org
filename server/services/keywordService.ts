@@ -24,8 +24,13 @@ export async function getArticlesByKeyword(keyword: string): Promise<KeywordPayl
            a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
            a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
            a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-           a.article_type AS "articleType"
+           a.article_type AS "articleType",
+           c.name_ar AS "categoryName", c.slug AS "categorySlug",
+           CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
+             'id', c.id, 'nameAr', c.name_ar, 'slug', c.slug, 'color', c.color
+           ) END AS category
     FROM articles a
+    LEFT JOIN categories c ON c.id = a.category_id
     INNER JOIN article_tags at ON at.article_id = a.id
     INNER JOIN tags t ON t.id = at.tag_id
     WHERE a.status = 'published'
@@ -50,8 +55,13 @@ export async function getArticlesByKeyword(keyword: string): Promise<KeywordPayl
              a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
              a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
              a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-             a.article_type AS "articleType"
+             a.article_type AS "articleType",
+             c.name_ar AS "categoryName", c.slug AS "categorySlug",
+             CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
+               'id', c.id, 'nameAr', c.name_ar, 'slug', c.slug, 'color', c.color
+             ) END AS category
       FROM articles a
+      LEFT JOIN categories c ON c.id = a.category_id
       WHERE a.status = 'published'
         AND (a.seo -> 'keywords') @> to_jsonb(${keyword}::text)
       ORDER BY a.published_at DESC
@@ -69,8 +79,13 @@ export async function getArticlesByKeyword(keyword: string): Promise<KeywordPayl
                  a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
                  a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
                  a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-                 a.article_type AS "articleType"
+                 a.article_type AS "articleType",
+                 c.name_ar AS "categoryName", c.slug AS "categorySlug",
+                 CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
+                   'id', c.id, 'nameAr', c.name_ar, 'slug', c.slug, 'color', c.color
+                 ) END AS category
           FROM articles a
+          LEFT JOIN categories c ON c.id = a.category_id
           WHERE a.status = 'published'
             AND EXISTS (
               SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
