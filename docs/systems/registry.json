@@ -375,7 +375,8 @@
       "summary": "بوابة موحّدة للنماذج، الميزانيات، سجلات الاستخدام، المتجهات، واستوديو البرومبت، ومظلة الاستدعاءات القديمة.",
       "docPath": "docs/systems/ai-hub/SYSTEM.md",
       "relatedDocs": [
-        "docs/ai-models-migration.md"
+        "docs/ai-models-migration.md",
+        "docs/systems/ai-hub/RUNTIME_READ_ACCESS.md"
       ],
       "pathGlobs": [
         "server/ai/gateway/**",
@@ -390,7 +391,8 @@
         "client/src/pages/PromptStudio.tsx",
         "client/src/pages/PromptStudioPublic.tsx",
         "server/services/aiPublicStatsService.ts",
-        "server/routes/aiPublicStats.ts"
+        "server/routes/aiPublicStats.ts",
+        "e2e/ai-hub-overview.spec.ts"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
@@ -402,7 +404,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "muqtarab",
@@ -753,14 +755,16 @@
         "scripts/promote-correspondent.ts",
         "server/utils/trustedProxyIp.ts",
         "cloudflare-worker/api-origin-worker.js",
-        "cloudflare-worker/wrangler.api.toml"
+        "cloudflare-worker/wrangler.api.toml",
+        "client/src/components/EditUserDialog.tsx",
+        "e2e/edit-user-biography.spec.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "seo-ssr",
