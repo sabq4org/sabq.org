@@ -2555,6 +2555,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             width: 100% !important;
             max-width: none !important;
           }
+          /* clip preserves rounded corners without trapping sticky in a scroll container. */
+          .article-editor-stage .rich-text-editor {
+            overflow: clip;
+          }
+          .article-editor-stage .rich-text-editor__toolbar {
+            position: sticky;
+            /* DashboardLayout scrolls below its header, so no header offset is needed. */
+            top: 0;
+            z-index: 20;
+            box-shadow: 0 2px 4px hsl(var(--foreground) / 0.08);
+          }
         `}</style>
        <div className="w-full min-w-0">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
@@ -4937,7 +4948,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           <div>
                             <div className="font-medium">إخفاء من الواجهة الرئيسية</div>
                             <div className="text-xs text-muted-foreground">
-                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية
+                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية أو صفحة لحظة بلحظة
                             </div>
                           </div>
                         </Label>
