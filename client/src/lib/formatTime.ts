@@ -90,7 +90,7 @@ function formatRelative(date: Date, locale: 'ar' | 'en'): string {
  */
 function formatAbsolute(date: Date, locale: 'ar' | 'en'): string {
   try {
-    const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US', {
+    const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US', {
       timeZone: RIYADH_TIMEZONE,
       year: 'numeric',
       month: 'long',
