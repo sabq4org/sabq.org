@@ -129,7 +129,7 @@ class ArticleRepository @Inject constructor(
             .map { MediaAsset(url = it.mediaFile!!.url, altText = it.altText) }
 
     suspend fun getArticlesByKeyword(keyword: String): List<Article> =
-        api.getArticlesByKeyword(keyword).map { it.toDomain() }
+        api.getArticlesByKeyword(keyword).articles.map { it.toDomain() }
 
     suspend fun getAuthorPage(name: String, page: Int = 1, limit: Int = 20): AuthorPage =
         api.getAuthorPage(name, page, limit).toDomain()

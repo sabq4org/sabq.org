@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.article
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -71,7 +72,7 @@ class ArticleDetailViewModel @Inject constructor(
                         _state.value = current.copy(hydrating = false)
                     } else {
                         _state.value = ArticleDetailUiState.Error(
-                            e.localizedMessage ?: "تعذّر تحميل المقال",
+                            readerErrorMessage(e, "تعذّر تحميل المقال"),
                         )
                     }
                 }

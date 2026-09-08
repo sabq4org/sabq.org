@@ -29,6 +29,15 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         else -> ArticleCategory.fromArabicSection(category?.name ?: categoryName)
     }
 
+    // A missing/unrecognised category may use the local colour, but must not
+    // claim that the article belongs to local news.
+    val resolvedCategoryLabel = sequenceOf(category?.name, categoryName)
+        .firstOrNull { !it.isNullOrBlank() }?.trim()
+        ?: ArticleCategory.entries.firstOrNull {
+            it.key == (category?.slug ?: categorySlug)
+        }?.title
+        ?: "أخبار"
+
     val resolvedTitle = title.ifBlank { "(بدون عنوان)" }
     val resolvedExcerpt = excerpt
         ?: aiSummary
@@ -87,7 +96,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         title = resolvedTitle,
         excerpt = resolvedExcerpt,
         category = resolvedCategory,
-        categoryLabel = (category?.name ?: categoryName ?: resolvedCategory.title).trim(),
+        categoryLabel = resolvedCategoryLabel,
         imageUrl = absoluteImageUrl,
         focalPoint = focal,
         readingTime = formatReadingMinutes(readingMinutes) ?: estimateReadingTime(resolvedExcerpt),
