@@ -374,7 +374,13 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
 
   const updateUserMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const { roleIds, bioAr, bio, titleAr, title, hasPressCard, jobTitle, department, pressIdNumber, cardValidUntil, email, ...userData } = data;
+      const { roleIds, bioAr, bio, titleAr, title, hasPressCard, jobTitle, department, pressIdNumber, cardValidUntil, email, phoneNumber, ...userData } = data;
+      // Do not reassign an untouched phone while editing the biography. Legacy
+      // duplicate numbers must not block unrelated edits; changed numbers still
+      // go through the server's uniqueness check (including an explicit clear).
+      const phoneData = phoneNumber !== (form.formState.defaultValues?.phoneNumber ?? "")
+        ? { phoneNumber }
+        : {};
       
       // Prepare press card data
       const pressCardData = {
@@ -388,7 +394,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
       await apiRequest(`/api/admin/users/${userId}`, {
         method: "PATCH",
         // بريد فارغ (حساب جوال بلا بريد) لا يُرسل — لا نمسح ولا نخترع بريدًا.
-        body: JSON.stringify({ ...userData, ...pressCardData, ...(email ? { email } : {}) }),
+        body: JSON.stringify({ ...userData, ...pressCardData, ...phoneData, ...(email ? { email } : {}) }),
       });
 
       if (roleIds && roleIds.length > 0) {

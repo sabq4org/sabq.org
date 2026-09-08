@@ -114,3 +114,69 @@ test("a writer with no biography has empty fields", async ({ page }) => {
   await expect(page.getByTestId("textarea-bioAr")).toHaveValue("");
   await expect(page.getByTestId("textarea-bio")).toHaveValue("");
 });
+
+const existingPhone = "+966500000001";
+
+test("saves biography without reassigning an unchanged legacy duplicate phone", async ({ page }) => {
+  let saved: unknown;
+  let profilePatch: Record<string, unknown> | undefined;
+  await page.route("**/api/admin/users/writer-test", route => {
+    if (route.request().method() === "PATCH") {
+      profilePatch = route.request().postDataJSON();
+      if (Object.hasOwn(profilePatch!, "phoneNumber")) {
+        return route.fulfill({ status: 409, json: { message: "رقم الجوال مسجل مسبقاً" } });
+      }
+      return route.fulfill({ json: { success: true } });
+    }
+    return route.fulfill({ json: { ...user, phoneNumber: existingPhone } });
+  });
+  await page.route("**/api/admin/users/writer-test/staff", route => {
+    if (route.request().method() === "PATCH") saved = route.request().postDataJSON();
+    return route.fulfill({ json: null });
+  });
+  await openDialog(page);
+  await expect(page.getByTestId("input-phoneNumber")).toHaveValue(existingPhone);
+  await page.getByTestId("textarea-bioAr").fill("السيرة بعد التعديل");
+  await page.getByTestId("button-submit").click();
+  await expect(page.getByTestId("dialog-edit-user")).toBeHidden();
+  expect(profilePatch).toBeDefined();
+  expect(profilePatch).not.toHaveProperty("phoneNumber");
+  expect(saved).toMatchObject({ bioAr: "السيرة بعد التعديل" });
+});
+
+test("a changed phone still reaches server validation and a conflict blocks saving", async ({ page }) => {
+  let submittedPhone: unknown;
+  let staffWrites = 0;
+  await page.route("**/api/admin/users/writer-test", route => {
+    if (route.request().method() === "PATCH") {
+      submittedPhone = route.request().postDataJSON().phoneNumber;
+      return route.fulfill({ status: 409, json: { message: "رقم الجوال مسجل مسبقاً" } });
+    }
+    return route.fulfill({ json: { ...user, phoneNumber: existingPhone } });
+  });
+  await page.route("**/api/admin/users/writer-test/staff", route => {
+    if (route.request().method() === "PATCH") staffWrites++;
+    return route.fulfill({ json: null });
+  });
+  await openDialog(page);
+  await page.getByTestId("input-phoneNumber").fill("+966500000002");
+  await page.getByTestId("button-submit").click();
+  await expect.poll(() => submittedPhone).toBe("+966500000002");
+  await expect(page.getByTestId("button-submit")).toBeEnabled();
+  await expect(page.getByTestId("dialog-edit-user")).toBeVisible();
+  expect(staffWrites).toBe(0);
+});
+
+test("explicitly clearing the phone is sent and saved", async ({ page }) => {
+  let profilePatch: Record<string, unknown> | undefined;
+  await page.route("**/api/admin/users/writer-test", route => {
+    if (route.request().method() === "PATCH") profilePatch = route.request().postDataJSON();
+    return route.fulfill({ json: { ...user, phoneNumber: existingPhone } });
+  });
+  await openDialog(page);
+  await expect(page.getByTestId("input-phoneNumber")).toHaveValue(existingPhone);
+  await page.getByTestId("input-phoneNumber").fill("");
+  await page.getByTestId("button-submit").click();
+  await expect(page.getByTestId("dialog-edit-user")).toBeHidden();
+  expect(profilePatch).toHaveProperty("phoneNumber", "");
+});
