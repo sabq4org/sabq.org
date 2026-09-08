@@ -337,7 +337,9 @@ function htmlCacheKey(requestUrl, commit, variant) {
 // discovery surfaces, one normalized page query. This keeps UTM/debug values
 // out of both metadata lookups and their cache keys.
 export function seoRequestPath(urlOrRequest) {
-  const u = new URL(typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.url);
+  // handleRequest passes a URL; Request objects expose .url, but URL uses .href.
+  const input = urlOrRequest instanceof URL ? urlOrRequest.href : urlOrRequest;
+  const u = new URL(typeof input === "string" ? input : input.url);
   if (!/^\/(?:category|author)\/[^/]+$/.test(u.pathname)) return u.pathname;
   const rawPage = u.searchParams.get("page");
   if (rawPage === null) return u.pathname;
