@@ -32,6 +32,32 @@ async function signedHeaders(request, secret) {
   return headers;
 }
 
+// Stall-retry (incident 2026-09-07/08): Cloudflare's fetch toward the Railway
+// edge intermittently hangs 8–40s before Railway even registers the request,
+// while a fresh fetch answers in milliseconds. For GET/HEAD only, abort an
+// attempt that produced no headers within STALL_RETRY_MS and re-issue it; the
+// last attempt is unbounded (previous behaviour). Writes are never retried.
+const STALL_RETRY_MS = 3000;
+const STALL_RETRIES = 2;
+
+async function fetchWithStallRetry(target, init) {
+  const idempotent = init.method === "GET" || init.method === "HEAD";
+  if (!idempotent) return { response: await fetch(target, init), attempts: 1 };
+  let lastErr;
+  for (let attempt = 0; attempt <= STALL_RETRIES; attempt++) {
+    const isLast = attempt === STALL_RETRIES;
+    const attemptInit = isLast ? init : { ...init, signal: AbortSignal.timeout(STALL_RETRY_MS) };
+    try {
+      return { response: await fetch(target, attemptInit), attempts: attempt + 1 };
+    } catch (err) {
+      lastErr = err;
+      if (isLast) break;
+      console.warn(`[api-origin-worker] origin stall/failure, retrying (${attempt + 1}/${STALL_RETRIES}):`, target, String(err?.name || err));
+    }
+  }
+  throw lastErr;
+}
+
 export default {
   async fetch(request, env) {
     const secret = env.EDGE_PROXY_SHARED_SECRET;
@@ -57,6 +83,11 @@ export default {
     const headers = await signedHeaders(request, secret);
     const init = { method: request.method, headers, redirect: "manual" };
     if (request.method !== "GET" && request.method !== "HEAD") init.body = request.body;
-    return fetch(`${origin}${url.pathname}${url.search}`, init);
+    const { response, attempts } = await fetchWithStallRetry(`${origin}${url.pathname}${url.search}`, init);
+    if (attempts === 1) return response;
+    // Surface retries to callers/monitors without buffering the body.
+    const out = new Response(response.body, response);
+    out.headers.set("X-Sabq-Origin-Attempts", String(attempts));
+    return out;
   },
 };
