@@ -9,5 +9,10 @@ routes = [
   { pattern = "api.sabq.org/*", zone_name = "sabq.org" },
 ]
 
+# Run near the Railway origin in US East. Europe ingress intermittently
+# stalled for 20+ seconds; the regional path uses Railway's iad1 ingress.
+[placement]
+region = "aws:us-east-1"
+
 [vars]
 API_ORIGIN = "https://sabqorg-production.up.railway.app"
