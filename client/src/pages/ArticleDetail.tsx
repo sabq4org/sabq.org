@@ -925,6 +925,13 @@ export default function ArticleDetail() {
   const timeAgo = article?.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: 'relative', locale: 'ar' })
     : null;
+  const publishedDateLabel = article?.publishedAt
+    ? formatArticleTimestamp(article.publishedAt, { format: 'absolute', locale: 'ar' })
+    : null;
+  const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;
+  const meaningfulUpdatedDateLabel = editorialModifiedAt
+    ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
+    : null;
 
   const getInitials = useCallback((firstName?: string | null, lastName?: string | null, email?: string | null) => {
     if (firstName && lastName) {
@@ -1215,10 +1222,15 @@ export default function ArticleDetail() {
                   {/* Metadata - Plain Text */}
                   <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                     {timeAgo && (
-                      <span className="flex items-center gap-1">
+                      <time dateTime={article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined} title={publishedDateLabel ?? undefined} className="flex items-center gap-1">
                         <Clock className="h-3 w-3 opacity-70" />
-                        {timeAgo}
-                      </span>
+                        {timeAgo}{publishedDateLabel ? ` (${publishedDateLabel})` : ""}
+                      </time>
+                    )}
+                    {meaningfulUpdatedDateLabel && (
+                      <time dateTime={editorialModifiedAt} title={meaningfulUpdatedDateLabel} className="text-xs">
+                        (آخر تحديث: {meaningfulUpdatedDateLabel})
+                      </time>
                     )}
                     <span className="flex items-center gap-1">
                       <Eye className="h-3 w-3 opacity-70" />

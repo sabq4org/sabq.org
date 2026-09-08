@@ -57,6 +57,11 @@ export function reporterProfileUrl(
   return `${baseUrl}${lang === "en" ? "/en" : ""}/reporter/${encodeURIComponent(slugOrId)}`;
 }
 
+function authorProfileUrl(baseUrl: string, name: string, lang: "ar" | "en"): string {
+  // The public author route is Arabic-only today; do not invent /en/author.
+  return `${baseUrl}/author/${encodeURIComponent(name)}`;
+}
+
 export function muqtarabAngleUrl(baseUrl: string, slug: string): string {
   return `${baseUrl}/muqtarab/${encodeURIComponent(slug)}`;
 }
@@ -83,6 +88,9 @@ export function buildArticleAuthorPerson(
     reporterStaffSlug?: string | null;
     authorId?: string | null;
     authorStaffSlug?: string | null;
+    /** A verified public profile URL supplied by the data layer, when one exists. */
+    reporterProfileUrl?: string | null;
+    authorProfileUrl?: string | null;
     lang?: "ar" | "en";
     fallbackName?: string;
   },
@@ -90,14 +98,32 @@ export function buildArticleAuthorPerson(
   const lang = opts.lang || "ar";
   const fallbackName = opts.fallbackName || (lang === "en" ? "Sabq News" : "صحيفة سبق الإلكترونية");
   const useReporter = !!opts.reporterName;
-  const slugOrId = useReporter
-    ? opts.reporterStaffSlug || opts.reporterId
-    : opts.authorStaffSlug || opts.authorId;
+  // A user id is not itself a public profile.  Only a staff slug proves that
+  // the /reporter route exists; otherwise use the public name route below.
+  const staffSlug = useReporter ? opts.reporterStaffSlug : opts.authorStaffSlug;
   const name = (useReporter ? opts.reporterName : opts.editorName) || fallbackName;
-  const url = slugOrId ? reporterProfileUrl(baseUrl, slugOrId, lang) : undefined;
-  return buildPersonJsonLd({
-    name,
-    url,
-    worksFor: lang === "en" ? SABQ_ORG_EN : SABQ_ORG_AR,
-  });
+  const explicitUrl = useReporter ? opts.reporterProfileUrl : opts.authorProfileUrl;
+  const url = explicitUrl || (staffSlug
+    ? reporterProfileUrl(baseUrl, staffSlug, lang)
+    : name !== fallbackName
+      ? authorProfileUrl(baseUrl, name, lang)
+      : undefined);
+
+  // A corporate byline is an Organization, not a fabricated Person.  This
+  // keeps publisher/byline identity consistent when an article has no named
+  // reporter or author.
+  const corporateNames = new Set([
+    fallbackName,
+    "صحيفة سبق الإلكترونية",
+    "صحيفة سبق",
+    "سبق",
+    "Sabq News",
+    "SABQ",
+  ]);
+  if (corporateNames.has(name.trim())) {
+    const org = lang === "en" ? SABQ_ORG_EN : SABQ_ORG_AR;
+    return { "@type": "NewsMediaOrganization", name: name.trim(), url: org.url };
+  }
+
+  return buildPersonJsonLd({ name, url, worksFor: lang === "en" ? SABQ_ORG_EN : SABQ_ORG_AR });
 }

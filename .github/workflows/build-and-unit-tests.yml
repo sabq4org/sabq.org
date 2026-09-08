@@ -34,6 +34,9 @@ jobs:
       - name: Unit tests (vitest)
         run: npm run test:unit
 
+      - name: SSR view tests
+        run: npm run test:web-next
+
       - name: Server build (esbuild)
         run: npm run build:server
 

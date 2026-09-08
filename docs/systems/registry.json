@@ -288,7 +288,14 @@
         "docs/editorial/**",
         "server/services/newsStatisticsService.ts",
         "tests/unit/statisticsSingleFlight.test.ts",
-        "shared/schema.ts"
+        "shared/schema.ts",
+        "client/src/components/article-editor/SabqEditorAssistant.tsx",
+        "client/src/lib/editorialSources.ts",
+        "server/utils/editorialDates.ts",
+        "server/utils/editorialDatesSql.ts",
+        "tests/unit/editorialDates.test.ts",
+        "tests/unit/editorialDatesSql.test.ts",
+        "tests/unit/editorialSources.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -323,7 +330,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "ifox",
@@ -778,14 +785,26 @@
         "server/services/archiveSeo.ts",
         "server/utils/apiListingRobots.ts",
         "shared/articleHeroPreload.ts",
-        "tests/unit/edgeMetadataBudget.test.ts"
+        "tests/unit/edgeMetadataBudget.test.ts",
+        "server/utils/creatorSchema.ts",
+        "server/utils/newsArticleSchema.ts",
+        "server/utils/seoArchive.ts",
+        "server/middleware/seoProjectionCache.ts",
+        "server/services/seoCacheInvalidation.ts",
+        "tests/unit/edgeSeoReadiness.test.ts",
+        "tests/unit/seoProjectionCache.test.ts",
+        "tests/unit/seoArchive.test.ts",
+        "tests/web-next/**",
+        "vitest.web-next.config.ts",
+        "client/src/pages/CategoryPage.tsx",
+        "client/src/components/CategoryArchivePage.tsx"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "comments",

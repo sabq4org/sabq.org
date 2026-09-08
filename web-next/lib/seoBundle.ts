@@ -26,6 +26,12 @@ export interface SeoBundle {
   publishedAt: string | null;
   updatedAt: string | null;
   author: string;
+  articleType?: string | null;
+  imageAlt?: string | null;
+  imageCaption?: string | null;
+  imageSource?: string | null;
+  isAiGeneratedImage?: boolean;
+  isAiGeneratedThumbnail?: boolean;
   reporterHref?: string | null;
   category: string | null;
   categoryHref: string | null;
@@ -65,6 +71,13 @@ export interface CategoryBundle {
   canonical: string;
   color?: string | null;
   articles: ArticleListItem[];
+  pagination?: {
+    page: number;
+    limit: number;
+    hasMore: boolean;
+    previousHref: string | null;
+    nextHref: string | null;
+  };
 }
 
 export interface HomeBundle {
@@ -87,7 +100,12 @@ export async function getArticleSeoBundle(
   const url = serverApiUrl(
     `/api/articles/${encodeURIComponent(slug)}/seo-bundle?lang=${lang}`,
   );
-  const res = await serverApiFetch(url, { next: { revalidate } });
+  // The Pages layer caches validated HTML for a bounded period. Keep
+  // the Next data cache disabled so a render cannot
+  // resurrect an older ISR payload. The API has a bounded, invalidated projection cache. The parameter remains for call-site
+  // compatibility while cache ownership lives at the edge.
+  void revalidate;
+  const res = await serverApiFetch(url, { cache: "no-store" });
 
   if (res.status === 404) return null;
   if (!res.ok) {
@@ -98,12 +116,13 @@ export async function getArticleSeoBundle(
 
 export async function getCategoryBundle(
   slug: string,
-  revalidate = 60,
+  page = 1,
 ): Promise<CategoryBundle | null> {
+  const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
   const url = serverApiUrl(
-    `/api/categories/${encodeURIComponent(slug)}/seo-bundle`,
+    `/api/categories/${encodeURIComponent(slug)}/seo-bundle?limit=30&page=${normalizedPage}`,
   );
-  const res = await serverApiFetch(url, { next: { revalidate } });
+  const res = await serverApiFetch(url, { cache: "no-store" });
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`category bundle failed: ${res.status} ${res.statusText}`);
@@ -113,7 +132,8 @@ export async function getCategoryBundle(
 
 export async function getHomeBundle(revalidate = 60): Promise<HomeBundle> {
   const url = serverApiUrl(`/api/edge/home-bundle`);
-  const res = await serverApiFetch(url, { next: { revalidate } });
+  void revalidate;
+  const res = await serverApiFetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`home bundle failed: ${res.status} ${res.statusText}`);
   }

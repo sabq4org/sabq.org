@@ -146,6 +146,7 @@ export async function purgeHomepage(opts?: { immediate?: boolean }): Promise<Pur
     ...bothHosts('/api/homepage-lite'),
     ...bothHosts('/api/lite-feed'),
     ...bothHosts('/api/ai-insights'),
+    ...bothHosts('/api/edge/home-bundle'),
   ], opts);
 }
 
@@ -169,6 +170,12 @@ export async function purgeArticle(slug: string, opts?: { immediate?: boolean })
     // serving stale.
     ...bothHosts(`/api/articles/${slug}`),
     ...bothHosts(`/api/articles/${slug}/sidebar`),
+    // The Next SSR app reads these aggregated projections directly. Purge
+    // each locale variant as well as the ordinary article API response so a
+    // published edit cannot leave a stale SEO bundle at the API edge.
+    ...bothHosts(`/api/articles/${slug}/seo-bundle?lang=ar`),
+    ...bothHosts(`/api/articles/${slug}/seo-bundle?lang=en`),
+    ...bothHosts(`/api/articles/${slug}/seo-bundle?lang=ur`),
     // Edge SEO injection caches (functions/_middleware.js + edgeMeta TTL).
     // Purging these makes the next crawl pick up fresh title/meta/JSON-LD
     // immediately after publish instead of waiting for the 10s edge JSON TTL

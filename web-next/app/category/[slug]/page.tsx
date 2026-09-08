@@ -10,22 +10,26 @@ export const dynamicParams = true;
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const bundle = await getCategoryBundle(slug);
+  const page = readPage((await searchParams).page);
+  if (page === null) notFound();
+  const bundle = await getCategoryBundle(slug, page);
   if (!bundle) {
     return { title: "غير موجود", robots: { index: false, follow: true } };
   }
   return {
-    title: { absolute: `${bundle.name} | سبق` },
+    title: { absolute: `${bundle.name}${page > 1 ? ` — الصفحة ${page}` : ""} | سبق` },
     description: bundle.description,
     alternates: { canonical: bundle.canonical },
     robots: { index: true, follow: true },
     openGraph: {
       type: "website",
-      title: `${bundle.name} | سبق`,
+      title: `${bundle.name}${page > 1 ? ` — الصفحة ${page}` : ""} | سبق`,
       description: bundle.description,
       url: bundle.canonical,
       siteName: "صحيفة سبق الإلكترونية",
@@ -36,11 +40,15 @@ export async function generateMetadata({
 
 export default async function CategoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
 }) {
   const { slug } = await params;
-  const bundle = await getCategoryBundle(slug);
+  const page = readPage((await searchParams).page);
+  if (page === null) notFound();
+  const bundle = await getCategoryBundle(slug, page);
   if (!bundle) notFound();
   const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
   const jsonLd = [
@@ -63,7 +71,7 @@ export default async function CategoryPage({
       name: `أحدث الأخبار في ${bundle.name}`,
       itemListElement: bundle.articles.slice(0, 30).map((item, index) => ({
         "@type": "ListItem",
-        position: index + 1,
+        position: (page - 1) * 30 + index + 1,
         url: `${siteUrl}${item.href}`,
         name: item.title,
       })),
@@ -122,6 +130,10 @@ export default async function CategoryPage({
         ) : (
           <p className="text-muted-foreground">لا توجد مقالات حالياً.</p>
         )}
+        <nav aria-label="صفحات أخبار القسم" className="mt-8 flex justify-between gap-4">
+          {bundle.pagination?.previousHref ? <a href={bundle.pagination.previousHref} rel="prev">الصفحة السابقة</a> : <span />}
+          {bundle.pagination?.nextHref ? <a href={bundle.pagination.nextHref} rel="next">الصفحة التالية</a> : null}
+        </nav>
       </main>
       <SiteFooter />
       <script
@@ -137,4 +149,11 @@ function safeJsonLd(value: unknown): string {
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026");
+}
+
+function readPage(value?: string): number | null {
+  if (value === undefined) return 1;
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) return null;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page <= 10_000 ? page : null;
 }

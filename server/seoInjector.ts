@@ -18,7 +18,8 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
-import { buildNewsArticleSchemaExtras } from "./utils/newsArticleSchema";
+import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
+import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import {
   buildPersonJsonLd,
   buildProfilePageJsonLd,
@@ -253,6 +254,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
         publishedAt: articles.publishedAt,
         updatedAt: articles.updatedAt,
         seo: articles.seo,
+        seoMetadata: articles.seoMetadata,
+        articleType: articles.articleType,
         status: articles.status,
         categoryName: categories.nameAr,
         authorId: articles.authorId,
@@ -268,8 +271,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .leftJoin(reporterStaff, eq(articles.reporterId, reporterStaff.userId))
-      .leftJoin(authorStaff, eq(articles.authorId, authorStaff.userId))
+      .leftJoin(reporterStaff, and(eq(articles.reporterId, reporterStaff.userId), eq(reporterStaff.isActive, true), inArray(reporterStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
+      .leftJoin(authorStaff, and(eq(articles.authorId, authorStaff.userId), eq(authorStaff.isActive, true), inArray(authorStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
       .where(or(eq(articles.slug, slug), eq(articles.englishSlug, slug)))
       .limit(1)
   );
@@ -295,16 +298,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
   const authorName = reporterName || editorName || 'صحيفة سبق الإلكترونية';
   const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
-  let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
-  if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
-    const pubMs = new Date(a.publishedAt).getTime();
-    const updMs = new Date(a.updatedAt).getTime();
-    const articleAgeMs = Date.now() - pubMs;
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    if (articleAgeMs > thirtyDaysMs && (updMs - pubMs) > 7 * 24 * 60 * 60 * 1000) {
-      modifiedTime = publishedTime;
-    }
-  }
+  const modifiedTime = getPublicEditorialModifiedAt(a.publishedAt, a.seoMetadata) || publishedTime;
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
   const authorPerson = buildArticleAuthorPerson(baseUrl, {
@@ -318,7 +312,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
+    "@type": getArticleSchemaType(a.articleType),
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
     "headline": title,
     "description": description,
