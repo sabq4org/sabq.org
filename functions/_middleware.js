@@ -416,6 +416,52 @@ export async function signProxyRequest(request, targetUrl, proxySecret) {
   return headers;
 }
 
+// Stall-retry for idempotent origin fetches (incident 2026-09-07/08): Cloudflare's
+// subrequest toward the Railway edge (observed MRS→cdg1) intermittently hangs
+// 8–40s BEFORE Railway even registers the request, while a fresh fetch answers
+// in 1–50ms. For GET/HEAD only: abort an attempt that has not produced headers
+// within STALL_RETRY_MS and re-issue it; the final attempt keeps the caller's
+// full deadline (or stays unbounded when none was given, as before). Writes are
+// never retried — their body is a one-shot stream and replaying is unsafe.
+const STALL_RETRY_MS = 3000;
+const STALL_RETRIES = 2;
+
+function isStallAbort(err) {
+  const name = err?.name || "";
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+export async function fetchWithStallRetry(target, init, opts = {}) {
+  const stallMs = opts.stallMs ?? STALL_RETRY_MS;
+  const retries = opts.retries ?? STALL_RETRIES;
+  const deadlineMs = opts.deadlineMs ?? 0;
+  const idempotent = init.method === "GET" || init.method === "HEAD";
+  if (!idempotent || retries <= 0) {
+    if (deadlineMs > 0) init.signal = AbortSignal.timeout(deadlineMs);
+    return fetch(target, init);
+  }
+  const startedAt = Date.now();
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const left = deadlineMs > 0 ? deadlineMs - (Date.now() - startedAt) : Infinity;
+    if (left <= 0) break;
+    const isLast = attempt === retries;
+    const budget = isLast ? left : Math.min(stallMs, left);
+    const attemptInit = { ...init };
+    if (Number.isFinite(budget)) attemptInit.signal = AbortSignal.timeout(budget);
+    try {
+      return await fetch(target, attemptInit);
+    } catch (err) {
+      lastErr = err;
+      // Only a stall (our own per-attempt timeout) is retried; a real upstream
+      // error propagates immediately, exactly as before this helper existed.
+      if (isLast || !isStallAbort(err)) throw err;
+      console.warn(`[pages-fn] origin stall, retrying (${attempt + 1}/${retries}):`, target);
+    }
+  }
+  throw lastErr;
+}
+
 export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
@@ -438,8 +484,9 @@ export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret)
   // origin (the 2026-07-25 dawn incident mode — not a fast 502) would otherwise
   // pin the reader for the platform's full subrequest limit before the
   // last-good fallback could kick in. Writes are never aborted this way.
-  if (timeoutMs > 0) init.signal = AbortSignal.timeout(timeoutMs);
-  return fetch(target, init);
+  // GET/HEAD additionally get a per-attempt stall abort + retry (see
+  // fetchWithStallRetry); the deadline below still bounds the whole sequence.
+  return fetchWithStallRetry(target, init, { deadlineMs: timeoutMs });
 }
 
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
