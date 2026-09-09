@@ -18,6 +18,7 @@
       "/server/storage.ts",
       "/server/lib/passkit/PassUpdateLogger.ts",
       "/server/services/aiNewsletter*.ts",
+      "/server/services/adminArticleList.ts",
       "/server/services/articleViewCounterService.ts",
       "/server/services/email.ts",
       "/server/services/loyalty.ts",
