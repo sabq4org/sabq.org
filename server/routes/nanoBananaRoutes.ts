@@ -7,7 +7,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { db } from "../db";
 import { aiImageGenerations, insertAiImageGenerationSchema, mediaFiles } from "../../shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import {
   generateAndUploadImage,
   type ImageGenerationRequest
@@ -21,6 +21,7 @@ import {
   resolveGenerationStyle,
 } from "../services/imageStyleService";
 import { resolveImageModel } from "@shared/imageStyles";
+import { EDITORIAL_IMAGE_FEATURE_KEY } from "@shared/editorialImages";
 import { parseLimit, parseOffset } from "../utils/pagination";
 
 // Request body schema (excludes userId - taken from session)
@@ -53,6 +54,8 @@ const generateImageRequestSchema = insertAiImageGenerationSchema.omit({
 });
 
 const router = Router();
+// The separate GPT editor tool shares the table, but not this history/API.
+const legacyImageFilter = sql`coalesce(${aiImageGenerations.metadata}->>'featureKey', '') <> ${EDITORIAL_IMAGE_FEATURE_KEY}`;
 
 // ============================================================
 // NANO BANANA PRO IMAGE GENERATION ROUTES
@@ -238,13 +241,13 @@ router.get("/generations", requireAuth, async (req: Request, res: Response) => {
     let query = db
       .select()
       .from(aiImageGenerations)
-      .where(eq(aiImageGenerations.userId, user.id))
+      .where(and(eq(aiImageGenerations.userId, user.id), legacyImageFilter))
       .$dynamic();
     
     if (status) {
       query = query.where(
         and(
-          eq(aiImageGenerations.userId, user.id),
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter),
           eq(aiImageGenerations.status, status as string)
         )
       );
@@ -253,7 +256,7 @@ router.get("/generations", requireAuth, async (req: Request, res: Response) => {
     if (articleId) {
       query = query.where(
         and(
-          eq(aiImageGenerations.userId, user.id),
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter),
           eq(aiImageGenerations.articleId, articleId as string)
         )
       );
@@ -292,7 +295,7 @@ router.get("/generations/:id", requireAuth, async (req: Request, res: Response) 
       .where(
         and(
           eq(aiImageGenerations.id, id),
-          eq(aiImageGenerations.userId, user.id)
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter)
         )
       )
       .limit(1);
@@ -327,7 +330,7 @@ router.delete("/generations/:id", requireAuth, async (req: Request, res: Respons
       .where(
         and(
           eq(aiImageGenerations.id, id),
-          eq(aiImageGenerations.userId, user.id)
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter)
         )
       )
       .limit(1);
@@ -362,7 +365,7 @@ router.get("/stats", requireAuth, async (req: Request, res: Response) => {
     const allGenerations = await db
       .select()
       .from(aiImageGenerations)
-      .where(eq(aiImageGenerations.userId, user.id));
+      .where(and(eq(aiImageGenerations.userId, user.id), legacyImageFilter));
     
     const stats = {
       total: allGenerations.length,
@@ -408,7 +411,7 @@ router.post("/generations/:id/save-to-library", requireAuth, async (req: Request
       .where(
         and(
           eq(aiImageGenerations.id, id),
-          eq(aiImageGenerations.userId, user.id)
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter)
         )
       )
       .limit(1);

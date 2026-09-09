@@ -141,6 +141,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "radar-relevance", displayName: "صلة رادار سبق", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
 
   // ── Media generation (same-provider output differs; chains start empty) ──
+  // Dedicated editor route executes directly with OPENAI_IMAGES_API_KEY; never gateway failover.
+  { featureKey: "editor-openai-images", displayName: "صور GPT — محرر الويب", category: "media", primary: { provider: "openai", modelId: "gpt-image-2.5-flare" }, fallbackChain: [], allowFailover: false },
   { featureKey: "image-generation", displayName: "توليد الصور", category: "media", primary: GPT_IMAGE, fallbackChain: [] },
   // وصف مشهد صور الأخبار التلقائية (نص قصير قبل توليد الصورة) — سريع ورخيص
   { featureKey: "image-scene-brief", displayName: "وصف مشهد صور الأخبار", category: "media", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
