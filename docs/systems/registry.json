@@ -311,7 +311,10 @@
         "client/src/components/OpenAIImageGeneratorDialog.tsx",
         "tests/unit/openaiImagesProvider.test.ts",
         "tests/unit/editorialImages.integration.test.ts",
-        "e2e/openai-editor-images.spec.ts"
+        "e2e/openai-editor-images.spec.ts",
+        "server/services/adminArticleList.ts",
+        "tests/unit/adminArticleList.integration.test.ts",
+        "e2e/articles-management-loading.spec.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",

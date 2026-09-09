@@ -1,3 +1,4 @@
+import { getAdminArticleMetrics } from "./services/adminArticleList";
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
 import { log } from "./utils/logger";
@@ -4606,29 +4607,7 @@ export class DatabaseStorage implements IStorage {
     // كل عدّ مستقل يدفع شرط status إلى فهرسه. صيغة FILTER الواحدة كانت تمسح
     // صف المقال كاملًا (~199k blocks في قياس الإنتاج) كلما انتهى الكاش.
     // المفتاح يبدأ بـ articles: كي تمسحه بوابة إبطال المقالات بعد أي كتابة.
-    return withSWR("articles:admin:metrics:v2", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, async () => {
-      const now = new Date();
-      const result = await db.execute<{
-        published: number | string;
-        draft: number | string;
-        archived: number | string;
-        scheduled: number | string;
-      }>(sql`
-        select
-          (select count(*) from ${articles} where ${articles.status} = 'published') as published,
-          (select count(*) from ${articles} where ${articles.status} = 'draft') as draft,
-          (select count(*) from ${articles} where ${articles.status} = 'archived') as archived,
-          (select count(*) from ${articles} where ${articles.status} = 'scheduled' and ${articles.scheduledAt} >= ${now}) as scheduled
-      `);
-      const row = result.rows[0];
-
-      return {
-        published: Number(row?.published ?? 0),
-        scheduled: Number(row?.scheduled ?? 0),
-        draft: Number(row?.draft ?? 0),
-        archived: Number(row?.archived ?? 0),
-      };
-    });
+    return withSWR("articles:admin:metrics:v3", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, getAdminArticleMetrics);
   }
 
   async archiveArticle(id: string, userId: string): Promise<Article> {
