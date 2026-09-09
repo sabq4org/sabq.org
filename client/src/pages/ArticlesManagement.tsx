@@ -146,11 +146,13 @@ function SortableRow({
   article,
   children,
   isSaving,
+  disableSorting,
   highlightResubmitted,
 }: {
   article: Article;
   children: React.ReactNode;
   isSaving?: boolean;
+  disableSorting?: boolean;
   highlightResubmitted?: false | "resubmitted" | "awaiting";
 }) {
   const {
@@ -160,7 +162,7 @@ function SortableRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: article.id });
+  } = useSortable({ id: article.id, disabled: disableSorting });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -185,14 +187,14 @@ function SortableRow({
       data-testid={`row-article-${article.id}`}
     >
       <td 
-        className="hidden md:table-cell w-9 py-3 px-1 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
+        className={cn("hidden md:table-cell w-9 py-3 px-1 text-center", !disableSorting && "cursor-grab active:cursor-grabbing touch-none select-none")}
         {...attributes} 
         {...listeners}
       >
-        <GripVertical 
+        {!disableSorting && <GripVertical
           className={`h-4 w-4 mx-auto ${isDragging ? 'text-primary' : 'text-muted-foreground'} ${isSaving ? 'animate-pulse' : ''}`} 
           data-testid={`drag-handle-${article.id}`} 
-        />
+        />}
       </td>
       {children}
     </tr>
@@ -346,7 +348,7 @@ export default function ArticlesManagement() {
 
   // Fetch metrics
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
-    queryKey: ["/api/admin/articles/metrics"],
+    queryKey: ["/api/admin/articles/metrics", user?.id],
     queryFn: async () => {
       const response = await fetch(apiUrl("/api/admin/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
@@ -356,7 +358,10 @@ export default function ArticlesManagement() {
       const data = await response.json();
       return data;
     },
-    enabled: !!user,
+    enabled: !!canViewArticles,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 
   // Selection belongs only to the visible account/filter/page.
@@ -386,6 +391,9 @@ export default function ArticlesManagement() {
       return response.json();
     },
     enabled: !!canViewArticles,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: activeStatus === "published" || activeStatus === "scheduled" ? 60_000 : false,
     // Keep the table in place during transitions, but never carry another account's rows.
     placeholderData: (previousData, previousQuery) =>
       user?.id && previousQuery?.queryKey[1] === user.id ? previousData : undefined,
@@ -395,6 +403,22 @@ export default function ArticlesManagement() {
   const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
   const displayedPage = articlesData?.page ?? currentPage;
   const totalPages = articlesData?.totalPages || 1;
+
+  // A scheduled row may publish, or move to another page, during a refresh.
+  // Bulk actions must never retain IDs that are no longer in the visible result.
+  useEffect(() => {
+    if (articlesFetching || isPlaceholderData || articlesError) return;
+    const visible = new Set(articles.map(article => article.id));
+    setSelectedArticles(previous => {
+      const next = new Set(Array.from(previous).filter(id => visible.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [articles, articlesFetching, isPlaceholderData, articlesError]);
+  useEffect(() => {
+    if (selectedArticles.size > 0) return;
+    setShowBulkArchiveDialog(false);
+    setShowBulkDeleteDialog(false);
+  }, [selectedArticles]);
 
   // Fetch categories for filter
   const { data: categoriesRaw } = useQuery<Category[]>({
@@ -829,7 +853,7 @@ export default function ArticlesManagement() {
 
   // Drag end handler
   const handleDragEnd = (event: DragEndEvent) => {
-    if (articlesBusy || updateOrderMutation.isPending) return;
+    if (articlesBusy || updateOrderMutation.isPending || activeStatus === "scheduled") return;
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
@@ -846,12 +870,16 @@ export default function ArticlesManagement() {
     // Create a new array with the reordered items
     const newArticles = arrayMove([...articles], oldIndex, newIndex);
 
-    // Generate unique descending displayOrder values using high-precision timestamp
-    // Each article gets a unique value: baseTimestamp * 1000 - (index * 1000) ensures no collisions
-    const baseTimestamp = Date.now();
+    // Every manual rank must exceed every publication second on this page;
+    // otherwise a just-published row could snap back above its drag target.
+    const publicationSeconds = newArticles.map(article => {
+      const time = article.publishedAt ? new Date(article.publishedAt).getTime() : 0;
+      return Number.isFinite(time) ? Math.floor(time / 1000) : 0;
+    });
+    const baseOrder = Math.max(Math.floor(Date.now() / 1000), ...publicationSeconds) + newArticles.length;
     const articleOrders = newArticles.map((article, index) => ({
       id: article.id,
-      displayOrder: Math.floor((baseTimestamp - index * 1000) / 1000),
+      displayOrder: baseOrder - index,
     }));
 
     // Build the current query key at call time to avoid stale closures
@@ -1383,6 +1411,7 @@ export default function ArticlesManagement() {
                           key={article.id}
                           article={article}
                           isSaving={updateOrderMutation.isPending}
+                          disableSorting={activeStatus === "scheduled"}
                           highlightResubmitted={
                             isResubmittedAfterRevision(article)
                               ? "resubmitted"
