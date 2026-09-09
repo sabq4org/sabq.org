@@ -1,4 +1,5 @@
 import { getAdminArticleMetrics } from "./services/adminArticleList";
+import { resetChangedImageProvenance, resolveArticleImageProvenance } from "./services/articleImageProvenance";
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
 import { log } from "./utils/logger";
@@ -4403,7 +4404,12 @@ export class DatabaseStorage implements IStorage {
 
     // Derive the public update timestamp atomically from the persisted row.
     // JSONB merges at UPDATE time, so another writer cannot lose metadata keys.
-    await this.applyAiImageFlagFromMedia(updateData);
+    const hasImageProvenance = await this.applyAiImageFlagFromMedia(updateData);
+    if (!hasImageProvenance && (typeof updateData.imageUrl === "string" || updateData.imageUrl === null)) {
+      const reset = resetChangedImageProvenance(updateData.imageUrl);
+      if (updateData.aiImageModel === undefined) updateData.aiImageModel = reset.aiImageModel;
+      if (updateData.aiImagePrompt === undefined) updateData.aiImagePrompt = reset.aiImagePrompt;
+    }
     const editorialMetadata = buildEditorialMetadataUpdate(updateData);
     if (editorialMetadata) updateData.seoMetadata = editorialMetadata;
     const [updated] = await db
@@ -4414,36 +4420,23 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  /// Mutates `data` in-place: when `data.imageUrl` matches a
-  /// media_files row whose `is_ai_generated` is true and the caller
-  /// hasn't already set `isAiGeneratedImage`, copy the AI metadata
-  /// (model + prompt) onto the article. No-op when the URL doesn't
-  /// resolve to a known media row or when the caller already provided
-  /// an explicit value.
-  private async applyAiImageFlagFromMedia(data: any): Promise<void> {
-    if (data?.isAiGeneratedImage === true) return; // caller already set it
+  /// Refresh provenance even when AI is already enabled: replacing an AI
+  /// image must not retain the model/prompt of the previous image.
+  private async applyAiImageFlagFromMedia(data: any): Promise<boolean> {
     const url = data?.imageUrl;
-    if (typeof url !== 'string' || url.length === 0) return;
+    if (typeof url !== 'string' || url.length === 0) return false;
     try {
-      const [media] = await db
-        .select({
-          isAi: mediaFiles.isAiGenerated,
-          model: mediaFiles.aiGenerationModel,
-          prompt: mediaFiles.aiGenerationPrompt,
-        })
-        .from(mediaFiles)
-        .where(eq(mediaFiles.url, url))
-        .limit(1);
-      if (media?.isAi) {
-        data.isAiGeneratedImage = true;
-        if (!data.aiImageModel && media.model) data.aiImageModel = media.model;
-        if (!data.aiImagePrompt && media.prompt) data.aiImagePrompt = media.prompt;
+      const provenance = await resolveArticleImageProvenance(url);
+      if (provenance) {
+        Object.assign(data, provenance);
+        return true;
       }
     } catch (err) {
       // Best-effort — never block the actual write because of a sync
       // lookup failure. The article saves with the original payload.
       console.warn('[storage] applyAiImageFlagFromMedia failed:', err);
     }
+    return false;
   }
 
   async deleteArticle(id: string): Promise<void> {
