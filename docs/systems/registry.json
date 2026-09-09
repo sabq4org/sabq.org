@@ -314,7 +314,9 @@
         "e2e/openai-editor-images.spec.ts",
         "server/services/adminArticleList.ts",
         "tests/unit/adminArticleList.integration.test.ts",
-        "e2e/articles-management-loading.spec.ts"
+        "e2e/articles-management-loading.spec.ts",
+        "server/services/articleImageProvenance.ts",
+        "tests/unit/articleImageProvenance.integration.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
