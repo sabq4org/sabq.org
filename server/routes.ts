@@ -1,3 +1,4 @@
+import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
@@ -7204,16 +7205,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
-      // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
-      // reordering from the dashboard persists after refetch instead of snapping back to date order
+      // Draft/archive retain manual order. Scheduled rows show the nearest due
+      // time first. Published rows use the indexed candidate merge below so an
+      // old scheduled draft rises when published without losing manual curation.
       let orderClauses;
       if (status === "archived") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "draft") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "scheduled") {
-        orderClauses = [desc(articles.displayOrder), desc(articles.scheduledAt), desc(articles.createdAt)];
+        orderClauses = [adminScheduledOrder];
       } else {
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
@@ -7309,9 +7310,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               return Number(countResult?.count || 0);
             })();
 
-        const rowsPromise = query.orderBy(...orderClauses)
-          .limit(limitNum)
-          .offset(offset);
+        const rowsPromise = status === "published"
+          ? (async () => {
+              const ids = await getAdminPublishedPageIds(and(...whereConditions), limitNum, offset);
+              if (!ids.length) return [];
+              const rows = await query.where(and(...whereConditions, inArray(articles.id, ids)));
+              const position = new Map(ids.map((id, index) => [id, index]));
+              return rows.sort((a, b) => position.get(a.article.id)! - position.get(b.article.id)!);
+            })()
+          : query.orderBy(...orderClauses).limit(limitNum).offset(offset);
         const [totalCount, rows] = await Promise.all([totalPromise, rowsPromise]);
 
         return { results: rows, total: totalCount };

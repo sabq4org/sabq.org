@@ -303,7 +303,10 @@
         "server/services/keywordService.ts",
         "server/routes/keywordRoutes.ts",
         "tests/unit/keywordService.test.ts",
-        "tests/unit/keywordCategoryContract.test.ts"
+        "tests/unit/keywordCategoryContract.test.ts",
+        "server/services/adminArticleList.ts",
+        "tests/unit/adminArticleList.integration.test.ts",
+        "e2e/articles-management-loading.spec.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -338,7 +341,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-08"
+      "lastReviewed": "2026-09-09"
     },
     {
       "id": "ifox",

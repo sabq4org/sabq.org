@@ -186,14 +186,20 @@ test("background refresh retains rows but blocks actions until completion", asyn
 
 for (const fails of [false, true]) {
   test(`drag reordering uses the active list cache and ${fails ? "rolls back failure" : "persists success"}`, async ({ page }) => {
+    const publishedAt = "2026-09-09T06:30:00Z";
+    await page.clock.setFixedTime(new Date(publishedAt));
     await setup(page);
-    let saved = results();
+    let saved = { ...results(), articles: results().articles.map(row => ({ ...row, publishedAt })) };
     let writes = 0;
     let completed = 0;
     await page.route("**/api/admin/articles?**", route => route.fulfill({ json: saved }));
+    await page.getByRole("button", { name: "تحديث قائمة الاختبار" }).click();
+    await expect(page.getByTestId("articles-updating")).toHaveCount(0);
     await page.route("**/api/admin/articles/update-order", async route => {
       writes++;
-      const ids = route.request().postDataJSON().articleOrders.map((entry: { id: string }) => entry.id);
+      const orders = route.request().postDataJSON().articleOrders;
+      expect(orders.every((entry: { displayOrder: number }) => entry.displayOrder > new Date(publishedAt).getTime() / 1000)).toBe(true);
+      const ids = orders.map((entry: { id: string }) => entry.id);
       expect(ids).toEqual(["page-1-b", "page-1-a"]);
       await new Promise(resolve => setTimeout(resolve, 500));
       completed++;
@@ -242,4 +248,48 @@ test("mobile breaking toggle preserves pagination and rolls back a failed write"
   await expect(toggle).toBeEnabled();
   await expect(toggle).toHaveText("عاجل");
   await expect(page.getByText("مقال اختبار page-1-a", { exact: true })).toBeVisible();
+});
+
+test("published and scheduled lists refresh automatically after scheduled publication", async ({ page }, info) => {
+  await page.clock.install();
+  await setup(page);
+  let published = false;
+  const pending = { ...article("scheduled-opinion", "scheduled"), articleType: "opinion", publishedAt: null, scheduledAt: "2026-09-09T07:15:00Z" };
+  const futureNews = { ...article("future-news", "scheduled"), scheduledAt: "2026-09-10T07:15:00Z", publishedAt: null };
+  await page.route("**/api/admin/articles/metrics", route => route.fulfill({ json: { published: published ? 61 : 60, scheduled: published ? 1 : 2, draft: 10, archived: 5 } }));
+  await page.route("**/api/admin/articles?**", route => {
+    const scheduled = new URL(route.request().url()).searchParams.get("status") === "scheduled";
+    const rows = scheduled ? (published ? [futureNews] : [pending, futureNews]) : (published ? [{ ...pending, status: "published", publishedAt: "2026-09-09T07:15:00Z" }, ...results().articles] : results().articles);
+    return route.fulfill({ json: { articles: rows, page: 1, limit: 30, total: rows.length, totalPages: 1 } });
+  });
+  await page.getByTestId("card-stat-scheduled").click();
+  await expect(page.getByTestId("row-article-scheduled-opinion")).toBeVisible();
+  await expect(page.getByTestId("row-article-future-news")).toBeVisible();
+  await expect(page.getByTestId("drag-handle-scheduled-opinion")).toHaveCount(0);
+  await page.getByTestId("fixture-controls").evaluate(element => { element.style.display = "none"; });
+  await page.screenshot({ path: info.outputPath("scheduled-list.png"), animations: "disabled", fullPage: true });
+  published = true;
+  await page.clock.fastForward(60_001);
+  await expect(page.getByTestId("row-article-scheduled-opinion")).toHaveCount(0);
+  await expect(page.getByTestId("card-stat-scheduled")).toContainText("1");
+  await page.getByTestId("card-stat-published").click();
+  await expect(page.getByTestId("row-article-scheduled-opinion")).toBeVisible();
+  await expect(page.getByTestId("card-stat-published")).toContainText("61");
+  await page.screenshot({ path: info.outputPath("published-list.png"), animations: "disabled", fullPage: true });
+});
+
+test("polling removes invisible scheduled selections and closes their bulk action", async ({ page }) => {
+  await page.clock.install();
+  const { writes } = await setup(page);
+  await page.getByTestId("card-stat-scheduled").click();
+  const checkbox = page.getByTestId("checkbox-article-page-1-a");
+  await checkbox.check();
+  await page.getByTestId("button-bulk-archive").click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.route("**/api/admin/articles?**", route => route.fulfill({ json: { ...results(1,"remaining","scheduled"), total: 2, totalPages: 1 } }));
+  await page.clock.fastForward(60_001);
+  await expect(page.getByText("مقال اختبار remaining-1-a", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.getByTestId("button-bulk-archive")).toHaveCount(0);
+  expect(writes).toEqual([]);
 });
