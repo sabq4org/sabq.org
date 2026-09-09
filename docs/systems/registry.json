@@ -304,6 +304,14 @@
         "server/routes/keywordRoutes.ts",
         "tests/unit/keywordService.test.ts",
         "tests/unit/keywordCategoryContract.test.ts",
+        "shared/editorialImages.ts",
+        "server/routes/editorialImages.ts",
+        "server/services/editorialImagesService.ts",
+        "server/services/openaiImagesProvider.ts",
+        "client/src/components/OpenAIImageGeneratorDialog.tsx",
+        "tests/unit/openaiImagesProvider.test.ts",
+        "tests/unit/editorialImages.integration.test.ts",
+        "e2e/openai-editor-images.spec.ts",
         "server/services/adminArticleList.ts",
         "tests/unit/adminArticleList.integration.test.ts",
         "e2e/articles-management-loading.spec.ts"
@@ -335,7 +343,8 @@
         "opinion-writer-coach",
         "opinion-writer-first-reader",
         "opinion-writer-style-profile",
-        "coverage-gap-matcher"
+        "coverage-gap-matcher",
+        "editor-openai-images"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
@@ -415,7 +424,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-08"
+      "lastReviewed": "2026-09-09"
     },
     {
       "id": "muqtarab",
