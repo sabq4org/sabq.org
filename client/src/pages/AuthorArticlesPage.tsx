@@ -3,7 +3,7 @@
  * تصميم أقرب لقائمة الرأي: هيرو خفيف + شبكة عناوين (بدون صفوف صور مكدّسة).
  */
 import { useEffect } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useSearch } from "wouter";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -72,6 +72,11 @@ export default function AuthorArticlesPage() {
   const rawName = params.name ? decodeURIComponent(params.name) : "";
   const name = rawName.trim().replace(/\s+/g, " ");
   const { user } = useAuth();
+  const search = useSearch();
+  const requestedPage = new URLSearchParams(search).get("page");
+  const pageNumber = requestedPage && /^[1-9]\d*$/.test(requestedPage) && Number(requestedPage) <= 10_000 ? Number(requestedPage) : 1;
+  const authorPath = `/author/${encodeURIComponent(name)}`;
+  const pageHref = (page: number) => page === 1 ? authorPath : `${authorPath}?page=${page}`;
 
   const {
     data,
@@ -81,7 +86,7 @@ export default function AuthorArticlesPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["/api/authors/by-name", name, PAGE_SIZE],
+    queryKey: ["/api/authors/by-name", name, PAGE_SIZE, pageNumber],
     queryFn: async ({ pageParam }): Promise<AuthorPage> => {
       const page = typeof pageParam === "number" ? pageParam : 1;
       const res = await fetch(
@@ -96,7 +101,7 @@ export default function AuthorArticlesPage() {
       }
       return res.json();
     },
-    initialPageParam: 1,
+    initialPageParam: pageNumber,
     getNextPageParam: (lastPage) => {
       if (lastPage.pagination?.hasMore) {
         return (lastPage.pagination.page || 1) + 1;
@@ -126,7 +131,7 @@ export default function AuthorArticlesPage() {
         : "كاتب — سبق";
   }, [firstPage?.author.name, name]);
 
-  useCanonical(name ? `https://sabq.org/author/${encodeURIComponent(name)}` : null);
+  useCanonical(name ? `https://sabq.org${pageHref(pageNumber)}` : null);
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -205,6 +210,7 @@ export default function AuthorArticlesPage() {
             </section>
 
             <section className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
+              {pageNumber > 1 && <a href={pageHref(pageNumber - 1)} rel="prev" className="inline-block mb-4 text-primary">الصفحة السابقة</a>}
               <h2 className="text-lg font-bold mb-6">أحدث المقالات</h2>
 
               {articles.length === 0 ? (
@@ -255,7 +261,8 @@ export default function AuthorArticlesPage() {
                   </div>
 
                   {hasNextPage ? (
-                    <div className="flex justify-center pt-10">
+                    <div className="flex justify-center items-center gap-4 pt-10">
+                      <a href={pageHref((data?.pages.at(-1)?.pagination?.page || pageNumber) + 1)} rel="next" className="text-primary">الصفحة التالية</a>
                       <Button
                         variant="outline"
                         onClick={() => fetchNextPage()}

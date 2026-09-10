@@ -1027,6 +1027,12 @@ fun SabqApp(
                     arguments = listOf(navArgument("keyword") { type = NavType.StringType }),
                 ) { entry ->
                     KeywordArticlesScreen(
+                        onSearchClick = {
+                            navController.navigate(SabqRoutes.Search) {
+                                popUpTo(SabqRoutes.KeywordArticles) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->

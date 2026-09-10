@@ -1,4 +1,3 @@
-import { getRealIp } from "./utils/rateLimiting";
 import { installShutdown } from "./shutdown";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
@@ -37,7 +36,8 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes } from "crypto";
+import { getRealIp, originGate, signProxyHeaders } from "./utils/trustedProxyIp";
 import { isNoindexPath } from "./utils/noindexPaths";
 
 process.on('uncaughtException', (error) => {
@@ -465,6 +465,16 @@ app.use(express.json({
                  // raw photo, so a couple of phone images need headroom.
                  // Bumped 10mb → 25mb to stop /articles/submit 413s.
   verify: (req: any, _res: any, buf: Buffer) => {
+    // The CSP report endpoint has its own small parser, but this global parser
+    // runs first. Enforce the same cap here so the 25 MB upload limit cannot
+    // be used to bypass the report endpoint's 16 KB budget.
+    const requestPath = String(req.originalUrl || req.url || "").split("?", 1)[0];
+    if (requestPath === "/api/security/csp-report" && buf.length > 16 * 1024) {
+      const error: any = new Error("CSP report payload too large");
+      error.status = 413;
+      error.type = "entity.too.large";
+      throw error;
+    }
     // Stash the exact raw bytes before JSON parsing so webhook handlers
     // can verify HMAC signatures against the original payload.
     req.rawBody = buf;
@@ -586,13 +596,21 @@ function hasSessionCookie(req: Request): boolean {
 //     handler — so `req.user` is unset when the limiter runs. Without this branch
 //     every app user behind the same carrier-grade NAT public IP shares ONE
 //     write bucket and intermittently gets HTTP 429 (e.g. when posting a
-//     comment). Keying by the token (hashed) gives each session its own bucket.
+//     comment). Route authentication may establish a user key later; an
+//     unverified token must never mint a bucket here.
 //  3. Anonymous requests → CDN/real client IP.
 function rateLimitKey(req: Request): string {
   const userId = (req as any).user?.id;
   if (userId) return `u:${userId}`;
+  // Bearer authentication runs inside the route handler. An arbitrary Bearer
+  // value must not mint a fresh bucket before it has been verified.
   return getRealIp(req);
 }
+
+// Optional origin gate. It is deliberately off until api.sabq.org is routed
+// through the signing Worker for mobile, web-next, meetings, and webhooks.
+// Health endpoints remain reachable for Railway healthchecks and diagnostics.
+app.use(originGate);
 
 // Fire-and-forget TELEMETRY beacons (view counter, behavior/accessibility logs)
 // are high-frequency, anonymous, and harmless to over-count — they must NOT be
@@ -1462,9 +1480,12 @@ if (!(globalThis as any).__sabqServer) {
           try {
             const port = parseInt(process.env.PORT || '5000', 10);
             console.log(`[Cache Warmup] 🔄 Pre-loading homepage cache...`);
+            const warmupHeaders = signProxyHeaders("GET", "/api/homepage-lite");
             const [homepageRes, categoriesRes] = await Promise.all([
-              fetch(`http://localhost:${port}/api/homepage-lite`),
-              fetch(`http://localhost:${port}/api/categories`),
+              fetch(`http://localhost:${port}/api/homepage-lite`, { headers: warmupHeaders }),
+              fetch(`http://localhost:${port}/api/categories`, {
+                headers: signProxyHeaders("GET", "/api/categories"),
+              }),
             ]);
             if (homepageRes.ok) {
               console.log(`[Cache Warmup] ✅ Homepage cache loaded successfully`);

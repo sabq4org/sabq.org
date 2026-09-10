@@ -1,4 +1,7 @@
+import { SummaryAudioAttribution } from "@/components/SummaryAudioAttribution";
+import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
+import { useArticleInsights, useArticleRecommendations } from "@/hooks/useArticleSidebarData";
 import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
@@ -7,7 +10,7 @@ import { Footer } from "@/components/Footer";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
-import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
+import { AIRecommendationsPanel } from "@/components/AIRecommendationsBlock";
 import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
 import { Paywall } from "@/components/Paywall";
 import StoryTimeline from "@/components/StoryTimeline";
@@ -71,6 +74,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, lazy, Suspense } fro
 import DOMPurify from "isomorphic-dompurify";
 import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
+import { ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH } from "@shared/articleHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
@@ -82,15 +86,14 @@ const AiArticleStats = lazy(() =>
 
 export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>();
+  // Start sidebar data before the article-loading return (the chart can stay lazy).
+  const insightsQuery = useArticleInsights(slug);
+  const recommendationsQuery = useArticleRecommendations(slug);
   const { toast } = useToast();
   const { logBehavior } = useBehaviorTracking();
   const [, setLocation] = useLocation();
   
-  // Audio player state
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  
+
   // الموجز مطوي افتراضياً (3 أسطر) عند فتح الخبر — مثل iOS/Android
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   useEffect(() => {
@@ -189,7 +192,7 @@ export default function ArticleDetail() {
     () => (article?.imageUrl ? getCacheBustedImageUrl(article.imageUrl, article.updatedAt) : null),
     [article?.imageUrl, article?.updatedAt],
   );
-  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null);
+  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null, ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH);
 
   const sanitizedArticleHtml = useMemo(() => {
     if (!article?.content) return "";
@@ -915,111 +918,19 @@ export default function ArticleDetail() {
     commentMutation.mutate({ content, parentId });
   }, [commentMutation]);
 
-  const handlePlayAudio = useCallback(async () => {
-    if (!article?.aiSummary && !article?.excerpt) {
-      toast({
-        title: "لا يوجد محتوى",
-        description: "الموجز الذكي غير متوفر لهذا المقال",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // If currently playing, stop playback
-    if (audioRef.current && !audioRef.current.paused) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0; // Reset to beginning
-      setIsPlaying(false);
-      return;
-    }
-
-    // If audio is already loaded but paused, resume playback
-    if (audioRef.current && audioRef.current.src) {
-      try {
-        await audioRef.current.play();
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Error resuming audio:', error);
-        toast({
-          title: "خطأ",
-          description: "فشل تشغيل الموجز الصوتي",
-          variant: "destructive",
-        });
-      }
-      return;
-    }
-
-    // Load and play new audio
-    try {
-      setIsLoadingAudio(true);
-      
-      // Cache busting: include article updatedAt + TTS version (bump when normalize/provider changes)
-      const timestamp = article?.updatedAt ? new Date(article.updatedAt).toISOString() : new Date().toISOString();
-      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=tafqit-v2`;
-      
-      // Create audio element
-      audioRef.current = new Audio(audioUrl);
-      
-      // Add event listeners
-      audioRef.current.addEventListener('ended', () => {
-        setIsPlaying(false);
-      });
-      
-      audioRef.current.addEventListener('error', (e) => {
-        console.error('Audio playback error:', e);
-        toast({
-          title: "خطأ",
-          description: "فشل تشغيل الموجز الصوتي",
-          variant: "destructive",
-        });
-        setIsPlaying(false);
-        setIsLoadingAudio(false);
-      });
-      
-      // Wait for audio to be ready, then play
-      audioRef.current.addEventListener('canplaythrough', async () => {
-        if (audioRef.current) {
-          try {
-            await audioRef.current.play();
-            setIsPlaying(true);
-            setIsLoadingAudio(false);
-          } catch (playError) {
-            console.error('Error playing audio:', playError);
-            toast({
-              title: "خطأ",
-              description: "فشل تشغيل الموجز الصوتي",
-              variant: "destructive",
-            });
-            setIsLoadingAudio(false);
-          }
-        }
-      }, { once: true }); // Only fire once
-      
-      // Start loading the audio
-      audioRef.current.load();
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      toast({
-        title: "خطأ",
-        description: "فشل تحميل الموجز الصوتي",
-        variant: "destructive",
-      });
-      setIsLoadingAudio(false);
-    }
-  }, [article?.aiSummary, article?.excerpt, article?.updatedAt, slug, toast]);
-
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, [slug]);
+  const { isLoadingAudio, isPlaying, provider: audioProvider, handlePlayAudio } = useArticleSummaryAudio(
+    slug, String(article?.updatedAt ?? ''), Boolean(article?.aiSummary || article?.excerpt),
+  );
 
   const timeAgo = article?.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: 'relative', locale: 'ar' })
+    : null;
+  const publishedDateLabel = article?.publishedAt
+    ? formatArticleTimestamp(article.publishedAt, { format: 'absolute', locale: 'ar' })
+    : null;
+  const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;
+  const meaningfulUpdatedDateLabel = editorialModifiedAt
+    ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
     : null;
 
   const getInitials = useCallback((firstName?: string | null, lastName?: string | null, email?: string | null) => {
@@ -1311,10 +1222,15 @@ export default function ArticleDetail() {
                   {/* Metadata - Plain Text */}
                   <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                     {timeAgo && (
-                      <span className="flex items-center gap-1">
+                      <time dateTime={article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined} title={publishedDateLabel ?? undefined} className="flex items-center gap-1">
                         <Clock className="h-3 w-3 opacity-70" />
-                        {timeAgo}
-                      </span>
+                        {timeAgo}{publishedDateLabel ? ` (${publishedDateLabel})` : ""}
+                      </time>
+                    )}
+                    {meaningfulUpdatedDateLabel && (
+                      <time dateTime={editorialModifiedAt} title={meaningfulUpdatedDateLabel} className="text-xs">
+                        (آخر تحديث: {meaningfulUpdatedDateLabel})
+                      </time>
                     )}
                     <span className="flex items-center gap-1">
                       <Eye className="h-3 w-3 opacity-70" />
@@ -1384,6 +1300,8 @@ export default function ArticleDetail() {
                       <h3 className="text-sm font-bold" data-testid="text-ai-summary-title">
                         الموجز
                       </h3>
+                      <div className="flex items-center gap-2">
+                      <SummaryAudioAttribution provider={audioProvider} />
                       <Button
                         variant={isPlaying ? "default" : "ghost"}
                         size="sm"
@@ -1401,6 +1319,7 @@ export default function ArticleDetail() {
                           <Volume2 className="h-3 w-3" />
                         )}
                       </Button>
+                      </div>
                     </div>
 
                     {shouldFetchBullets && isLoadingBullets && aiBullets.length === 0 ? (
@@ -1775,14 +1694,14 @@ export default function ArticleDetail() {
           <aside className="space-y-6">
             {/* AI Article Analytics */}
             <Suspense fallback={<Skeleton className="h-48 w-full" />}>
-              <AiArticleStats slug={slug} />
+              <AiArticleStats query={insightsQuery} />
             </Suspense>
 
             {/* Advertisement Slot - Article Sidebar */}
             <AdSlot slotId="sidebar" className="my-6" />
 
             {/* AI-Powered Smart Recommendations */}
-            <AIRecommendationsBlock articleSlug={slug} />
+            <AIRecommendationsPanel query={recommendationsQuery} />
 
             {/* Related Opinion Articles */}
             {article?.category && (

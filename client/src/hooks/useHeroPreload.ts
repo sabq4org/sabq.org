@@ -1,22 +1,13 @@
 import { useEffect } from "react";
-import {
-  buildCloudflareUrl,
-  generateResponsiveSrcSet,
-  HERO_SIZES_ATTR,
-  normalizeImageSrc,
-} from "@/lib/cdnImage";
+import { buildHeroImagePreload } from "@shared/articleHeroPreload";
 
-export function useHeroPreload(imageUrl: string | null | undefined): void {
+export function useHeroPreload(imageUrl: string | null | undefined, quality = 72, fallbackWidth = 960): void {
   useEffect(() => {
     if (!imageUrl || typeof document === "undefined") return;
 
-    // Keep quality in lockstep with HeroCarousel's HERO_QUALITY. If the
-    // preloaded srcset uses a different quality than the rendered <img>, the
-    // browser treats them as different resources and downloads the hero twice.
-    const HERO_QUALITY = 72;
-    const normalized = normalizeImageSrc(imageUrl);
-    const srcset = generateResponsiveSrcSet(normalized, HERO_QUALITY);
-    const fallbackHref = buildCloudflareUrl(normalized, { width: 960, quality: HERO_QUALITY }) || normalized;
+    const preload = buildHeroImagePreload(imageUrl, quality, fallbackWidth);
+    if (!preload) return;
+    const { href: fallbackHref, imagesrcset: srcset, imagesizes } = preload;
 
     // The Pages middleware may have already injected this exact preload into
     // the served HTML (data-hero-preload-edge, built from the same shared
@@ -31,7 +22,7 @@ export function useHeroPreload(imageUrl: string | null | undefined): void {
     link.setAttribute("fetchpriority", "high");
     if (srcset) {
       link.setAttribute("imagesrcset", srcset);
-      link.setAttribute("imagesizes", HERO_SIZES_ATTR);
+      link.setAttribute("imagesizes", imagesizes!);
     }
     link.href = fallbackHref;
     link.dataset.heroPreload = "1";
@@ -45,5 +36,5 @@ export function useHeroPreload(imageUrl: string | null | undefined): void {
         /* already removed */
       }
     };
-  }, [imageUrl]);
+  }, [imageUrl, quality, fallbackWidth]);
 }

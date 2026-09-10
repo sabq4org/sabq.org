@@ -257,19 +257,23 @@ export function useArticleAiTools({
 
   const proofreadMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("/api/ai/proofread", {
+      const result = await apiRequest<{ issues: ProofreadIssue[] }>("/api/ai/proofread", {
         method: "POST",
         body: JSON.stringify({ content }),
       });
+      if (!Array.isArray(result?.issues) || result.issues.some(i => !i || typeof i.original !== "string" || typeof i.suggestion !== "string")) {
+        throw new Error("لم تكتمل نتيجة التدقيق، يرجى إعادة المحاولة");
+      }
+      return result;
     },
     onSuccess: (data: any) => {
       const issues = Array.isArray(data?.issues) ? data.issues : [];
       setProofreadIssues(issues);
       setShowProofreadDialog(true);
       toast({
-        title: issues.length === 0 ? "لا توجد أخطاء إملائية" : `تم العثور على ${issues.length} ملاحظة`,
+        title: issues.length === 0 ? "اكتمل التدقيق" : `تم العثور على ${issues.length} ملاحظة`,
         description: issues.length === 0
-          ? "النص سليم إملائياً"
+          ? "لم يرصد المدقق أخطاء إملائية في هذه المراجعة"
           : "راجع الاقتراحات يدوياً — لن يتم تعديل النص تلقائياً",
       });
     },

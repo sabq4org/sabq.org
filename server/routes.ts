@@ -1,5 +1,7 @@
 import { registerShutdownHook } from "./shutdown";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
+import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
@@ -15,8 +17,11 @@ import {
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
+import { getRealIp as getTrustedRealIp } from "./utils/trustedProxyIp";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
+import { apiListingNoindex, apiListingRobotsRules } from "./utils/apiListingRobots";
 import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError, isUniqueViolation } from "./utils/pgError";
@@ -132,6 +137,7 @@ import { generateSeoMetadata } from './seo-generator';
 import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } from "./cacheMiddleware";
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
+import { getCachedNewsStatistics } from "./services/newsStatisticsService";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import { bestEffortWithin } from "./utils/bestEffortDeadline";
@@ -158,7 +164,12 @@ import { checkUserStatus } from "./userStatusMiddleware";
 import { slugRedirectMiddleware } from "./middleware/slugRedirect";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { getRealIp, cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
+import { cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
+import {
+  mediaUploadProbe,
+  markMediaUploadStage,
+  type MediaUploadProbe,
+} from "./utils/mediaUploadDiagnostics";
 
 // A genuine article view counts ONCE per visitor (logged-in user, else real
 // client IP) per article within this window. Rapid repeats (refresh-mashing,
@@ -539,6 +550,7 @@ function sanitizeArticleUpdatePayload(body: any) {
 }
 
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
+  app.use(apiListingNoindex);
   const AI_BULLETS_TTL_MS = 30 * 60 * 1000;
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
   const aiBulletsInFlight = new Map<string, Promise<string[]>>();
@@ -1965,8 +1977,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // images, rich editor, angle-writer topic images) — NOT just the media library.
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
-  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
-    const uploadStartedAt = Date.now();
+  app.post("/api/media/upload", mediaUploadProbe, markMediaUploadStage("auth"), isAuthenticated, markMediaUploadStage("rate-limit"), mediaUploadLimiter, markMediaUploadStage("body-receive"), parseMediaUpload, async (req: any, res) => {
+    const probe = req.__mediaUploadProbe as MediaUploadProbe;
+    const uploadStartedAt = probe?.startedAt ?? Date.now();
+    const handlerStartedAt = Date.now();
+    const uploadTimings: Record<string, number> = {};
     try {
       const userId = req.user.id;
 
@@ -1985,6 +2000,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Verify the file's actual magic bytes match the claimed MIME
       // (security audit M1, 2026-05-11). multer's fileFilter only
       // trusts the client-declared header; sharp reads the real format.
+      probe.stage = "verify";
       if (req.file.mimetype.startsWith('image/')) {
         let verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
         // iPhone / some browsers mislabel HEIC/AVIF as image/jpeg. If the
@@ -2035,7 +2051,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       console.log("[Media Upload] File received:", {
-        originalName: req.file.originalname,
         mimetype: req.file.mimetype,
         size: req.file.size,
       });
@@ -2043,8 +2058,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Per-phase timings land in one log line at the end so Railway logs
       // show where a slow upload spent its time (verify/transcode vs provider
       // vs DB) without guessing.
-      const uploadTimings: Record<string, number> = {};
-      uploadTimings.verify = Date.now() - uploadStartedAt;
+      // Keep transport/auth/multer time separate from application work. The
+      // lifecycle line reports body arrival; this phase starts when the async
+      // upload handler actually begins.
+      uploadTimings.verify = Date.now() - handlerStartedAt;
+      if (probe.bodyReceivedAt) uploadTimings.body = probe.bodyReceivedAt - uploadStartedAt;
       let phaseStartedAt = Date.now();
 
       // Perceptual hash (dedup warning) needs a decode pass over the source.
@@ -2086,6 +2104,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           ? newsImageStorageService.isUploadAvailable()
           : cloudflareImagesService.isCloudflareConfigured())
       ) {
+        probe.stage = "provider";
         const imageResult = isEditorialImage
           ? await newsImageStorageService.upload({
               buffer: req.file.buffer,
@@ -2123,6 +2142,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // GCS path — used only when CF didn't claim the upload. Wrapped in
       // try/catch so a missing/misconfigured GCS doesn't kill the request
       // when CF already has the file.
+      probe.stage = "storage";
       let storagePath: string;
       if (cloudflareUrl) {
         storagePath = cloudflareUrl;
@@ -2213,6 +2233,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       uploadTimings.storage = Date.now() - phaseStartedAt;
       phaseStartedAt = Date.now();
+      probe.stage = "database";
 
       // Upload is image-only (the multer fileFilter rejects everything else),
       // so the type is always "image". Real video/document support is a
@@ -2402,6 +2423,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // assignPerceptualHash is already best-effort (swallows missing-column).
       uploadTimings.db = Date.now() - phaseStartedAt;
       phaseStartedAt = Date.now();
+      probe.stage = "hash";
       let duplicateOf = null;
       if (fileType === 'image') {
         try {
@@ -2414,9 +2436,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
       uploadTimings.hash = Date.now() - phaseStartedAt;
+      uploadTimings.handler = Date.now() - handlerStartedAt;
       uploadTimings.total = Date.now() - uploadStartedAt;
       console.log(
-        `[Media Upload] timings ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} purpose=${uploadPurpose || '-'} size=${req.file.size}`,
+        `[Media Upload] timings requestId=${probe.requestId} ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} kind=${isEditorialImage ? "editorial" : "generic"} size=${req.file.size}`,
       );
 
       res.json({
@@ -2426,7 +2449,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         duplicateOf,
       });
     } catch (error: any) {
-      console.error("Error uploading media file:", error);
+      console.error("Error uploading media file:", {
+        requestId: probe?.requestId,
+        stage: probe?.stage,
+        errorName: error?.name,
+        errorCode: error?.code,
+        elapsed: Date.now() - uploadStartedAt,
+      });
 
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ message: "الملف كبير جداً. الحد الأقصى 10MB" });
@@ -7096,8 +7125,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { search, status, articleType, categoryId, authorId, featured, includeAI, page = '1', limit = '30' } = req.query;
       
       // Auto-filter for reporters: they should only see their own articles
-      const userPermissions = await getUserPermissions(req.user.id);
-      const canViewAllArticles = userPermissions.includes('articles.view_all') || 
+      // The permission middleware has already populated the effective RBAC cache.
+      // Reuse it instead of querying users/roles/permissions again on every list load.
+      const userPermissions = await getEffectiveUserPermissions(req.user.id);
+      const canViewAllArticles = userPermissions.includes('*') ||
+        userPermissions.includes('articles.view_all') ||
         userPermissions.includes('articles.manage') ||
         ['admin', 'system_admin', 'editor', 'chief_editor', 'content_manager'].includes(req.user.role);
       
@@ -7178,16 +7210,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
-      // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
-      // reordering from the dashboard persists after refetch instead of snapping back to date order
+      // Draft/archive retain manual order. Scheduled rows show the nearest due
+      // time first. Published rows use the indexed candidate merge below so an
+      // old scheduled draft rises when published without losing manual curation.
       let orderClauses;
       if (status === "archived") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "draft") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "scheduled") {
-        orderClauses = [desc(articles.displayOrder), desc(articles.scheduledAt), desc(articles.createdAt)];
+        orderClauses = [adminScheduledOrder];
       } else {
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
@@ -7261,22 +7293,38 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
 
         // Get total count for pagination — عند البحث يكفينا عدد المرشحين
-        // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح.
-        let totalCount: number;
-        if (searchCandidateTotal !== null) {
-          totalCount = searchCandidateTotal;
-        } else {
-          let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
-          if (whereConditions.length > 0) {
-            countQuery = countQuery.where(and(...whereConditions));
-          }
-          const [countResult] = await countQuery;
-          totalCount = Number(countResult?.count || 0);
-        }
+        // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح. في القائمة
+        // العادية لا يعتمد العد على صفوف الصفحة، لذلك نشغّلهما بالتوازي.
+        const requestedMetricsStatus: 'published' | 'draft' | 'archived' | null =
+          status === 'published' ? 'published' :
+          status === 'draft' ? 'draft' :
+          status === 'archived' ? 'archived' : null;
+        const metricsTotalStatus = !shouldFilterByUser && whereConditions.length === 1
+          ? requestedMetricsStatus
+          : null;
+        const totalPromise = searchCandidateTotal !== null
+          ? Promise.resolve(searchCandidateTotal)
+          : metricsTotalStatus
+            ? storage.getArticlesMetrics().then((metrics) => metrics[metricsTotalStatus])
+          : (async () => {
+              let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
+              if (whereConditions.length > 0) {
+                countQuery = countQuery.where(and(...whereConditions));
+              }
+              const [countResult] = await countQuery;
+              return Number(countResult?.count || 0);
+            })();
 
-        const rows = await query.orderBy(...orderClauses)
-          .limit(limitNum)
-          .offset(offset);
+        const rowsPromise = status === "published"
+          ? (async () => {
+              const ids = await getAdminPublishedPageIds(and(...whereConditions), limitNum, offset);
+              if (!ids.length) return [];
+              const rows = await query.where(and(...whereConditions, inArray(articles.id, ids)));
+              const position = new Map(ids.map((id, index) => [id, index]));
+              return rows.sort((a, b) => position.get(a.article.id)! - position.get(b.article.id)!);
+            })()
+          : query.orderBy(...orderClauses).limit(limitNum).offset(offset);
+        const [totalCount, rows] = await Promise.all([totalPromise, rowsPromise]);
 
         return { results: rows, total: totalCount };
       })();
@@ -8101,11 +8149,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Handle republish feature
       if (req.body.republish === true) {
-        // User wants to republish with current timestamp
+        // Resurface the article without rewriting its original publication
+        // date. The surfaced timestamp controls ordering only.
         updateData.displayOrder = Math.floor(Date.now() / 1000);
-        // User wants to republish with current timestamp
-        updateData.publishedAt = new Date();
-      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !updateData.publishedAt) {
+        updateData.resurfacedAt = new Date();
+      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !existingArticle.publishedAt && !updateData.publishedAt) {
         // Only set publishedAt automatically when publishing for the first time
         updateData.displayOrder = Math.floor(Date.now() / 1000);
         updateData.publishedAt = new Date();
@@ -13282,12 +13330,7 @@ Respond in valid JSON format only:
   // News Statistics Endpoint - Statistics cards data
   app.get("/api/news/stats", async (req, res) => {
     try {
-      const cacheKey = 'news:stats';
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
-      const stats = await storage.getNewsStatistics();
-      memoryCache.set(cacheKey, stats, CACHE_TTL.SHORT);
+      const stats = await getCachedNewsStatistics();
       res.json(stats);
     } catch (error) {
       console.error("Error fetching news stats:", error);
@@ -13953,6 +13996,11 @@ Respond in valid JSON format only:
 
   // Get smart summary audio for an article
   app.get("/api/articles/:slug/summary-audio", async (req: any, res) => {
+    // Settings changes must reach the origin; generated audio remains cached on the server.
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("CDN-Cache-Control", "no-store");
+    res.setHeader("Vercel-CDN-Cache-Control", "no-store");
+    res.append("Access-Control-Expose-Headers", "X-TTS-Provider, X-TTS-Cache");
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
@@ -13969,95 +14017,13 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "الموجز غير متوفر لهذا المقال" });
       }
 
-      // كاش صوت جاهز — بدون must-revalidate حتى لا يُعاد التوليد في كل زيارة.
-      const updatedKey = article.updatedAt instanceof Date
-        ? article.updatedAt.toISOString()
-        : String(article.updatedAt ?? "");
-      // v3: صوت علي السعودي + eleven_multilingual_v2 — تخطّي أي كاش قديم بصوت Flash/Google.
-      const audioCacheKey = `summary-audio:v3:${article.id}:${updatedKey}`;
-      const cachedAudio = memoryCache.get<{ buffer: Buffer; provider: string }>(audioCacheKey);
-      if (cachedAudio) {
-        res.setHeader("X-TTS-Provider", cachedAudio.provider);
-        res.setHeader("X-TTS-Cache", "HIT");
-        res.setHeader("Content-Type", "audio/mpeg");
-        res.setHeader("Content-Length", cachedAudio.buffer.length.toString());
-        res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400");
-        res.setHeader("ETag", `"${article.id}-${updatedKey}-${cachedAudio.provider}"`);
-        return res.send(cachedAudio.buffer);
-      }
-
-      const explicit = (process.env.TTS_PROVIDER || '').toLowerCase();
-      let audioBuffer: Buffer | null = null;
-      let usedProvider = '';
-
-      const timeoutPromise = (ms: number) => new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TTS timeout')), ms)
-      );
-
-      if (explicit !== 'google') {
-        const { getElevenLabsService, isElevenLabsQuotaCoolingDown } = await import("./services/elevenlabs");
-        if (isElevenLabsQuotaCoolingDown()) {
-          // تخطٍ فوري — كان كل طلب ينتظر فشل ElevenLabs ثم Google (~1.2ث+).
-        } else {
-          const elevenLabsService = getElevenLabsService();
-          if (elevenLabsService) {
-            try {
-              // multilingual_v2 أعلى جودة عربية بكثير من Flash، والكاش 24 ساعة
-              // يجعل كلفة المهلة الأطول تُدفع مرة واحدة لكل مقال فقط.
-              audioBuffer = await Promise.race([
-                elevenLabsService.textToSpeech({
-                  text: textToConvert,
-                  model: 'eleven_multilingual_v2',
-                  voiceId: process.env.ELEVENLABS_NEWS_VOICE_ID || 'MI88rOZjXbH22N8KHXUo', // علي — سعودي عميق هادئ
-                  language: 'ar',
-                  voiceSettings: {
-                    stability: 0.50,          // أقل = تلوين نبري إذاعي بدل الرتابة
-                    similarity_boost: 0.80,
-                    style: 0.15,              // رصانة نشرة دون مبالغة درامية
-                    use_speaker_boost: true,
-                    speed: 0.95               // إبطاء بسيط = وقار المذيع
-                  }
-                }, 20_000),
-                timeoutPromise(20_000)
-              ]);
-              usedProvider = 'elevenlabs';
-            } catch (eErr) {
-              const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
-              if (eMsg.includes('quota_exceeded') || /quota|payment_required|credits/i.test(eMsg)) {
-                console.warn('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
-              } else {
-                console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
-              }
-            }
-          }
-        }
-      }
-
-      if (!audioBuffer) {
-        const { getGoogleTTSService } = await import("./services/googleTts");
-        const google = getGoogleTTSService();
-        if (!google) {
-          throw new Error('No TTS provider available');
-        }
-        audioBuffer = await Promise.race([
-          google.textToSpeech({
-            text: textToConvert,
-            voiceId: 'ar-XA-Wavenet-C',
-            voiceSettings: { stability: 0.6, speed: 1.0 }
-          }),
-          timeoutPromise(15000)
-        ]);
-        usedProvider = 'google';
-      }
-
-      memoryCache.set(audioCacheKey, { buffer: audioBuffer, provider: usedProvider }, CACHE_TTL.LONG);
-      res.setHeader("X-TTS-Provider", usedProvider);
-      res.setHeader("X-TTS-Cache", "MISS");
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Content-Length", audioBuffer.length.toString());
-      res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400");
-      res.setHeader("ETag", `"${article.id}-${updatedKey}-${usedProvider}"`);
-      res.send(audioBuffer);
+      const { getSummaryAudio } = await import("./services/summaryAudioService");
+      const audio = await getSummaryAudio(String(article.id), textToConvert);
+      res.setHeader("X-TTS-Provider", audio.provider);
+      res.setHeader("X-TTS-Cache", audio.cache);
+      res.setHeader("Content-Type", audio.contentType);
+      res.setHeader("Content-Length", audio.buffer.length.toString());
+      res.send(audio.buffer);
     } catch (error) {
       console.error("Error generating summary audio:", error);
       const errorMessage = error instanceof Error && error.message === 'ElevenLabs timeout' 
@@ -14288,11 +14254,7 @@ Respond in valid JSON format only:
       // Pages egress doesn't collapse every anonymous visitor into one bucket.
       const viewerKey = req.user?.id
         ? `u:${req.user.id}`
-        : ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
-          || (req.headers['cf-connecting-ip'] as string)
-          || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-          || req.ip
-          || 'unknown';
+        : getTrustedRealIp(req);
       const viewDedupKey = `view:seen:${articleId}:${viewerKey}`;
       if (memoryCache.get<boolean>(viewDedupKey)) {
         return res.json({ success: true, counted: false });
@@ -14310,11 +14272,7 @@ Respond in valid JSON format only:
 
       // Record the per-IP aggregate (hashed IP, buffered) so a counted view can
       // later be broken down by distinct IP. Same precedence as rateLimitKey().
-      const clientIp = ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
-        || (req.headers['cf-connecting-ip'] as string)
-        || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-        || req.ip
-        || 'unknown';
+      const clientIp = getTrustedRealIp(req);
       recordArticleView(articleId, clientIp, userId);
 
       res.json({ success: true, counted: true });
@@ -14752,6 +14710,11 @@ Respond in valid JSON format only:
         const parsed = insertArticleMediaAssetSchema.safeParse({
           ...req.body,
           articleId,
+          // The ORM contract requires NOT NULL; preserve the existing API
+          // fallback before validation so omitted alt text remains accepted.
+          altText: req.body.altText === undefined || req.body.altText === ""
+            ? "صورة الخبر"
+            : req.body.altText,
         });
 
         if (!parsed.success) {
@@ -14761,10 +14724,7 @@ Respond in valid JSON format only:
           });
         }
         
-        const dataToInsert = {
-          ...parsed.data,
-          altText: parsed.data.altText || "صورة الخبر",
-        };
+        const dataToInsert = parsed.data;
         const asset = await storage.createArticleMediaAsset(dataToInsert);
         memoryCache.invalidatePattern('^article:media-assets:');
         // Purge article HTML/JSON/sidebar at the edge so newly-added photos
@@ -14831,7 +14791,14 @@ Respond in valid JSON format only:
     try {
         const { id } = req.params;
         
-        const parsed = updateArticleMediaAssetSchema.safeParse(req.body);
+        const parsed = updateArticleMediaAssetSchema.safeParse({
+          ...req.body,
+          // Keep the established PATCH behavior for omitted/empty alt text,
+          // while rejecting explicit null before the database write.
+          altText: req.body.altText === undefined || req.body.altText === ""
+            ? "صورة الخبر"
+            : req.body.altText,
+        });
 
         if (!parsed.success) {
           return res.status(400).json({ 
@@ -14846,10 +14813,7 @@ Respond in valid JSON format only:
           return res.status(access.httpStatus).json({ message: access.message });
         }
 
-        const dataToUpdate = {
-          ...parsed.data,
-          altText: parsed.data.altText || "صورة الخبر",
-        };
+        const dataToUpdate = parsed.data;
         const asset = await storage.updateArticleMediaAsset(id, dataToUpdate);
 
         if (!asset) {
@@ -15436,10 +15400,11 @@ Respond in valid JSON format only:
 
       // Handle republish feature
       if (req.body.republish === true) {
-        // User wants to republish with current timestamp
+        // Resurface the article without rewriting its original publication
+        // date. The surfaced timestamp controls ordering only.
         updateData.displayOrder = Math.floor(Date.now() / 1000);
-        updateData.publishedAt = new Date();
-      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !updateData.publishedAt) {
+        updateData.resurfacedAt = new Date();
+      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !existingArticle.publishedAt && !updateData.publishedAt) {
         updateData.publishedAt = new Date();
       }
 
@@ -26781,7 +26746,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Stable hash-bucketed article sitemaps:
   // articles partitioned by abs(hashtext(id::text)) % N, lastmod from
   // updated_at || published_at. Bucket assignment is stable for a given id.
-  const SITEMAP_AR_BUCKETS = 50;
+  const SITEMAP_AR_BUCKETS = AR_SITEMAP_BUCKETS;
   const SITEMAP_EN_BUCKETS = 10;
   const SITEMAP_UR_BUCKETS = 10;
 
@@ -26791,7 +26756,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const baseUrl = "https://sabq.org";
       // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
       // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
-      const indexXml = await getOrBuildSitemapXml('index', 30 * 60 * 1000, async () => {
+      const indexXml = await getOrBuildSitemapXml('index_archive_v3', 30 * 60 * 1000, async () => {
         // Most-recent published article → a <lastmod> hint on the
         // frequently-changing news + article-bucket children so Google
         // reprioritizes them on recrawl. One cheap aggregate; index is cached 30m.
@@ -26910,19 +26875,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         title: spec.title,
         publishedAt: spec.publishedAt,
         updatedAt: spec.updatedAt,
+        editorialModifiedAt: spec.table === articles
+          ? sql<string | null>`${articles.seoMetadata}->>'editorialModifiedAt'`
+          : sql<string | null>`NULL`,
         imageUrl: spec.imageUrl,
       })
       .from(spec.table)
       .where(
         and(
           eq(spec.status, "published"),
+          spec.table === articles ? isCanonicalArchiveArticle() : undefined,
           isNotNull(spec.publishedAt),
           isNotNull(spec.title),
           ne(spec.title, ""),
           lte(spec.publishedAt, new Date()),
           // المقسوم حرفي (raw) لا باراميتر — شرط مطابقة فهرس التعبير
           // idx_articles_sitemap_bucket؛ لو صار $N يعود المسح الكامل للجدول
-          sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
+          spec.table === articles ? archiveSitemapBucketCondition(bucket)
+            : sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
         ),
       )
       .orderBy(desc(spec.publishedAt))
@@ -26950,7 +26920,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     for (const row of rows) {
       const canonicalSlug = row.englishSlug || row.slug;
       if (!canonicalSlug) continue;
-      const lastmodSource = row.updatedAt || row.publishedAt || new Date();
+      const lastmodSource = (spec.table === articles ? getPublicEditorialModifiedAt(row.publishedAt, { editorialModifiedAt: row.editorialModifiedAt }) : row.updatedAt) || row.publishedAt;
+      if (!lastmodSource) continue;
       const lastmod = new Date(lastmodSource).toISOString();
       const pubDate = row.publishedAt ? new Date(row.publishedAt) : new Date(0);
       let priority = '0.3';
@@ -27036,7 +27007,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     imageUrl: urArticles.imageUrl,
   } as any;
 
-  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticles", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
+  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticlesCanonicalV3", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
   registerBucketedSitemap("/sitemap-en-articles-:page.xml", "__sitemapEnArticles", enSitemapSpec, "/en/article", SITEMAP_EN_BUCKETS);
   registerBucketedSitemap("/sitemap-ur-articles-:page.xml", "__sitemapUrArticles", urSitemapSpec, "/ur/article", SITEMAP_UR_BUCKETS);
 
@@ -27184,6 +27155,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 User-agent: *
 Allow: /
 Disallow: /api/
+${apiListingRobotsRules}
 
 # ملاحظة: صفحات الحساب والمصادقة (login, register, logout, *-password,
 # 2fa-verify, verify-email, profile, bookmarks, reading-history, my-*,
@@ -27193,7 +27165,8 @@ Disallow: /api/
 # Search Console: لأن Google لا يستطيع زحفها، فلا يرى وسم noindex ولا يُسقطها.
 # الآن يستطيع زحفها ويرى X-Robots-Tag: noindex (يضيفه وسيط Cloudflare Pages
 # لكل مسارات noindex — راجع functions/_middleware.js) فيُسقطها من الفهرس.
-# /api/ يبقى محظورًا لأنه نقاط نهاية JSON (ليست HTML) ولا يمكن وسمها بـ noindex.
+# بقية /api/ تبقى محظورة. قائمتا الأخبار المحددتان أعلاه قابلتان للزحف
+# لرؤية X-Robots-Tag: noindex, nofollow؛ الترويسة صالحة لموارد JSON أيضاً.
 
 # Googlebot-News intentionally has NO separate group — a previous
 # "Disallow: /" (with a few Allow exceptions) blocked it from the homepage

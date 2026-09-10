@@ -231,6 +231,29 @@ describe("المساعدات", () => {
 });
 
 describe("ضجيج العميل غير القابل للإصلاح — يسقط ولو كان الإطار من حزمتنا", () => {
+  it("JAVASCRIPT-REACT-3F/3G/3H: مهلة المكونات الاصطناعية فقط تسقط", () => {
+    const expectedDeadline = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "SabqQueryDeadlineError", value: "Request timed out" },
+    );
+    const realBrowserTimeout = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "TimeoutError", value: "Request timed out" },
+    );
+    const unrelatedSameType = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "SabqQueryDeadlineError", value: "Different failure" },
+    );
+
+    expect(shouldSendSentryEvent(expectedDeadline)).toBe(false);
+    expect(shouldSendSentryEvent(realBrowserTimeout)).toBe(true);
+    expect(shouldSendSentryEvent(unrelatedSameType)).toBe(true);
+    expect(isIgnoredClientErrorMessage("Request timed out")).toBe(false);
+  });
+
   it("JAVASCRIPT-REACT-2T: تم فقدان اتصال الشبكة (سفاري معرّب)", () => {
     // https://sabq.sentry.io/issues/7619514545/
     const event = eventWith(

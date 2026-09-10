@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { db, executeWithStatementTimeout } from "../db";
+
+// The case-insensitive JSON fallback is intentionally bounded. It is only
+// reached after both the relational tag lookup and the GIN exact-match lookup
+// return no rows, but it still has to be cancelled server-side so a cold scan
+// cannot occupy a pooler connection for the full client query timeout.
+const SEO_FALLBACK_TIMEOUT_MS = 750;
 
 export interface KeywordPayload {
   articles: any[];
@@ -18,8 +24,13 @@ export async function getArticlesByKeyword(keyword: string): Promise<KeywordPayl
            a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
            a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
            a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-           a.article_type AS "articleType"
+           a.article_type AS "articleType",
+           c.name_ar AS "categoryName", c.slug AS "categorySlug",
+           CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
+             'id', c.id, 'nameAr', c.name_ar, 'slug', c.slug, 'color', c.color
+           ) END AS category
     FROM articles a
+    LEFT JOIN categories c ON c.id = a.category_id
     INNER JOIN article_tags at ON at.article_id = a.id
     INNER JOIN tags t ON t.id = at.tag_id
     WHERE a.status = 'published'
@@ -44,8 +55,13 @@ export async function getArticlesByKeyword(keyword: string): Promise<KeywordPayl
              a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
              a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
              a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-             a.article_type AS "articleType"
+             a.article_type AS "articleType",
+             c.name_ar AS "categoryName", c.slug AS "categorySlug",
+             CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
+               'id', c.id, 'nameAr', c.name_ar, 'slug', c.slug, 'color', c.color
+             ) END AS category
       FROM articles a
+      LEFT JOIN categories c ON c.id = a.category_id
       WHERE a.status = 'published'
         AND (a.seo -> 'keywords') @> to_jsonb(${keyword}::text)
       ORDER BY a.published_at DESC
@@ -56,21 +72,37 @@ export async function getArticlesByKeyword(keyword: string): Promise<KeywordPayl
     // Last resort: case-insensitive scan, only when the indexed exact match
     // found nothing (rare — covers keywords stored in a different case).
     if (!filteredArticles || filteredArticles.length === 0) {
-      const seoResult = await db.execute(sql`
-        SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
-               a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
-               a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
-               a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-               a.article_type AS "articleType"
-        FROM articles a
-        WHERE a.status = 'published'
-          AND EXISTS (
-            SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
-            WHERE lower(kw) = lower(${keyword})
-          )
-        ORDER BY a.published_at DESC
-        LIMIT 20
-      `);
+      let seoResult;
+      try {
+        seoResult = await executeWithStatementTimeout(sql`
+          SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
+                 a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
+                 a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
+                 a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
+                 a.article_type AS "articleType",
+                 c.name_ar AS "categoryName", c.slug AS "categorySlug",
+                 CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
+                   'id', c.id, 'nameAr', c.name_ar, 'slug', c.slug, 'color', c.color
+                 ) END AS category
+          FROM articles a
+          LEFT JOIN categories c ON c.id = a.category_id
+          WHERE a.status = 'published'
+            AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
+              WHERE lower(kw) = lower(${keyword})
+            )
+          ORDER BY a.published_at DESC
+          LIMIT 20
+        `, SEO_FALLBACK_TIMEOUT_MS);
+      } catch (error: any) {
+        const code = error?.code ?? error?.cause?.code;
+        if (code !== "57014") throw error;
+        // The fallback is best-effort. Do not log the user-provided keyword.
+        console.warn(
+          `[Keyword] case-insensitive SEO fallback timed out after ${SEO_FALLBACK_TIMEOUT_MS}ms`,
+        );
+        seoResult = { rows: [] };
+      }
       filteredArticles = (seoResult as any).rows || seoResult;
     }
   }

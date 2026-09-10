@@ -215,7 +215,7 @@ export async function removeSubscriberFromGroup(subscriberId: string, groupId: s
  * Process webhook from MailerLite
  */
 export interface MailerLiteWebhookEvent {
-  type: 'subscriber.created' | 'subscriber.updated' | 'subscriber.unsubscribed' | 'subscriber.bounced' | 'campaign.sent';
+  type: 'subscriber.created' | 'subscriber.updated' | 'subscriber.unsubscribed' | 'subscriber.bounced' | 'campaign.sent' | string;
   data: {
     subscriber?: MailerLiteSubscriber;
     campaign?: {
@@ -226,18 +226,40 @@ export interface MailerLiteWebhookEvent {
   created_at: string;
 }
 
+export function parseMailerLiteWebhooks(payload: unknown): MailerLiteWebhookEvent[] {
+  const input = payload && typeof payload === 'object' &&
+    Array.isArray((payload as { events?: unknown }).events)
+    ? (payload as { events: unknown[] }).events
+    : Array.isArray(payload) ? payload : [payload];
+
+  return input.flatMap((entry): MailerLiteWebhookEvent[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const raw = entry as Record<string, unknown>;
+    const type = typeof raw.type === 'string' ? raw.type
+      : typeof raw.event === 'string' ? raw.event : '';
+    if (!type) return [];
+
+    // MailerLite's current subscriber payload puts the subscriber fields at
+    // the top level. Older integration examples use data.subscriber or
+    // subscriber directly; normalize all shapes before route handling.
+    const subscriber = raw.data && typeof raw.data === 'object'
+      ? (raw.data as Record<string, unknown>).subscriber
+      : raw.subscriber || (typeof raw.email === 'string' ? raw : undefined);
+    const data = raw.data && typeof raw.data === 'object'
+      ? raw.data as MailerLiteWebhookEvent['data']
+      : { subscriber: subscriber as MailerLiteSubscriber | undefined,
+          campaign: raw.campaign as MailerLiteWebhookEvent['data']['campaign'] };
+
+    return [{
+      type,
+      data,
+      created_at: typeof raw.created_at === 'string' ? raw.created_at : new Date().toISOString(),
+    }];
+  });
+}
+
 export function parseMailerLiteWebhook(payload: unknown): MailerLiteWebhookEvent | null {
-  try {
-    const event = payload as MailerLiteWebhookEvent;
-    if (!event.type || !event.data) {
-      console.warn('⚠️ Invalid MailerLite webhook payload');
-      return null;
-    }
-    return event;
-  } catch (error) {
-    console.error('❌ Error parsing MailerLite webhook:', error);
-    return null;
-  }
+  return parseMailerLiteWebhooks(payload)[0] || null;
 }
 
 /**

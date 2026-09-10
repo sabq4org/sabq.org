@@ -47,6 +47,9 @@ jobs:
           SESSION_REVOCATION_TEST_URL: postgresql://audit_local:local_test_only@127.0.0.1:5432/postgres
         run: npm run test:unit
 
+      - name: SSR view tests
+        run: npm run test:web-next
+
       - name: Server build (esbuild)
         run: npm run build:server
 

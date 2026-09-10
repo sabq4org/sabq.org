@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.live
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
@@ -68,7 +69,7 @@ class MomentByMomentViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            loadError = e.localizedMessage ?: "تعذر تحميل الأخبار",
+                            loadError = readerErrorMessage(e, "تعذر تحميل الأخبار"),
                         )
                     }
                 }

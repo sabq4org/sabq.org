@@ -12,6 +12,7 @@ import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/format";
 import { apiRequest } from "@/lib/queryClient";
 import { rememberPostAuthReturn } from "@/lib/postAuthRedirect";
@@ -20,6 +21,7 @@ import { PredictionMyEntryCard } from "@/components/predictions/PredictionMyEntr
 import { PredictionRulesCard } from "@/components/predictions/PredictionRulesCard";
 import { PredictionSeasonCard } from "@/components/predictions/PredictionSeasonCard";
 import { PredictionSettlementDrawer } from "@/components/predictions/PredictionSettlementDrawer";
+import { isPredictionRateLimitError } from "@/components/predictions/predictionRequestError";
 import {
   type PredCompetitionDetail,
   type PredCompetitionSummary,
@@ -74,6 +76,7 @@ function syncCompetitionUrl(slug: string, keepDeep = true) {
 
 export default function PredictionCenter() {
   const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("matches");
   const [selectedSlug, setSelectedSlug] = useState<string | null>(competitionFromUrl);
   const [settlementContestId, setSettlementContestId] = useState<string | null>(null);
@@ -148,6 +151,14 @@ export default function PredictionCenter() {
       });
       const page = await apiRequest<PredLeaderboardResponse>(`/api/predictions/leaderboards?${params}`);
       setBoardPages((pages) => [...pages, Array.isArray(page.entries) ? page.entries : []]);
+    } catch (error) {
+      // 429 is an expected edge throttle: explain it and let the visitor retry.
+      // Re-throw every other failure so genuine application errors stay visible.
+      if (!isPredictionRateLimitError(error)) throw error;
+      toast({
+        title: "تمهّل قليلًا",
+        description: "وصلت إلى حد الطلبات مؤقتًا. انتظر لحظات ثم حاول مجددًا.",
+      });
     } finally {
       setBoardLoadingMore(false);
     }

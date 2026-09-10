@@ -4,11 +4,10 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { requireAuth, logActivity } from "../rbac";
 import { insertSocialFollowSchema } from "@shared/schema";
+import { getRealIp as getTrustedRealIp } from "../utils/trustedProxyIp";
 
 function getRealIp(req: any): string {
-  return req.headers['cf-connecting-ip'] as string ||
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    req.ip || 'unknown';
+  return getTrustedRealIp(req);
 }
 
 const followLimiter = rateLimit({

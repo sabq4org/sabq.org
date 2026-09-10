@@ -35,6 +35,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { sanitizeEditorialAiResult } from "@/lib/sanitizeEditorialAiResult";
+import { appendReviewedSources } from "@/lib/editorialSources";
 
 type EditorialTaskType =
   | "edit"
@@ -105,6 +106,7 @@ export function SabqEditorAssistant({
   const [material2, setMaterial2] = useState("");
   const [instructions, setInstructions] = useState("");
   const [result, setResult] = useState<EditorialTaskResult | null>(null);
+  const [selectedSourceIndexes, setSelectedSourceIndexes] = useState<number[]>([]);
 
   const fromEditor = TASKS_FROM_EDITOR.has(task);
   const editorMaterial = [articleTitle, articleContent].filter(Boolean).join("\n\n");
@@ -134,6 +136,7 @@ export function SabqEditorAssistant({
 
   const reset = () => {
     setResult(null);
+    setSelectedSourceIndexes([]);
     taskMutation.reset();
   };
 
@@ -301,10 +304,12 @@ export function SabqEditorAssistant({
                       size="sm"
                       className="gap-1"
                       onClick={() => {
-                        onApplyBody(result.body);
+                        onApplyBody(appendReviewedSources(result.body, result.sources, selectedSourceIndexes));
                         toast({
                           title: "طُبق المتن في المحرر",
-                          description: "راجعه قبل الحفظ — الذكاء لا ينشر.",
+                          description: selectedSourceIndexes.length > 0
+                            ? "أُدرجت المصادر التي اخترتها — راجع المتن قبل الحفظ."
+                            : "لم تُدرج مصادر تلقائياً — راجع المتن قبل الحفظ.",
                         });
                       }}
                       data-testid="button-sabq-apply-body"
@@ -357,18 +362,30 @@ export function SabqEditorAssistant({
 
               {result.sources.length > 0 && (
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">المصادر</Label>
+                  <Label className="text-xs text-muted-foreground">المصادر — اختر ما راجعته لإدراجه في المتن</Label>
                   {result.sources.map((s, i) => (
-                    <a
+                    <label
                       key={i}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      className="flex items-center gap-2 text-xs"
                     >
-                      <Link2 className="h-3 w-3 shrink-0" />
-                      {s.title}
-                    </a>
+                      <input
+                        type="checkbox"
+                        checked={selectedSourceIndexes.includes(i)}
+                        onChange={(event) => setSelectedSourceIndexes((current) => event.target.checked
+                          ? [...current, i]
+                          : current.filter((index) => index !== i))}
+                        aria-label={`إدراج المصدر: ${s.title}`}
+                      />
+                      <a
+                        href={/^https?:\/\//i.test(s.url) ? s.url : undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-primary hover:underline"
+                      >
+                        <Link2 className="h-3 w-3 shrink-0" />
+                        {s.title}
+                      </a>
+                    </label>
                   ))}
                 </div>
               )}

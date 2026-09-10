@@ -160,6 +160,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WriterDayPicker } from "@/pages/opinion-author/WriterPriorityRail";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
+import { OpenAIImageGeneratorDialog } from "@/components/OpenAIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
 import { InfographicAiDialog } from "@/components/InfographicAiDialog";
 import { InfographicDataEditor } from "@/components/dashboard/InfographicDataEditor";
@@ -311,6 +312,7 @@ export default function ArticleEditor() {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showLogoComposer, setShowLogoComposer] = useState(false);
   const [showAIImageDialog, setShowAIImageDialog] = useState(false);
+  const [showOpenAIImageDialog, setShowOpenAIImageDialog] = useState(false);
   const [showInfographicDialog, setShowInfographicDialog] = useState(false);
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
   const [showAlbumUploadDialog, setShowAlbumUploadDialog] = useState(false);
@@ -3252,6 +3254,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           توليد بالذكاء الاصطناعي
                         </Button>
                       )}
+                      {canGenerateImages && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowOpenAIImageDialog(true)}
+                          className="gap-2 border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
+                          data-testid="button-generate-openai-image"
+                        >
+                          <ImagePlus className="h-4 w-4" />
+                          صور GPT
+                        </Button>
+                      )}
                       {canUseInfographics && (
                         <Button
                           variant="outline"
@@ -5382,6 +5397,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           category:
             allCategories.find((cat) => cat.id === categoryId)?.slug ||
             allCategories.find((cat) => cat.id === categoryId)?.nameAr,
+        }}
+      />
+
+      <OpenAIImageGeneratorDialog
+        userId={user?.id || ""}
+        open={showOpenAIImageDialog}
+        onClose={() => setShowOpenAIImageDialog(false)}
+        articleTitle={title}
+        articleExcerpt={excerpt}
+        onImageGenerated={(generatedUrl) => {
+          setImageUrl(generatedUrl);
+          setIsAiGeneratedImage(true);
+          toast({ title: "تم استخدام صورة GPT", description: "أُضيفت الصورة المولّدة كصورة بارزة. احفظ الخبر لتثبيت التغيير." });
         }}
       />
 

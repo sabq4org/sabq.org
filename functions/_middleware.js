@@ -60,6 +60,10 @@ const DEFAULT_API_ORIGIN = "https://api.sabq.org";
 // surface at the edge within ~10s (mirrors the standalone worker).
 const SEO_META_TTL = 10;
 const SLUG_REDIRECT_TTL = 10;
+// A crawler must never wait for an unbounded Next.js subrequest. If SSR is
+// unavailable we fall back to the existing SEO path (when enabled), but an
+// otherwise generic SPA shell is always no-store for that crawler request.
+const SSR_PROXY_TIMEOUT_MS = 5000;
 
 const HTML_NO_STORE_HEADERS = {
   "Cache-Control":
@@ -73,7 +77,7 @@ const HTML_NO_STORE_HEADERS = {
 // homepage). This is the P1 archiving fix: instead of forcing Googlebot to
 // re-render the SPA shell from origin on every crawl (~1.5s TTFB, huge
 // crawl-budget drain), the injected shell is served from Cloudflare's edge in
-// <150ms for repeat hits, refreshed in the background.
+// repeat hits, with a bounded 60-second lifetime and no stale serving.
 //
 // BROWSER vs EDGE split (white-page-after-deploy fix, 2026-06-15):
 //   - Cache-Control governs the VISITOR's browser. We set it to no-store so the
@@ -81,12 +85,11 @@ const HTML_NO_STORE_HEADERS = {
 //     which a visitor's browser would replay a stale index.html that points at a
 //     rotated /assets/index-<hash>.js (= the classic post-deploy white page).
 //   - CDN-Cache-Control governs Cloudflare's OWN edge tier independently of the
-//     browser, so the edge still serves the SEO-injected shell for 5 min (TTFB
+//     browser, so the edge still serves the SEO-injected shell for 60s (TTFB
 //     win + crawl-budget savings preserved). The edge keyspace is namespaced by
 //     deploy commit (CF_PAGES_COMMIT_SHA, see htmlCacheKey), so a new deploy =
 //     fresh keyspace — the edge can never serve the previous build's dead chunks.
-//   - stale-while-revalidate=60 : edge can serve a slightly-stale copy while it
-//     refreshes in the background → no cold-start tax for the next crawler.
+//   - No stale-while-revalidate: an expired shell must be regenerated.
 //
 // SAFETY: this is ONLY applied to indexable content on the canonical host
 // (sabq.org). noindex screens (dashboard/admin/auth/account), non-canonical
@@ -101,7 +104,7 @@ const HTML_EDGE_CACHE_HEADERS = {
     "private, no-cache, must-revalidate, max-age=0",
   // Edge: keep caching the SEO-injected shell for the TTFB/crawl-budget win.
   "CDN-Cache-Control":
-    "public, max-age=300, stale-while-revalidate=60",
+    "public, max-age=60",
 };
 
 const STATIC_EXTENSIONS = [
@@ -203,7 +206,7 @@ function isSsrPath(p) {
 // indexing/preview bots; ordinary headless Chrome / Lighthouse is intentionally
 // excluded so PageSpeed reflects the real (SPA) user experience.
 const CRAWLER_RE =
-  /(googlebot|google-inspectiontool|storebot-google|google-site-verification|bingbot|bingpreview|applebot|yandex(bot)?|duckduckbot|baiduspider|sogou|naverbot|petalbot|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|telegrambot|whatsapp|discordbot|pinterest(bot)?|redditbot|embedly|vkshare|skypeuripreview|nuzzel|qwantify|googleweblight)/i;
+  /(googlebot|google-inspectiontool|storebot-google|google-site-verification|bingbot|bingpreview|applebot|oai-searchbot|claude-searchbot|perplexitybot|yandex(bot)?|duckduckbot|baiduspider|sogou|naverbot|petalbot|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|telegrambot|whatsapp|discordbot|pinterest(bot)?|redditbot|embedly|vkshare|skypeuripreview|nuzzel|qwantify|googleweblight)/i;
 function isCrawler(ua) {
   return !!ua && CRAWLER_RE.test(ua);
 }
@@ -241,6 +244,19 @@ class HtmlLangSetter {
 // reclaiming crawl budget. Consistent with the human experience: the public
 // article API already returns 404 for archived articles, so this is not
 // cloaking. noindex header is belt-and-suspenders.
+export function isHstsHost(hostname) {
+  return hostname === "sabq.org" || hostname === "www.sabq.org";
+}
+
+export function htmlSecurityHeadersForHost(hostname) {
+  const headers = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  };
+  if (isHstsHost(hostname)) headers["Strict-Transport-Security"] = "max-age=86400";
+  return headers;
+}
+
 function goneHtmlResponse() {
   const body =
     '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
@@ -265,7 +281,7 @@ function isHtml(res) {
   return (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
 
-function applyHtmlHeaders(res, headerSet) {
+export function applyHtmlHeaders(res, headerSet) {
   if (!isHtml(res)) return res;
   const headers = new Headers(res.headers);
   // Clear stale freshness hints so a cacheable response never inherits a
@@ -274,6 +290,17 @@ function applyHtmlHeaders(res, headerSet) {
   headers.delete("Expires");
   for (const [k, v] of Object.entries(headerSet)) headers.set(k, v);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function applyHtmlSecurityHeaders(res, hostname) {
+  if (!isHtml(res)) return res;
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(htmlSecurityHeadersForHost(hostname))) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function shouldApplyHtmlSecurityHeaders(pathname, res) {
+  return !isProxyPath(pathname) && isHtml(res);
 }
 
 // Cloudflare does NOT auto-cache text/html from a Pages Function based on
@@ -290,6 +317,17 @@ function htmlCacheKey(requestUrl, commit, variant) {
   // Drop the client deploy-recovery buster so recovery reloads don't fragment
   // (or poison) the cache, and don't carry it into the cache key.
   u.searchParams.delete("_dr");
+  // Tracking parameters must not fragment the HTML cache. Pagination is a
+  // meaningful query only for the category/author discovery surfaces; keep a
+  // strictly positive integer there and discard every other query parameter.
+  const isPagedSurface = /^\/(?:category|author)\/[^/]+$/.test(u.pathname);
+  const pageRaw = isPagedSurface ? u.searchParams.get("page") || "" : "";
+  const page = /^\d+$/.test(pageRaw) ? Number(pageRaw) : 0;
+  u.search = "";
+  if (isPagedSurface && pageRaw && (!/^[1-9]\d*$/.test(pageRaw) || page > 10000)) u.searchParams.set("page", "invalid");
+  if (isPagedSurface && Number.isInteger(page) && page > 1 && page <= 10000) {
+    u.searchParams.set("page", String(page));
+  }
   u.searchParams.set("__b", commit || "dev");
   // Audience namespace for dynamic rendering: on SSR paths the crawler gets a
   // different rendering (full SSR) than humans (SPA shell), so they must NOT
@@ -298,7 +336,138 @@ function htmlCacheKey(requestUrl, commit, variant) {
   return new Request(u.toString(), { method: "GET" });
 }
 
-async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
+// The API SEO handlers accept the canonical pathname and, for paginated
+// discovery surfaces, one normalized page query. This keeps UTM/debug values
+// out of both metadata lookups and their cache keys.
+export function seoRequestPath(urlOrRequest) {
+  // handleRequest passes a URL; Request objects expose .url, but URL uses .href.
+  const input = urlOrRequest instanceof URL ? urlOrRequest.href : urlOrRequest;
+  const u = new URL(typeof input === "string" ? input : input.url);
+  if (!/^\/(?:category|author)\/[^/]+$/.test(u.pathname)) return u.pathname;
+  const rawPage = u.searchParams.get("page");
+  if (rawPage === null) return u.pathname;
+  const page = /^\d+$/.test(rawPage) ? Number(rawPage) : 0;
+  // Preserve malformed/out-of-range values so the API can return its explicit
+  // 400 rather than silently turning a bad URL into page one.
+  return page > 0 && page <= 10000
+    ? `${u.pathname}?page=${page}`
+    : `${u.pathname}?page=${encodeURIComponent(rawPage)}`;
+}
+
+function hasUsableSsrHtml(path, text) {
+  if (!text || /<div\s+id=["']root["']\s*>\s*<\/div>/i.test(text)) return false;
+  // Next embeds route templates in script tags. Do not count those hidden
+  // strings as visible article/category headings.
+  const visible = text.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
+  if (/^\/article\/|^\/en\/article\/|^\/ur\/article\//.test(path)) {
+    return /<h1(?:\s|>)/i.test(visible) && /application\/ld\+json/i.test(text);
+  }
+  if (/^\/category\//.test(path)) {
+    return /<h1(?:\s|>)/i.test(visible) && /ItemList|CollectionPage/i.test(text);
+  }
+  return /<main(?:\s|>)/i.test(visible) || /application\/ld\+json/i.test(text);
+}
+
+async function validatedSsrResponse(res, path) {
+  if ((res.status === 404 || res.status === 410) && isHtml(res)) {
+    const headers = new Headers(res.headers);
+    headers.set("Cache-Control", "private, no-store, no-cache, max-age=0");
+    headers.set("CDN-Cache-Control", "no-store");
+    return new Response(await res.arrayBuffer(), { status: res.status, statusText: res.statusText, headers });
+  }
+  if (res.status !== 200 || !isHtml(res)) return null;
+  const body = await res.arrayBuffer();
+  const text = new TextDecoder().decode(body);
+  if (!hasUsableSsrHtml(path, text)) return null;
+  const headers = new Headers(res.headers);
+  headers.delete("content-length");
+  return new Response(body, { status: res.status, statusText: res.statusText, headers });
+}
+
+function crawlerSsrFailureResponse() {
+  return new Response("SSR temporarily unavailable", {
+    status: 503,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "private, no-store, no-cache, max-age=0",
+      "CDN-Cache-Control": "no-store",
+      "Retry-After": "60",
+    },
+  });
+}
+
+export async function signProxyRequest(request, targetUrl, proxySecret) {
+  const url = new URL(targetUrl);
+  const realIp = request.headers.get("cf-connecting-ip");
+  const headers = new Headers(request.headers);
+  // Client supplied forwarding headers are never forwarded as authority.
+  headers.delete("X-Sabq-Client-IP");
+  headers.delete("X-Sabq-Proxy-Timestamp");
+  headers.delete("X-Sabq-Proxy-Signature");
+  if (!realIp || !proxySecret) return headers;
+  const timestamp = String(Date.now());
+  const payload = `${timestamp}\n${request.method}\n${url.pathname}${url.search}\n${realIp}`;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(proxySecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  const signature = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  headers.set("X-Sabq-Client-IP", realIp);
+  headers.set("X-Sabq-Proxy-Timestamp", timestamp);
+  headers.set("X-Sabq-Proxy-Signature", signature);
+  return headers;
+}
+
+// Stall-retry for idempotent origin fetches (incident 2026-09-07/08): Cloudflare's
+// subrequest toward the Railway edge (observed MRS→cdg1) intermittently hangs
+// 8–40s BEFORE Railway even registers the request, while a fresh fetch answers
+// in 1–50ms. For GET/HEAD only: abort an attempt that has not produced headers
+// within STALL_RETRY_MS and re-issue it; the final attempt keeps the caller's
+// full deadline (or stays unbounded when none was given, as before). Writes are
+// never retried — their body is a one-shot stream and replaying is unsafe.
+const STALL_RETRY_MS = 3000;
+const STALL_RETRIES = 2;
+
+function isStallAbort(err) {
+  const name = err?.name || "";
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+export async function fetchWithStallRetry(target, init, opts = {}) {
+  const stallMs = opts.stallMs ?? STALL_RETRY_MS;
+  const retries = opts.retries ?? STALL_RETRIES;
+  const deadlineMs = opts.deadlineMs ?? 0;
+  const idempotent = init.method === "GET" || init.method === "HEAD";
+  if (!idempotent || retries <= 0) {
+    if (deadlineMs > 0) init.signal = AbortSignal.timeout(deadlineMs);
+    return fetch(target, init);
+  }
+  const startedAt = Date.now();
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const left = deadlineMs > 0 ? deadlineMs - (Date.now() - startedAt) : Infinity;
+    if (left <= 0) break;
+    const isLast = attempt === retries;
+    const budget = isLast ? left : Math.min(stallMs, left);
+    const attemptInit = { ...init };
+    if (Number.isFinite(budget)) attemptInit.signal = AbortSignal.timeout(budget);
+    try {
+      return await fetch(target, attemptInit);
+    } catch (err) {
+      lastErr = err;
+      // Only a stall (our own per-attempt timeout) is retried; a real upstream
+      // error propagates immediately, exactly as before this helper existed.
+      if (isLast || !isStallAbort(err)) throw err;
+      console.warn(`[pages-fn] origin stall, retrying (${attempt + 1}/${retries}):`, target);
+    }
+  }
+  throw lastErr;
+}
+
+export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
   // Pages Functions re-issue the request with `fetch()` to API_ORIGIN. Cloudflare
@@ -307,22 +476,7 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   // (symptom: HTTP 429 on login/comments for the whole site). Capture the real
   // client IP from the inbound request (still correct here) and forward it in a
   // trusted header the backend reads first in rateLimitKey() (server/index.ts).
-  const headers = new Headers(request.headers);
-  const realIp = request.headers.get("cf-connecting-ip");
-  headers.delete("X-Sabq-Client-IP");
-  headers.delete("X-Sabq-Proxy-Timestamp");
-  headers.delete("X-Sabq-Proxy-Signature");
-  if (realIp && proxySecret) {
-    const timestamp = String(Date.now());
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey("raw", encoder.encode(proxySecret),
-      { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const payload = `${timestamp}\n${request.method}\n${url.pathname}${url.search}\n${realIp}`;
-    const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-    headers.set("X-Sabq-Client-IP", realIp);
-    headers.set("X-Sabq-Proxy-Timestamp", timestamp);
-    headers.set("X-Sabq-Proxy-Signature", [...new Uint8Array(signature)].map(b => b.toString(16).padStart(2, "0")).join(""));
-  }
+  const headers = await signProxyRequest(request, target, proxySecret);
   const init = {
     method: request.method,
     headers,
@@ -335,8 +489,9 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   // origin (the 2026-07-25 dawn incident mode — not a fast 502) would otherwise
   // pin the reader for the platform's full subrequest limit before the
   // last-good fallback could kick in. Writes are never aborted this way.
-  if (timeoutMs > 0) init.signal = AbortSignal.timeout(timeoutMs);
-  return fetch(target, init);
+  // GET/HEAD additionally get a per-attempt stall abort + retry (see
+  // fetchWithStallRetry); the deadline below still bounds the whole sequence.
+  return fetchWithStallRetry(target, init, { deadlineMs: timeoutMs });
 }
 
 // Complete the bounded SSR body before serving or caching it. A failed render
@@ -355,23 +510,40 @@ export async function fetchSsrResponse(request, nextOrigin, timeoutMs = 5000) {
 }
 
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
-async function cachedJson(url, ttl) {
+export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) {
   const cache = caches.default;
   const key = new Request(url, { method: "GET" });
   const hit = await cache.match(key);
   if (hit) {
     try { return await hit.json(); } catch (_) { /* fall through */ }
   }
-  const res = await fetch(url, { headers: { "User-Agent": "sabq-pages-fn/1.0" }, signal: AbortSignal.timeout(3000) });
+  // Includes body consumption: receiving headers alone does not end the budget.
+  // Metadata is always fetched as GET. Build a minimal request so a HEAD HTML
+  // request cannot produce a signature for a different method and browser
+  // credentials never reach the cacheable metadata origin.
+  const sourceHeaders = new Headers();
+  const clientIp = sourceRequest?.headers.get("cf-connecting-ip");
+  if (clientIp) sourceHeaders.set("cf-connecting-ip", clientIp);
+  const metadataRequest = new Request(url, { method: "GET", headers: sourceHeaders });
+  const requestHeaders = await signProxyRequest(metadataRequest, url, proxySecret);
+  requestHeaders.set("User-Agent", "sabq-pages-fn/1.0");
+  const res = await fetch(url, {
+    headers: requestHeaders,
+    signal: AbortSignal.timeout(2500),
+  });
   if (!res.ok) return null;
   const text = await res.text();
-  await cache.put(
+  let payload;
+  try { payload = JSON.parse(text); } catch (_) { return null; }
+  const write = cache.put(
     key,
     new Response(text, {
       headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttl}` },
     }),
-  );
-  try { return JSON.parse(text); } catch (_) { return null; }
+  ).catch((err) => console.warn("[pages-fn] metadata cache write failed:", err));
+  // Cache persistence must not delay an otherwise ready HTML response.
+  context.waitUntil(write);
+  return payload;
 }
 
 function escapeHtml(s) {
@@ -617,7 +789,7 @@ async function serveApiLastGood(cacheKeyReq, reason) {
 // + the reactive retryImport/deployRecovery layer, which already classifies the
 // MIME/CORS refusal of an HTML response to a .js request as a chunk failure.
 
-export async function onRequest(context) {
+async function handleRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;
@@ -660,6 +832,14 @@ export async function onRequest(context) {
   }
 
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
+  const edgeProxyGateRequired = String(env.EDGE_PROXY_GATE_REQUIRED || "").toLowerCase() === "on";
+  if (edgeProxyGateRequired && !env.EDGE_PROXY_SHARED_SECRET && (isProxyPath(path) || isInjectablePath(path))) {
+    console.error("[pages-fn] EDGE_PROXY_GATE_REQUIRED is on but EDGE_PROXY_SHARED_SECRET is missing");
+    return new Response("API proxy is not configured", {
+      status: 503,
+      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
   const nextOrigin = (env.NEXT_ORIGIN || "").replace(/\/+$/, "");
   const ssrEnabled =
@@ -739,10 +919,7 @@ export async function onRequest(context) {
   const finalizeHtml = (res, { cacheable = false } = {}) => {
     // A noindex page (private route) must never be edge-cached as indexable.
     const useCache = cacheable && !noindexHost && !pathIsNoindex;
-    const out = applyHtmlHeaders(
-      res,
-      useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
-    );
+    const out = applyHtmlHeaders(res, useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS);
     // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
     // private routes (login/register/profile/dashboard/search/…). This is the
     // signal that lets Googlebot drop the now-crawlable (un-robots-blocked)
@@ -775,8 +952,11 @@ export async function onRequest(context) {
       headers,
     });
     // Store a clone; the original stream is returned to the client. TTL is
-    // derived by the Cache API from the response's s-maxage (300s).
-    context.waitUntil(caches.default.put(cacheKey, tagged.clone()).catch(() => {}));
+    // derived by the Cache API from the stored clone's max-age (60s).
+    const storedHeaders = new Headers(tagged.headers);
+    storedHeaders.set("Cache-Control", "public, max-age=60");
+    const stored = new Response(tagged.clone().body, { status: tagged.status, headers: storedHeaders });
+    context.waitUntil(caches.default.put(cacheKey, stored).catch(() => {}));
     return tagged;
   };
 
@@ -819,6 +999,7 @@ export async function onRequest(context) {
             }
           }
           const headers = new Headers(hit.headers);
+          Object.entries(HTML_EDGE_CACHE_HEADERS).forEach(([name, value]) => headers.set(name, value));
           headers.set("x-edge-cache", "HIT");
           return new Response(hit.body, {
             status: hit.status,
@@ -973,13 +1154,28 @@ export async function onRequest(context) {
   if (edgeHtmlCacheEnabled && htmlCacheable && cacheKey) {
     const hit = await caches.default.match(cacheKey);
     if (hit) {
+      if (wantsSsr) {
+        // Older entries (or an entry written before SSR was enabled) must not
+        // turn a crawler request into a cached, empty SPA shell.
+        const valid = await validatedSsrResponse(hit.clone(), path);
+        if (!valid) {
+          context.waitUntil(caches.default.delete(cacheKey).catch(() => {}));
+        } else {
+          const headers = new Headers(valid.headers);
+          Object.entries(HTML_EDGE_CACHE_HEADERS).forEach(([name, value]) => headers.set(name, value));
+          headers.set("x-edge-cache", "HIT");
+          return new Response(valid.body, { status: valid.status, statusText: valid.statusText, headers });
+        }
+      } else {
       const headers = new Headers(hit.headers);
-      headers.set("x-edge-cache", "HIT");
+      Object.entries(HTML_EDGE_CACHE_HEADERS).forEach(([name, value]) => headers.set(name, value));
+          headers.set("x-edge-cache", "HIT");
       return new Response(hit.body, {
         status: hit.status,
         statusText: hit.statusText,
         headers,
       });
+      }
     }
   }
 
@@ -993,9 +1189,13 @@ export async function onRequest(context) {
   // through to the existing SPA-shell path, so SSR is fail-safe.
   if (wantsSsr && htmlCacheable) {
     try {
+      const seoPath = seoRequestPath(url);
       const slug = await cachedJson(
-        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}`,
         SLUG_REDIRECT_TTL,
+        context,
+        request,
+        env.EDGE_PROXY_SHARED_SECRET,
       );
       const redirectTo = slug && slug.redirect ? slug.redirect : null;
       if (redirectTo && redirectTo !== path) {
@@ -1004,17 +1204,20 @@ export async function onRequest(context) {
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
       if (slug && slug.gone) return goneHtmlResponse();
-      const ssrRes = await fetchSsrResponse(request, nextOrigin);
-      // Only edge-cache a successful HTML render; Next 404/5xx pass through
-      // no-store so a transient error is never cached as a 200.
-      const ok = ssrRes.status === 200 && isHtml(ssrRes);
+      const ssrRes = await proxyToApi(request, nextOrigin, SSR_PROXY_TIMEOUT_MS, env.EDGE_PROXY_SHARED_SECRET);
+      // Buffer and validate the complete render before caching it. A 200 SPA
+      // fallback is not a usable SSR response and must never be cached for a
+      // crawler.
+      const validated = await validatedSsrResponse(ssrRes, path);
+      if (!validated) throw new Error("invalid-or-empty-ssr-html");
+      if (validated.status !== 200) return deliverHtml(validated, { cacheable: false });
       // web-next renders every route with the root layout's lang="ar" dir="rtl";
       // correct the declared language for the /en|/ur surfaces (crawler-only path).
-      const ssrLocale = ok ? localeAttrsForPath(path) : null;
+      const ssrLocale = localeAttrsForPath(path);
       const localized = ssrLocale
-        ? new HTMLRewriter().on("html", new HtmlLangSetter(ssrLocale)).transform(ssrRes)
-        : ssrRes;
-      return deliverHtml(localized, { cacheable: ok });
+        ? new HTMLRewriter().on("html", new HtmlLangSetter(ssrLocale)).transform(validated)
+        : validated;
+      return deliverHtml(localized, { cacheable: true });
     } catch (err) {
       console.error("[pages-fn] ssr proxy failed, falling back to SPA shell:", err);
       // fall through to the SPA shell / SEO injection path below
@@ -1022,6 +1225,10 @@ export async function onRequest(context) {
   }
 
   if (!seoEnabled || !injectable) {
+    // With SSR enabled, this is a failure fallback for a crawler. Returning a
+    // generic 200 shell is acceptable as a user-facing emergency response but
+    // must never be stored as the crawler's SSR representation.
+    if (wantsSsr) return crawlerSsrFailureResponse();
     return deliverHtml(await next(), { cacheable: htmlCacheable });
   }
 
@@ -1033,13 +1240,23 @@ export async function onRequest(context) {
     // redirect is rare (Arabic/legacy slugs), so on the hot path we just
     // discard the unused shell/meta; when a redirect IS present we 301 before
     // touching them.
+    const seoPath = seoRequestPath(url);
     const [slug, shell, meta] = await Promise.all([
       cachedJson(
-        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}`,
         SLUG_REDIRECT_TTL,
+        context,
+        request,
+        env.EDGE_PROXY_SHARED_SECRET,
       ),
       next(),
-      cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL),
+      cachedJson(
+        `${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(seoPath)}`,
+        SEO_META_TTL,
+        context,
+        request,
+        env.EDGE_PROXY_SHARED_SECRET,
+      ),
     ]);
     const redirectTo = slug && slug.redirect ? slug.redirect : null;
     if (redirectTo && redirectTo !== path) {
@@ -1053,12 +1270,18 @@ export async function onRequest(context) {
 
     // No meta (DB hiccup) → don't long-cache an un-injected generic shell on a
     // content URL; serve it no-store so the next crawl re-tries injection.
-    if (!isHtml(shell) || !meta) return finalizeHtml(shell, { cacheable: false });
+    if (!isHtml(shell) || !meta) {
+      if (wantsSsr) return crawlerSsrFailureResponse();
+      return finalizeHtml(shell, { cacheable: false });
+    }
 
     // A resolved `noindex` (e.g. missing row, unpublished, aged-out) must never
     // be edge-cached as a 200 indexable page.
     const metaNoindex =
       typeof meta.robots === "string" && meta.robots.toLowerCase().includes("noindex");
+    if (wantsSsr && !metaNoindex && (!meta.semanticHtml || (/^\/(?:en\/|ur\/)?article\//.test(path) && !meta.jsonLd?.articleBody))) {
+      return crawlerSsrFailureResponse();
+    }
     const injectedCacheable = htmlCacheable && !metaNoindex;
 
     // Strip the shell's generic tags first so crawlers that read the FIRST
@@ -1088,6 +1311,19 @@ export async function onRequest(context) {
     return deliverHtml(rewriter.transform(shell), { cacheable: injectedCacheable });
   } catch (err) {
     console.error("[pages-fn] html error:", err);
+    if (wantsSsr) return crawlerSsrFailureResponse();
     return finalizeHtml(await next(), { cacheable: false });
   }
+}
+
+// Security-only outer layer. The inner handler owns routing, caching, redirects,
+// and response headers; this wrapper never rewrites those decisions. API and
+// other proxy responses are deliberately excluded so their existing contract
+// remains byte/header compatible.
+export async function onRequest(context) {
+  const response = await handleRequest(context);
+  const url = new URL(context.request.url);
+  return shouldApplyHtmlSecurityHeaders(url.pathname, response)
+    ? applyHtmlSecurityHeaders(response, url.hostname)
+    : response;
 }

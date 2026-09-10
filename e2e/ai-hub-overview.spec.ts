@@ -1,5 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const overview = {
@@ -12,7 +11,10 @@ const overview = {
 
 async function openOverview(page: Page) {
   const dependencies = `/@fs${path.resolve("node_modules/.vite/deps")}`;
-  const { browserHash } = JSON.parse(readFileSync("node_modules/.vite/deps/_metadata.json", "utf8"));
+  // Use Vite's transformed import: optimized packages can have different hashes.
+  const transformed = await (await page.request.get("/src/lib/queryClient.ts")).text();
+  const queryImport = transformed.match(/from "([^"\n]*@tanstack_react-query\.js[^"\n]*)"/)?.[1];
+  if (!queryImport) throw new Error("Vite React Query import was not found");
   await page.route("**/__ai-hub-test", route => route.fulfill({
     contentType: "text/html; charset=utf-8",
     body: `<html dir="rtl"><head><meta charset="utf-8"></head><body><div id="root"></div><script type="module">
@@ -23,7 +25,7 @@ async function openOverview(page: Page) {
       window.__vite_plugin_react_preamble_installed__ = true;
       const {default: React} = await import('${dependencies}/react.js');
       const {default: ReactDOM} = await import('${dependencies}/react-dom_client.js');
-      const {QueryClientProvider} = await import('${dependencies}/@tanstack_react-query.js?v=${browserHash}');
+      const {QueryClientProvider} = await import('${queryImport}');
       const {queryClient} = await import('/src/lib/queryClient.ts');
       queryClient.setDefaultOptions({queries: {...queryClient.getDefaultOptions().queries, retry: false}});
       window.refreshOverview = () => queryClient.invalidateQueries({queryKey: ['/api/admin/ai-hub/overview']});

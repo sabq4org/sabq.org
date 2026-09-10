@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-05",
+  "updatedAt": "2026-09-07",
   "systems": [
     {
       "id": "account-center",
@@ -135,14 +135,16 @@
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupScreen.kt",
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupRepository.kt",
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsHubScreen.kt",
-        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsViewModel.kt"
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsViewModel.kt",
+        "shared/schema.ts",
+        "tests/unit/schemaMismatch.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "editorial",
@@ -157,6 +159,11 @@
         "docs/ai-prompts-article-editor.md"
       ],
       "pathGlobs": [
+        "client/src/pages/ArticleDetail.tsx",
+        "client/src/components/AiArticleStats.tsx",
+        "client/src/components/AIRecommendationsBlock.tsx",
+        "client/src/components/ArticleSidebarRecovery.tsx",
+        "client/src/hooks/useArticleSidebarData.ts",
         "client/src/components/staff/MyStaffProfileCard.tsx",
         "client/src/components/staff/MyServicesHomeLink.tsx",
         "client/src/components/staff/StaffProfileForm.tsx",
@@ -246,6 +253,9 @@
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
         "client/src/components/DashboardLayout.tsx",
+        "client/src/components/DashboardSessionLoading.tsx",
+        "e2e/dashboard-session-loading.spec.ts",
+        "e2e/fixtures/dashboard-session.*",
         "client/src/components/ui/sidebar.tsx",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
         "client/src/components/NewsMap.tsx",
@@ -260,6 +270,10 @@
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
         "client/src/pages/en/EnglishArticlesPage.tsx",
         "client/src/pages/en/EnglishArticleEditor.tsx",
+        "client/src/pages/ArticleEditor.tsx",
+        "server/routes/liveNews.ts",
+        "client/src/pages/MomentByMoment.tsx",
+        "tests/unit/liveNewsVisibility.integration.test.ts",
         "client/src/pages/AnnouncementsList.tsx",
         "client/src/pages/AnnouncementEditor.tsx",
         "client/src/pages/AnnouncementDetail.tsx",
@@ -296,7 +310,41 @@
         "tests/unit/liveNewsVisibility.integration.test.ts",
         "server/services/articleWriteVersion.ts",
         "client/src/hooks/useArticleEditLock.ts",
-        "client/src/lib/articleDraft.ts"
+        "client/src/lib/articleDraft.ts",
+        "server/services/newsStatisticsService.ts",
+        "tests/unit/statisticsSingleFlight.test.ts",
+        "shared/schema.ts",
+        "client/src/components/article-editor/SabqEditorAssistant.tsx",
+        "client/src/lib/editorialSources.ts",
+        "server/utils/editorialDates.ts",
+        "server/utils/editorialDatesSql.ts",
+        "tests/unit/editorialDates.test.ts",
+        "tests/unit/editorialDatesSql.test.ts",
+        "tests/unit/editorialSources.test.ts",
+        "server/services/keywordService.ts",
+        "server/routes/keywordRoutes.ts",
+        "tests/unit/keywordService.test.ts",
+        "tests/unit/keywordCategoryContract.test.ts",
+        "shared/editorialImages.ts",
+        "server/routes/editorialImages.ts",
+        "server/services/editorialImagesService.ts",
+        "server/services/openaiImagesProvider.ts",
+        "client/src/components/OpenAIImageGeneratorDialog.tsx",
+        "tests/unit/openaiImagesProvider.test.ts",
+        "tests/unit/editorialImages.integration.test.ts",
+        "e2e/openai-editor-images.spec.ts",
+        "server/services/adminArticleList.ts",
+        "tests/unit/adminArticleList.integration.test.ts",
+        "e2e/articles-management-loading.spec.ts",
+        "server/services/articleImageProvenance.ts",
+        "tests/unit/articleImageProvenance.integration.test.ts",
+        "server/services/proofreadService.ts",
+        "client/src/hooks/useArticleAiTools.ts",
+        "client/src/components/article-editor/ProofreadDialog.tsx",
+        "client/src/lib/applyProofreadIssue.ts",
+        "tests/unit/proofreadService.test.ts",
+        "tests/unit/proofreadService.live.test.ts",
+        "e2e/proofread-editor.spec.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -325,13 +373,15 @@
         "opinion-writer-coach",
         "opinion-writer-first-reader",
         "opinion-writer-style-profile",
-        "coverage-gap-matcher"
+        "coverage-gap-matcher",
+        "editor-openai-images",
+        "proofread"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-08"
+      "lastReviewed": "2026-09-09"
     },
     {
       "id": "ifox",
@@ -377,7 +427,8 @@
       "summary": "بوابة موحّدة للنماذج، الميزانيات، سجلات الاستخدام، المتجهات، واستوديو البرومبت، ومظلة الاستدعاءات القديمة.",
       "docPath": "docs/systems/ai-hub/SYSTEM.md",
       "relatedDocs": [
-        "docs/ai-models-migration.md"
+        "docs/ai-models-migration.md",
+        "docs/systems/ai-hub/RUNTIME_READ_ACCESS.md"
       ],
       "pathGlobs": [
         "server/ai/gateway/**",
@@ -390,7 +441,10 @@
         "server/jobs/aiUsageRollup.ts",
         "client/src/pages/dashboard/AiHub/**",
         "client/src/pages/PromptStudio.tsx",
-        "client/src/pages/PromptStudioPublic.tsx"
+        "client/src/pages/PromptStudioPublic.tsx",
+        "server/services/aiPublicStatsService.ts",
+        "server/routes/aiPublicStats.ts",
+        "e2e/ai-hub-overview.spec.ts"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
@@ -402,7 +456,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-09-09"
     },
     {
       "id": "muqtarab",
@@ -475,7 +529,7 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "النشرة البريدية المجدولة الباقية؛ منتج النشرات الصوتية أُوقف في 2026-07-25 مع مسارات توافقية للعملاء القدامى.",
+      "summary": "موجز المقال الصوتي بأصوات HUMAIN السعودية وإعدادات إدارة واحتياط ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
         "docs/AUDIO_NEWSLETTER_SYSTEM.md"
@@ -490,16 +544,35 @@
         "server/routes/smartNewsletterRoutes.ts",
         "server/routes/newsletterAnalyticsRoutes.ts",
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
-        "docs/AUDIO_NEWSLETTER_SYSTEM.md"
+        "docs/AUDIO_NEWSLETTER_SYSTEM.md",
+        "server/services/humainTts.ts",
+        "server/services/summaryAudioSettings.ts",
+        "server/services/summaryAudioService.ts",
+        "server/services/elevenlabs.ts",
+        "server/services/googleTts.ts",
+        "server/routes/summaryAudioSettings.ts",
+        "client/src/components/admin/SummaryAudioSettings.tsx",
+        "tests/unit/humainTts.test.ts",
+        "tests/unit/summaryAudio*.test.ts",
+        "e2e/summary-audio-settings.spec.ts",
+        "e2e/fixtures/summary-audio.*",
+        "docs/systems/audio-newsletter/HUMAIN.md",
+        "tests/unit/ttsDeadlines.test.ts",
+        "client/src/hooks/useArticleSummaryAudio.ts",
+        "client/src/components/SummaryAudioAttribution.tsx",
+        "server/routes/mailerliteWebhookHandler.ts",
+        "server/services/mailerlite.ts",
+        "server/services/mailerliteWebhookSignature.ts",
+        "tests/unit/mailerlite*.test.ts"
       ],
       "aiFeatureKeys": [
         "audio-newsletter"
       ],
-      "dashboardPath": "/dashboard/audio-newsletters",
+      "dashboardPath": "/dashboard/system-settings",
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-08-01"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "media-library",
@@ -518,7 +591,11 @@
         "server/routes/mediaLibrary.ts",
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx",
-        "tests/unit/mediaStoreWebhook.test.ts"
+        "tests/unit/mediaStoreWebhook.test.ts",
+        "server/utils/mediaUploadDiagnostics.ts",
+        "tests/unit/mediaUploadDiagnostics.test.ts",
+        "shared/schema.ts",
+        "tests/unit/schemaMismatch.test.ts"
       ],
       "aiFeatureKeys": [
         "media-caption"
@@ -527,7 +604,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-09-04"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "sports-tournaments",
@@ -544,6 +621,11 @@
         "docs/MATCH_EVENT_ALERTS.md"
       ],
       "pathGlobs": [
+        "server/services/sportsComponentSnapshot.ts",
+        "client/src/hooks/useSportsHomeQuery.ts",
+        "client/src/components/kingscup/KingsCupHomeSection.tsx",
+        "client/src/components/sports/SportsPortalStrip.tsx",
+        "client/src/components/tournaments/CupHomeStrip.tsx",
         "server/services/gulfCup*.ts",
         "server/services/asianCup*.ts",
         "server/services/kingsCup*.ts",
@@ -626,7 +708,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-25"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "push-notifications",
@@ -675,14 +757,16 @@
         "server/routes/advertiserPayments.ts",
         "client/src/pages/dashboard/ads/**",
         "client/src/pages/dashboard/NativeAdsManagement.tsx",
-        "client/src/pages/dashboard/AdvertiserDashboard.tsx"
+        "client/src/pages/dashboard/AdvertiserDashboard.tsx",
+        "client/src/hooks/useDmsTopAdsVisibility.ts",
+        "client/src/styles/dms-top-ads.css"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
       "owners": [
         "monetization"
       ],
-      "lastReviewed": "2026-07-25"
+      "lastReviewed": "2026-09-07"
     },
     {
       "id": "auth-rbac",
@@ -738,14 +822,19 @@
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/auth/**",
         "android-native/app/src/main/res/xml/backup_rules.xml",
         "android-native/app/src/main/res/xml/data_extraction_rules.xml",
-        "android-native/vara/src/main/kotlin/com/sabq/vara/core/VaraViewModel.kt"
+        "android-native/vara/src/main/kotlin/com/sabq/vara/core/VaraViewModel.kt",
+        "server/utils/trustedProxyIp.ts",
+        "cloudflare-worker/api-origin-worker.js",
+        "cloudflare-worker/wrangler.api.toml",
+        "client/src/components/EditUserDialog.tsx",
+        "e2e/edit-user-biography.spec.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "seo-ssr",
@@ -767,14 +856,30 @@
         "server/utils/noindexPaths.ts",
         "web-next/**",
         "functions/_middleware.js",
-        "web-next/lib/articleMetadata.ts"
+        "web-next/lib/articleMetadata.ts",
+        "server/services/archiveSeo.ts",
+        "server/utils/apiListingRobots.ts",
+        "shared/articleHeroPreload.ts",
+        "tests/unit/edgeMetadataBudget.test.ts",
+        "server/utils/creatorSchema.ts",
+        "server/utils/newsArticleSchema.ts",
+        "server/utils/seoArchive.ts",
+        "server/middleware/seoProjectionCache.ts",
+        "server/services/seoCacheInvalidation.ts",
+        "tests/unit/edgeSeoReadiness.test.ts",
+        "tests/unit/seoProjectionCache.test.ts",
+        "tests/unit/seoArchive.test.ts",
+        "tests/web-next/**",
+        "vitest.web-next.config.ts",
+        "client/src/pages/CategoryPage.tsx",
+        "client/src/components/CategoryArchivePage.tsx"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "comments",

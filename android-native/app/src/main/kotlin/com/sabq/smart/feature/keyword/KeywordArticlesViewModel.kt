@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.keyword
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -67,7 +68,7 @@ class KeywordArticlesViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _state.value = KeywordArticlesUiState.Error(
-                        e.localizedMessage ?: "تعذر تحميل مقالات الوسم"
+                        readerErrorMessage(e, "تعذر تحميل مقالات الوسم")
                     )
                 }
         }

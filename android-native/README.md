@@ -49,7 +49,7 @@ android-native/
 
 ```bash
 cd android-native
-./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest :app:assembleDebug
 ./gradlew :app:installDebug
 ```
 
@@ -89,6 +89,9 @@ release.keyPassword=...
 
 ## ملاحظات حالية
 
-- لا توجد حاليًا حزمة اختبارات `src/test` أو `src/androidTest` فعلية؛ إضافة smoke tests للمسارات الحرجة أولوية.
+- اختبارات JVM في `app/src/test`: عقود قوائم الأخبار والكلمات المفتاحية والبحث والأقسام، أسماء التصنيفات، ورسائل أخطاء القراءة. CI يشغّل `:app:testDebugUnitTest` مع البناء ويرفع تقارير النجاح والفشل.
+- صفحات القراءة تستخدم `readerErrorMessage`: نص عربي ثابت للمستخدم وتشخيص محلي بنوع الخطأ وحالة HTTP فقط؛ لا تُعرض رسائل JSON أو تُسجَّل أجسام الاستجابات. إلغاء coroutine يُمرَّر كما هو.
+- `/api/keyword/{keyword}` مسار عام للقراءة؛ استجابته `{ articles, muqtarabTopics }`. يقرأ Android حقل `articles`؛ `category` أو `categoryName`/`categorySlug` يحددان الشارة. البيانات المفقودة تُعرض «أخبار» ولا تُصنّف «محلية» افتراضيًا. التصنيف الدقيق يتطلب نشر إضافة بيانات التصنيف في الخادم أولًا.
+- صفحة الوسم الفارغة تعرض حالة «لا توجد مواد» مع زر البحث، وفق مكوّن EmptyStateView المستخدم في iOS. التصفح لأكثر من 20 نتيجة ومزامنة المتابعة خارج هذه الدفعة.
 - لا تطوّر ميزات جديدة داخل `android/`؛ هو غلاف Capacitor تاريخي فقط وفق `AGENTS.md`.
 - لا تستدعِ نقاط `/api/*` الخاصة بجلسة الويب من التطبيق؛ استخدم `/api/v1/*` وBearer دائمًا.

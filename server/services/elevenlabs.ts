@@ -286,13 +286,14 @@ export class ElevenLabsService {
     this.apiKey = apiKey;
   }
 
-  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000, signal?: AbortSignal): Promise<Buffer> {
+  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000, retry = true, signal?: AbortSignal): Promise<Buffer> {
     if (isElevenLabsQuotaCoolingDown()) {
       const err: any = new Error('quota_exceeded: ElevenLabs cooling down after payment/quota failure');
       err.status = 402;
       throw err;
     }
     if (signal) return this._textToSpeechRequest(options, timeoutMs, signal);
+    if (!retry) return this._textToSpeechRequest(options, timeoutMs);
     return retryWithBackoff(
       () => this._textToSpeechRequest(options, timeoutMs),
       'ElevenLabs TTS',
@@ -362,13 +363,13 @@ export class ElevenLabsService {
       clearTimeout(timeoutId);
       return Buffer.from(audioBuffer);
     } catch (error) {
-      clearTimeout(timeoutId);
-      
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Request timeout: ElevenLabs API did not respond within ${timeoutMs}ms`);
       }
       
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

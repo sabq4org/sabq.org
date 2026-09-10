@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
-import { readFileSync } from "node:fs";
 
 const role = { id: "11111111-1111-4111-8111-111111111111", name: "writer", nameAr: "كاتب" };
 const biography = "كاتب تجريبي متخصص في الشؤون الثقافية.";
@@ -12,7 +11,10 @@ const user = {
 async function openDialog(page: Page) {
   page.on("pageerror", error => console.error(error.message));
   const dependencies = `/@fs${path.resolve("node_modules/.vite/deps")}`;
-  const { browserHash } = JSON.parse(readFileSync("node_modules/.vite/deps/_metadata.json", "utf8"));
+  // Use Vite's transformed import: optimized packages can have different hashes.
+  const transformed = await (await page.request.get("/src/lib/queryClient.ts")).text();
+  const queryImport = transformed.match(/from "([^"\n]*@tanstack_react-query\.js[^"\n]*)"/)?.[1];
+  if (!queryImport) throw new Error("Vite React Query import was not found");
   await page.route("**/__edit-user-test", route => route.fulfill({
     contentType: "text/html; charset=utf-8",
     body: `<html dir="rtl"><head><meta charset="utf-8"></head><body><div id="root"></div><script type="module">
@@ -23,7 +25,7 @@ async function openDialog(page: Page) {
       window.__vite_plugin_react_preamble_installed__ = true;
       const {default: React} = await import('${dependencies}/react.js');
       const {default: ReactDOM} = await import('${dependencies}/react-dom_client.js');
-      const {QueryClientProvider} = await import('${dependencies}/@tanstack_react-query.js?v=${browserHash}');
+      const {QueryClientProvider} = await import('${queryImport}');
       const {queryClient} = await import('/src/lib/queryClient.ts');
       queryClient.setDefaultOptions({queries: {...queryClient.getDefaultOptions().queries, retry: false}});
       window.refreshWriter = () => queryClient.invalidateQueries({queryKey: ['/api/admin/users', 'writer-test']});
@@ -111,4 +113,70 @@ test("a writer with no biography has empty fields", async ({ page }) => {
   await openDialog(page);
   await expect(page.getByTestId("textarea-bioAr")).toHaveValue("");
   await expect(page.getByTestId("textarea-bio")).toHaveValue("");
+});
+
+const existingPhone = "+966500000001";
+
+test("saves biography without reassigning an unchanged legacy duplicate phone", async ({ page }) => {
+  let saved: unknown;
+  let profilePatch: Record<string, unknown> | undefined;
+  await page.route("**/api/admin/users/writer-test", route => {
+    if (route.request().method() === "PATCH") {
+      profilePatch = route.request().postDataJSON();
+      if (Object.hasOwn(profilePatch!, "phoneNumber")) {
+        return route.fulfill({ status: 409, json: { message: "رقم الجوال مسجل مسبقاً" } });
+      }
+      return route.fulfill({ json: { success: true } });
+    }
+    return route.fulfill({ json: { ...user, phoneNumber: existingPhone } });
+  });
+  await page.route("**/api/admin/users/writer-test/staff", route => {
+    if (route.request().method() === "PATCH") saved = route.request().postDataJSON();
+    return route.fulfill({ json: null });
+  });
+  await openDialog(page);
+  await expect(page.getByTestId("input-phoneNumber")).toHaveValue(existingPhone);
+  await page.getByTestId("textarea-bioAr").fill("السيرة بعد التعديل");
+  await page.getByTestId("button-submit").click();
+  await expect(page.getByTestId("dialog-edit-user")).toBeHidden();
+  expect(profilePatch).toBeDefined();
+  expect(profilePatch).not.toHaveProperty("phoneNumber");
+  expect(saved).toMatchObject({ bioAr: "السيرة بعد التعديل" });
+});
+
+test("a changed phone still reaches server validation and a conflict blocks saving", async ({ page }) => {
+  let submittedPhone: unknown;
+  let staffWrites = 0;
+  await page.route("**/api/admin/users/writer-test", route => {
+    if (route.request().method() === "PATCH") {
+      submittedPhone = route.request().postDataJSON().phoneNumber;
+      return route.fulfill({ status: 409, json: { message: "رقم الجوال مسجل مسبقاً" } });
+    }
+    return route.fulfill({ json: { ...user, phoneNumber: existingPhone } });
+  });
+  await page.route("**/api/admin/users/writer-test/staff", route => {
+    if (route.request().method() === "PATCH") staffWrites++;
+    return route.fulfill({ json: null });
+  });
+  await openDialog(page);
+  await page.getByTestId("input-phoneNumber").fill("+966500000002");
+  await page.getByTestId("button-submit").click();
+  await expect.poll(() => submittedPhone).toBe("+966500000002");
+  await expect(page.getByTestId("button-submit")).toBeEnabled();
+  await expect(page.getByTestId("dialog-edit-user")).toBeVisible();
+  expect(staffWrites).toBe(0);
+});
+
+test("explicitly clearing the phone is sent and saved", async ({ page }) => {
+  let profilePatch: Record<string, unknown> | undefined;
+  await page.route("**/api/admin/users/writer-test", route => {
+    if (route.request().method() === "PATCH") profilePatch = route.request().postDataJSON();
+    return route.fulfill({ json: { ...user, phoneNumber: existingPhone } });
+  });
+  await openDialog(page);
+  await expect(page.getByTestId("input-phoneNumber")).toHaveValue(existingPhone);
+  await page.getByTestId("input-phoneNumber").fill("");
+  await page.getByTestId("button-submit").click();
+  await expect(page.getByTestId("dialog-edit-user")).toBeHidden();
+  expect(profilePatch).toHaveProperty("phoneNumber", "");
 });

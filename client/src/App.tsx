@@ -342,6 +342,7 @@ const SportmonksNewsImporter = lazy(() => retryImport(() => import("@/pages/dash
 const SportsNamesManager = lazy(() => retryImport(() => import("@/pages/dashboard/SportsNamesManager")));
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
 const PromptStudio = lazy(() => retryImport(() => import("@/pages/PromptStudio")));
+const DeepSeekLab = lazy(() => retryImport(() => import("@/pages/dashboard/DeepSeekLab")));
 const PromptStudioPublic = lazy(() => retryImport(() => import("@/pages/PromptStudioPublic")));
 const DeepAnalysis = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysis")));
 const DeepAnalysisList = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysisList")));
@@ -1157,6 +1158,7 @@ function Router() {
         <Route path="/dashboard/sentiment-insights">{() => <LazyRoute component={SentimentInsights} />}</Route>
         <Route path="/admin/comments/suspicious-words">{() => <LazyRoute component={SuspiciousWordsManagement} />}</Route>
         <Route path="/dashboard/prompt-studio">{() => <LazyRoute component={PromptStudio} />}</Route>
+        <Route path="/dashboard/deepseek-lab">{() => <LazyRoute component={DeepSeekLab} />}</Route>
         <Route path="/dashboard/tasks">{() => <LazyRoute component={TasksPage} />}</Route>
         <Route path="/dashboard/ai/summaries">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/ai/deep-analysis-list">{() => <LazyRoute component={DeepAnalysisList} />}</Route>

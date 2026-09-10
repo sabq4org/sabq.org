@@ -2795,9 +2795,9 @@ export const sportsPoolPlayerPicks = pgTable("sports_pool_player_picks", {
   teamName: text("team_name"),
   status: text("status").notNull().default("pending"), // pending | correct | incorrect
   pointsAwarded: integer("points_awarded").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  settledAt: timestamp("settled_at"), // حارس التسوية (مثل sports_pool_predictions)
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }), // حارس التسوية (مثل sports_pool_predictions)
 }, (table) => [
   uniqueIndex("uq_pool_player_pick").on(table.fixtureId, table.userId, table.kind),
   index("idx_sp_pool_pick_user").on(table.userId),
@@ -2822,8 +2822,8 @@ export const sportsPoolMatchPicks = pgTable("sports_pool_match_picks", {
   actualScorers: jsonb("actual_scorers").$type<Array<{ playerId: number; name: string; teamId: number; minute: number | null }>>(),
   firstScorerId: integer("first_scorer_id"), // null حتى تنتهي المباراة
   status: text("status").notNull().default("open"), // open | locked | settled
-  settledAt: timestamp("settled_at"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_pool_match_picks_status").on(table.status),
   index("idx_sp_pool_match_picks_comp").on(table.competitionSlug, table.kickoffTs),
@@ -2843,8 +2843,8 @@ export const sportsPoolUserDivisions = pgTable("sports_pool_user_divisions", {
   seasonPoints: integer("season_points").notNull().default(0),
   lastPromotedTo: integer("last_promoted_to"),
   lastRelegatedTo: integer("last_relegated_to"),
-  computedAt: timestamp("computed_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  computedAt: timestamp("computed_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_pool_div_week").on(table.weekId),
   index("idx_sp_pool_div_div").on(table.division, table.seasonPoints),
@@ -2858,8 +2858,8 @@ export const sportsPoolWeeklyPoints = pgTable("sports_pool_weekly_points", {
   points: integer("points").notNull().default(0),
   matchesPlayed: integer("matches_played").notNull().default(0),
   matchesWon: integer("matches_won").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("uq_sp_pool_weekly_user").on(table.userId, table.weekId),
   index("idx_sp_pool_weekly_week").on(table.weekId, sql`${table.points} DESC`),
@@ -5309,15 +5309,15 @@ export const smartBlocks = pgTable("smart_blocks", {
   }>(),
   // Homepage Stage fields (additive — 2026-07-19)
   sortOrder: integer("sort_order").notNull().default(0),
-  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
-  subtitle: varchar("subtitle", { length: 160 }),
+  sourceType: varchar("source_type").notNull().default("keyword"),
+  subtitle: varchar("subtitle"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   scheduleStartAt: timestamp("schedule_start_at"),
   scheduleEndAt: timestamp("schedule_end_at"),
   lookbackHours: integer("lookback_hours"),
   minArticles: integer("min_articles").notNull().default(1),
-  playbook: varchar("playbook", { length: 60 }),
+  playbook: varchar("playbook"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -5340,11 +5340,18 @@ export const smartBlocksRelations = relations(smartBlocks, ({ one }) => ({
 
 // Smart Blocks Types
 export type SmartBlock = typeof smartBlocks.$inferSelect;
+// Database storage matches production; API validation retains its existing limits.
+const smartBlockInputLimits = {
+  sourceType: z.string().max(30).optional(),
+  subtitle: z.string().max(160).nullish(),
+  playbook: z.string().max(60).nullish(),
+  backgroundColor: z.string().max(20).nullish(),
+};
 export const insertSmartBlockSchema = createInsertSchema(smartBlocks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend(smartBlockInputLimits);
 export type InsertSmartBlock = z.infer<typeof insertSmartBlockSchema>;
 export type UpdateSmartBlock = Partial<InsertSmartBlock>;
 
@@ -5423,7 +5430,7 @@ export const enSmartBlocks = pgTable("en_smart_blocks", {
   title: varchar("title", { length: 60 }).notNull(),
   keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
-  backgroundColor: varchar("background_color", { length: 20 }),
+  backgroundColor: varchar("background_color"),
   placement: varchar("placement", { length: 30 }).notNull(),
   layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'),
   limitCount: integer("limit_count").notNull().default(6),
@@ -5432,15 +5439,15 @@ export const enSmartBlocks = pgTable("en_smart_blocks", {
     dateRange?: { from: string; to: string };
   }>(),
   sortOrder: integer("sort_order").notNull().default(0),
-  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
-  subtitle: varchar("subtitle", { length: 160 }),
+  sourceType: varchar("source_type").notNull().default("keyword"),
+  subtitle: varchar("subtitle"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   scheduleStartAt: timestamp("schedule_start_at"),
   scheduleEndAt: timestamp("schedule_end_at"),
   lookbackHours: integer("lookback_hours"),
   minArticles: integer("min_articles").notNull().default(1),
-  playbook: varchar("playbook", { length: 60 }),
+  playbook: varchar("playbook"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -5464,7 +5471,7 @@ export const insertEnSmartBlockSchema = createInsertSchema(enSmartBlocks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend(smartBlockInputLimits);
 export type InsertEnSmartBlock = z.infer<typeof insertEnSmartBlockSchema>;
 
 // ============================================
@@ -7154,7 +7161,7 @@ export const urSmartBlocks = pgTable("ur_smart_blocks", {
   title: varchar("title", { length: 60 }).notNull(),
   keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
-  backgroundColor: varchar("background_color", { length: 20 }),
+  backgroundColor: varchar("background_color"),
   placement: varchar("placement", { length: 30 }).notNull(),
   layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'),
   limitCount: integer("limit_count").notNull().default(6),
@@ -7163,15 +7170,15 @@ export const urSmartBlocks = pgTable("ur_smart_blocks", {
     dateRange?: { from: string; to: string };
   }>(),
   sortOrder: integer("sort_order").notNull().default(0),
-  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
-  subtitle: varchar("subtitle", { length: 160 }),
+  sourceType: varchar("source_type").notNull().default("keyword"),
+  subtitle: varchar("subtitle"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   scheduleStartAt: timestamp("schedule_start_at"),
   scheduleEndAt: timestamp("schedule_end_at"),
   lookbackHours: integer("lookback_hours"),
   minArticles: integer("min_articles").notNull().default(1),
-  playbook: varchar("playbook", { length: 60 }),
+  playbook: varchar("playbook"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -7195,7 +7202,7 @@ export const insertUrSmartBlockSchema = createInsertSchema(urSmartBlocks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend(smartBlockInputLimits);
 export type InsertUrSmartBlock = z.infer<typeof insertUrSmartBlockSchema>;
 
 // ============================================
@@ -9636,7 +9643,7 @@ export const insertArticleMediaAssetSchema = createInsertSchema(articleMediaAsse
   articleId: z.string().min(1, "Article ID is required"),
   mediaFileId: z.string().optional().nullable(),
   locale: z.enum(["ar", "en", "ur"]),
-  altText: z.string().max(125, "Alt text should be concise (max 125 chars)").optional().nullable(),
+  altText: z.string().max(125, "Alt text should be concise (max 125 chars)"),
   captionHtml: z.string().optional().nullable(),
   captionPlain: z.string().max(500, "Caption should be concise (max 500 chars)").optional().nullable(),
   sourceName: z.string().optional().nullable(),
@@ -9648,7 +9655,7 @@ export const insertArticleMediaAssetSchema = createInsertSchema(articleMediaAsse
 
 // Update schema
 export const updateArticleMediaAssetSchema = z.object({
-  altText: z.string().max(125).optional().nullable(),
+  altText: z.string().max(125).optional(),
   captionHtml: z.string().optional().nullable(),
   captionPlain: z.string().max(500).optional().nullable(),
   keywordTags: z.array(z.string()).optional().nullable(),
@@ -12136,7 +12143,7 @@ export type CorrespondentApplicationWithDetails = CorrespondentApplication & {
 
 // جدول طلبات تسجيل كتّاب الرأي
 export const opinionAuthorApplications = pgTable("opinion_author_applications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   
   // معلومات كاتب الرأي
   arabicName: text("arabic_name").notNull(), // الاسم بالعربية
@@ -12160,17 +12167,17 @@ export const opinionAuthorApplications = pgTable("opinion_author_applications", 
   consentAt: timestamp("consent_at"),
   
   // حالة الطلب
-  status: text("status").default("pending").notNull(), // pending, approved, rejected
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, approved, rejected
   
   // معلومات المراجعة
   reviewedBy: varchar("reviewed_by").references(() => users.id), // من راجع الطلب
-  reviewedAt: timestamp("reviewed_at"), // تاريخ المراجعة
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }), // تاريخ المراجعة
   reviewNotes: text("review_notes"), // ملاحظات المراجعة (سبب الرفض مثلاً)
   
   // المستخدم الناتج عن الموافقة
   createdUserId: varchar("created_user_id").references(() => users.id), // المستخدم المُنشأ بعد الموافقة
   
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_opinion_author_applications_status").on(table.status),
   index("idx_opinion_author_applications_email").on(table.email),

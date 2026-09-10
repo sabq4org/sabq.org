@@ -1,0 +1,18 @@
+# API origin proxy for the verified api.sabq.org cutover. The secret is a
+# dashboard-managed binding and is intentionally absent from this file.
+name = "sabq-api-origin"
+main = "api-origin-worker.js"
+compatibility_date = "2024-09-01"
+account_id = "1ac069d5f5c7a3dd7f4e3c864f51446d"
+workers_dev = false
+routes = [
+  { pattern = "api.sabq.org/*", zone_name = "sabq.org" },
+]
+
+# Run near the Railway origin in US East. Europe ingress intermittently
+# stalled for 20+ seconds; the regional path uses Railway's iad1 ingress.
+[placement]
+region = "aws:us-east-1"
+
+[vars]
+API_ORIGIN = "https://sabqorg-production.up.railway.app"

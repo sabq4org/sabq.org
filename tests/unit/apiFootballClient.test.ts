@@ -64,4 +64,21 @@ describe("apiFootballGet rate-limit backpressure", () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("opens the transport circuit after repeated failures and prevents fanout", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("upstream unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { apiFootballGet } = await import("../../server/services/apiFootballClient");
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await expect(apiFootballGet("Test", "fixtures", { live: "all" })).rejects.toThrow(
+        "transport failure",
+      );
+    }
+
+    await expect(apiFootballGet("Test", "teams", { id: 9 })).rejects.toThrow(
+      "cooling down",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
 });

@@ -1,8 +1,11 @@
+import { getAdminArticleMetrics } from "./services/adminArticleList";
+import { resetChangedImageProvenance, resolveArticleImageProvenance } from "./services/articleImageProvenance";
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
-import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
+import { buildEditorialMetadataUpdate } from "./utils/editorialDatesSql";
+import { memoryCache, CACHE_TTL, withCache, withSWR } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
@@ -4390,9 +4393,17 @@ export class DatabaseStorage implements IStorage {
     if (updateData.imageFocalPoint === null || updateData.imageFocalPoint === undefined) {
       delete updateData.imageFocalPoint;
     }
-    // Same sync as createArticle — pick up the AI flag from the
-    // matching media_files row whenever the cover image changes.
-    await this.applyAiImageFlagFromMedia(updateData);
+
+    // Derive the public update timestamp atomically from the persisted row.
+    // JSONB merges at UPDATE time, so another writer cannot lose metadata keys.
+    const hasImageProvenance = await this.applyAiImageFlagFromMedia(updateData);
+    if (!hasImageProvenance && (typeof updateData.imageUrl === "string" || updateData.imageUrl === null)) {
+      const reset = resetChangedImageProvenance(updateData.imageUrl);
+      if (updateData.aiImageModel === undefined) updateData.aiImageModel = reset.aiImageModel;
+      if (updateData.aiImagePrompt === undefined) updateData.aiImagePrompt = reset.aiImagePrompt;
+    }
+    const editorialMetadata = buildEditorialMetadataUpdate(updateData);
+    if (editorialMetadata) updateData.seoMetadata = editorialMetadata;
     const [updated] = await db
       .update(articles)
       .set(updateData)
@@ -4401,36 +4412,23 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  /// Mutates `data` in-place: when `data.imageUrl` matches a
-  /// media_files row whose `is_ai_generated` is true and the caller
-  /// hasn't already set `isAiGeneratedImage`, copy the AI metadata
-  /// (model + prompt) onto the article. No-op when the URL doesn't
-  /// resolve to a known media row or when the caller already provided
-  /// an explicit value.
-  private async applyAiImageFlagFromMedia(data: any): Promise<void> {
-    if (data?.isAiGeneratedImage === true) return; // caller already set it
+  /// Refresh provenance even when AI is already enabled: replacing an AI
+  /// image must not retain the model/prompt of the previous image.
+  private async applyAiImageFlagFromMedia(data: any): Promise<boolean> {
     const url = data?.imageUrl;
-    if (typeof url !== 'string' || url.length === 0) return;
+    if (typeof url !== 'string' || url.length === 0) return false;
     try {
-      const [media] = await db
-        .select({
-          isAi: mediaFiles.isAiGenerated,
-          model: mediaFiles.aiGenerationModel,
-          prompt: mediaFiles.aiGenerationPrompt,
-        })
-        .from(mediaFiles)
-        .where(eq(mediaFiles.url, url))
-        .limit(1);
-      if (media?.isAi) {
-        data.isAiGeneratedImage = true;
-        if (!data.aiImageModel && media.model) data.aiImageModel = media.model;
-        if (!data.aiImagePrompt && media.prompt) data.aiImagePrompt = media.prompt;
+      const provenance = await resolveArticleImageProvenance(url);
+      if (provenance) {
+        Object.assign(data, provenance);
+        return true;
       }
     } catch (err) {
       // Best-effort — never block the actual write because of a sync
       // lookup failure. The article saves with the original payload.
       console.warn('[storage] applyAiImageFlagFromMedia failed:', err);
     }
+    return false;
   }
 
   async deleteArticle(id: string): Promise<void> {
@@ -4591,25 +4589,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }> {
-    // استعلام واحد بدل 4 COUNT متتالية + كاش قصير (كان يُسجَّل ~2.5s في APM)
-    return withCache("admin:articles:metrics", CACHE_TTL.SHORT, async () => {
-      const now = new Date();
-      const [row] = await db
-        .select({
-          published: sql<number>`count(*) filter (where ${articles.status} = 'published')`,
-          draft: sql<number>`count(*) filter (where ${articles.status} = 'draft')`,
-          archived: sql<number>`count(*) filter (where ${articles.status} = 'archived')`,
-          scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled' and ${articles.scheduledAt} >= ${now})`,
-        })
-        .from(articles);
-
-      return {
-        published: Number(row?.published ?? 0),
-        scheduled: Number(row?.scheduled ?? 0),
-        draft: Number(row?.draft ?? 0),
-        archived: Number(row?.archived ?? 0),
-      };
-    });
+    // كل عدّ مستقل يدفع شرط status إلى فهرسه. صيغة FILTER الواحدة كانت تمسح
+    // صف المقال كاملًا (~199k blocks في قياس الإنتاج) كلما انتهى الكاش.
+    // المفتاح يبدأ بـ articles: كي تمسحه بوابة إبطال المقالات بعد أي كتابة.
+    return withSWR("articles:admin:metrics:v3", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, getAdminArticleMetrics);
   }
 
   async archiveArticle(id: string, userId: string): Promise<Article> {
