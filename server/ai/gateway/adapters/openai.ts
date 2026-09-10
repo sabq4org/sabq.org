@@ -54,7 +54,7 @@ export const openaiAdapter: ProviderAdapter = {
     }
 
     const response = await getClient().chat.completions.create(body as any, {
-      timeout: params.timeoutMs,
+      timeout: params.timeoutMs, signal: params.signal, maxRetries: 0,
     });
 
     return {
@@ -72,7 +72,7 @@ export const openaiAdapter: ProviderAdapter = {
         input: params.input,
         ...(params.dimensions ? { dimensions: params.dimensions } : {}),
       },
-      { timeout: params.timeoutMs },
+      { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
     return {
       embeddings: response.data.map((d) => d.embedding),
@@ -92,7 +92,7 @@ export const openaiAdapter: ProviderAdapter = {
     if (!modelId.startsWith("gpt-image")) body.response_format = "b64_json";
 
     const response = await getClient().images.generate(body as any, {
-      timeout: params.timeoutMs,
+      timeout: params.timeoutMs, signal: params.signal, maxRetries: 0,
     });
     return {
       images: (response.data ?? []).map((img) => ({
@@ -110,7 +110,7 @@ export const openaiAdapter: ProviderAdapter = {
         input: params.text,
         response_format: (params.format as any) || "mp3",
       },
-      { timeout: params.timeoutMs },
+      { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
     const audio = Buffer.from(await response.arrayBuffer());
     return {

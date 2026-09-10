@@ -1,3 +1,4 @@
+import { isLeader } from "../leaderElection";
 /**
  * Seasonal Categories Cron Job
  * وظيفة Cron لتحديث التصنيفات الموسمية تلقائياً
@@ -5,7 +6,7 @@
  */
 import { log } from "../utils/logger";
 
-import cron from "node-cron";
+import cron from "../leaderCron";
 import { updateSeasonalCategories } from "../smartCategoriesEngine";
 
 /**
@@ -41,6 +42,7 @@ export function startSeasonalCategoriesJob() {
   
   // Also run immediately on startup
   setTimeout(async () => {
+    if (!isLeader()) return;
     try {
       log.info("[Seasonal Categories Job] 🚀 Running initial update on startup...");
       await updateSeasonalCategories();

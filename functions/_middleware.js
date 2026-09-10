@@ -119,6 +119,9 @@ const STATIC_EXTENSIONS = [
 // them to discover the noindex. Now Google crawls, sees the header, and drops
 // them. KEEP IN SYNC with server/utils/noindexPaths.ts.
 const NOINDEX_PREFIXES = [
+  "/survey", "/meet", "/verify", "/en/settings", "/ur/settings",
+  "/plus-preview", "/nd96-preview", "/preferences", "/loyalty",
+  "/sports2", "/sports3", "/sports4", "/sports5",
   // dashboards / admin / internal tooling
   "/dashboard", "/en/dashboard", "/ur/dashboard",
   "/admin", "/ifox",
@@ -146,7 +149,7 @@ const NOINDEX_PREFIXES = [
 // Boundary-aware prefix match (mirrors isNoindexPath in
 // server/utils/noindexPaths.ts): `/profile` matches `/profile` and
 // `/profile/123` but NOT `/profiles`. Trailing-slash prefixes are normalized.
-function isNoindexPrefix(p) {
+export function isNoindexPrefix(p) {
   for (let prefix of NOINDEX_PREFIXES) {
     if (prefix.endsWith("/")) prefix = prefix.slice(0, -1);
     if (p === prefix || p.startsWith(prefix + "/")) return true;
@@ -295,7 +298,7 @@ function htmlCacheKey(requestUrl, commit, variant) {
   return new Request(u.toString(), { method: "GET" });
 }
 
-async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
+async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
   // Pages Functions re-issue the request with `fetch()` to API_ORIGIN. Cloudflare
@@ -306,7 +309,20 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
   // trusted header the backend reads first in rateLimitKey() (server/index.ts).
   const headers = new Headers(request.headers);
   const realIp = request.headers.get("cf-connecting-ip");
-  if (realIp) headers.set("X-Sabq-Client-IP", realIp);
+  headers.delete("X-Sabq-Client-IP");
+  headers.delete("X-Sabq-Proxy-Timestamp");
+  headers.delete("X-Sabq-Proxy-Signature");
+  if (realIp && proxySecret) {
+    const timestamp = String(Date.now());
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", encoder.encode(proxySecret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const payload = `${timestamp}\n${request.method}\n${url.pathname}${url.search}\n${realIp}`;
+    const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+    headers.set("X-Sabq-Client-IP", realIp);
+    headers.set("X-Sabq-Proxy-Timestamp", timestamp);
+    headers.set("X-Sabq-Proxy-Signature", [...new Uint8Array(signature)].map(b => b.toString(16).padStart(2, "0")).join(""));
+  }
   const init = {
     method: request.method,
     headers,
@@ -323,6 +339,21 @@ async function proxyToApi(request, apiOrigin, timeoutMs = 0) {
   return fetch(target, init);
 }
 
+// Complete the bounded SSR body before serving or caching it. A failed render
+// falls through to the normal SPA path, but genuine 404/410 responses survive.
+export async function fetchSsrResponse(request, nextOrigin, timeoutMs = 5000) {
+  const response = await proxyToApi(request, nextOrigin, timeoutMs);
+  if (response.status >= 500) {
+    await response.body?.cancel();
+    throw new Error(`SSR upstream ${response.status}`);
+  }
+  const body = await response.arrayBuffer();
+  const headers = new Headers(response.headers);
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+  return new Response([204, 205, 304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers });
+}
+
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
 async function cachedJson(url, ttl) {
   const cache = caches.default;
@@ -331,7 +362,7 @@ async function cachedJson(url, ttl) {
   if (hit) {
     try { return await hit.json(); } catch (_) { /* fall through */ }
   }
-  const res = await fetch(url, { headers: { "User-Agent": "sabq-pages-fn/1.0" } });
+  const res = await fetch(url, { headers: { "User-Agent": "sabq-pages-fn/1.0" }, signal: AbortSignal.timeout(3000) });
   if (!res.ok) return null;
   const text = await res.text();
   await cache.put(
@@ -516,11 +547,11 @@ function getApiCacheTtl(path, request) {
   return 0;
 }
 
-function apiCacheKey(requestUrl) {
+export function apiCacheKey(requestUrl) {
   const u = new URL(requestUrl);
   // Keep only essential query parameters that alter the backend response
   const cleanParams = new URLSearchParams();
-  const keepParams = ["limit", "offset", "page", "q", "category", "type"];
+  const keepParams = ["limit", "offset", "page", "q", "category", "type", "withStats", "includeIfox"];
   for (const p of keepParams) {
     if (u.searchParams.has(p)) {
       cleanParams.set(p, u.searchParams.get(p));
@@ -807,6 +838,7 @@ export async function onRequest(context) {
         request,
         apiOrigin,
         useApiCache ? API_PROXY_TIMEOUT_MS : 0,
+        env.EDGE_PROXY_SHARED_SECRET,
       );
 
       // Cacheable anonymous GETs: buffer the FULL body before cloning/caching.
@@ -972,7 +1004,7 @@ export async function onRequest(context) {
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
       if (slug && slug.gone) return goneHtmlResponse();
-      const ssrRes = await proxyToApi(request, nextOrigin);
+      const ssrRes = await fetchSsrResponse(request, nextOrigin);
       // Only edge-cache a successful HTML render; Next 404/5xx pass through
       // no-store so a transient error is never cached as a 200.
       const ok = ssrRes.status === 200 && isHtml(ssrRes);

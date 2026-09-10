@@ -49,6 +49,7 @@ async function fetchLiveUpdates(
     const whereConditions = [
       sql`${articles.status} = 'published'`,
       sql`${articles.publishedAt} IS NOT NULL`,
+      eq(articles.hideFromHomepage, false),
     ];
 
     if (filter === "breaking") {

@@ -1,3 +1,5 @@
+import { getRealIp } from "./utils/rateLimiting";
+import { installShutdown } from "./shutdown";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
@@ -589,27 +591,7 @@ function hasSessionCookie(req: Request): boolean {
 function rateLimitKey(req: Request): string {
   const userId = (req as any).user?.id;
   if (userId) return `u:${userId}`;
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Bearer ')) {
-    return `b:${createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 32)}`;
-  }
-  // Real visitor IP resolution. When traffic is proxied through our Cloudflare
-  // Worker (frontend-edge-worker.js, route sabq.org/*), the worker re-issues
-  // the request with `fetch(request)`, which makes Cloudflare REWRITE
-  // `cf-connecting-ip` on the origin subrequest to the worker's single egress
-  // IP. The result: every visitor collapses into ONE rate-limit bucket and the
-  // whole site's anonymous writes (logins, comments, reactions) share the
-  // writeLimiter's 1000/15min ceiling → permanent HTTP 429 for everyone.
-  //
-  // Fix: the worker forwards the genuine client IP it sees in a trusted custom
-  // header (`x-sabq-client-ip`; `true-client-ip` is also honored for parity
-  // with Cloudflare Enterprise). We prefer that, then fall back to
-  // `cf-connecting-ip` (correct for DIRECT origin pulls like api.sabq.org),
-  // then the leftmost X-Forwarded-For, then req.ip.
-  const forwardedReal = (req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined;
-  const cfIp = req.headers['cf-connecting-ip'] as string;
-  const xForwardedFor = req.headers['x-forwarded-for'] as string;
-  return forwardedReal?.split(',')[0]?.trim() || cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
+  return getRealIp(req);
 }
 
 // Fire-and-forget TELEMETRY beacons (view counter, behavior/accessibility logs)
@@ -1510,41 +1492,11 @@ if (!(globalThis as any).__sabqServer) {
       // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
       const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
       
-      const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop, onBecomeLeader } = await import("./leaderElection");
+      const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop } = await import("./leaderElection");
       await tryBecomeLeader();
       startLeaderElectionLoop(60000);
       
-      if (enableBackgroundWorkers) {
-        onBecomeLeader(async () => {
-          console.log("[Server] Starting background workers after leader failover...");
-          try {
-            const { startNotificationWorker } = await import("./notificationWorker");
-            startNotificationWorker();
-          } catch (error) {
-            console.error("[Server] Error starting notification worker after failover:", error);
-          }
-          try {
-            const { startPushWorker } = await import("./jobs/pushWorker");
-            startPushWorker();
-          } catch (error) {
-            console.error("[Server] Error starting push worker after failover:", error);
-          }
-          try {
-            if (
-              process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false'
-              && runNewsletterSchedulerInWeb
-            ) {
-              const { newsletterScheduler } = await import("./services/newsletterScheduler");
-              newsletterScheduler.start();
-              console.log("[Server] Newsletter scheduler started after failover");
-            }
-          } catch (error) {
-            console.error("[Server] Error starting newsletter scheduler after failover:", error);
-          }
-        });
-      }
-      
-      const shouldRunBackgroundJobs = enableBackgroundWorkers && isLeader();
+      const shouldRunBackgroundJobs = enableBackgroundWorkers;
       
       if (!enableBackgroundWorkers) {
         console.log("[Server] Background workers disabled (ENABLE_BACKGROUND_WORKERS not set)");
@@ -1643,7 +1595,7 @@ if (!(globalThis as any).__sabqServer) {
         setTimeout(async () => {
           try {
             const { runOneShotStoriesArchive } = await import("./jobs/oneShotStoriesArchive");
-            await runOneShotStoriesArchive();
+            if (isLeader()) await runOneShotStoriesArchive();
           } catch (error) {
             console.error("[Server] Error running one-shot stories archive:", error);
           }
@@ -2080,13 +2032,4 @@ if (!(globalThis as any).__sabqServer) {
 })();
 
 
-if (!(globalThis as any).__sabqServer) {
-  process.on("SIGTERM", () => {
-    console.log("[Server] SIGTERM signal received: closing HTTP server");
-    process.exit(0);
-  });
-  process.on("SIGINT", () => {
-    console.log("[Server] SIGINT signal received: closing HTTP server");
-    process.exit(0);
-  });
-}
+installShutdown(server);

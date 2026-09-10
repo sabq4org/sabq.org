@@ -312,20 +312,21 @@ export async function upsertEntry(params: {
     throw new PredictionError(PREDICTION_ERROR_CODES.COMPETITION_DISABLED, 503);
   }
 
-  const [contest] = await db
+  return db.transaction(async tx => {
+  const [contest] = await tx
     .select()
     .from(predictionContests)
     .where(eq(predictionContests.id, params.contestId))
-    .limit(1);
+    .limit(1).for("update");
   if (!contest) throw new PredictionError(PREDICTION_ERROR_CODES.CONTEST_NOT_FOUND, 404);
 
   // بطولة موقوفة/مسودة/منتهية لا تقبل توقعات جديدة حتى لو بقيت مسابقاتها open —
   // بدون هذا الحارس كان الإيقاف التشغيلي (paused) يوقف العرض ولا يوقف الكتابة.
-  const [competition] = await db
+  const [competition] = await tx
     .select({ status: predictionCompetitions.status })
     .from(predictionCompetitions)
     .where(eq(predictionCompetitions.id, contest.competitionId))
-    .limit(1);
+    .limit(1).for("share");
   if (!competition || competition.status !== "active") {
     throw new PredictionError(PREDICTION_ERROR_CODES.COMPETITION_DISABLED, 409);
   }
@@ -344,25 +345,23 @@ export async function upsertEntry(params: {
     throw new PredictionError(PREDICTION_ERROR_CODES.INVALID_PREDICTION_PAYLOAD, 422);
   }
 
-  const [entry] = await db
-    .insert(predictionEntries)
-    .values({
-      contestId: params.contestId,
-      userId: params.userId,
-      predictionPayload: parsed.data,
-      scoringProfileId: contest.scoringProfileId,
-      sourcePlatform: params.platform,
-    })
-    .onConflictDoUpdate({
-      target: [predictionEntries.contestId, predictionEntries.userId],
-      set: {
-        predictionPayload: parsed.data,
-        status: "active",
-        sourcePlatform: params.platform,
-        updatedAt: now,
-      },
-    })
-    .returning();
+  // Contest row lock serializes with closing/result updates. The predicate
+  // is evaluated by PostgreSQL at insertion (and again for conflict updates).
+  const result = await tx.execute(sql`
+    INSERT INTO ${predictionEntries}
+      (contest_id, user_id, prediction_payload, scoring_profile_id, source_platform)
+    SELECT ${params.contestId}, ${params.userId}, ${JSON.stringify(parsed.data)}::jsonb,
+      ${contest.scoringProfileId}, ${params.platform}
+    WHERE clock_timestamp() < ${contest.locksAt.toISOString()}::timestamptz
+      AND clock_timestamp() >= ${contest.opensAt.toISOString()}::timestamptz
+    ON CONFLICT (contest_id, user_id) DO UPDATE SET
+      prediction_payload = excluded.prediction_payload, status = 'active',
+      source_platform = excluded.source_platform, updated_at = clock_timestamp()
+    WHERE clock_timestamp() < ${contest.locksAt.toISOString()}::timestamptz
+    RETURNING id, prediction_payload AS "predictionPayload", submitted_at AS "submittedAt"
+  `);
+  const entry = result.rows[0];
+  if (!entry) throw new PredictionError(PREDICTION_ERROR_CODES.PREDICTION_LOCKED, 409);
 
   return {
     id: entry.id,
@@ -370,28 +369,32 @@ export async function upsertEntry(params: {
     submittedAt: entry.submittedAt,
     locksAt: contest.locksAt,
   };
+  });
 }
 
 export async function withdrawEntry(contestId: string, userId: string) {
-  const [contest] = await db
+  return db.transaction(async tx => {
+  const [contest] = await tx
     .select()
     .from(predictionContests)
     .where(eq(predictionContests.id, contestId))
-    .limit(1);
+    .limit(1).for("update");
   if (!contest) throw new PredictionError(PREDICTION_ERROR_CODES.CONTEST_NOT_FOUND, 404);
   if (contest.status !== "open" || new Date() >= contest.locksAt) {
     throw new PredictionError(PREDICTION_ERROR_CODES.WITHDRAWAL_NOT_ALLOWED, 409);
   }
 
-  const withdrawn = await db
+  const withdrawn = await tx
     .update(predictionEntries)
     .set({ status: "withdrawn", updatedAt: new Date() })
-    .where(and(eq(predictionEntries.contestId, contestId), eq(predictionEntries.userId, userId)))
+    .where(and(eq(predictionEntries.contestId, contestId), eq(predictionEntries.userId, userId),
+      sql`clock_timestamp() < ${contest.locksAt.toISOString()}::timestamptz`))
     .returning({ id: predictionEntries.id });
   // سحب ما لا وجود له كان يعيد 200 صامتة — الآن 404 صريحة.
   if (withdrawn.length === 0) {
     throw new PredictionError(PREDICTION_ERROR_CODES.ENTRY_NOT_FOUND, 404);
   }
+  });
 }
 
 // ---------------------------------------------------------------------------

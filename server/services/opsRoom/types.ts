@@ -11,11 +11,11 @@ export type TaskPatch = Partial<Omit<InsertOpsTask, "id">>;
 export interface OpsStore {
   insertTask(row: InsertOpsTask): Promise<OpsTaskRow>;
   getTask(id: string): Promise<OpsTaskRow | undefined>;
-  updateTask(id: string, patch: TaskPatch): Promise<OpsTaskRow | undefined>;
+  updateTask(id: string, patch: TaskPatch, expected?: { status: string; attempts: number; startedAt: Date | null }): Promise<OpsTaskRow | undefined>;
   /** مطالبة ذرية بخطوة: تنجح فقط إن كانت حالتها `ready` لحظة التحديث (تمنع التنفيذ المزدوج). */
   claimStep(id: string, patch: TaskPatch): Promise<OpsTaskRow | undefined>;
   listSteps(parentId: string): Promise<OpsTaskRow[]>;
-  listMainTasks(opts?: { statuses?: OpsTaskStatus[]; limit?: number }): Promise<OpsTaskRow[]>;
+  listMainTasks(opts?: { statuses?: OpsTaskStatus[]; limit?: number; oldestFirst?: boolean }): Promise<OpsTaskRow[]>;
   /** مهام رئيسية نشطة بنفس النوع والعنوان خلال نافذة زمنية — لمنع التكرار */
   findRecentDuplicate(taskType: string, normalizedTitle: string, sinceMs: number): Promise<OpsTaskRow | undefined>;
   insertEvent(row: InsertOpsTaskEvent): Promise<void>;

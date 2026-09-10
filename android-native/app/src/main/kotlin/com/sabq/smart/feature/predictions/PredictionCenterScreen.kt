@@ -63,8 +63,14 @@ fun PredictionCenterScreen(
     onBack: () -> Unit,
     onRequireLogin: () -> Unit,
     viewModel: PredictionCenterViewModel = hiltViewModel(),
+    initialCompetition: String? = null,
 ) {
     val state by viewModel.state.collectAsState()
+    LaunchedEffect(initialCompetition, state.competitions) {
+        if (initialCompetition != null && state.competitions.any { it.slug == initialCompetition }) {
+            viewModel.selectCompetition(initialCompetition)
+        }
+    }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(state.toast) {

@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-08-28",
+  "updatedAt": "2026-09-05",
   "systems": [
     {
       "id": "account-center",
@@ -131,14 +131,18 @@
         "sports app ios/SabqSports/Screens/PredictionContestDetailView.swift",
         "android-native/vara/src/main/kotlin/com/sabq/vara/ui/AccountScreens.kt",
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/predictions/**",
-        "docs/PREDICTION_CORE.md"
+        "docs/PREDICTION_CORE.md",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupScreen.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupRepository.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsHubScreen.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsViewModel.kt"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-08-16"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "editorial",
@@ -275,7 +279,24 @@
         "client/src/components/publisher/**",
         "server/services/articleSlugService.ts",
         "tests/unit/articleSlugService.test.ts",
-        "docs/editorial/**"
+        "docs/editorial/**",
+        "server/services/editorialAiService.ts",
+        "client/src/components/article-editor/SabqEditorAssistant.tsx",
+        "client/src/lib/sanitizeEditorialAiResult.ts",
+        "shared/editorialAiSources.ts",
+        "tests/unit/editorialAiServiceSecurity.test.ts",
+        "tests/unit/sanitizeEditorialAiResult.test.ts",
+        "server/services/publishGate.ts",
+        "server/services/publishGateRules.ts",
+        "tests/unit/publishGate.test.ts",
+        "tests/unit/publisherPermissionDenies.test.ts",
+        "client/src/pages/ArticleEditor.tsx",
+        "server/routes/liveNews.ts",
+        "client/src/pages/MomentByMoment.tsx",
+        "tests/unit/liveNewsVisibility.integration.test.ts",
+        "server/services/articleWriteVersion.ts",
+        "client/src/hooks/useArticleEditLock.ts",
+        "client/src/lib/articleDraft.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -310,7 +331,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-03"
+      "lastReviewed": "2026-09-08"
     },
     {
       "id": "ifox",
@@ -332,7 +353,8 @@
         "server/jobs/aiTasksCleanup.ts",
         "client/src/pages/admin/ifox/**",
         "client/src/components/admin/ifox/**",
-        "client/src/pages/ifox/**"
+        "client/src/pages/ifox/**",
+        "server/jobs/ifoxContentGeneratorJob.ts"
       ],
       "aiFeatureKeys": [
         "ifox-content",
@@ -344,7 +366,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "ai-hub",
@@ -380,7 +402,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-07-19"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "muqtarab",
@@ -495,7 +517,8 @@
         "server/services/newsImageStorageService.ts",
         "server/routes/mediaLibrary.ts",
         "server/routes/mediaStoreRoutes.ts",
-        "client/src/pages/dashboard/MediaLibrary.tsx"
+        "client/src/pages/dashboard/MediaLibrary.tsx",
+        "tests/unit/mediaStoreWebhook.test.ts"
       ],
       "aiFeatureKeys": [
         "media-caption"
@@ -504,7 +527,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-09-04"
     },
     {
       "id": "sports-tournaments",
@@ -625,14 +648,15 @@
         "server/notificationBus.ts",
         "server/routes/pushNotificationRoutes.ts",
         "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
-        "docs/APPLE_PUSH_SETUP.md"
+        "docs/APPLE_PUSH_SETUP.md",
+        "server/notificationWorker.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-21"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "ads",
@@ -698,14 +722,30 @@
         "server/services/mobileUserRolePayload.ts",
         "server/services/userRoleSync.ts",
         "server/routes/promoteCorrespondent.ts",
-        "scripts/promote-correspondent.ts"
+        "scripts/promote-correspondent.ts",
+        "tests/unit/rbacPersonalDenies.test.ts",
+        "server/sessionRevocations.ts",
+        "tests/unit/sessionRevocations.integration.test.ts",
+        "tests/unit/authSessionRevocation.test.ts",
+        "tests/unit/sessionFailoverStore.test.ts",
+        "tests/unit/sessionDegradedSignal.test.ts",
+        "server/utils/trustedProxyIp.ts",
+        "server/utils/rateLimiting.ts",
+        "sabq app ios/sabq/Stores/AuthStore.swift",
+        "sports app ios/SabqSports/Services/AuthStore.swift",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/AuthRepository.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/auth/**",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/auth/**",
+        "android-native/app/src/main/res/xml/backup_rules.xml",
+        "android-native/app/src/main/res/xml/data_extraction_rules.xml",
+        "android-native/vara/src/main/kotlin/com/sabq/vara/core/VaraViewModel.kt"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-16"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "seo-ssr",
@@ -726,14 +766,15 @@
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
         "web-next/**",
-        "functions/_middleware.js"
+        "functions/_middleware.js",
+        "web-next/lib/articleMetadata.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-30"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "comments",
@@ -980,7 +1021,8 @@
         "scripts/seed-ops-room.ts",
         "client/src/pages/dashboard/OpsRoom/**",
         "tests/unit/opsRoomEngine.test.ts"
-      ]
+      ],
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "economy-live",
@@ -1005,6 +1047,45 @@
         "tests/unit/economyNumberGuard.test.ts",
         "tests/fixtures/sama/**"
       ]
+    },
+    {
+      "id": "platform-runtime",
+      "nameAr": "تشغيل المنصة والبنية المشتركة",
+      "nameEn": "Platform Runtime",
+      "status": "active",
+      "category": "infra",
+      "summary": "الإقلاع والقيادة والإيقاف وملفات العقود المشتركة؛ منطق المنتج يبقى عند مالك نظامه.",
+      "docPath": "docs/systems/platform-runtime/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/editorial/SYSTEM.md",
+        "docs/systems/push-notifications/SYSTEM.md",
+        "docs/systems/predictions-core/SYSTEM.md",
+        "docs/systems/seo-ssr/SYSTEM.md",
+        "docs/systems/ai-hub/SYSTEM.md",
+        "docs/systems/ops-room/SYSTEM.md",
+        "docs/systems/ifox/SYSTEM.md",
+        "docs/systems/auth-rbac/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "server/index.ts",
+        "server/bootstrap.ts",
+        "server/leaderElection.ts",
+        "server/leaderCron.ts",
+        "server/shutdown.ts",
+        "server/routes.ts",
+        "server/storage.ts",
+        "server/mobileApiRoutes.ts",
+        "shared/schema.ts",
+        "Dockerfile",
+        ".github/workflows/**",
+        "docs/systems/platform-runtime/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": null,
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-09-05"
     }
   ]
 }

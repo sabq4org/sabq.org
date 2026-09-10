@@ -1,3 +1,4 @@
+import { isShuttingDown, registerShutdownHook } from "./shutdown";
 import { pool } from "./db";
 import { getRedisClient } from "./redis";
 
@@ -24,14 +25,15 @@ type LeaderClient = {
 
 let _client: LeaderClient | null = null;
 let _isLeader = false;
+let leaseValidUntil = 0;
 let _mode: "lease" | "advisory" | null = null;
 const _podId = `${process.pid}-${Date.now()}`;
 let _leaderCheckInterval: ReturnType<typeof setInterval> | null = null;
-let _onBecomeLeaderCallback: (() => void) | null = null;
+let _onBecomeLeaderCallback: (() => void | Promise<void>) | null = null;
 let _electionInFlight = false;
 
 export function isLeader(): boolean {
-  return _isLeader;
+  return !isShuttingDown() && _isLeader && (_mode !== "lease" || Date.now() < leaseValidUntil);
 }
 
 export function getPodId(): string {
@@ -47,7 +49,7 @@ export function getLeaderMode(): string | null {
  * Register a callback to be called when this pod becomes the leader
  * This is used to start background workers on failover
  */
-export function onBecomeLeader(callback: () => void): void {
+export function onBecomeLeader(callback: () => void | Promise<void>): void {
   _onBecomeLeaderCallback = callback;
 }
 
@@ -63,14 +65,17 @@ function demote(): void {
 }
 
 export async function tryBecomeLeader(): Promise<boolean> {
+  if (isShuttingDown()) return false;
   if (_isLeader) return true;
 
   const redis = getRedisClient();
   if (redis) {
     _mode = "lease";
     try {
+      const startedAt = Date.now();
       const acquired = await redis.setLock(LEASE_KEY, _podId, LEASE_TTL_MS);
       if (acquired === "OK") {
+        leaseValidUntil = startedAt + LEASE_TTL_MS;
         _isLeader = true;
         console.log(`[Leader Election] 👑 Pod (${_podId}) acquired leader LEASE - now the LEADER`);
         console.log(`[Leader Election] 📋 Background jobs will run on this pod`);
@@ -130,13 +135,12 @@ async function verifyLeadership(): Promise<void> {
       return;
     }
     try {
-      const holder = await redis.get(LEASE_KEY);
-      if (holder !== _podId) {
-        console.warn(`[Leader Election] ⚠️ Lease lost to ${holder ?? "expiry"} — demoting pod (${_podId})`);
+      const startedAt = Date.now();
+      if (await redis.renewLock(LEASE_KEY, _podId, LEASE_TTL_MS) !== 1) {
         demote();
         return;
       }
-      await redis.expire(LEASE_KEY, Math.ceil(LEASE_TTL_MS / 1000));
+      leaseValidUntil = startedAt + LEASE_TTL_MS;
     } catch {
       console.warn(`[Leader Election] ⚠️ Lease renewal failed — demoting pod (${_podId})`);
       demote();
@@ -175,7 +179,7 @@ export function startLeaderElectionLoop(intervalMs: number = 30000): void {
         if (_onBecomeLeaderCallback) {
           console.log(`[Leader Election] Starting background workers after failover...`);
           try {
-            _onBecomeLeaderCallback();
+            await _onBecomeLeaderCallback();
             console.log(`[Leader Election] Background workers started successfully after failover`);
           } catch (error) {
             console.error(`[Leader Election] Error starting background workers after failover:`, error);
@@ -198,8 +202,7 @@ export async function releaseLeadership(): Promise<void> {
   if (_mode === "lease") {
     try {
       const redis = getRedisClient();
-      if (redis && (await redis.get(LEASE_KEY)) === _podId) {
-        await redis.del(LEASE_KEY);
+      if (redis && await redis.releaseLock(LEASE_KEY, _podId) === 1) {
         console.log(`[Leader Election] 🔓 Released leader lease`);
       }
     } catch (error) {
@@ -219,10 +222,4 @@ export async function releaseLeadership(): Promise<void> {
   demote();
 }
 
-process.on("SIGTERM", async () => {
-  await releaseLeadership();
-});
-
-process.on("SIGINT", async () => {
-  await releaseLeadership();
-});
+registerShutdownHook("leader-lease", releaseLeadership, "release");

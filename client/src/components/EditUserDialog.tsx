@@ -54,6 +54,7 @@ interface User {
   lastNameEn: string | null;
   phoneNumber: string | null;
   profileImageUrl: string | null;
+  bio?: string | null;
   status: string;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -115,6 +116,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   /** رقم بطاقة وُلِّد داخل هذه الجلسة — يقفل الحقل بلا إعادة تحميل تفقد التعديلات */
   const [issuedPressId, setIssuedPressId] = useState<string | null>(null);
   const [generatingPressId, setGeneratingPressId] = useState(false);
+  const [initializedUserId, setInitializedUserId] = useState<string | null>(null);
 
   // Only system_admin can edit staff emails
   const canEditEmail = hasRole(currentUser, "system_admin");
@@ -196,9 +198,11 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   });
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
 
-  const { data: user, isLoading: userLoading } = useQuery<User>({
+  const { data: user, isFetching: userFetching, isError: userError, refetch: refetchUser } = useQuery<User>({
     queryKey: ["/api/admin/users", userId],
     enabled: open && !!userId,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/admin/users/${userId}`));
       if (!res.ok) throw new Error("Failed to fetch user");
@@ -206,12 +210,14 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     },
   });
 
-  const { data: staffData } = useQuery<{ bio?: string; bioAr?: string; title?: string; titleAr?: string } | null>({
+  const { data: staffData, isFetching: staffFetching, isError: staffError, refetch: refetchStaff } = useQuery<{ bio?: string | null; bioAr?: string | null; title?: string | null; titleAr?: string | null } | null>({
     queryKey: ["/api/admin/users", userId, "staff"],
     enabled: open && !!userId,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/admin/users/${userId}/staff`));
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error("تعذر تحميل معلومات الموظف");
       return res.json();
     },
   });
@@ -332,11 +338,14 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
       setShowPassword(false);
       setIssuedPressId(null);
       setGeneratingPressId(false);
+      setInitializedUserId(null);
     }
   }, [open]);
 
   useEffect(() => {
-    if (user) {
+    // Initialize once per opening, after both requests complete. Refetches must
+    // not reset edits, and a failed staff request must never look like empty data.
+    if (open && user?.id === userId && staffData !== undefined && !userFetching && !staffFetching && !userError && !staffError && initializedUserId !== userId) {
       form.reset({
         email: user.email || "",
         firstName: user.firstName,
@@ -345,7 +354,8 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
         lastNameEn: user.lastNameEn || "",
         phoneNumber: user.phoneNumber || "",
         profileImageUrl: user.profileImageUrl,
-        bioAr: staffData?.bioAr || "",
+        // Accepted writers can have their Arabic biography on users.bio only.
+        bioAr: staffData?.bioAr || user.bio || "",
         bio: staffData?.bio || "",
         titleAr: staffData?.titleAr || "",
         title: staffData?.title || "",
@@ -358,8 +368,9 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
         pressIdNumber: user.pressIdNumber || "",
         cardValidUntil: user.cardValidUntil || "",
       });
+      setInitializedUserId(userId);
     }
-  }, [user, staffData, form]);
+  }, [open, userId, user, staffData, userFetching, staffFetching, userError, staffError, initializedUserId, form]);
 
   const updateUserMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -417,6 +428,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   });
 
   const onSubmit = (data: FormData) => {
+    if (initializedUserId !== userId || userError || staffError) return;
     updateUserMutation.mutate(data);
   };
   
@@ -441,7 +453,14 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
           </DialogDescription>
         </DialogHeader>
 
-        {userLoading ? (
+        {(userError || staffError) && !userFetching && !staffFetching ? (
+          <div className="space-y-4 py-8 text-center" role="alert">
+            <p>تعذر تحميل بيانات المستخدم أو السيرة الذاتية. أعد المحاولة قبل التعديل.</p>
+            <Button type="button" variant="outline" onClick={() => { void refetchUser(); void refetchStaff(); }}>
+              إعادة المحاولة
+            </Button>
+          </div>
+        ) : initializedUserId !== userId || userError || staffError ? (
           <div className="flex items-center justify-center py-8" data-testid="loading-user">
             <Loader2 className="h-8 w-8 animate-spin" />
           </div>

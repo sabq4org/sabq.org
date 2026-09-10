@@ -11,6 +11,7 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, asc, like, or, sql, gte, lte, count, sum } from "drizzle-orm";
 import * as tapService from "../services/tapPaymentService";
+import { verifyMediaStoreCharge } from "../services/mediaStoreWebhook";
 
 const VAT_RATE = 0.15;
 
@@ -582,15 +583,15 @@ router.get("/orders/track/:token", async (req: Request, res: Response) => {
 
 router.post("/webhook", raw({ type: "application/json" }), async (req: Request, res: Response) => {
   try {
-    const rawBody = req.body.toString("utf8");
-    const hashstring = req.headers["hashstring"] as string || req.headers["hash"] as string;
-
-    if (!tapService.verifyWebhookSignature(rawBody, hashstring || "")) {
+    const captured = (req as Request & { rawBody?: unknown }).rawBody;
+    const rawBody = Buffer.isBuffer(captured) ? captured : Buffer.isBuffer(req.body) ? req.body : null;
+    if (!rawBody) return res.status(400).send("Missing raw body");
+    const payload = verifyMediaStoreCharge(rawBody, req.headers["hashstring"]);
+    if (!payload) {
       console.error("[Media Store] Invalid or missing webhook signature");
       return res.status(401).send("Unauthorized");
     }
 
-    const payload = JSON.parse(rawBody);
     const chargeId = payload.id;
     const orderId = payload.metadata?.orderId;
 
@@ -612,13 +613,24 @@ router.post("/webhook", raw({ type: "application/json" }), async (req: Request, 
       return res.status(404).send("Order not found");
     }
 
+    // Metadata is not signed by Tap. Bind it to the charge saved at checkout.
+    if (order.paymentChargeId !== chargeId || Math.round(payload.amount * 100) !== order.totalHalalas) {
+      return res.status(400).send("Payment does not match order");
+    }
+    // Tap retries deliveries. A replay must not undo fulfillment or duplicate payment events.
+    if (order.status !== "pending" && order.status !== "payment_pending") return res.status(200).send("OK");
+
     const verifiedCharge = await tapService.retrieveCharge(chargeId);
+    if (verifiedCharge.id !== chargeId || verifiedCharge.currency !== "SAR"
+      || Math.round(verifiedCharge.amount * 100) !== order.totalHalalas) {
+      return res.status(400).send("Verified payment does not match order");
+    }
     const verifiedStatus = verifiedCharge.status;
 
     console.log(`[Media Store] Verified status from Tap API: ${verifiedStatus}`);
 
     if (tapService.isPaymentSuccessful(verifiedStatus)) {
-      await db.update(mediaServiceOrders)
+      const [updated] = await db.update(mediaServiceOrders)
         .set({
           status: "paid",
           paymentId: chargeId,
@@ -632,14 +644,16 @@ router.post("/webhook", raw({ type: "application/json" }), async (req: Request, 
             cardLastFour: verifiedCharge.card?.last_four,
           },
         })
-        .where(eq(mediaServiceOrders.id, orderId));
+        .where(and(eq(mediaServiceOrders.id, orderId), eq(mediaServiceOrders.paymentChargeId, chargeId), eq(mediaServiceOrders.status, order.status)))
+        .returning({ id: mediaServiceOrders.id });
+      if (!updated) return res.status(200).send("OK");
 
       await addOrderEvent(orderId, "paid", `تم الدفع بنجاح - المبلغ: ${(order.totalHalalas / 100).toFixed(2)} ريال`);
 
       console.log(`[Media Store] Order ${order.orderNumber} marked as paid`);
 
     } else if (tapService.isPaymentFailed(verifiedStatus)) {
-      await db.update(mediaServiceOrders)
+      const [updated] = await db.update(mediaServiceOrders)
         .set({
           status: "cancelled",
           updatedAt: new Date(),
@@ -648,7 +662,9 @@ router.post("/webhook", raw({ type: "application/json" }), async (req: Request, 
             failureReason: verifiedCharge.response?.message,
           },
         })
-        .where(eq(mediaServiceOrders.id, orderId));
+        .where(and(eq(mediaServiceOrders.id, orderId), eq(mediaServiceOrders.paymentChargeId, chargeId), eq(mediaServiceOrders.status, order.status)))
+        .returning({ id: mediaServiceOrders.id });
+      if (!updated) return res.status(200).send("OK");
 
       await addOrderEvent(orderId, "payment_failed", `فشل الدفع: ${verifiedCharge.response?.message || verifiedStatus}`);
 

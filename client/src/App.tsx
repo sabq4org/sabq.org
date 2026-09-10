@@ -195,10 +195,12 @@ const ArchivePage = lazy(() => retryImport(() => import("@/pages/ArchivePage")))
 
 // === LAZY IMPORTS (Dashboard Core) ===
 const Dashboard = lazy(() => retryImport(() => import("@/pages/Dashboard")));
+const Dashboard2 = lazy(() => retryImport(() => import("@/pages/Dashboard2")));
 const AnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/AnalyticsDashboard")));
 const ArticleEditor = lazy(() => retryImport(() => import("@/pages/ArticleEditor")));
 const ArticlePreview = lazy(() => retryImport(() => import("@/pages/ArticlePreview")));
 const ArticlesManagement = lazy(() => retryImport(() => import("@/pages/ArticlesManagement")));
+const ArticlesManagementPreview = lazy(() => retryImport(() => import("@/pages/ArticlesManagementPreview")));
 const CategoriesManagement = lazy(() => retryImport(() => import("@/pages/CategoriesManagement")));
 const UsersManagement = lazy(() => retryImport(() => import("@/pages/UsersManagement")));
 const RolesManagement = lazy(() => retryImport(() => import("@/pages/RolesManagement")));
@@ -887,6 +889,8 @@ function Router() {
         </Route>
         
         <Route path="/dashboard">{() => <LazyRoute component={Dashboard} />}</Route>
+        {/* مركز قيادة سبق التحريري — صفحة موازية لا تمس اللوحة الحالية */}
+        <Route path="/dashboard2">{() => <LazyRoute component={Dashboard2} />}</Route>
         <Route path="/dashboard/analytics">{() => <LazyRoute component={AnalyticsDashboard} />}</Route>
         {/* Article Analytics - requires analytics.view permission */}
         <Route path="/dashboard/article-analytics">
@@ -899,6 +903,8 @@ function Router() {
           )}
         </Route>
         <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* معاينة مستقلة لإعادة تصميم إدارة المقالات — لا تلمس الصفحة الحالية */}
+        <Route path="/dashboard/articles-preview">{() => <LazyRoute component={ArticlesManagementPreview} />}</Route>
         <Route path="/dashboard/articles/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>

@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-08-16 | المالك: platform
+> آخر مراجعة: 2026-09-05 | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -31,14 +31,29 @@
 - `ROLE_PERMISSIONS_MAP` للأدمن يحمل `"*"` حرفياً — لا تستبدله بتوسيع `PERMISSION_CODES`.
 - فلاتر التنقل يجب أن short-circuit على `permissions.includes("*")`.
 - `hasRole(..., "admin")` يقبل أيضاً `system_admin` / `system.admin` / `superadmin` / `super_admin`. أي بوابة أدوار في الواجهة (`ProtectedRoute`, `useRoleProtection`) يجب أن تمر عبر `hasRole` — مطابقة نصية لـ `role === "admin"` تطرد مسؤول النظام من صفحات مثل `/dashboard/admin/publishers` وiFox.
-- دمج الصلاحيات عبر `resolveEffectivePermissions(roles, dbPerms)` = اتحاد DB ∪ خريطة الكود ثم طرح `ROLE_PERMISSION_DENY_MAP` (مثال: مدير المحتوى بلا `meetings.create` ولا `staff.view_productivity` حتى لو بقيت في DB).
+- دمج الصلاحيات عبر `resolveEffectivePermissions(roles, dbPerms, deniedPermissionCodes)` = اتحاد DB ∪ خريطة الكود ثم طرح استبعادات الدور والمنع الفردي. المنع الفردي يُطبّق بعد كل المنح، بما فيها منحة الناشر الديناميكية في `/api/auth/user`؛ عقد الأدمن `"*"` مستثنى كالسابق.
+- `getUserPermissionData` قراءة صارمة: فشل قراءة الاستثناءات يرمي خطأ، ولا يتحول إلى قائمة منع فارغة يعقبها منح ثابتة. بوابة RBAC ترفض عند الفشل؛ مسار الحساب يعيد خطأ بدل تخزين صلاحيات غير مؤكدة. `storage.getUserPermissions` يفوّض إلى قارئ RBAC نفسه ليحترم المنع الفردي في المسارات القديمة. تغيير الاستثناءات يُبطل كاش `rbac` و`auth-user` المحليين عبر `invalidateUserPermissionCache`. دفعة الصلاحيات لا تغيّر عقود Bearer.
 - مدير المحتوى قد يملك `users.view` (لاختيار المراسلين في المحرر) فيظهر قسم «الفريق والصلاحيات» إن لم يُستبعد بـ `excludeRoles` على حاوية `users` في `nav.config.ts` — الإخفاء هناك UX فقط ولا يسحب الصلاحية.
-- جلسات الويب: Redis أساسي + Postgres failover عبر `SessionFailoverStore`. عمليات `get`/`set`/`touch`/`destroy` تنتقل لـ PG عند فشل Redis — **لا تُرجع خطأ Redis إذا نجح الـ fallback** (خصوصاً `destroy` أثناء `req.logIn` / regenerate؛ وإلا يظهر «خطأ في إنشاء الجلسة» بعد `LocalStrategy: Success`).
+- جلسات الويب: Redis أساسي + Postgres failover عبر `SessionFailoverStore`؛ الوضع PG-only يمر عبر المخزن نفسه. `destroy` يحفظ إبطالًا دائمًا أولًا ثم ينظف النسختين بأفضل جهد. فشل Redis لا يفشل التجديد إذا حُفظ الإبطال؛ فشل حفظ الإبطال يُعاد للمتصل ولا يُعلن نجاح الخروج.
+- `sessionRevocations.ts` يستخدم صفوفًا مستقلة في جدول `sessions` الحالي: `revocation:sid:<hash>` لمدة 8 أيام (عمر الجلسة الأقصى 7 أيام)، و`revocation:user:<hash>` برقم إصدار دائم لكل مستخدم أُبطلت جلساته. هذه الصفوف لا تحمل `passport.user` ولا تُستخدم كجلسات، ولا تحتاج migration. تصحيح `connect-pg-simple.ttl`: الوحدة ثوانٍ وليست مللي ثانية.
+- Passport يختم `webAuthGeneration` عند تسجيل الدخول فقط؛ `set` و`touch` لا يرفعان إصدار جلسة قديمة. `invalidateAllUserSessions` يحفظ إصدار المستخدم مع `exceptWebSid` قبل التنظيف؛ يحاول تنظيف الموبايل حتى إذا تعذر سجل الويب، ثم يعيد خطأ الإبطال. حذف Bearer يحتفظ بسلوكه القائم، ولا يشمله ضمان سجل الويب.
+- قبول جلسة غير فارغة يتطلب استعلام PG مفهرسًا عن SID والمستخدم؛ `set` و`touch` يفحصان الإبطال أيضًا. الطلب المعتاد الذي يقرأ ثم يجدد الجلسة يضيف استعلامين؛ لا يوجد negative cache محلي لأنه يفتح نافذة قبول بعد الإبطال. فشل مرجع الإبطال يرفض المصادقة، وأخطاء البنية التحتية تضيف `X-Session-Degraded` كي تعيد الواجهة المحاولة.
+- **النشر/التراجع:** الضمان يتطلب أن تعمل كل نسخ API بكود الإبطال الجديد. النسخ القديمة لا تقرأ السجل؛ الرجوع إليها مع وجود نسخ جلسات قديمة يعيد خطر الاستعادة. أثر الاستعلامات على Neon لم يُقَس إنتاجيًا؛ راقب انتظار pool وp95 ومعدل التدهور قبل تعميم النشر. لا تُحذف سجلات إصدار المستخدم الدائمة ضمن تنظيف الجلسات العادي.
 - Postgres الخاص بالجلسات يستخدم pool مستقلاً صغيراً (`SESSION_FALLBACK_POOL_MAX`، الافتراضي 4، والسقف 10) بمهلات قصيرة؛ لا تعيده إلى pool المحتوى لأن انقطاع Redis قد يستنزف كل اتصالات الأخبار.
 
 ## صحة وتشغيل
 - راجع CLAUDE.md § RBAC قبل أي تغيير
 - عند 500 على `/api/login` مع `Command timed out` من ioredis: تحقق من Upstash ثم من سجل `[Session Pool]` ومن أن الفايل أوفر يكتب على جدول `sessions`.
 
+## التحقق المحلي
+- `tests/unit/sessionRevocations.integration.test.ts`: اختبارات opt-in على قاعدة PostgreSQL محلية فارغة فقط، بواسطة `SESSION_REVOCATION_TEST_URL`. ينشئ الاختبار جدول الجلسات ثم يحذفه بعد النهاية؛ لا يستعمل `DATABASE_URL` أو Neon.
+- تغطية: انقطاع/عودة Redis، مخزن جديد، PG-only، كتابة متأخرة، touch بعد الإبطال، إبطال المستخدم واستثناء جلسته، login بإصدار جديد، وفشل سجل الإبطال. `authSessionRevocation.test.ts` يتحقق من توصيل Passport والتنظيف المستقل للموبايل.
+
 ## عند التعديل
 - [ ] قرأت هذا الملف + قسم RBAC في `CLAUDE.md`
+
+## تطبيقات الموبايل والثقة بالحافة — مراجعة 2026-09-05
+- استجابة requires2FA لا تنشئ جلسة، بما فيها SMS وApple وGoogle في التطبيقات؛ تنتقل إلى واجهة التحدي القائمة.
+- VARA يحاول إبطال الجلسة على الخادم قبل إسقاط الاعتماد المحلي؛ فشل الشبكة يظهر للمستخدم ويبقي إمكانية إعادة المحاولة. 401 يؤكد عدم صلاحية الجلسة ويُقبل للخروج.
+- أندرويد سبق يخزن ciphertext عبر AES-GCM بمفتاح Android Keystore؛ ترحيل DataStore يزيل النص القديم بعد نجاح التشفير فقط. ملف datastore/auth_prefs.preferences_pb مستبعد من cloud/device backup.
+- عنوان IP الممرر من Pages مقبول فقط بتوقيع HMAC حديث مربوط بالطريقة والمسار. انظر بوابة إعداد الإنتاج في platform-runtime.

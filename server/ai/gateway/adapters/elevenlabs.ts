@@ -28,6 +28,7 @@ export const elevenlabsAdapter: ProviderAdapter = {
         model: modelId,
       },
       params.timeoutMs,
+      params.signal,
     );
 
     return {

@@ -21,7 +21,7 @@
 import { Router } from "express";
 import { db } from "../db";
 import { articleEditLocks, users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, lte, or, sql } from "drizzle-orm";
 import { authorizeArticleWrite } from "../services/articleAccessService";
 import { getEffectiveUserPermissions } from "../rbac";
 
@@ -93,25 +93,8 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
       return res.status(access.httpStatus).json({ message: access.message });
     }
 
-    const [existing] = await db
-      .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, articleId))
-      .limit(1);
-
     const now = new Date();
     const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
-
-    if (existing) {
-      const lock = existing as LockRow;
-      const expired = lock.expiresAt.getTime() <= Date.now();
-      if (!expired && lock.userId !== userId) {
-        return res.status(409).json({
-          message: "المقالة مقفلة من مستخدم آخر",
-          ...shape(lock, userId),
-        });
-      }
-    }
 
     const userName = await resolveUserName(userId, req.user);
 
@@ -128,9 +111,15 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
       .onConflictDoUpdate({
         target: articleEditLocks.articleId,
         set: { userId, userName, acquiredAt: now, expiresAt, lastHeartbeat: now },
+        setWhere: or(eq(articleEditLocks.userId, userId), lte(articleEditLocks.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`)),
       })
       .returning();
 
+    if (!upserted) {
+      const [owner] = await db.select().from(articleEditLocks)
+        .where(eq(articleEditLocks.articleId, articleId)).limit(1);
+      return res.status(409).json({ message: "المقالة مقفلة من مستخدم آخر", ...shape(owner, userId) });
+    }
     res.json(shape(upserted as LockRow, userId));
   } catch (err) {
     console.error("[edit-lock] POST error:", err);
@@ -145,22 +134,14 @@ const heartbeatHandler = async (req: any, res: any) => {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
 
-    const [existing] = await db
-      .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, articleId))
-      .limit(1);
-
-    if (!existing || (existing as LockRow).userId !== userId) {
-      return res.status(409).json({ message: "Lock no longer owned" });
-    }
-
     const [updated] = await db
       .update(articleEditLocks)
       .set({ lastHeartbeat: now, expiresAt })
-      .where(eq(articleEditLocks.articleId, articleId))
+      .where(and(eq(articleEditLocks.articleId, articleId), eq(articleEditLocks.userId, userId),
+        sql`${articleEditLocks.expiresAt} > (clock_timestamp() at time zone 'UTC')`))
       .returning();
 
+    if (!updated) return res.status(409).json({ message: "Lock no longer owned" });
     res.json(shape(updated as LockRow, userId));
   } catch (err) {
     console.error("[edit-lock] heartbeat error:", err);
@@ -180,15 +161,9 @@ router.delete("/api/admin/articles/:id/lock", requireAuth, async (req: any, res)
 
     // Only the lock owner can release. Silently no-op for anyone else so
     // navigating away doesn't surface a confusing error.
-    const [existing] = await db
-      .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, articleId))
-      .limit(1);
-
-    if (existing && (existing as LockRow).userId === userId) {
-      await db.delete(articleEditLocks).where(eq(articleEditLocks.articleId, articleId));
-    }
+    await db.delete(articleEditLocks).where(and(
+      eq(articleEditLocks.articleId, articleId), eq(articleEditLocks.userId, userId),
+    ));
 
     res.json({ released: true });
   } catch (err) {

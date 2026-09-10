@@ -80,8 +80,6 @@ fun GcPredictionsHubScreen(
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.appBg, colors.appBgMid, colors.appBg)))) {
         Column(Modifier.fillMaxSize()) {
-            GcPredictionsHero(state, colors)
-            GcEarnedBadgesRail(state.today?.me?.badges.orEmpty(), colors)
             GcSegmentBar(state.segment, colors, viewModel::selectSegment)
             state.toast?.let { toast ->
                 LaunchedEffect(toast) {
@@ -100,12 +98,20 @@ fun GcPredictionsHubScreen(
             }
             Box(Modifier.weight(1f)) {
                 when (state.segment) {
-                    GcPredictionsViewModel.Segment.MATCHES -> GcMatchesSegment(state, viewModel, onRequireLogin, colors)
-                    GcPredictionsViewModel.Segment.LEADERBOARD -> GcLeaderboardSegment(state, colors)
+                    GcPredictionsViewModel.Segment.MATCHES -> com.sabq.smart.feature.predictions.PredictionCenterScreen(
+                        onBack = { viewModel.selectSegment(GcPredictionsViewModel.Segment.MAJLIS) },
+                        onRequireLogin = onRequireLogin, initialCompetition = "gulf-cup-27")
+                    GcPredictionsViewModel.Segment.LEADERBOARD -> com.sabq.smart.feature.predictions.PredictionCenterScreen(
+                        onBack = { viewModel.selectSegment(GcPredictionsViewModel.Segment.MAJLIS) },
+                        onRequireLogin = onRequireLogin, initialCompetition = "gulf-cup-27")
                     GcPredictionsViewModel.Segment.MAJLIS -> GcMajlisHubScreen(state, viewModel, onRequireLogin, colors)
                     GcPredictionsViewModel.Segment.FANTASY -> GcFantasyLeaderboardSegment(state, colors)
-                    GcPredictionsViewModel.Segment.LONG -> GcLongSegment(state, viewModel, onRequireLogin, colors)
-                    GcPredictionsViewModel.Segment.MINE -> GcMineSegment(state, onRequireLogin, colors)
+                    GcPredictionsViewModel.Segment.LONG -> com.sabq.smart.feature.predictions.PredictionCenterScreen(
+                        onBack = { viewModel.selectSegment(GcPredictionsViewModel.Segment.MAJLIS) },
+                        onRequireLogin = onRequireLogin, initialCompetition = "gulf-cup-27")
+                    GcPredictionsViewModel.Segment.MINE -> com.sabq.smart.feature.predictions.PredictionCenterScreen(
+                        onBack = { viewModel.selectSegment(GcPredictionsViewModel.Segment.MAJLIS) },
+                        onRequireLogin = onRequireLogin, initialCompetition = "gulf-cup-27")
                 }
             }
         }
@@ -205,12 +211,9 @@ private fun GcSegmentBar(
     onSelect: (GcPredictionsViewModel.Segment) -> Unit,
 ) {
     val labels = listOf(
-        GcPredictionsViewModel.Segment.MATCHES to "المباريات",
-        GcPredictionsViewModel.Segment.LEADERBOARD to "المتصدرون",
+        GcPredictionsViewModel.Segment.MATCHES to "التوقعات",
         GcPredictionsViewModel.Segment.MAJLIS to "المجالس",
         GcPredictionsViewModel.Segment.FANTASY to "الفانتازي",
-        GcPredictionsViewModel.Segment.LONG to "البطل والهدّاف",
-        GcPredictionsViewModel.Segment.MINE to "توقّعاتي",
     )
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)

@@ -208,6 +208,10 @@ class AuthViewModel @Inject constructor(
                     _form.value = AuthFormState.Success(it)
                 }
                 .onFailure { e ->
+                    if (e is TwoFactorRequiredException) {
+                        _form.value = AuthFormState.Requires2FA(e.challengeToken)
+                        return@onFailure
+                    }
                     _form.value = AuthFormState.Error(
                         (e as? AuthException)?.message
                             ?: e.localizedMessage
@@ -264,6 +268,10 @@ class AuthViewModel @Inject constructor(
                     _form.value = AuthFormState.Success(it)
                 }
                 .onFailure { e ->
+                    if (e is TwoFactorRequiredException) {
+                        _form.value = AuthFormState.Requires2FA(e.challengeToken)
+                        return@onFailure
+                    }
                     _form.value = AuthFormState.Error(
                         (e as? AuthException)?.message
                             ?: e.localizedMessage
@@ -302,6 +310,10 @@ class AuthViewModel @Inject constructor(
                     _form.value = AuthFormState.Success(it)
                 }
                 .onFailure { e ->
+                    if (e is TwoFactorRequiredException) {
+                        _form.value = AuthFormState.Requires2FA(e.challengeToken)
+                        return@onFailure
+                    }
                     _form.value = AuthFormState.Error(
                         (e as? AuthException)?.message
                             ?: e.localizedMessage

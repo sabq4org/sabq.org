@@ -42,6 +42,24 @@ describe("getPermissionsForRoles — wildcard contract", () => {
 });
 
 describe("content_manager — meetings.create and staff productivity revoked", () => {
+  it("applies personal denies after code, DB, and dynamic grants across roles", () => {
+    const effective = resolveEffectivePermissions(
+      ["editor", "reporter"],
+      ["articles.publish", "custom.allowed"],
+      ["articles.publish"],
+    );
+    expect(effective).not.toContain("articles.publish");
+    expect(effective).toContain("articles.view");
+    expect(effective).toContain("custom.allowed");
+    expect(resolveEffectivePermissions(["publisher"], ["articles.publish"], ["articles.publish"]))
+      .not.toContain("articles.publish");
+  });
+
+  it("preserves the superuser contract despite personal denies", () => {
+    expect(resolveEffectivePermissions(["admin"], [], ["articles.publish"]))
+      .toEqual(["*"]);
+  });
+
   it("ROLE_PERMISSIONS_MAP no longer grants meetings.create or staff.view_productivity", () => {
     const perms = ROLE_PERMISSIONS_MAP[ROLE_NAMES.CONTENT_MANAGER] || [];
     expect(perms).toContain("meetings.view");
