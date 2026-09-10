@@ -98,6 +98,7 @@ import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
 import editorialAiRouter from "./editorialAi";
 import imageStylesRouter from "./imageStyles";
+import deepseekLabRouter from "./deepseekLab";
 import editorialImagesRouter from "./editorialImages";
 import videoResolverRouter from "./videoResolver";
 
@@ -212,6 +213,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(editorialAiRouter);
   // أنماط توليد الصور (editorial)
   app.use(imageStylesRouter);
+  app.use(deepseekLabRouter);
   app.use(editorialImagesRouter);
   // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
   app.use(videoResolverRouter);
