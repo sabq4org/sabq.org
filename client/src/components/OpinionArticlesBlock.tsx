@@ -1,31 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, ArrowLeft, User } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { apiUrl } from "@/lib/queryClient";
+import { ChevronLeft, Quote, User } from "lucide-react";
+import { formatDistanceToNow, isValid } from "date-fns";
 import { ar } from "date-fns/locale";
+
+const ARTICLE_LIMIT = 8;
+const cardClassName = "relative flex min-w-0 flex-col rounded-3xl border border-[#e3ebf2] bg-white p-5 dark:border-border dark:bg-card";
 
 type OpinionArticle = {
   id: string;
   title: string;
   excerpt?: string;
   slug: string;
-  imageUrl?: string;
   publishedAt?: string;
-  views: number;
   author?: {
-    id: string;
     firstName?: string;
     lastName?: string;
     profileImageUrl?: string;
-  };
-  category?: {
-    id: string;
-    nameAr: string;
-    icon?: string;
   };
 };
 
@@ -34,219 +28,105 @@ interface OpinionArticlesBlockProps {
 }
 
 export function OpinionArticlesBlock({ enabled = true }: OpinionArticlesBlockProps) {
-  const { data: articles, isLoading } = useQuery<{ articles: OpinionArticle[]; total: number }>({
-    queryKey: ["/api/opinion", { page: 1, limit: 6 }],
+  const { data, isLoading } = useQuery<{ articles: OpinionArticle[] }>({
+    queryKey: ["/api/opinion", { page: 1, limit: ARTICLE_LIMIT }],
     queryFn: async () => {
-      const res = await fetch("/api/opinion?page=1&limit=6", {
+      const res = await fetch(apiUrl(`/api/opinion?page=1&limit=${ARTICLE_LIMIT}`), {
         credentials: "include",
       });
-      if (!res.ok) return { articles: [], total: 0 };
+      if (!res.ok) return { articles: [] };
       return await res.json();
     },
     enabled,
   });
+  const articles = Array.isArray(data?.articles) ? data.articles.slice(0, ARTICLE_LIMIT) : [];
 
-  if (isLoading) {
-    return (
-      <section className="py-8" dir="rtl">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <BookOpen className="h-6 w-6 text-primary" />
-              <h2 className="text-2xl md:text-3xl font-bold">مقالات الرأي</h2>
-            </div>
-          </div>
-
-          {/* Mobile Skeleton */}
-          <div className="md:hidden space-y-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="bg-card shadow-sm border border-border dark:border-card-border rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Skeleton className="h-4 w-12" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-4/5" />
-                <Skeleton className="h-2 w-2/3" />
-                <div className="flex items-center gap-2 pt-2 border-t">
-                  <Skeleton className="h-5 w-5 rounded-full" />
-                  <Skeleton className="h-2 w-20" />
-                  <Skeleton className="h-2 w-16" />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Tablet/Desktop Skeleton */}
-          <div className="hidden md:grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="shadow-sm border border-border dark:border-card-border">
-                <CardContent className="p-4 sm:p-5 space-y-3">
-                  <div className="h-6 bg-muted rounded w-1/3"></div>
-                  <div className="h-5 bg-muted rounded w-full"></div>
-                  <div className="h-5 bg-muted rounded w-4/5"></div>
-                  <div className="h-4 bg-muted rounded w-2/3"></div>
-                  <div className="h-4 bg-muted rounded w-1/2"></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (!articles || articles.articles.length === 0) {
-    return null;
-  }
+  if (!enabled || (!isLoading && articles.length === 0)) return null;
 
   return (
-    <section className="py-8" dir="rtl">
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <BookOpen className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl md:text-3xl font-bold">مقالات الرأي</h2>
-          </div>
-          <Link href="/opinion">
-            <Button variant="ghost" className="gap-2" data-testid="button-view-all-opinions">
-              عرض الكل
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+    <section
+      className="border-y border-[#e3ebf2] bg-[#f4f8fb] py-8 md:py-10 dark:border-border dark:bg-muted/30"
+      dir="rtl"
+      aria-labelledby="homepage-opinions-heading"
+      aria-busy={isLoading}
+      data-testid="homepage-opinions"
+    >
+      <div className="container mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="homepage-opinions-heading" className="flex items-center gap-3 text-xl font-bold text-[#10202e] sm:text-2xl md:text-3xl dark:text-foreground">
+            <span className="h-7 w-1.5 shrink-0 rounded-full bg-[#0e76b8]" aria-hidden="true" />
+            آراء تستحق القراءة
+          </h2>
+          <Link
+            href="/opinion"
+            className="flex min-h-11 shrink-0 items-center gap-1 rounded text-sm font-semibold text-[#6b7c8a] dark:text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            data-testid="button-view-all-opinions"
+          >
+            المزيد
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </Link>
         </div>
 
-        {/* Mobile View - Compact List */}
-        <div className="md:hidden flex flex-col gap-4">
-          {articles?.articles?.map((article) => {
-            const authorName = article.author
-              ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "كاتب"
-              : "كاتب";
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4" data-testid="homepage-opinions-grid">
+          {isLoading ? Array.from({ length: ARTICLE_LIMIT }, (_, i) => (
+            <div key={i} className={cardClassName} aria-hidden="true" data-testid="opinion-card-skeleton">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-14" />
+                </div>
+              </div>
+              <div className="my-5 space-y-3">
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-4/5" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+              <div className="flex justify-between border-t border-[#e3ebf2] pt-3 dark:border-border">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </div>
+          )) : articles.map((article) => {
+            const authorName = `${article.author?.firstName || ""} ${article.author?.lastName || ""}`.trim() || "كاتب رأي";
+            const publishedAt = article.publishedAt ? new Date(article.publishedAt) : null;
 
             return (
-              <Link key={article.id} href={`/opinion/${article.slug}`} className="block">
-                <div 
-                  className="group bg-card shadow-sm border border-border dark:border-card-border rounded-lg p-3 hover-elevate active-elevate-2"
-                  data-testid={`opinion-card-mobile-${article.id}`}
-                >
-                  {/* Badges */}
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Badge variant="default" className="gap-1 text-[10px] px-1.5 py-0.5">
-                      <BookOpen className="h-2.5 w-2.5" />
-                      رأي
-                    </Badge>
-                    {article.category && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
-                        {article.category.icon} {article.category.nameAr}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Title - 2 lines max */}
-                  <h3 className="text-sm font-bold line-clamp-2 leading-snug mb-2 group-hover:text-primary transition-colors">
-                    {article.title}
-                  </h3>
-
-                  {/* Excerpt - 1 line only on mobile */}
-                  {article.excerpt && (
-                    <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
-                      {article.excerpt}
-                    </p>
-                  )}
-
-                  {/* Author info - compact */}
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-2 border-t border-border dark:border-border/60">
-                    <div className="flex items-center gap-2">
-                      {article.author?.profileImageUrl ? (
-                        <img
-                          src={article.author.profileImageUrl}
-                          alt={authorName}
-                          className="h-8 w-8 rounded-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                          <User className="h-4 w-4" />
-                        </div>
-                      )}
-                      <span className="font-medium">{authorName}</span>
-                    </div>
-                    {article.publishedAt && (
-                      <span className="text-[10px]">
-                        {formatDistanceToNow(new Date(article.publishedAt), {
-                          addSuffix: true,
-                          locale: ar,
-                        })}
-                      </span>
-                    )}
+              <article key={article.id} className={`${cardClassName} group`} data-testid={`opinion-card-${article.id}`}>
+                <Quote className="absolute left-4 top-4 h-8 w-8 text-[#e3ebf2] dark:text-border" aria-hidden="true" />
+                <div className="flex items-center gap-3 pl-8">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={article.author?.profileImageUrl} alt={authorName} className="object-cover" loading="lazy" />
+                    <AvatarFallback><User className="h-6 w-6 text-[#6b7c8a] dark:text-muted-foreground" aria-hidden="true" /></AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#10202e] dark:text-foreground">{authorName}</p>
+                    <p className="mt-0.5 text-xs text-[#6b7c8a] dark:text-muted-foreground">كاتب رأي</p>
                   </div>
                 </div>
-              </Link>
-            );
-          })}
-        </div>
 
-        {/* Tablet/Desktop View - Cards Grid */}
-        <div className="hidden md:grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-3">
-          {articles?.articles?.map((article) => {
-            const authorName = article.author
-              ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "كاتب"
-              : "كاتب";
+                <h3 className="mt-4 text-lg font-bold leading-relaxed text-[#10202e] dark:text-foreground">
+                  <Link
+                    href={`/opinion/${article.slug}`}
+                    className="after:absolute after:inset-0 after:rounded-3xl transition-colors hover:text-primary focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary focus-visible:after:ring-offset-2"
+                  >
+                    {article.title}
+                  </Link>
+                </h3>
+                {article.excerpt && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#5a6b79] dark:text-muted-foreground">{article.excerpt}</p>}
 
-            return (
-              <Link key={article.id} href={`/opinion/${article.slug}`}>
-                <Card className="h-full hover-elevate active-elevate-2 overflow-hidden shadow-sm border border-border dark:border-card-border" data-testid={`opinion-card-${article.id}`}>
-                  <CardContent className="p-4 sm:p-5 space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="default" className="gap-1">
-                        <BookOpen className="h-3 w-3" />
-                        رأي
-                      </Badge>
-                      {article.category && (
-                        <Badge variant="secondary">
-                          {article.category.icon} {article.category.nameAr}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <h3 className="text-base sm:text-lg font-bold line-clamp-2 leading-tight">
-                      {article.title}
-                    </h3>
-
-                    {article.excerpt && (
-                      <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                        {article.excerpt}
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-3 sm:gap-4 text-xs text-muted-foreground pt-2 border-t border-border dark:border-border/60">
-                      <div className="flex items-center gap-3">
-                        {article.author?.profileImageUrl ? (
-                          <img
-                            src={article.author.profileImageUrl}
-                            alt={authorName}
-                            className="h-10 w-10 rounded-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                            <User className="h-5 w-5" />
-                          </div>
-                        )}
-                        <span className="font-medium">{authorName}</span>
-                      </div>
-                      {article.publishedAt && (
-                        <span>
-                          {formatDistanceToNow(new Date(article.publishedAt), {
-                            addSuffix: true,
-                            locale: ar,
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                <div className="mt-auto pt-4">
+                  <div className="flex items-center justify-between gap-2 border-t border-[#e3ebf2] pt-3 text-xs text-[#6b7c8a] dark:text-muted-foreground dark:border-border">
+                    {publishedAt && isValid(publishedAt) ? (
+                      <time dateTime={publishedAt.toISOString()}>
+                        {formatDistanceToNow(publishedAt, { addSuffix: true, locale: ar })}
+                      </time>
+                    ) : <span />}
+                    <span className="font-semibold text-[#0e76b8] dark:text-primary">اقرأ المقال</span>
+                  </div>
+                </div>
+              </article>
             );
           })}
         </div>

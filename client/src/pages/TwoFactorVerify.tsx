@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@/components/ui/form";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +18,8 @@ const verifySchema = z.object({
 });
 
 type VerifyFormData = z.infer<typeof verifySchema>;
+
+const verificationSlotClassName = "h-12 w-full rounded-lg first:rounded-l-lg last:rounded-r-lg border-x-2 border-y-2 first:border-l-2 border-slate-400 bg-white text-xl font-semibold text-slate-950 shadow-sm dark:border-slate-500 dark:bg-slate-950 dark:text-white";
 
 export default function TwoFactorVerify() {
   const { toast } = useToast();
@@ -227,26 +229,32 @@ export default function TwoFactorVerify() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>رمز التحقق من التطبيق</FormLabel>
-                          <FormControl>
-                            <div className="flex justify-center" dir="ltr">
+                          <div className="flex justify-center" dir="ltr">
+                            <FormControl>
                               <InputOTP
                                 maxLength={6}
+                                containerClassName="w-full max-w-[320px]"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
                                 value={field.value}
                                 onChange={field.onChange}
                                 disabled={isLoading}
                                 data-testid="input-authenticator-token"
                               >
-                                <InputOTPGroup>
-                                  <InputOTPSlot index={0} />
-                                  <InputOTPSlot index={1} />
-                                  <InputOTPSlot index={2} />
-                                  <InputOTPSlot index={3} />
-                                  <InputOTPSlot index={4} />
-                                  <InputOTPSlot index={5} />
+                                <InputOTPGroup className="grid w-full grid-cols-6 gap-1.5 sm:gap-2">
+                                  <InputOTPSlot index={0} className={verificationSlotClassName} />
+                                  <InputOTPSlot index={1} className={verificationSlotClassName} />
+                                  <InputOTPSlot index={2} className={verificationSlotClassName} />
+                                  <InputOTPSlot index={3} className={verificationSlotClassName} />
+                                  <InputOTPSlot index={4} className={verificationSlotClassName} />
+                                  <InputOTPSlot index={5} className={verificationSlotClassName} />
                                 </InputOTPGroup>
                               </InputOTP>
-                            </div>
-                          </FormControl>
+                            </FormControl>
+                          </div>
+                          <FormDescription className="text-center text-xs text-slate-600 dark:text-slate-300">
+                            أدخل الرمز المكوّن من 6 أرقام، من اليسار إلى اليمين
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -332,26 +340,32 @@ export default function TwoFactorVerify() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>رمز التحقق من الرسالة</FormLabel>
-                              <FormControl>
-                                <div className="flex justify-center" dir="ltr">
+                              <div className="flex justify-center" dir="ltr">
+                                <FormControl>
                                   <InputOTP
                                     maxLength={6}
+                                    containerClassName="w-full max-w-[320px]"
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
                                     value={field.value}
                                     onChange={field.onChange}
                                     disabled={isLoading}
                                     data-testid="input-sms-token"
                                   >
-                                    <InputOTPGroup>
-                                      <InputOTPSlot index={0} />
-                                      <InputOTPSlot index={1} />
-                                      <InputOTPSlot index={2} />
-                                      <InputOTPSlot index={3} />
-                                      <InputOTPSlot index={4} />
-                                      <InputOTPSlot index={5} />
+                                    <InputOTPGroup className="grid w-full grid-cols-6 gap-1.5 sm:gap-2">
+                                      <InputOTPSlot index={0} className={verificationSlotClassName} />
+                                      <InputOTPSlot index={1} className={verificationSlotClassName} />
+                                      <InputOTPSlot index={2} className={verificationSlotClassName} />
+                                      <InputOTPSlot index={3} className={verificationSlotClassName} />
+                                      <InputOTPSlot index={4} className={verificationSlotClassName} />
+                                      <InputOTPSlot index={5} className={verificationSlotClassName} />
                                     </InputOTPGroup>
                                   </InputOTP>
-                                </div>
-                              </FormControl>
+                                </FormControl>
+                              </div>
+                              <FormDescription className="text-center text-xs text-slate-600 dark:text-slate-300">
+                                أدخل الرمز المكوّن من 6 أرقام، من اليسار إلى اليمين
+                              </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}

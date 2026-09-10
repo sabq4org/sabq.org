@@ -746,9 +746,9 @@ export default function MomentByMoment() {
       <main className="flex-1">
         {/* Official Sabq editorial heading: same shell and width as news pages.
             Red is reserved for live state; brand blue anchors the section. */}
-        <section className="border-b bg-card/40" data-testid="header-hero">
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
-            <nav className="flex items-center gap-2 mb-4 text-xs text-muted-foreground" aria-label="مسار الصفحة">
+        <section className="border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="header-hero">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
+            <nav className="flex items-center gap-2 mb-4 text-xs text-[#6b7c8a] dark:text-muted-foreground" aria-label="مسار الصفحة">
               <Link href="/" className="inline-flex items-center gap-1.5 hover:text-primary transition-colors" data-testid="link-home">
                 <Home className="h-3.5 w-3.5" />
                 الرئيسية
@@ -771,7 +771,7 @@ export default function MomentByMoment() {
                       مباشر
                     </Badge>
                   </div>
-                  <p className="mt-1.5 text-sm text-foreground/65" data-testid="text-page-subtitle">
+                  <p className="mt-1.5 text-sm text-[#6b7c8a] dark:text-muted-foreground" data-testid="text-page-subtitle">
                     متابعة فورية لأهم الأخبار العاجلة والتحديثات من غرفة أخبار سبق
                   </p>
                 </div>

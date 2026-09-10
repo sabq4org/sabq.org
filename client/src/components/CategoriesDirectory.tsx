@@ -250,14 +250,11 @@ export function CategoriesDirectory({
 
   return (
     <>
-      <section className="relative overflow-hidden border-b bg-gradient-to-br from-primary/15 via-background to-accent/10">
-        <div className="absolute inset-0 opacity-[0.35] dark:opacity-20">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808010_1px,transparent_1px),linear-gradient(to_bottom,#80808010_1px,transparent_1px)] bg-[size:28px_28px]" />
-        </div>
+      <section className="border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="categories-header">
 
         <div className="container relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
           <nav
-            className="mb-6 flex items-center gap-2 text-sm text-muted-foreground"
+            className="mb-6 flex items-center gap-2 text-sm text-[#6b7c8a] dark:text-muted-foreground"
             data-testid="breadcrumb-navigation"
           >
             <Link href="/">
@@ -282,7 +279,7 @@ export function CategoriesDirectory({
               >
                 التصنيفات
               </h1>
-              <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+              <p className="mt-3 max-w-2xl text-base leading-relaxed text-[#6b7c8a] md:text-lg dark:text-muted-foreground">
                 تصفّح أقسام الصحيفة الرسمية — من السياسة والاقتصاد إلى الرياضة والثقافة —
                 مع مؤشرات النشاط التحريري وعدد التغطيات في كل قسم.
               </p>

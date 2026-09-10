@@ -29,11 +29,9 @@ const SHOW_TOP_ADS = true;
 
 // === LAZY LOADED - Below the fold content (retryImport + deploy recovery) ===
 const AIInsightsBlock = lazyNamed(() => import("@/components/AIInsightsBlock"), "AIInsightsBlock");
-const TrendingKeywords = lazyNamed(() => import("@/components/TrendingKeywords"), "TrendingKeywords");
 const SmartSummaryBlock = lazyNamed(() => import("@/components/SmartSummaryBlock"), "SmartSummaryBlock");
 const PersonalizedFeed = lazyNamed(() => import("@/components/PersonalizedFeed"), "PersonalizedFeed");
 const ContinueReadingWidget = lazyNamed(() => import("@/components/ContinueReadingWidget"), "ContinueReadingWidget");
-const TrendingTopics = lazyNamed(() => import("@/components/TrendingTopics"), "TrendingTopics");
 const OpinionArticlesBlock = lazyNamed(() => import("@/components/OpinionArticlesBlock"), "OpinionArticlesBlock");
 const TrendingWeekSection = lazyNamed(() => import("@/components/TrendingWeekSection"), "TrendingWeekSection");
 const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopicsShowcase"), "MuqtarabTopicsShowcase");
@@ -601,10 +599,8 @@ export default function Home() {
         </LazySection>
 
         <LazySection>
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-            <div className="scroll-fade-in">
-              <OpinionArticlesBlock enabled={true} />
-            </div>
+          <div className="scroll-fade-in">
+            <OpinionArticlesBlock enabled={true} />
           </div>
         </LazySection>
 
@@ -613,26 +609,6 @@ export default function Home() {
         <LazySection>
           <ContinueReadingWidget />
         </LazySection>
-
-        {/* Trending Topics + Trending Keywords — desktop only (hidden on mobile). */}
-        {!isMobile && (
-          <LazySection>
-            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-              <div className="space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {homepage.trending && homepage.trending.length > 0 && (
-                    <div className="scroll-fade-in">
-                      <TrendingTopics topics={homepage.trending} />
-                    </div>
-                  )}
-                  <div className="scroll-fade-in">
-                    <TrendingKeywords />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </LazySection>
-        )}
 
         {/* News Map (Leaflet) — desktop only. The map library is heavy
             (~150KB+); skipping the section on mobile means the chunk never
