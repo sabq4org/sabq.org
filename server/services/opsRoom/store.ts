@@ -3,7 +3,7 @@
  * claimStep ذري: UPDATE … WHERE status = 'ready' RETURNING — يمنع تنفيذ خطوة
  * واحدة مرتين إن تزامن الكرون مع دفعة فورية أو تعددت النسخ.
  */
-import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { opsTaskEvents, opsTasks, type InsertOpsTask, type InsertOpsTaskEvent, type OpsTaskEventRow, type OpsTaskRow } from "@shared/schema";
 import { OPS_ACTIVE_STATUSES, type OpsTaskStatus } from "@shared/opsRoom";
@@ -20,8 +20,10 @@ export class DrizzleOpsStore implements OpsStore {
     return row;
   }
 
-  async updateTask(id: string, patch: TaskPatch): Promise<OpsTaskRow | undefined> {
-    const [row] = await db.update(opsTasks).set(patch).where(eq(opsTasks.id, id)).returning();
+  async updateTask(id: string, patch: TaskPatch, expected?: { status: string; attempts: number; startedAt: Date | null }): Promise<OpsTaskRow | undefined> {
+    const [row] = await db.update(opsTasks).set(patch).where(and(eq(opsTasks.id, id),
+      expected ? and(eq(opsTasks.status, expected.status), eq(opsTasks.attempts, expected.attempts),
+        expected.startedAt ? eq(opsTasks.startedAt, expected.startedAt) : isNull(opsTasks.startedAt)) : undefined)).returning();
     return row;
   }
 
@@ -38,14 +40,14 @@ export class DrizzleOpsStore implements OpsStore {
     return db.select().from(opsTasks).where(eq(opsTasks.parentId, parentId)).orderBy(opsTasks.stepIndex);
   }
 
-  async listMainTasks(opts?: { statuses?: OpsTaskStatus[]; limit?: number }): Promise<OpsTaskRow[]> {
+  async listMainTasks(opts?: { statuses?: OpsTaskStatus[]; limit?: number; oldestFirst?: boolean }): Promise<OpsTaskRow[]> {
     const conds = [isNull(opsTasks.parentId)];
     if (opts?.statuses?.length) conds.push(inArray(opsTasks.status, opts.statuses));
     return db
       .select()
       .from(opsTasks)
       .where(and(...conds))
-      .orderBy(desc(opsTasks.createdAt))
+      .orderBy(opts?.oldestFirst ? asc(opsTasks.updatedAt) : desc(opsTasks.createdAt))
       .limit(opts?.limit ?? 100);
   }
 

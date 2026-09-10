@@ -19,6 +19,7 @@ export function articleMetadata(m: SeoBundleMeta): Metadata {
     description: m.description,
     alternates: alternatesFrom(m),
     robots: m.robots,
+    other: m.googlebotNews ? { "googlebot-news": m.googlebotNews } : undefined,
     openGraph: {
       type: "article",
       title: m.title,

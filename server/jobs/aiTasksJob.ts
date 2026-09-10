@@ -1,4 +1,4 @@
-import * as cron from 'node-cron';
+import * as cron from '../leaderCron';
 import { log } from "../utils/logger";
 import { aiTaskExecutor } from '../services/aiTaskExecutor';
 

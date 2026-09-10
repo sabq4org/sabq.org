@@ -24,6 +24,8 @@ import {
   type EditorialTaskType,
 } from "../ai/prompts/tasks";
 import { assertEditedContentComplete } from "../ai/editorialOutputGuards";
+import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
+import { isHttpSourceUrl } from "@shared/editorialAiSources";
 
 export interface EditorialTaskInput {
   type: EditorialTaskType;
@@ -123,7 +125,8 @@ function parseAndValidate(
     throw new Error("Editorial output missing mandatory editorNotes");
   }
 
-  const body = typeof parsed.body === "string" ? parsed.body : "";
+  const rawBody = typeof parsed.body === "string" ? parsed.body : "";
+  const body = sanitizeArticleHtml(rawBody);
   // مهام إعادة الصياغة لا تحتمل متناً مبتوراً (علة علامة التنصيص غير المهربة —
   // حادثة 2026-08-03): الحارس يرمي فنسقط للنموذج البديل.
   if (BODY_COMPLETENESS_TASKS.has(input.type)) {
@@ -131,6 +134,8 @@ function parseAndValidate(
       input.type === "merge"
         ? `${input.material}\n${input.material2 ?? ""}`
         : input.material;
+    // Check the original too: HTML parsing can close a truncated paragraph.
+    assertEditedContentComplete(rawBody, inputText);
     assertEditedContentComplete(body, inputText);
   }
 
@@ -143,7 +148,7 @@ function parseAndValidate(
     editorNotes: parsed.editorNotes.filter((n: unknown) => typeof n === "string"),
     sources: Array.isArray(parsed.sources)
       ? parsed.sources.filter(
-          (s: any) => s && typeof s.title === "string" && typeof s.url === "string",
+          (s: any) => s && typeof s.title === "string" && isHttpSourceUrl(s.url),
         )
       : [],
     pushText: typeof parsed.pushText === "string" && parsed.pushText ? parsed.pushText : null,
@@ -153,7 +158,7 @@ function parseAndValidate(
       typeof parsed.enVersion.body === "string"
         ? {
             headline: parsed.enVersion.headline,
-            body: parsed.enVersion.body,
+            body: sanitizeArticleHtml(parsed.enVersion.body),
             pushText:
               typeof parsed.enVersion.pushText === "string"
                 ? parsed.enVersion.pushText

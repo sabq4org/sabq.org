@@ -1,3 +1,4 @@
+import { isLeader } from "../leaderElection";
 import * as cron from 'node-cron';
 import { log } from "../utils/logger";
 import { db } from '../db';
@@ -133,6 +134,7 @@ class NewsletterScheduler {
     const job = cron.schedule(
       config.cronSchedule,
       async () => {
+        if (process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true" && !isLeader()) return;
         await this.executeScheduledNewsletter(config);
       },
       {

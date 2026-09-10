@@ -3,7 +3,7 @@
  * يعيد تعيين عداد الظهورات اليومية للحملات الإعلانية عند منتصف الليل
  */
 
-import cron from "node-cron";
+import cron from "../leaderCron";
 import { db } from "../db";
 import { campaigns } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";

@@ -3,7 +3,7 @@
  * يعيد تعيين حالة استنفاذ الميزانية اليومية للإعلانات عند منتصف الليل بتوقيت السعودية
  */
 
-import cron from "node-cron";
+import cron from "../leaderCron";
 import { db } from "../db";
 import { nativeAds, nativeAdDailySpend } from "@shared/schema";
 import { isNotNull, eq, and, sql, lt } from "drizzle-orm";

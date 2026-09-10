@@ -41,10 +41,10 @@ async function loadEffectivePermData(
       permData = { isSuperuser, permissions: [] };
     } else {
       const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
-      const dbPerms = await getUserPermissions(userId);
+      const permissionData = await getUserPermissionData(userId);
       permData = {
         isSuperuser,
-        permissions: resolveEffectivePermissions(allRoles, dbPerms),
+        permissions: resolveEffectivePermissions(allRoles, permissionData.permissions, permissionData.deniedPermissionCodes),
       };
     }
     memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
@@ -177,60 +177,71 @@ export async function roleIdsAssignmentError(
   return null;
 }
 
+/** Strict read: callers merging further grants must not treat a failed deny lookup as empty. */
+export async function getUserPermissionData(userId: string): Promise<{
+  permissions: string[];
+  deniedPermissionCodes: string[];
+}> {
+  // Superuser check — matches userHasPermission's logic.
+  const [user] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+
+  if (!isSuperuser) {
+    const rbacRoles = await db
+      .select({ roleName: roles.name })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId));
+    isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
+  }
+
+  if (isSuperuser) {
+    const allPerms = await db.select({ code: permissions.code }).from(permissions);
+    return { permissions: allPerms.map(p => p.code), deniedPermissionCodes: [] };
+  }
+
+  // Get role-based permissions
+  const result = await db
+    .select({ permissionCode: permissions.code })
+    .from(userRoles)
+    .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
+    .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+    .where(eq(userRoles.userId, userId));
+
+  const rolePermissionCodes = new Set(result.map(r => r.permissionCode));
+
+  // Get user-level overrides
+  const overrides = await db
+    .select({
+      permissionCode: userPermissionOverrides.permissionCode,
+      effect: userPermissionOverrides.effect
+    })
+    .from(userPermissionOverrides)
+    .where(eq(userPermissionOverrides.userId, userId));
+
+  // Apply overrides
+  for (const override of overrides) {
+    if (override.effect === 'allow') {
+      rolePermissionCodes.add(override.permissionCode);
+    } else if (override.effect === 'deny') {
+      rolePermissionCodes.delete(override.permissionCode);
+    }
+  }
+
+  return {
+    permissions: Array.from(rolePermissionCodes),
+    deniedPermissionCodes: overrides.filter(o => o.effect === "deny").map(o => o.permissionCode),
+  };
+}
+
 export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
-    // Superuser check — matches userHasPermission's logic.
-    const [user] = await db
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
-
-    if (!isSuperuser) {
-      const rbacRoles = await db
-        .select({ roleName: roles.name })
-        .from(userRoles)
-        .innerJoin(roles, eq(userRoles.roleId, roles.id))
-        .where(eq(userRoles.userId, userId));
-      isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
-    }
-
-    if (isSuperuser) {
-      const allPerms = await db.select({ code: permissions.code }).from(permissions);
-      return allPerms.map(p => p.code);
-    }
-
-    // Get role-based permissions
-    const result = await db
-      .select({ permissionCode: permissions.code })
-      .from(userRoles)
-      .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
-      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-      .where(eq(userRoles.userId, userId));
-
-    const rolePermissionCodes = new Set(result.map(r => r.permissionCode));
-
-    // Get user-level overrides
-    const overrides = await db
-      .select({
-        permissionCode: userPermissionOverrides.permissionCode,
-        effect: userPermissionOverrides.effect
-      })
-      .from(userPermissionOverrides)
-      .where(eq(userPermissionOverrides.userId, userId));
-
-    // Apply overrides
-    for (const override of overrides) {
-      if (override.effect === 'allow') {
-        rolePermissionCodes.add(override.permissionCode);
-      } else if (override.effect === 'deny') {
-        rolePermissionCodes.delete(override.permissionCode);
-      }
-    }
-
-    return Array.from(rolePermissionCodes);
+    return (await getUserPermissionData(userId)).permissions;
   } catch (error) {
     console.error("Error getting user permissions:", error);
     return [];

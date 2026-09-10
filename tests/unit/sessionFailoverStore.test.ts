@@ -89,7 +89,7 @@ describe("SessionFailoverStore — عتبة التحويل", () => {
   beforeEach(() => {
     primary = new FakeStore();
     fallback = new FakeStore();
-    store = new SessionFailoverStore(primary, fallback, 30_000, 3, 10_000);
+    store = new SessionFailoverStore(primary, fallback, { isRevoked: async () => false, revokeSid: async () => {}, revokeUser: async () => {}, generationForUser: async () => "" }, 30_000, 3, 10_000);
   });
 
   it("نبضة Redis واحدة تُخدَم من الاحتياطي دون تحويل بقية الحركة", async () => {
@@ -152,7 +152,7 @@ describe("SessionFailoverStore — التدهور الرشيق بدل 500", () =
   beforeEach(() => {
     primary = new FakeStore();
     fallback = new FakeStore();
-    store = new SessionFailoverStore(primary, fallback, 30_000, 3, 10_000);
+    store = new SessionFailoverStore(primary, fallback, { isRevoked: async () => false, revokeSid: async () => {}, revokeUser: async () => {}, generationForUser: async () => "" }, 30_000, 3, 10_000);
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 

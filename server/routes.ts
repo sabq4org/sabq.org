@@ -1,3 +1,5 @@
+import { registerShutdownHook } from "./shutdown";
+import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 // Reference: javascript_object_storage blueprint
@@ -77,7 +79,7 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
 import { inferStaffRolesFromWork } from "./services/staffRoleInference";
@@ -593,13 +595,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   initArticleViewCounters();
 
-  process.on('SIGTERM', async () => {
-    console.log('[Buffers] SIGTERM received, flushing...');
+  registerShutdownHook("behavior-buffer", async () => {
+    if (behaviorFlushTimer) clearInterval(behaviorFlushTimer);
+    while (isFlushingBehavior) await new Promise(resolve => setTimeout(resolve, 25));
     await flushBehaviorBuffer();
-  });
-  process.on('SIGINT', async () => {
-    console.log('[Buffers] SIGINT received, flushing...');
-    await flushBehaviorBuffer();
+    if (behaviorLogBuffer.length) throw new Error("Behavior buffer remains unflushed");
   });
 
   // Setup authentication
@@ -1502,7 +1502,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.json(cachedPayload);
       }
 
-      const [user, userRolesResult, dbPermissions] = await Promise.all([
+      const [user, userRolesResult, permissionData] = await Promise.all([
         storage.getUser(userId),
         // All user's roles from RBAC system, fallback to user.role from users table
         db
@@ -1511,7 +1511,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
           .where(eq(userRoles.userId, userId)),
         // User permissions from RBAC system (includes permission overrides)
-        getUserPermissions(userId),
+        getUserPermissionData(userId),
       ]);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -1546,23 +1546,28 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Also derive permissions from role-based mapping (for permissions defined in code but not yet in DB)
       const { resolveEffectivePermissions } = await import("@shared/rbac-constants");
       // دمج DB ∪ خريطة الكود مع استبعاد ROLE_PERMISSION_DENY_MAP (مثل meetings.create لمدير المحتوى)
-      const permissionsArray = resolveEffectivePermissions(allRoles, dbPermissions);
+      const permissionGrants = resolveEffectivePermissions(allRoles, permissionData.permissions);
 
       // الناشر الموثوق (auto_publish) يستخدم المحرر الأساسي وينشر منه —
       // نمنحه articles.publish ديناميكياً ما دامت بوابة نشره مفتوحة، حتى
       // تظهر له أزرار النشر في الواجهة (الفحص الخادمي له مساره الخاص).
       if (
-        !permissionsArray.includes("articles.publish") &&
+        !permissionGrants.includes("articles.publish") &&
         (allRoles.includes("publisher") || user.linkedPublisherId)
       ) {
         try {
           if (await trustedPublisherCanPublish(user.id)) {
-            permissionsArray.push("articles.publish");
+            permissionGrants.push("articles.publish");
           }
         } catch (err) {
           console.error("[auth/user] trusted publisher check failed:", err);
         }
       }
+
+      // Personal denies must also win over the dynamic publisher grant above.
+      const permissionsArray = resolveEffectivePermissions(
+        allRoles, permissionGrants, permissionData.deniedPermissionCodes,
+      );
 
       // حساب الوكالة (مالك publishers أو linkedPublisherId) — للواجهة
       // (مثلاً قائمة المراسلين تقتصر على «صحيفة سبق»).
@@ -7991,6 +7996,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
+      // New editors send their loaded version; older clients still receive an
+      // atomic read/write check against the version loaded by this handler.
+      const expectedVersion = req.body?.expectedUpdatedAt ?? existingArticle.updatedAt;
+      const expectedDate = new Date(expectedVersion);
+      if (!Number.isFinite(expectedDate.getTime())) {
+        return res.status(400).json({ message: "Invalid article version" });
+      }
+
       // Check permissions: edit_own or edit_any — من الصلاحيات الفعلية (نفس
       // مصدر بوابة requireAnyPermission) بدل getUserPermissions (DB فقط).
       const userPermissions = await getEffectiveUserPermissions(userId);
@@ -8275,10 +8288,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .update(articles)
         .set({
           ...updateData,
-          updatedAt: new Date(),
+          updatedAt: nextArticleVersion,
         })
-        .where(eq(articles.id, articleId))
+        .where(and(eq(articles.id, articleId),
+          matchesArticleVersion(expectedDate), articleLockAllowsWriter(userId)))
         .returning();
+
+      if (!updatedArticle) {
+        return res.status(409).json({ code: "ARTICLE_VERSION_CONFLICT", message: "تغير المقال منذ فتحه. احتفظ بمسودتك وأعد تحميل النسخة الحالية قبل الحفظ." });
+      }
 
       // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
       // Passing the article so its slug + englishSlug are BOTH purged at

@@ -22,6 +22,7 @@ import { storage } from "../storage";
 import { deductPublisherCreditSafely } from "./publisherCreditService";
 import { invalidatePublishedContent } from "./contentInvalidation";
 import { PUBLISHER_GUIDE_DEFAULT_SECTIONS } from "@shared/publisherGuideDefaults";
+import { getUserPermissionData } from "../rbac";
 
 /**
  * بوابة الناشر (وكالات المحتوى الخارجية).
@@ -503,7 +504,7 @@ export async function submitPortalArticle(userId: string, articleId: string): Pr
 
   const now = new Date();
 
-  if (publisher.autoPublish) {
+  if (await trustedPublisherCanPublish(userId, gate)) {
     const [published] = await db
       .update(articles)
       .set({
@@ -1858,7 +1859,9 @@ export async function listAgencyReviewQueue(opts: { status?: string; page?: numb
  * الناشر الموثوق (auto_publish وبوابته مفتوحة) يملك قدرة نشر فعلية من
  * المحرر الأساسي دون منح دوره صلاحية articles.publish العامة.
  */
-export async function trustedPublisherCanPublish(userId: string): Promise<boolean> {
-  const gate = await getPublishingGate(userId);
-  return !!(gate.allowed && gate.publisher?.autoPublish);
+export async function trustedPublisherCanPublish(userId: string, knownGate?: PublishingGate): Promise<boolean> {
+  const gate = knownGate ?? await getPublishingGate(userId);
+  if (!gate.allowed || !gate.publisher?.autoPublish) return false;
+  const { deniedPermissionCodes } = await getUserPermissionData(userId);
+  return !deniedPermissionCodes.includes("articles.publish");
 }

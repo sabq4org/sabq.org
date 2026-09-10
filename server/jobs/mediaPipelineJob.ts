@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron from '../leaderCron';
 import { backfillUntagged } from '../services/mediaAutoTagService';
 import { backfillMediaEmbeddings } from '../services/mediaSearchService';
 import { backfillPerceptualHashes } from '../services/mediaHashService';
