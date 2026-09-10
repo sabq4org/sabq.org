@@ -199,6 +199,7 @@ const AnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/Analytic
 const ArticleEditor = lazy(() => retryImport(() => import("@/pages/ArticleEditor")));
 const ArticlePreview = lazy(() => retryImport(() => import("@/pages/ArticlePreview")));
 const ArticlesManagement = lazy(() => retryImport(() => import("@/pages/ArticlesManagement")));
+const ArticlesManagementPreview = lazy(() => retryImport(() => import("@/pages/ArticlesManagementPreview")));
 const CategoriesManagement = lazy(() => retryImport(() => import("@/pages/CategoriesManagement")));
 const UsersManagement = lazy(() => retryImport(() => import("@/pages/UsersManagement")));
 const RolesManagement = lazy(() => retryImport(() => import("@/pages/RolesManagement")));
@@ -900,6 +901,8 @@ function Router() {
           )}
         </Route>
         <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* معاينة مستقلة لإعادة تصميم إدارة المقالات — لا تلمس الصفحة الحالية */}
+        <Route path="/dashboard/articles-preview">{() => <LazyRoute component={ArticlesManagementPreview} />}</Route>
         <Route path="/dashboard/articles/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
