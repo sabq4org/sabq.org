@@ -83,13 +83,11 @@ class GcPredictionsViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     init {
-        loadCore()
         viewModelScope.launch {
             authRepository.user.collectLatest { user ->
                 _state.update { it.copy(user = user) }
                 if (user != null) {
                     loadMajalis(force = true)
-                    loadMine()
                     loadPreference()
                     runCatching { deviceRegistrationManager.syncGulfCupToken() }
                 } else {
@@ -121,12 +119,12 @@ class GcPredictionsViewModel @Inject constructor(
     fun selectSegment(segment: Segment) {
         _state.update { it.copy(segment = segment, error = null) }
         when (segment) {
-            Segment.MATCHES -> loadToday()
-            Segment.LEADERBOARD -> loadLeaderboard()
+            Segment.MATCHES -> Unit
+            Segment.LEADERBOARD -> Unit
             Segment.MAJLIS -> if (_state.value.user != null) loadMajalis()
             Segment.FANTASY -> loadFantasyLeaderboard()
-            Segment.LONG -> loadLong()
-            Segment.MINE -> if (_state.value.user != null) loadMine()
+            Segment.LONG -> Unit
+            Segment.MINE -> Unit
         }
     }
 
