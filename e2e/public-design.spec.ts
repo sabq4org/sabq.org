@@ -57,6 +57,7 @@ test("English and Urdu preserve their routes, labels and bookmark contracts", as
   await expect(listCard(page).locator('a').first()).toHaveAttribute("href", "/en/article/public-design-sample");
   await expect(page.getByTestId("link-infographic-infographic")).toHaveAttribute("href", "/en/article/public-design-sample");
   await expect(page.getByText("Breaking", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("badge-content-type-localized-category")).toHaveText("Local section");
   let enRequests = 0;
   await page.route("**/api/en/articles/public-design-sample/bookmark", route => { enRequests++; return route.fulfill({ json: { isBookmarked: true } }); });
   await listCard(page).getByRole("button", { name: /^Save:/ }).click();
@@ -66,6 +67,7 @@ test("English and Urdu preserve their routes, labels and bookmark contracts", as
   await expect(listCard(page).locator('a').first()).toHaveAttribute("href", "/ur/article/public-design-sample");
   await expect(page.getByTestId("link-infographic-infographic")).toHaveAttribute("href", "/ur/article/public-design-sample");
   await expect(page.getByText("بریکنگ", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("badge-content-type-localized-category")).toHaveText("مقامی خبریں");
   const methods: string[] = [];
   await page.route("**/api/ur/article/public-design-sample/bookmark", route => { methods.push(route.request().method()); return route.fulfill({ json: { id: "sample-bookmark" } }); });
   const save = listCard(page).getByRole("button").first();

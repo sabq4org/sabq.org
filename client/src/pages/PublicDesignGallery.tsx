@@ -45,6 +45,7 @@ export default function PublicDesignGallery() {
       <section aria-label="بطاقات القائمة"><PublicSectionHeading title="القائمة والتفاعل" /><NewsArticleCard article={sample} viewMode="list" locale={locale} metadata={{ views: true }} /></section>
       <section aria-label="الصف المختصر"><PublicSectionHeading title="الصف المختصر" /><NewsArticleCard article={sample} viewMode="compact" locale={locale} /></section>
       <section aria-label="بطاقة الإنفوجرافيك"><PublicSectionHeading title="الإنفوجرافيك" /><NewsArticleCard article={{ ...sample, id: "infographic", articleType: "infographic" }} viewMode="compact" locale={locale} /></section>
+      <section aria-label="تصنيف اللغات"><NewsArticleCard article={{ ...sample, id: "localized-category", category: { id: "localized-only", name: locale === "ur" ? "مقامی خبریں" : "Local section" } as unknown as ArticleWithDetails["category"] }} viewMode="grid" locale={locale} /></section>
       <section aria-label="بطاقات الرأي" className="public-surface rounded-2xl p-6"><PublicSectionHeading title="الرأي" /><div className="public-news-grid"><OpinionCard article={opinion} variant="home" /><OpinionCard article={opinion} variant="grid" /><OpinionCard article={opinion} variant="sidebar" /></div></section>
       <section className="article-detail" aria-label="بطاقات الأخبار الجانبية">
         <div className="article-detail-sidebar article-sidebar-related w-full max-w-[340px]">

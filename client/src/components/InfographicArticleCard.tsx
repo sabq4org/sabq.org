@@ -42,8 +42,10 @@ export function InfographicArticleCard({
     : locale === "ur"
       ? { type: "انفوگرافک", view: "انفوگرافک دیکھیں" }
       : { type: "إنفوجرافيك", view: "استعرض الإنفوجرافيك" };
-  const categoryName = locale === "en" ? article.category?.nameEn || article.category?.nameAr
-    : locale === "ur" ? (article.category as (NonNullable<ArticleWithDetails["category"]> & { nameUr?: string }) | undefined)?.nameUr || article.category?.nameAr : article.category?.nameAr;
+  const localizedCategory = article.category as (NonNullable<ArticleWithDetails["category"]> & { name?: string; nameUr?: string }) | undefined;
+  const categoryName = locale === "en" ? localizedCategory?.nameEn || localizedCategory?.name || localizedCategory?.nameAr
+    : locale === "ur" ? localizedCategory?.nameUr || localizedCategory?.name || localizedCategory?.nameAr
+    : localizedCategory?.nameAr || localizedCategory?.name;
 
   // Always prefer horizontal banner (16:9) for card display if available
   // This provides better visual consistency across all card types
@@ -266,7 +268,7 @@ export function InfographicArticleCard({
                   className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm text-foreground border-0 text-xs shadow-md"
                   data-testid={`badge-category-${article.id}`}
                 >
-                  {article.category.nameAr}
+                  {categoryName}
                 </Badge>
               </div>
             )}

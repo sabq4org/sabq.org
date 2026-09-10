@@ -52,6 +52,7 @@ export function ContentLabel({
     );
   if (!hideCategory && article.category) {
     const category = article.category as {
+      name?: string;
       nameAr?: string;
       nameEn?: string;
       nameUr?: string;
@@ -59,10 +60,10 @@ export function ContentLabel({
     };
     const name =
       locale === "en"
-        ? category.nameEn || category.nameAr
+        ? category.nameEn || category.name || category.nameAr
         : locale === "ur"
-          ? category.nameUr || category.nameAr
-          : category.nameAr;
+          ? category.nameUr || category.name || category.nameAr
+          : category.nameAr || category.name;
     return (
       <Badge
         variant="secondary"
