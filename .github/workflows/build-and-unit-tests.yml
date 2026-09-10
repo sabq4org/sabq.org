@@ -54,4 +54,7 @@ jobs:
         run: npm run build:server
 
       - name: Client build (vite)
+        # Node 24 default heap is not enough for the 5.7k-module Vite bundle on CI runners.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build:client
