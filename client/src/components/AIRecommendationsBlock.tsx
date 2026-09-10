@@ -1,3 +1,4 @@
+import { ArticleSidebarHeading } from "./ArticleSidebarHeading";
 import type { ArticleSidebarQuery } from "@/hooks/useArticleSidebarData";
 import { useArticleRecommendations, type ArticleRecommendation } from "@/hooks/useArticleSidebarData";
 import { ArticleSidebarRecovery } from "@/components/ArticleSidebarRecovery";
@@ -32,7 +33,7 @@ export function AIRecommendationsBlock({ articleSlug }: AIRecommendationsBlockPr
   return <AIRecommendationsPanel query={query} />;
 }
 
-export function AIRecommendationsPanel({ query }: { query: ArticleSidebarQuery<ArticleRecommendation[]> }) {
+export function AIRecommendationsPanel({ query, editorial = false }: { query: ArticleSidebarQuery<ArticleRecommendation[]>; editorial?: boolean }) {
   const { data: recommendationsRaw, isLoading, error } = query;
   if (!recommendationsRaw && (error || query.fetchStatus === "paused" || query.sessionUnavailable)) {
     return <ArticleSidebarRecovery label="التوصيات" onRetry={query.retrySidebar} busy={query.isFetching} />;
@@ -74,7 +75,7 @@ export function AIRecommendationsPanel({ query }: { query: ArticleSidebarQuery<A
       className="overflow-hidden border-2 border-primary/20 shadow-lg hover:shadow-xl transition-shadow duration-300" 
       data-testid="card-ai-recommendations"
     >
-      {/* Header with gradient background */}
+      {editorial ? <ArticleSidebarHeading title="توصيات الذكاء الاصطناعي" description="مختار لك بواسطة AI" icon={Sparkles} titleTestId="text-ai-recommendations-title" /> : (
       <CardHeader className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 pb-4 border-b border-primary/10">
         <div className="flex items-center justify-between gap-3 flex-wrap" dir="rtl">
           <div className="flex items-center gap-2">
@@ -94,6 +95,8 @@ export function AIRecommendationsPanel({ query }: { query: ArticleSidebarQuery<A
           </Badge>
         </div>
       </CardHeader>
+
+      )}
 
       {/* Recommendations List */}
       <CardContent className="p-0" dir="rtl">

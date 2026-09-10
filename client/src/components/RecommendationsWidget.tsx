@@ -1,3 +1,4 @@
+import { ArticleSidebarHeading } from "./ArticleSidebarHeading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Clock, MessageSquare } from "lucide-react";
@@ -11,17 +12,20 @@ interface RecommendationsWidgetProps {
   articles: ArticleWithDetails[];
   title?: string;
   reason?: string;
+  editorial?: boolean;
 }
 
 export function RecommendationsWidget({ 
   articles, 
   title = "مقترحات لك",
+  editorial = false,
   reason = "بناءً على قراءاتك السابقة" 
 }: RecommendationsWidgetProps) {
   if (articles.length === 0) return null;
 
   return (
     <Card className="overflow-hidden">
+      {editorial ? <ArticleSidebarHeading title={title} description={reason} icon={Sparkles} /> : (
       <CardHeader className="bg-gradient-to-br from-primary/5 to-accent/5 border-b space-y-2 pb-4">
         <CardTitle className="flex items-center gap-2 text-lg">
           <div className="p-2 rounded-lg bg-primary/10">
@@ -33,6 +37,7 @@ export function RecommendationsWidget({
           {reason}
         </p>
       </CardHeader>
+      )}
       <CardContent className="p-0">
         <div className="divide-y">
           {articles.map((article, index) => {

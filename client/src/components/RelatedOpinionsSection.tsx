@@ -1,3 +1,4 @@
+import { ArticleSidebarHeading } from "./ArticleSidebarHeading";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -5,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BookOpen, User, ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiUrl } from "@/lib/queryClient";
 
 interface OpinionArticle {
   id: string;
@@ -37,6 +39,7 @@ interface RelatedOpinionsSectionProps {
   categoryColor?: string;
   excludeArticleId?: string;
   limit?: number;
+  editorial?: boolean;
 }
 
 function OpinionCard({ article, categoryColor }: { article: OpinionArticle; categoryColor?: string }) {
@@ -109,6 +112,7 @@ export function RelatedOpinionsSection({
   categoryColor,
   excludeArticleId,
   limit = 5,
+  editorial = false,
 }: RelatedOpinionsSectionProps) {
   const { data, isLoading } = useQuery<{ articles: OpinionArticle[]; total: number }>({
     queryKey: ["/api/opinion/related/category", categoryId, { excludeId: excludeArticleId, limit }],
@@ -117,7 +121,7 @@ export function RelatedOpinionsSection({
         limit: limit.toString(),
         ...(excludeArticleId && { excludeId: excludeArticleId }),
       });
-      const res = await fetch(`/api/opinion/related/category/${categoryId}?${params}`, {
+      const res = await fetch(apiUrl(`/api/opinion/related/category/${categoryId}?${params}`), {
         credentials: "include",
       });
       if (!res.ok) return { articles: [], total: 0 };
@@ -140,7 +144,11 @@ export function RelatedOpinionsSection({
   return (
     <section className="py-8" dir="rtl">
       <div className="space-y-6">
-        {/* Header */}
+        {editorial ? (
+          <ArticleSidebarHeading title="مقالات رأي مرتبطة" description={`من تصنيف «${categoryName}»`} icon={BookOpen}
+            action={<Link href={`/opinion?category=${categoryId}`} data-testid="button-view-more-opinions">عرض المزيد <ArrowLeft aria-hidden="true" /></Link>}
+          />
+        ) : (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div 
@@ -168,6 +176,8 @@ export function RelatedOpinionsSection({
             </Button>
           </Link>
         </div>
+
+        )}
 
         {/* Vertical List */}
         <div className="space-y-3">
