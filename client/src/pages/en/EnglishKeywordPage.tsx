@@ -8,6 +8,9 @@ import { Clock, Eye, Tag, Zap, Flame, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { EnArticle } from "@shared/schema";
 import { EnglishLayout } from "@/components/en/EnglishLayout";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import type { ArticleWithDetails } from "@shared/schema";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -30,7 +33,7 @@ export default function EnglishKeywordPage() {
   const { data: articles, isLoading } = useQuery<EnArticle[]>({
     queryKey: ["/api/en/keyword", keyword],
     queryFn: async () => {
-      const res = await fetch(`/api/en/keyword/${encodeURIComponent(keyword)}`, {
+      const res = await fetch(apiUrl(`/api/en/keyword/${encodeURIComponent(keyword)}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch articles");
@@ -40,17 +43,17 @@ export default function EnglishKeywordPage() {
 
   return (
     <EnglishLayout>
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="public-page container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
-        <div className="mb-8 space-y-4">
+        <div className="public-page-header mb-8 space-y-4">
           <div className="flex items-center gap-3">
             <Tag className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl md:text-4xl font-bold" data-testid="text-keyword-title">
+            <h1 className="public-page-title text-3xl md:text-4xl font-bold" data-testid="text-keyword-title">
               {keyword}
             </h1>
           </div>
           {!isLoading && articles && (
-            <p className="text-muted-foreground" data-testid="text-articles-count">
+            <p className="public-page-description text-muted-foreground" data-testid="text-articles-count">
               {articles.length} {articles.length === 1 ? "article" : "articles"}
             </p>
           )}
@@ -68,8 +71,11 @@ export default function EnglishKeywordPage() {
         {/* Articles - Unified Layout */}
         {!isLoading && articles && articles.length > 0 && (
           <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {articles.map((article, index) => <NewsArticleCard key={article.id} article={article as unknown as ArticleWithDetails} viewMode="grid" locale="en" priority={index < 4} metadata={{ views: true }} />)}
+            </div>
             {/* Mobile View: Vertical List */}
-            <Card className="overflow-hidden lg:hidden border-0 dark:border dark:border-card-border">
+            <Card className="hidden overflow-hidden lg:hidden border-0 dark:border dark:border-card-border">
               <CardContent className="p-0">
                 <div className="divide-y divide-border">
                   {articles.map((article) => {
@@ -164,7 +170,7 @@ export default function EnglishKeywordPage() {
             </Card>
 
             {/* Desktop View: Grid with 4 columns */}
-            <div className="hidden lg:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="hidden lg:hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {articles.map((article) => (
                 <Link key={article.id} href={`/en/article/${article.englishSlug || article.slug}`}>
                   <Card 

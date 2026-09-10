@@ -139,14 +139,17 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
       aria-label="رأس الصفحة الرئيسي"
       data-compact-brand={sticky && compactBrand ? "true" : "false"}
       className={`${sticky ? "sabq-adaptive-header sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
-      style={nd96.active ? ND96_SCOPE_STYLE : undefined}
+      style={{
+        ...(nd96.active ? ND96_SCOPE_STYLE : {}),
+        ...(sticky && compactBrand ? { "--public-header-height": "64px" } : {}),
+      } as React.CSSProperties}
       dir="rtl"
     >
       {nd96.active && <NationalDay96ScopeStyles />}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="sabq-header-row flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <Link href="/" onClick={(e) => {
               if (window.location.pathname === '/') {
                 e.preventDefault();
@@ -187,7 +190,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </div>
 
           {/* Mobile Logo */}
-          <div className="md:hidden flex items-center">
+          <div className="lg:hidden flex items-center">
             <Link href="/" onClick={(e) => {
               if (window.location.pathname === '/') {
                 e.preventDefault();
@@ -228,7 +231,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </div>
 
           {/* Main Navigation - Center (Desktop only) */}
-          <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden md:flex items-center gap-6 flex-1 justify-center">
+          <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden lg:flex items-center gap-5 flex-1 justify-center min-w-0">
             {mainSections.map((section) => (
               section.external ? (
                 <a 
@@ -272,7 +275,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden hover-elevate active-elevate-2"
+              className="lg:hidden hover-elevate active-elevate-2"
               onClick={() => setMobileMenuOpen(true)}
               data-testid="button-menu"
               aria-label="فتح القائمة"
@@ -281,7 +284,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             </Button>
 
             {/* Mobile Actions */}
-            <div className="md:hidden flex items-center gap-0.5 max-sm:gap-0">
+            <div className="lg:hidden flex items-center gap-0.5 max-sm:gap-0">
               <SearchDialog />
               <LanguageSwitcher />
               <ThemeToggle />
@@ -329,7 +332,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             </div>
 
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden lg:flex items-center gap-1">
               <SearchDialog />
               <AccessibilitySettings variant="desktop" />
               <LanguageSwitcher />

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { angleTheme } from "@/lib/angleTheme";
+import { apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import type { Topic, Angle } from "@shared/schema";
@@ -44,11 +45,11 @@ export default function Muqtarab() {
   const { data: allTopics, isLoading: topicsLoading } = useQuery<TopicWithAngle[]>({
     queryKey: ["/api/muqtarab/topics/featured", 50],
     queryFn: async () => {
-      const res = await fetch("/api/muqtarab/topics/featured?limit=50", {
-        credentials: "include",
-      });
-      if (!res.ok) return [];
-      return await res.json();
+      try {
+        return await apiRequest<TopicWithAngle[]>("/api/muqtarab/topics/featured?limit=50");
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -82,9 +83,9 @@ export default function Muqtarab() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background" dir="rtl">
+      <div className="public-page min-h-screen bg-background" dir="rtl">
         <Header user={user} />
-        <main className="container max-w-7xl mx-auto px-4 py-6">
+        <main className="public-container container max-w-7xl mx-auto px-4 py-6">
           <div className="space-y-8">
             {/* Topics skeleton */}
             <div className="space-y-4">
@@ -112,7 +113,7 @@ export default function Muqtarab() {
 
   if (error || !angles || angles.length === 0) {
     return (
-      <div className="min-h-screen bg-background" dir="rtl">
+      <div className="public-page min-h-screen bg-background" dir="rtl">
         <Header user={user} />
         <main className="container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto">
@@ -128,29 +129,29 @@ export default function Muqtarab() {
   }
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="public-page min-h-screen bg-background" dir="rtl">
       <Header user={user} />
 
       <main className="relative overflow-hidden">
         {/* Hero Section with big centered title */}
-        <section className="relative pt-16 pb-8 px-4" data-testid="section-hero">
-          <div className="absolute inset-0 h-[50vh]">
+        <section className="public-page-header relative pt-16 pb-8 px-4" data-testid="section-hero">
+          <div className="pointer-events-none absolute inset-0 h-full overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
             <div className="absolute top-20 right-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
             <div className="absolute bottom-20 left-10 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
           </div>
           
-          <div className="container max-w-4xl mx-auto text-center relative">
+          <div className="public-container container max-w-4xl mx-auto text-center relative">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
               <span>محتوى حصري ومتعمق</span>
             </div>
             
-            <h1 className="text-5xl md:text-7xl font-black mb-6 bg-gradient-to-l from-foreground via-foreground to-muted-foreground bg-clip-text" data-testid="heading-title">
+            <h1 className="public-page-title text-5xl md:text-7xl font-black mb-6 bg-gradient-to-l from-foreground via-foreground to-muted-foreground bg-clip-text" data-testid="heading-title">
               مُقترب
             </h1>
             
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-6" data-testid="text-tagline">
+            <p className="public-page-description text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-6" data-testid="text-tagline">
               زوايا فريدة تأخذك إلى أعماق القصص والأحداث
             </p>
             
@@ -163,7 +164,7 @@ export default function Muqtarab() {
           </div>
         </section>
 
-        <div className="container max-w-7xl mx-auto px-4 py-6">
+        <div className="public-container container max-w-7xl mx-auto px-4 py-6">
         <div className="space-y-6">
 
           {/* Recent Topics — global feed across all angles */}
@@ -172,7 +173,7 @@ export default function Muqtarab() {
               <div className="bg-gradient-to-br from-primary to-primary/80 p-1.5 rounded-lg shadow-sm">
                 <BookOpen className="h-4 w-4 text-primary-foreground" />
               </div>
-              <h2 className="text-lg font-bold">أحدث المواضيع</h2>
+              <h2 className="public-section-title text-lg font-bold">أحدث المواضيع</h2>
             </div>
 
             {sortedTopics.length > 0 ? (
@@ -189,7 +190,7 @@ export default function Muqtarab() {
                       className="group"
                     >
                       <Card
-                        className="h-full overflow-hidden border border-border/60 shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer group-hover:-translate-y-0.5"
+                        className="public-card h-full overflow-hidden border border-border/60 shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer group-hover:-translate-y-0.5"
                         data-testid={`topic-card-${topic.id}`}
                       >
                         <div className="relative">
@@ -237,19 +238,19 @@ export default function Muqtarab() {
                         </div>
 
                         <CardContent className="p-3 space-y-2">
-                          <h3 className="font-bold text-base line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+                          <h3 className="public-card-title font-bold text-base line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                             {topic.title}
                           </h3>
 
                           {topic.excerpt && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                            <p className="public-card-excerpt text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                               {topic.excerpt}
                             </p>
                           )}
 
                           <div className="flex items-center justify-between pt-2 border-t border-border/50">
                             {topic.publishedAt && (
-                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <div className="public-meta flex items-center gap-1 text-[11px] text-muted-foreground">
                                 <Calendar className="h-3 w-3" />
                                 <span>
                                   {formatDistanceToNow(new Date(topic.publishedAt), {
@@ -286,7 +287,7 @@ export default function Muqtarab() {
               <div className="bg-gradient-to-br from-primary to-primary/80 p-1.5 rounded-lg shadow-sm">
                 <Sparkles className="h-4 w-4 text-primary-foreground" />
               </div>
-              <h2 className="text-lg font-bold">الزوايا</h2>
+              <h2 className="public-section-title text-lg font-bold">الزوايا</h2>
               <span className="text-xs text-muted-foreground">— اختر زاوية وادخل عالم كاتبها</span>
             </div>
 
@@ -303,7 +304,7 @@ export default function Muqtarab() {
                     data-testid={`card-angle-${angle.id}`}
                   >
                     <Card
-                      className="h-full overflow-hidden border border-border/60 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group-hover:-translate-y-0.5"
+                      className="public-card h-full overflow-hidden border border-border/60 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group-hover:-translate-y-0.5"
                       style={theme.vars}
                     >
                       {/* Cover */}

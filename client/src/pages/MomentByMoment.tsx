@@ -319,7 +319,7 @@ function TimelineEntry({ item }: TimelineEntryProps) {
             </span>
 
             <span
-              className="text-[10px] sm:text-[11px] font-medium px-1.5 py-0.5 rounded bg-muted text-foreground/75"
+              className="public-label text-[10px] sm:text-[11px] font-medium px-1.5 py-0.5 rounded bg-muted text-foreground/75"
               style={{ borderRight: `3px solid ${categoryColor}` }}
               data-testid={`badge-category-${item.id}`}
             >
@@ -327,7 +327,7 @@ function TimelineEntry({ item }: TimelineEntryProps) {
             </span>
 
             {item.isBreaking && (
-              <Badge variant="destructive" className="text-[10px] gap-0.5 shadow-sm px-1.5 py-0 h-4" data-testid={`badge-breaking-${item.id}`}>
+                <Badge variant="destructive" className="public-label text-[10px] gap-0.5 shadow-sm px-1.5 py-0 h-4" data-testid={`badge-breaking-${item.id}`}>
                 <Zap className="h-2.5 w-2.5" />
                 عاجل
               </Badge>
@@ -346,12 +346,12 @@ function TimelineEntry({ item }: TimelineEntryProps) {
 
           <div className="flex gap-3">
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-sm sm:text-base mb-1 line-clamp-2 leading-relaxed text-foreground group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
+              <h3 className="public-card-title font-bold text-sm sm:text-base mb-1 line-clamp-2 leading-relaxed text-foreground group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
                 {item.title}
               </h3>
 
               {item.summary && (
-                <p className="text-xs text-foreground/65 line-clamp-1 leading-relaxed hidden sm:block mb-1.5" data-testid={`text-summary-${item.id}`}>
+                <p className="public-card-excerpt text-xs text-foreground/65 line-clamp-1 leading-relaxed hidden sm:block mb-1.5" data-testid={`text-summary-${item.id}`}>
                   {item.summary}
                 </p>
               )}
@@ -463,7 +463,7 @@ function BreakingTicker({ items }: { items: LiveUpdate[] }) {
               <div className="h-1.5 sm:h-2.5 w-1.5 sm:w-2.5 rounded-full bg-destructive animate-pulse" />
               <div className="absolute inset-0 h-1.5 sm:h-2.5 w-1.5 sm:w-2.5 rounded-full bg-destructive live-pulse-ring" />
             </div>
-            <Badge variant="destructive" className="shadow-md text-[9px] sm:text-xs px-1 sm:px-2 py-0 sm:py-0.5 h-4 sm:h-auto" data-testid="badge-breaking-ticker">
+              <Badge variant="destructive" className="shadow-md text-[9px] sm:text-xs px-1 sm:px-2 py-0 sm:py-0.5 h-4 sm:h-auto" data-testid="badge-breaking-ticker">
               <Zap className="h-2 sm:h-3 w-2 sm:w-3 ml-0.5 sm:ml-1" />
               عاجل
             </Badge>
@@ -740,14 +740,14 @@ export default function MomentByMoment() {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl" data-testid="page-moment-by-moment">
+    <div className="public-page min-h-screen bg-background flex flex-col" dir="rtl" data-testid="page-moment-by-moment">
       <Header user={user} />
 
       <main className="flex-1">
         {/* Official Sabq editorial heading: same shell and width as news pages.
             Red is reserved for live state; brand blue anchors the section. */}
-        <section className="border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="header-hero">
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
+        <section className="public-page-header border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="header-hero">
+          <div className="public-container container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
             <nav className="flex items-center gap-2 mb-4 text-xs text-[#6b7c8a] dark:text-muted-foreground" aria-label="مسار الصفحة">
               <Link href="/" className="inline-flex items-center gap-1.5 hover:text-primary transition-colors" data-testid="link-home">
                 <Home className="h-3.5 w-3.5" />
@@ -763,7 +763,7 @@ export default function MomentByMoment() {
                 <div>
                   <p className="text-xs sm:text-sm font-bold text-primary mb-1">مركز سبق المباشر</p>
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight" data-testid="text-page-title">
+                    <h1 className="public-page-title text-2xl sm:text-3xl md:text-4xl font-black tracking-tight" data-testid="text-page-title">
                       لحظة بلحظة
                     </h1>
                     <Badge variant="destructive" className="gap-1.5 px-2 py-0.5" data-testid="badge-live">
@@ -771,7 +771,7 @@ export default function MomentByMoment() {
                       مباشر
                     </Badge>
                   </div>
-                  <p className="mt-1.5 text-sm text-[#6b7c8a] dark:text-muted-foreground" data-testid="text-page-subtitle">
+                  <p className="public-page-description mt-1.5 text-sm text-[#6b7c8a] dark:text-muted-foreground" data-testid="text-page-subtitle">
                     متابعة فورية لأهم الأخبار العاجلة والتحديثات من غرفة أخبار سبق
                   </p>
                 </div>
@@ -790,7 +790,7 @@ export default function MomentByMoment() {
         <BreakingTicker items={breakingNews} />
 
         {/* Standard Sabq content width and two-column editorial grid. */}
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-7">
+        <div className="public-container container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-7">
         {/* DMS Leaderboard (full width) */}
         <DmsLeaderboardAd />
 
@@ -817,7 +817,7 @@ export default function MomentByMoment() {
               data-testid="header-status-bar"
               aria-hidden={filtersCollapsed}
             >
-              <div className="rounded-xl bg-card/95 backdrop-blur-sm border border-border/70 shadow-sm p-3">
+              <div className="public-card rounded-xl bg-card/95 backdrop-blur-sm border border-border/70 shadow-sm p-3">
               {/* Status Row - Ultra compact on mobile */}
               <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap mb-2.5">
                 <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">

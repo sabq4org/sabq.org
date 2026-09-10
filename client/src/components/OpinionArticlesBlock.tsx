@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiUrl } from "@/lib/queryClient";
-import { ChevronLeft, Quote, User } from "lucide-react";
-import { formatDistanceToNow, isValid } from "date-fns";
-import { ar } from "date-fns/locale";
+import { ChevronLeft } from "lucide-react";
+import { OpinionCard } from "@/components/public/OpinionCard";
 
 const ARTICLE_LIMIT = 8;
 const cardClassName = "relative flex min-w-0 flex-col rounded-3xl border border-[#e3ebf2] bg-white p-5 dark:border-border dark:bg-card";
@@ -88,47 +86,7 @@ export function OpinionArticlesBlock({ enabled = true }: OpinionArticlesBlockPro
                 <Skeleton className="h-3 w-16" />
               </div>
             </div>
-          )) : articles.map((article) => {
-            const authorName = `${article.author?.firstName || ""} ${article.author?.lastName || ""}`.trim() || "كاتب رأي";
-            const publishedAt = article.publishedAt ? new Date(article.publishedAt) : null;
-
-            return (
-              <article key={article.id} className={`${cardClassName} group`} data-testid={`opinion-card-${article.id}`}>
-                <Quote className="absolute left-4 top-4 h-8 w-8 text-[#e3ebf2] dark:text-border" aria-hidden="true" />
-                <div className="flex items-center gap-3 pl-8">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={article.author?.profileImageUrl} alt={authorName} className="object-cover" loading="lazy" />
-                    <AvatarFallback><User className="h-6 w-6 text-[#6b7c8a] dark:text-muted-foreground" aria-hidden="true" /></AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-[#10202e] dark:text-foreground">{authorName}</p>
-                    <p className="mt-0.5 text-xs text-[#6b7c8a] dark:text-muted-foreground">كاتب رأي</p>
-                  </div>
-                </div>
-
-                <h3 className="mt-4 text-lg font-bold leading-relaxed text-[#10202e] dark:text-foreground">
-                  <Link
-                    href={`/opinion/${article.slug}`}
-                    className="after:absolute after:inset-0 after:rounded-3xl transition-colors hover:text-primary focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary focus-visible:after:ring-offset-2"
-                  >
-                    {article.title}
-                  </Link>
-                </h3>
-                {article.excerpt && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#5a6b79] dark:text-muted-foreground">{article.excerpt}</p>}
-
-                <div className="mt-auto pt-4">
-                  <div className="flex items-center justify-between gap-2 border-t border-[#e3ebf2] pt-3 text-xs text-[#6b7c8a] dark:text-muted-foreground dark:border-border">
-                    {publishedAt && isValid(publishedAt) ? (
-                      <time dateTime={publishedAt.toISOString()}>
-                        {formatDistanceToNow(publishedAt, { addSuffix: true, locale: ar })}
-                      </time>
-                    ) : <span />}
-                    <span className="font-semibold text-[#0e76b8] dark:text-primary">اقرأ المقال</span>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+          )) : articles.map((article) => <OpinionCard key={article.id} article={article} variant="home" />)}
         </div>
       </div>
     </section>

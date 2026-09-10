@@ -250,7 +250,7 @@ export function CategoriesDirectory({
 
   return (
     <>
-      <section className="border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="categories-header">
+      <section className="public-page-header" data-testid="categories-header">
 
         <div className="container relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
           <nav
@@ -274,12 +274,12 @@ export function CategoriesDirectory({
                 دليل أقسام سبق الإخباري
               </div>
               <h1
-                className="text-3xl font-bold tracking-tight md:text-4xl lg:text-5xl"
+                className="public-page-title"
                 data-testid="heading-categories"
               >
                 التصنيفات
               </h1>
-              <p className="mt-3 max-w-2xl text-base leading-relaxed text-[#6b7c8a] md:text-lg dark:text-muted-foreground">
+              <p className="public-page-description max-w-2xl">
                 تصفّح أقسام الصحيفة الرسمية — من السياسة والاقتصاد إلى الرياضة والثقافة —
                 مع مؤشرات النشاط التحريري وعدد التغطيات في كل قسم.
               </p>

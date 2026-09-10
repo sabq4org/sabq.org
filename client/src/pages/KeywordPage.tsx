@@ -15,12 +15,13 @@ import { arSA } from "date-fns/locale";
 import type { ArticleWithDetails } from "@shared/schema";
 import { Header } from "@/components/Header";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 
 // Format numbers with commas (English numerals)
 const formatNumber = (num: number): string => {
   return num.toLocaleString('en-US');
 };
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
@@ -76,7 +77,7 @@ export default function KeywordPage() {
   const { data: keywordData, isLoading } = useQuery<KeywordResponse>({
     queryKey: ["/api/keyword", keyword],
     queryFn: async () => {
-      const res = await fetch(`/api/keyword/${encodeURIComponent(keyword)}`, {
+      const res = await fetch(apiUrl(`/api/keyword/${encodeURIComponent(keyword)}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch articles");
@@ -213,10 +214,10 @@ export default function KeywordPage() {
     <div className="min-h-screen flex flex-col bg-background" dir="rtl">
       <Header user={user} />
 
-      <main className="flex-1">
+      <main className="public-page flex-1">
         {/* Hero Section - Clean & Simple */}
-        <div className="border-b bg-card/50">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <div className="public-page-header border-b bg-card/50">
+          <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               {/* Keyword Info */}
               <div className="space-y-2">
@@ -224,14 +225,14 @@ export default function KeywordPage() {
                   <div className="p-2 rounded-lg bg-primary/10">
                     <Tag className="h-5 w-5 text-primary" />
                   </div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-foreground" data-testid="text-keyword-title">
+                  <h1 className="public-page-title text-2xl md:text-3xl font-bold text-foreground" data-testid="text-keyword-title">
                     {keyword}
                   </h1>
                 </div>
                 
                 {/* Stats - Inline */}
                 {!isLoading && (
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <div className="public-page-description flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <Newspaper className="h-4 w-4" />
                       <strong className="text-foreground">{formatNumber(stats.articleCount)}</strong> مقال
@@ -290,8 +291,8 @@ export default function KeywordPage() {
         </div>
 
         {/* Filter & Sort Bar */}
-        <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
+        <div className="public-filter-bar sticky top-[var(--public-header-height,80px)] z-40 bg-background/95 backdrop-blur-md border-b">
+          <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               {/* Filter Pills */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -348,7 +349,7 @@ export default function KeywordPage() {
           </div>
         </div>
 
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Loading State */}
           {isLoading && (
             <div className="space-y-8">
@@ -371,220 +372,10 @@ export default function KeywordPage() {
           {/* Articles - Mobile List + Desktop Grid */}
           {!isLoading && filteredAndSortedArticles.length > 0 && (
             <>
-              {/* Mobile View: Vertical List */}
-              <Card className="overflow-hidden lg:hidden border-0 dark:border dark:border-card-border" data-testid="keyword-articles-mobile">
-                <CardContent className="p-0">
-                  <div className="divide-y dark:divide-y">
-                    {filteredAndSortedArticles.map((article) => {
-                      const timeAgo = article.publishedAt
-                        ? formatDistanceToNow(new Date(article.publishedAt), {
-                            addSuffix: true,
-                            locale: arSA,
-                          })
-                        : null;
-                      const displayImage = (article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl;
-
-                      return (
-                        <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
-                          <div 
-                            className="block group cursor-pointer"
-                            data-testid={`link-keyword-article-mobile-${article.id}`}
-                          >
-                            <div className="p-4 hover-elevate active-elevate-2 transition-all">
-                              <div className="flex gap-3">
-                                {/* Image */}
-                                {displayImage && (
-                                  <div className="relative flex-shrink-0 w-24 h-20 rounded-lg overflow-hidden">
-                                    <OptimizedImage
-                                      src={displayImage}
-                                      alt={article.title}
-                                      className="w-full h-full object-cover rounded-lg transition-transform duration-500 group-hover:scale-110"
-                                      wrapperClassName="w-full h-full"
-                                      priority={false}
-                                    />
-                                  </div>
-                                )}
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0 space-y-1.5">
-                                  {/* Badges */}
-                                  <div className="flex items-center gap-1.5">
-                                    {article.newsType === "breaking" ? (
-                                      <Badge 
-                                        variant="destructive" 
-                                        className="text-[10px] h-4 gap-0.5 shrink-0"
-                                        data-testid={`badge-keyword-mobile-breaking-${article.id}`}
-                                      >
-                                        <Zap className="h-2 w-2" />
-                                        عاجل
-                                      </Badge>
-                                    ) : isNewArticle(article.publishedAt) ? (
-                                      <Badge 
-                                        className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0"
-                                        data-testid={`badge-keyword-mobile-new-${article.id}`}
-                                      >
-                                        <Flame className="h-2 w-2" />
-                                        جديد
-                                      </Badge>
-                                    ) : article.category ? (
-                                      <Badge 
-                                        variant="secondary"
-                                        className="text-[10px] h-4 shrink-0 text-black"
-                                        style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                                        data-testid={`badge-keyword-mobile-category-${article.id}`}
-                                      >
-                                        {article.category.nameAr}
-                                      </Badge>
-                                    ) : null}
-                                    {/* AI Generated Content Badge */}
-                                    {(article as any).aiGenerated && (
-                                      <Badge 
-                                        className="text-[10px] h-4 gap-0.5 bg-violet-500/90 hover:bg-violet-600 text-white border-0 shrink-0"
-                                        data-testid={`badge-keyword-mobile-ai-${article.id}`}
-                                      >
-                                        <Brain className="h-2 w-2" aria-hidden="true" />
-                                        AI
-                                      </Badge>
-                                    )}
-                                  </div>
-
-                                  {/* Title */}
-                                  <h4 className={`font-bold text-sm line-clamp-2 leading-snug transition-colors ${
-                                    article.newsType === "breaking"
-                                      ? "text-destructive"
-                                      : "group-hover:text-primary"
-                                  }`} data-testid={`text-keyword-mobile-title-${article.id}`}>
-                                    {article.title}
-                                  </h4>
-
-                                  {/* Meta Info */}
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                    {timeAgo && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        {timeAgo}
-                                      </span>
-                                    )}
-                                    <span className="flex items-center gap-1">
-                                      <Eye className="h-3 w-3" />
-                                      {formatNumber(article.views || 0)}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Desktop View: Grid */}
-              <div className="hidden lg:grid grid-cols-4 gap-6">
-                {filteredAndSortedArticles.map((article) => {
-                  const timeAgo = article.publishedAt
-                    ? formatDistanceToNow(new Date(article.publishedAt), {
-                        addSuffix: true,
-                        locale: arSA,
-                      })
-                    : null;
-                  const displayImage = (article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl;
-
-                  return (
-                    <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
-                      <Card className={`hover-elevate active-elevate-2 h-full cursor-pointer group border-0 dark:border dark:border-card-border ${
-                        article.newsType === "breaking" ? "bg-destructive/5" : ""
-                      }`} data-testid={`card-keyword-article-${article.id}`}>
-                        {displayImage && (
-                          <div className="relative aspect-[16/9] overflow-hidden">
-                            <OptimizedImage
-                              src={displayImage}
-                              alt={article.title}
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                              priority={false}
-                            />
-                          </div>
-                        )}
-                        <CardContent className="p-5 space-y-3">
-                          {/* Badges */}
-                          <div className="flex items-center gap-2">
-                            {article.newsType === "breaking" ? (
-                              <Badge 
-                                variant="destructive" 
-                                className="text-xs h-5 gap-1 shrink-0" 
-                                data-testid={`badge-keyword-breaking-${article.id}`}
-                              >
-                                <Zap className="h-2.5 w-2.5" />
-                                عاجل
-                              </Badge>
-                            ) : isNewArticle(article.publishedAt) ? (
-                              <Badge 
-                                className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0" 
-                                data-testid={`badge-keyword-new-${article.id}`}
-                              >
-                                <Flame className="h-2.5 w-2.5" />
-                                جديد
-                              </Badge>
-                            ) : article.category ? (
-                              <Badge 
-                                variant="secondary"
-                                className="text-xs h-5 shrink-0 text-black" 
-                                style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                                data-testid={`badge-keyword-category-${article.id}`}
-                              >
-                                {article.category.nameAr}
-                              </Badge>
-                            ) : null}
-                            {/* AI Generated Content Badge */}
-                            {(article as any).aiGenerated && (
-                              <Badge 
-                                className="text-xs h-5 gap-1 bg-violet-500/90 hover:bg-violet-600 text-white border-0 shrink-0"
-                                data-testid={`badge-keyword-ai-${article.id}`}
-                              >
-                                <Brain className="h-2.5 w-2.5" aria-hidden="true" />
-                                محتوى AI
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          {/* Title */}
-                          <h3 className={`text-lg font-bold line-clamp-2 transition-colors ${
-                            article.newsType === "breaking"
-                              ? "text-destructive"
-                              : "group-hover:text-primary"
-                          }`} data-testid={`text-keyword-article-title-${article.id}`}>
-                            {article.title}
-                          </h3>
-                          
-                          {/* Excerpt */}
-                          {article.excerpt && (
-                            <p className="text-sm text-muted-foreground line-clamp-3">
-                              {article.excerpt}
-                            </p>
-                          )}
-                          
-                          {/* Meta */}
-                          <div className="flex flex-col gap-2 pt-2 border-t">
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              {timeAgo && (
-                                <div className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{timeAgo}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1">
-                                <Eye className="h-3 w-3" />
-                                <span>{formatNumber(article.views || 0)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  );
-                })}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {filteredAndSortedArticles.map((article, index) => (
+                  <NewsArticleCard key={article.id} article={article} viewMode="grid" metadata={{ views: true }} priority={index < 4} />
+                ))}
               </div>
             </>
           )}

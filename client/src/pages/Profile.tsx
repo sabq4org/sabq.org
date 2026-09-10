@@ -57,7 +57,7 @@ import {
   Newspaper,
   CreditCard,
 } from "lucide-react";
-import { ArticleCard } from "@/components/ArticleCard";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
@@ -131,7 +131,7 @@ function SavedArticlesList({
       <div className="divide-y divide-border/60 rounded-none border-y border-border/50">
         {visibleArticles.map((article) => (
           <div key={article.id} className="py-2 first:pt-0 last:pb-0">
-            <ArticleCard article={article} variant="list" />
+            <NewsArticleCard article={article} viewMode="list" locale="ar" metadata={{ views: true }} />
           </div>
         ))}
       </div>
@@ -1193,7 +1193,7 @@ export default function Profile() {
             </section>
 
             {/* Editorial navigation + content — no wrapping Card */}
-            <main className="container mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8" dir="rtl" data-testid="profile-account-band">
+            <main className="public-page container mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8" dir="rtl" data-testid="profile-account-band">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <div
                   className="sticky top-0 z-20 -mx-4 mb-6 flex gap-1 overflow-x-auto border-b border-border/60 bg-background/95 px-4 pb-px backdrop-blur sm:static sm:mx-0 sm:mb-8 sm:bg-transparent sm:px-0 sm:backdrop-blur-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -1498,7 +1498,7 @@ export default function Profile() {
                       <div className="divide-y divide-border/60 border-y border-border/50">
                         {recommendations.slice(0, 4).map((article) => (
                           <div key={article.id} className="py-2">
-                            <ArticleCard article={article} variant="list" />
+                            <NewsArticleCard article={article} viewMode="list" locale="ar" metadata={{ views: true }} />
                           </div>
                         ))}
                       </div>

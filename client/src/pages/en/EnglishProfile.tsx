@@ -44,7 +44,7 @@ import {
   Tag,
   X,
 } from "lucide-react";
-import { ArticleCard } from "@/components/ArticleCard";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
@@ -702,7 +702,7 @@ export default function EnglishProfile() {
           </aside>
 
           {/* Main Content */}
-          <main>
+          <main className="public-page">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle>Profile</CardTitle>
@@ -759,10 +759,7 @@ export default function EnglishProfile() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
                               >
-                                <ArticleCard
-                                  article={article}
-                                  variant="grid"
-                                />
+                                <NewsArticleCard article={article} viewMode="grid" locale="en" metadata={{ views: true }} />
                               </motion.div>
                             ))}
                           </AnimatePresence>
@@ -818,10 +815,7 @@ export default function EnglishProfile() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
                               >
-                                <ArticleCard
-                                  article={article}
-                                  variant="grid"
-                                />
+                                <NewsArticleCard article={article} viewMode="grid" locale="en" metadata={{ views: true }} />
                               </motion.div>
                             ))}
                           </AnimatePresence>
@@ -877,10 +871,7 @@ export default function EnglishProfile() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
                               >
-                                <ArticleCard
-                                  article={article}
-                                  variant="grid"
-                                />
+                                <NewsArticleCard article={article} viewMode="grid" locale="en" metadata={{ views: true }} />
                               </motion.div>
                             ))}
                           </AnimatePresence>

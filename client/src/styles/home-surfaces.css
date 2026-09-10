@@ -1,9 +1,9 @@
 /* Homepage surfaces follow the opinion section; shared components elsewhere
    retain their own theme. Media overlays and semantic icon colors are intact. */
 .home-surface-theme {
-  --home-surface: #f4f8fb;
-  --home-paper: #fff;
-  --home-rule: #e3ebf2;
+  --home-surface: var(--public-surface, #f4f8fb);
+  --home-paper: var(--public-card, #fff);
+  --home-rule: var(--public-border, #e3ebf2);
 }
 
 .dark .home-surface-theme {
@@ -12,7 +12,7 @@
   --home-rule: #2b3947;
 }
 
-.home-surface-theme main :is(.bg-card, .shadcn-card) {
+.home-surface-theme main :is(.bg-card, .shadcn-card):not(.public-news-card):not(.public-opinion-card) {
   background-color: var(--home-surface);
   border-color: var(--home-rule);
 }

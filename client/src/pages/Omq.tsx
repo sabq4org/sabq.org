@@ -26,6 +26,7 @@ import {
   Bot
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiUrl } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import OmqHeader from "@/components/omq/OmqHeader";
 import OmqAnimatedLogo from "@/components/omq/OmqAnimatedLogo";
@@ -108,7 +109,7 @@ export default function Omq() {
           params.append(key, String(value));
         }
       });
-      const response = await fetch(`/api/omq?${params}`);
+      const response = await fetch(apiUrl(`/api/omq?${params}`));
       if (!response.ok) {
         throw new Error('فشل في تحميل التحليلات');
       }
@@ -208,8 +209,8 @@ export default function Omq() {
       <OmqHeader onSearch={handleSearch} />
 
       {/* Hero Section */}
-      <section className="relative px-4 py-12 md:py-16">
-        <div className="container mx-auto max-w-7xl">
+      <section className="public-page-header relative px-4 py-12 md:py-16">
+        <div className="public-container container mx-auto max-w-7xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -222,7 +223,7 @@ export default function Omq() {
             </div>
             
             {/* Title */}
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4" data-testid="text-page-title">
+            <h1 className="public-page-title text-4xl md:text-6xl font-bold text-white mb-4" data-testid="text-page-title">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-500 to-violet-500">
                 عُمق
               </span>
@@ -232,7 +233,7 @@ export default function Omq() {
               <span className="text-xl md:text-3xl text-gray-400">Deep Analysis</span>
             </h1>
             
-            <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-6" data-testid="text-page-description">
+            <p className="public-page-description text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-6" data-testid="text-page-description">
               تحليلات استراتيجية عميقة مدعومة بثلاثة نماذج ذكاء اصطناعي متقدمة
             </p>
 

@@ -118,7 +118,7 @@ export default function Register() {
   };
 
   return (
-    <div className="relative min-h-screen bg-background" dir="rtl">
+    <div className="public-page public-auth-page relative min-h-screen bg-background" dir="rtl">
       <div className="flex flex-col lg:flex-row min-h-screen">
         {/* Right Side - Form Content */}
         <div className="flex flex-col w-full lg:w-1/2 overflow-y-auto px-4 sm:px-6 md:px-8">
@@ -216,7 +216,7 @@ export default function Register() {
                 </div>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="public-auth-form space-y-3 sm:space-y-4">
                   <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                     <FormField
                       control={form.control}

@@ -3,6 +3,8 @@ import * as Sentry from "@sentry/react";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
+import "./styles/public-design.css";
+import "./styles/public-opinion-card.css";
 import { installDeployRecovery } from "./lib/deployRecovery";
 import { startBuildVersionPolling } from "./lib/buildVersion";
 import {

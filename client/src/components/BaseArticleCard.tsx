@@ -10,6 +10,7 @@ interface BaseArticleCardProps {
   cardType?: "default" | "news" | "ai" | "infographic";
   onReact?: (articleId: string) => void;
   onBookmark?: (articleId: string) => void;
+  onShare?: (article: ArticleWithDetails) => void;
   hideCategory?: boolean;
   aiScore?: number;
   selectionReason?: "breaking" | "trending" | "featured" | "recommended";
@@ -18,51 +19,63 @@ interface BaseArticleCardProps {
 /**
  * BaseArticleCard - A smart dispatcher component that routes to the appropriate
  * specialized article card component based on article type and card type props.
- * 
+ *
  * This component provides a unified interface for rendering different types of
  * article cards (default, news, AI-generated, and infographic) while maintaining
  * backward compatibility with existing specialized components.
- * 
+ *
  * @example
  * // Auto-detect type from article properties
  * <BaseArticleCard article={article} variant="grid" />
- * 
+ *
  * // Explicitly specify card type
  * <BaseArticleCard article={article} cardType="ai" variant="featured" aiScore={0.92} />
  */
-export function BaseArticleCard({ 
-  article, 
-  variant = "grid", 
+export function BaseArticleCard({
+  article,
+  variant = "grid",
   cardType,
   onReact,
   onBookmark,
+  onShare,
   hideCategory,
   aiScore,
   selectionReason,
 }: BaseArticleCardProps) {
   // Auto-detect card type from article properties if not explicitly provided
-  const resolvedType = cardType || (
-    article.articleType === 'infographic' ? 'infographic' :
-    article.aiGenerated ? 'ai' : 'default'
-  );
+  const resolvedType =
+    cardType ||
+    (article.articleType === "infographic"
+      ? "infographic"
+      : article.aiGenerated
+        ? "ai"
+        : "default");
 
   switch (resolvedType) {
-    case 'infographic':
+    case "infographic":
       // InfographicArticleCard doesn't support all variants
       // Convert "list" to "grid" since InfographicArticleCard only supports grid/featured/compact
       return (
-        <InfographicArticleCard 
-          article={article} 
-          variant={variant === "list" ? "grid" : (variant as "grid" | "featured" | "compact")}
+        <InfographicArticleCard
+          article={article}
+          variant={
+            variant === "list"
+              ? "grid"
+              : (variant as "grid" | "featured" | "compact")
+          }
         />
       );
 
-    case 'ai':
+    case "ai":
       // AIArticleCard doesn't support "compact" variant - convert to "grid"
       return (
-        <AIArticleCard 
-          article={article} 
-          variant={variant === "compact" ? "grid" : (variant as "grid" | "featured" | "list")}
+        <AIArticleCard
+          article={article}
+          variant={
+            variant === "compact"
+              ? "grid"
+              : (variant as "grid" | "featured" | "list")
+          }
           aiScore={aiScore}
           selectionReason={selectionReason}
           onReact={onReact}
@@ -70,22 +83,28 @@ export function BaseArticleCard({
         />
       );
 
-    case 'news':
+    case "news":
       // NewsArticleCard uses "viewMode" prop instead of "variant"
       // It doesn't support "featured" variant - convert to "grid"
       return (
-        <NewsArticleCard 
-          article={article} 
-          viewMode={variant === "featured" ? "grid" : (variant as "grid" | "list" | "compact")}
+        <NewsArticleCard
+          article={article}
+          viewMode={
+            variant === "featured"
+              ? "grid"
+              : (variant as "grid" | "list" | "compact")
+          }
           hideCategory={hideCategory}
+          onBookmark={onBookmark}
+          onShare={onShare}
         />
       );
 
-    case 'default':
+    case "default":
     default:
       return (
-        <ArticleCard 
-          article={article} 
+        <ArticleCard
+          article={article}
           variant={variant}
           onReact={onReact}
           onBookmark={onBookmark}

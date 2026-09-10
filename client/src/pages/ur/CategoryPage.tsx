@@ -11,6 +11,9 @@ import type { UrCategory, UrArticle } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { UrduFooter } from "@/components/ur/UrduFooter";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import type { ArticleWithDetails } from "@shared/schema";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -32,7 +35,7 @@ export default function UrduCategoryPage() {
   const { data: category, isLoading: categoryLoading } = useQuery<UrCategory>({
     queryKey: ["/api/ur/categories/slug", slug],
     queryFn: async () => {
-      const res = await fetch(`/api/ur/categories/slug/${slug}`, { credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/ur/categories/slug/${slug}`), { credentials: 'include' });
       if (!res.ok) throw new Error("Failed to fetch category");
       return res.json();
     },
@@ -44,7 +47,7 @@ export default function UrduCategoryPage() {
     queryKey: ["/api/ur/categories", slug, "articles"],
     queryFn: async () => {
       if (!category) return [];
-      const res = await fetch(`/api/ur/categories/${category.id}/articles`, { credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/ur/categories/${category.id}/articles`), { credentials: 'include' });
       if (!res.ok) throw new Error("Failed to fetch articles");
       return res.json();
     },
@@ -83,16 +86,16 @@ export default function UrduCategoryPage() {
       <div>
         {/* Category Header (text + gradient). Hero cover image removed from
             category pages for faster mobile LCP — see Arabic CategoryPage. */}
-        <div className="bg-gradient-to-br from-primary/10 to-primary/5 py-12 sm:py-16">
+        <div className="public-page-header bg-gradient-to-br from-primary/10 to-primary/5 py-12 sm:py-16">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4 mb-4">
               <Newspaper className="h-12 w-12 sm:h-16 sm:w-16 text-primary" />
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold">
+              <h1 className="public-page-title text-3xl sm:text-4xl md:text-5xl font-bold">
                 {category.name}
               </h1>
             </div>
             {category.description && (
-              <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
+              <p className="public-page-description text-base sm:text-lg text-muted-foreground max-w-3xl">
                 {category.description}
               </p>
             )}
@@ -100,7 +103,7 @@ export default function UrduCategoryPage() {
         </div>
 
         {/* Articles Grid */}
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
           {articlesLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-32 w-full" />
@@ -117,8 +120,11 @@ export default function UrduCategoryPage() {
             </div>
           ) : (
             <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {articles.map((article, index) => <NewsArticleCard key={article.id} article={article as unknown as ArticleWithDetails} viewMode="grid" locale="ur" priority={index < 4} metadata={{ views: true }} />)}
+              </div>
               {/* Mobile View: Vertical List */}
-              <Card className="overflow-hidden lg:hidden shadow-sm border border-border/40 dark:border-card-border">
+              <Card className="hidden overflow-hidden lg:hidden shadow-sm border border-border/40 dark:border-card-border">
                 <CardContent className="p-0">
                   <div className="divide-y divide-border/50 dark:divide-border">
                     {articles.map((article) => {
@@ -210,7 +216,7 @@ export default function UrduCategoryPage() {
               </Card>
 
               {/* Desktop View: Grid with 4 columns */}
-              <div className="hidden lg:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="hidden lg:hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {articles.map((article) => (
                   <Link key={article.id} href={`/ur/article/${article.englishSlug || article.slug}`}>
                     <Card 

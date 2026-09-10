@@ -10,13 +10,13 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { Footer } from "@/components/Footer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
-import { Eye, Loader2, PenLine } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
+import { OpinionCard } from "@/components/public/OpinionCard";
+import { Loader2, PenLine } from "lucide-react";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import type { ArticleWithDetails } from "@shared/schema";
 
 const PAGE_SIZE = 18;
 
@@ -134,7 +134,7 @@ export default function AuthorArticlesPage() {
   useCanonical(name ? `https://sabq.org${pageHref(pageNumber)}` : null);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="public-page min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
@@ -166,7 +166,7 @@ export default function AuthorArticlesPage() {
           </div>
         ) : (
           <>
-            <section className="border-b border-border bg-muted/30">
+            <section className="public-page-header border-b border-border bg-muted/30">
               <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-5 sm:gap-7">
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 border border-border">
@@ -184,7 +184,7 @@ export default function AuthorArticlesPage() {
 
                   <div className="min-w-0 space-y-2">
                     <h1
-                      className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight"
+                      className="public-page-title text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight"
                       data-testid="text-author-page-name"
                     >
                       {firstPage.author.name}
@@ -220,43 +220,29 @@ export default function AuthorArticlesPage() {
               ) : (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {articles.map((article) => (
-                      <Link key={article.id} href={articleHref(article)}>
-                        <Card
-                          className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-hidden flex flex-col"
-                          data-testid={`card-author-article-${article.id}`}
-                        >
-                          <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
-                            <h3 className="font-bold text-xl line-clamp-3 text-foreground leading-snug">
-                              {article.title}
-                            </h3>
-
-                            {article.publishedAt ? (
-                              <p className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(article.publishedAt), {
-                                  addSuffix: true,
-                                  locale: ar,
-                                })}
-                              </p>
-                            ) : null}
-
-                            {article.excerpt ? (
-                              <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
-                                {article.excerpt}
-                              </p>
-                            ) : (
-                              <div className="flex-1" />
-                            )}
-
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-border">
-                              <Eye className="h-3 w-3" />
-                              <span className="tabular-nums">
-                                {(article.views || 0).toLocaleString("en-US")}
-                              </span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
+                    {articles.map((article) => article.articleType === "opinion" ? (
+                      <OpinionCard
+                        key={article.id}
+                        variant="grid"
+                        article={{
+                          ...article,
+                          author: {
+                            name: firstPage.author.name,
+                            profileImageUrl: firstPage.author.avatarUrl,
+                          },
+                        }}
+                      />
+                    ) : (
+                      <NewsArticleCard
+                        key={article.id}
+                        article={{
+                          ...article,
+                          articleType: "news",
+                          category: undefined,
+                        } as unknown as ArticleWithDetails}
+                        viewMode="grid"
+                        metadata={{ views: true }}
+                      />
                     ))}
                   </div>
 

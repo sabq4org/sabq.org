@@ -275,8 +275,8 @@ function CategoryLandingPage() {
 
       {/* Keep the category heading text-only for a fast LCP, with the same
           solid surface as the categories directory and live feed. */}
-      <div className="border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="category-header">
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-8 lg:py-10">
+      <div className="public-page-header border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="category-header">
+        <div className="public-container container mx-auto px-3 sm:px-6 lg:px-8 py-8 lg:py-10">
           {/* Breadcrumb Navigation */}
           <nav className="flex items-center gap-2 text-sm text-[#6b7c8a] dark:text-muted-foreground" data-testid="breadcrumb-navigation">
             <Link href="/">
@@ -317,7 +317,7 @@ function CategoryLandingPage() {
                 {category.icon && (
                   <span className="text-3xl sm:text-4xl">{category.icon}</span>
                 )}
-                <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold">
+                <h1 className="public-page-title text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold">
                   {category.nameAr}
                 </h1>
                 {isSmartCategory ? (
@@ -347,7 +347,7 @@ function CategoryLandingPage() {
                 )}
               </div>
               {category.description && (
-                <p className="text-sm sm:text-base md:text-lg text-[#6b7c8a] dark:text-muted-foreground max-w-3xl mb-2 sm:mb-3 leading-relaxed">
+                <p className="public-page-description text-sm sm:text-base md:text-lg text-[#6b7c8a] dark:text-muted-foreground max-w-3xl mb-2 sm:mb-3 leading-relaxed">
                   {category.description}
                 </p>
               )}
@@ -412,7 +412,7 @@ function CategoryLandingPage() {
       </div>
 
       {/* DMS Leaderboard Ad - Desktop only */}
-      <div className="container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
+      <div className="public-page container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
         <DmsLeaderboardAd />
       </div>
 
