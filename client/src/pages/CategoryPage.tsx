@@ -273,27 +273,12 @@ function CategoryLandingPage() {
     <div className="min-h-screen bg-background" dir="rtl">
       <Header user={user} />
 
-      {/* Hero image intentionally removed from category pages: the large
-          cover image was the LCP element and dragged mobile LCP to ~3.7s.
-          A lightweight text + gradient header paints almost instantly, so
-          the category title becomes a fast text LCP instead. */}
-
-      {/* Category Header Section (text + gradient, no hero image) */}
-      <div className={`${
-        isSmartCategory
-          ? "bg-gradient-to-br from-primary/15 via-accent/10 to-primary/5 dark:from-primary/8 dark:via-accent/5 dark:to-primary/3 border-b"
-          : "bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 dark:from-primary/10 dark:to-primary/5 border-b"
-      } relative overflow-hidden`}>
-        {/* Animated AI Grid Pattern for Smart Categories */}
-        {isSmartCategory && (
-          <div className="absolute inset-0 opacity-20 dark:opacity-10">
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-          </div>
-        )}
-        
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-4 relative z-10">
+      {/* Keep the category heading text-only for a fast LCP, with the same
+          solid surface as the categories directory and live feed. */}
+      <div className="border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="category-header">
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-8 lg:py-10">
           {/* Breadcrumb Navigation */}
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="breadcrumb-navigation">
+          <nav className="flex items-center gap-2 text-sm text-[#6b7c8a] dark:text-muted-foreground" data-testid="breadcrumb-navigation">
             <Link href="/">
               <span className="flex items-center gap-1 hover-elevate px-2 py-1 rounded transition-colors cursor-pointer">
                 <Home className="h-3.5 w-3.5" />
@@ -332,7 +317,7 @@ function CategoryLandingPage() {
                 {category.icon && (
                   <span className="text-3xl sm:text-4xl">{category.icon}</span>
                 )}
-                <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-foreground">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold">
                   {category.nameAr}
                 </h1>
                 {isSmartCategory ? (
@@ -341,7 +326,7 @@ function CategoryLandingPage() {
                     transition={{ duration: 2, repeat: Infinity }}
                   >
                     <Badge
-                      className="flex items-center gap-1.5 min-h-8 px-3 py-1.5 text-sm bg-gradient-to-r from-primary to-accent text-primary-foreground border-0 shadow-lg"
+                      className="flex items-center gap-1.5 min-h-8 px-3 py-1.5 text-sm bg-primary text-primary-foreground border-0 shadow-lg"
                       data-testid="badge-category-type"
                     >
                       <Brain className="h-3.5 w-3.5" />
@@ -362,7 +347,7 @@ function CategoryLandingPage() {
                 )}
               </div>
               {category.description && (
-                <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-3xl mb-2 sm:mb-3 leading-relaxed">
+                <p className="text-sm sm:text-base md:text-lg text-[#6b7c8a] dark:text-muted-foreground max-w-3xl mb-2 sm:mb-3 leading-relaxed">
                   {category.description}
                 </p>
               )}

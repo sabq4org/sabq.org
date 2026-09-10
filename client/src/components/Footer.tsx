@@ -12,12 +12,12 @@ import {
   ChevronDown
 } from "lucide-react";
 import { SiX, SiTiktok, SiWhatsapp, SiGoogleplay, SiApple, SiHuawei } from "react-icons/si";
-import sabqLogo from "@assets/sabq-logo.png";
+import sabqLogo from "../../../public/branding/identity/sabq-logo-white.svg";
 
 function MobileCollapsible({ title, children }: { title: string; children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   return (
-    <div className="border-b border-border/50">
+    <div className="border-b border-[#2a4052]">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-between w-full py-3 text-sm font-medium"
@@ -75,7 +75,7 @@ export function Footer() {
   return (
     <footer 
       id="footer" 
-      className="bg-muted/30 border-t" 
+      className="bg-[#0e2233] text-[#f1f6fa] border-t border-[#2a4052]"
       data-testid="footer" 
       dir="rtl"
     >
@@ -87,14 +87,14 @@ export function Footer() {
             <img 
               src={sabqLogo} 
               alt="سبق" 
-              className="h-10 w-auto"
+              className="h-[66px] w-[74px] object-contain"
               loading="lazy"
-              width={751}
-              height={681}
+              width={74}
+              height={66}
               decoding="async"
             />
           </Link>
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-xs text-[#b2c3d0] text-center">
             منصة إخبارية سعودية ذكية
           </p>
           
@@ -139,7 +139,7 @@ export function Footer() {
             {mainCategories.map((cat) => (
               <li key={cat.id}>
                 <Link href={`/category/${cat.slug}`}>
-                  <span className="text-xs text-muted-foreground hover:text-foreground">
+                  <span className="text-xs text-[#b2c3d0] hover:text-white">
                     {cat.nameAr}
                   </span>
                 </Link>
@@ -154,7 +154,7 @@ export function Footer() {
             {infoLinks.map((link, i) => (
               <li key={i}>
                 <Link href={link.href}>
-                  <span className="text-xs text-muted-foreground hover:text-foreground">
+                  <span className="text-xs text-[#b2c3d0] hover:text-white">
                     {link.label}
                   </span>
                 </Link>
@@ -162,7 +162,7 @@ export function Footer() {
             ))}
             <li>
               <Link href="/contact">
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <span className="inline-flex items-center gap-1 text-xs text-[#b2c3d0] hover:text-white">
                   <Mail className="h-3 w-3" />
                   تواصل معنا
                 </span>
@@ -172,14 +172,14 @@ export function Footer() {
         </MobileCollapsible>
 
         {/* Social Icons */}
-        <div className="flex items-center justify-center gap-4 my-4">
+        <div className="flex flex-wrap items-center justify-center gap-4 my-4">
           {socialLinks.map((s, i) => (
             <a
               key={i}
               href={s.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-[#b2c3d0] hover:text-white transition-colors"
               aria-label={s.label}
             >
               <s.icon className="h-4 w-4" />
@@ -188,8 +188,8 @@ export function Footer() {
         </div>
 
         {/* Copyright */}
-        <div className="flex flex-col items-center gap-1 text-center border-t border-border/50 pt-3">
-          <p className="text-[11px] text-muted-foreground">
+        <div className="flex flex-col items-center gap-1 text-center border-t border-[#2a4052] pt-3">
+          <p className="text-[11px] text-[#b2c3d0]">
             © {currentYear} سبق الذكية | صُنعت بكل <span className="text-green-600">♥</span> في السعودية
           </p>
         </div>
@@ -207,14 +207,14 @@ export function Footer() {
               <img 
                 src={sabqLogo} 
                 alt="سبق" 
-                className="h-8 w-auto"
+                className="h-[85px] w-24 object-contain"
                 loading="lazy"
-                width={751}
-                height={681}
+                width={96}
+                height={85}
                 decoding="async"
               />
             </Link>
-            <p className="text-sm text-muted-foreground max-w-xs">
+            <p className="text-sm text-[#b2c3d0] max-w-xs">
               منصة إخبارية سعودية ذكية
             </p>
             
@@ -260,7 +260,7 @@ export function Footer() {
               {mainCategories.map((cat) => (
                 <li key={cat.id}>
                   <Link href={`/category/${cat.slug}`}>
-                    <span className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    <span className="text-sm text-[#b2c3d0] hover:text-white transition-colors">
                       {cat.nameAr}
                     </span>
                   </Link>
@@ -276,7 +276,7 @@ export function Footer() {
               {infoLinks.map((link, i) => (
                 <li key={i}>
                   <Link href={link.href}>
-                    <span className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    <span className="text-sm text-[#b2c3d0] hover:text-white transition-colors">
                       {link.label}
                     </span>
                   </Link>
@@ -284,7 +284,7 @@ export function Footer() {
               ))}
               <li>
                 <Link href="/contact">
-                  <span className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <span className="inline-flex items-center gap-1 text-sm text-[#b2c3d0] hover:text-white transition-colors">
                     <Mail className="h-3.5 w-3.5" />
                     تواصل معنا
                   </span>
@@ -295,13 +295,13 @@ export function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-6 border-t border-border/50">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-6 border-t border-[#2a4052]">
           {/* Copyright */}
           <div className="flex flex-col items-center md:items-start gap-1">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[#b2c3d0]">
               © {currentYear} سبق الذكية
             </p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <p className="text-xs text-[#b2c3d0] flex items-center gap-1">
               صُنعت بكل <span className="text-green-600">♥</span> في السعودية
             </p>
           </div>
@@ -314,7 +314,7 @@ export function Footer() {
                 href={s.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-[#b2c3d0] hover:text-white transition-colors"
                 aria-label={s.label}
               >
                 <s.icon className="h-4 w-4" />
