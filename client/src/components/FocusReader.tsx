@@ -2,13 +2,15 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import DOMPurify from "isomorphic-dompurify";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useFocusSession } from "@/hooks/useFocusSession";
 import { SocialShareBar } from "@/components/SocialShareBar";
 import { useTheme } from "@/components/ThemeProvider";
 import { apiRequest } from "@/lib/queryClient";
-import { X, Share2, Clock, CheckCircle2, Eye, Type, Sun, Moon } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import "@/styles/focus-reader.css";
+import { X, Share2, Clock, CheckCircle2, Eye, Type, Sun, Moon, MoreHorizontal, ChartNoAxesColumnIncreasing } from "lucide-react";
 
 export type FocusReaderLanguage = "ar" | "en" | "ur";
 
@@ -40,7 +42,10 @@ const FONT_SIZE_CLASSES: Record<FontSize, string> = {
 const LABELS = {
   ar: {
     dir: "rtl" as const,
-    title: "نمط القراءة المركّزة",
+    title: "قراءة مركّزة",
+    more: "المزيد من الخيارات",
+    resume: "متابعة القراءة",
+    backToArticle: "العودة للخبر",
     description: "اقرأ المقال بدون تشتيت واحتفظ بسجل جلسات قراءتك",
     exit: "إنهاء",
     share: "مشاركة الجلسة",
@@ -64,6 +69,9 @@ const LABELS = {
   en: {
     dir: "ltr" as const,
     title: "Focus Reading Mode",
+    more: "More options",
+    resume: "Continue reading",
+    backToArticle: "Back to article",
     description: "Read distraction-free and keep a record of your reading sessions",
     exit: "Exit",
     share: "Share session",
@@ -87,6 +95,9 @@ const LABELS = {
   ur: {
     dir: "rtl" as const,
     title: "توجہ مرکوز پڑھائی",
+    more: "مزید اختیارات",
+    resume: "پڑھنا جاری رکھیں",
+    backToArticle: "خبر پر واپس جائیں",
     description: "بغیر کسی خلل کے پڑھیں اور اپنی پڑھائی کا ریکارڈ رکھیں",
     exit: "اختتام",
     share: "سیشن شیئر کریں",
@@ -163,12 +174,14 @@ export function FocusReader({
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const readerRef = useRef<HTMLDivElement | null>(null);
   // `summaryOpen` drives the post-session summary/share dialog. It is opened
   // either explicitly via the toolbar Share button OR automatically when the
   // user exits Focus Mode after a meaningful reading session.
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [generatedShareUrl, setGeneratedShareUrl] = useState<string | null>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   // True when the summary dialog was opened as part of the exit flow; closing
   // it should then dismiss the entire reader overlay.
   const summaryShouldCloseReaderRef = useRef(false);
@@ -180,6 +193,7 @@ export function FocusReader({
   }, [fontSize]);
 
   const {
+    sessionId,
     focusedSeconds,
     completed,
     markCompleted,
@@ -220,10 +234,13 @@ export function FocusReader({
   // Lock background scroll while open
   useEffect(() => {
     if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    readerRef.current?.querySelector<HTMLButtonElement>('[data-testid="button-focus-close"]')?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
+      previousFocus?.focus({ preventScroll: true });
     };
   }, [open]);
 
@@ -240,13 +257,21 @@ export function FocusReader({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || summaryOpen) return;
       if (e.key === "Escape") {
+        e.preventDefault();
         requestExit();
+      }
+      if (e.key === "Tab" && readerRef.current?.contains(document.activeElement)) {
+        const controls = Array.from(readerRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], [tabindex="0"]')).filter(el => el.getClientRects().length > 0);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, requestExit]);
+  }, [open, requestExit, summaryOpen]);
 
   const handleClose = () => {
     requestExit();
@@ -271,12 +296,13 @@ export function FocusReader({
         return `${window.location.origin}/s/${created.shortCode}`;
       }
     } catch (error) {
-      console.debug("Shortlink creation failed, falling back to full URL:", error);
+      console.warn("Shortlink creation failed, falling back to full URL:", error);
     }
     return fullUrl;
   }, []);
 
   const handleShareClick = async () => {
+    setShareError(null);
     if (!isLoggedIn) {
       toast({ title: labels.loginRequired });
       // Still surface the summary dialog so the guest sees their session stats.
@@ -295,7 +321,9 @@ export function FocusReader({
         setSummaryOpen(true);
         toast({ title: labels.sessionShared });
       } else {
-        toast({ title: labels.sessionShareError, variant: "destructive" });
+        setShareError(labels.sessionShareError);
+        summaryShouldCloseReaderRef.current = false;
+        setSummaryOpen(true);
       }
     } finally {
       setIsGeneratingShare(false);
@@ -304,6 +332,7 @@ export function FocusReader({
 
   // Trigger from inside the summary dialog (post-exit) to generate a share link.
   const handleGenerateShareFromSummary = async () => {
+    setShareError(null);
     if (!isLoggedIn) {
       toast({ title: labels.loginRequired });
       return;
@@ -316,7 +345,7 @@ export function FocusReader({
         setGeneratedShareUrl(url);
         toast({ title: labels.sessionShared });
       } else {
-        toast({ title: labels.sessionShareError, variant: "destructive" });
+        setShareError(labels.sessionShareError);
       }
     } finally {
       setIsGeneratingShare(false);
@@ -327,151 +356,96 @@ export function FocusReader({
   if (typeof document === "undefined") return null;
 
   const isDark = theme === "dark";
+  const publishedDate = publishedAt ? new Date(publishedAt) : null;
+  const validPublishedDate = publishedDate && !Number.isNaN(publishedDate.getTime()) ? publishedDate : null;
+  const dateLabel = validPublishedDate?.toLocaleDateString(
+    language === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : language === "ur" ? "ur-PK-u-ca-gregory-nu-latn" : "en-US",
+    { timeZone: "Asia/Riyadh", year: "numeric", month: "long", day: "numeric" },
+  );
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[10000] bg-background overflow-hidden"
+      ref={readerRef}
+      className="focus-reader"
       dir={labels.dir}
+      role="dialog"
+      aria-modal="true"
+      aria-label={labels.title}
       data-testid="overlay-focus-reader"
     >
-      {/* Cinematic Ambient Reader Background */}
-      {articleImageUrl && (
-        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0">
-          <div
-            className="absolute inset-0 bg-cover bg-center filter blur-[130px] scale-[1.6] opacity-[0.05] dark:opacity-[0.18] transition-all duration-1000 animate-ambient-glow"
-            style={{
-              backgroundImage: `url(${articleImageUrl})`,
-            }}
-          />
-        </div>
-      )}
-
-      {/* Top toolbar */}
-      <div className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              data-testid="button-focus-close"
-              aria-label={labels.exit}
-            >
-              <X className="h-5 w-5" />
-            </Button>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" aria-hidden="true" />
-              <span data-testid="text-focus-timer" className="tabular-nums">
-                {formatDuration(focusedSeconds, language)}
+      <header className="focus-reader-toolbar">
+        <div className="focus-reader-toolbar-inner">
+          <div className="focus-reader-session">
+            <div className="focus-reader-mode"><Eye aria-hidden="true" /><span>{labels.title}</span></div>
+            <div className="focus-reader-session-meta">
+              <span className="focus-reader-timer" aria-label={labels.timer}><Clock aria-hidden="true" /><span data-testid="text-focus-timer">{formatDuration(focusedSeconds, language)}</span></span>
+              <span className={completed ? "focus-reader-completed" : ""} data-testid={completed ? "status-focus-completed" : "status-focus-inprogress"}>
+                {completed && <CheckCircle2 aria-hidden="true" />}{completed ? labels.completed : labels.inProgress}
               </span>
-              {completed ? (
-                <span className="ms-2 inline-flex items-center gap-1 text-success" data-testid="status-focus-completed">
-                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                  <span>{labels.completed}</span>
-                </span>
-              ) : (
-                <span className="ms-2 inline-flex items-center gap-1" data-testid="status-focus-inprogress">
-                  <Eye className="h-4 w-4" aria-hidden="true" />
-                  <span>{labels.inProgress}</span>
-                </span>
-              )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              className="inline-flex items-center gap-1 rounded-md border bg-muted/40 p-1"
-              role="group"
-              aria-label={labels.fontSize}
-              data-testid="group-focus-font-size"
-            >
-              <Type className="mx-1 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+          <div className="focus-reader-controls">
+            <div className="focus-reader-fonts" role="group" aria-label={labels.fontSize} data-testid="group-focus-font-size">
+              <Type aria-hidden="true" />
               {(["sm", "md", "lg"] as const).map((sz) => (
-                <Button
-                  key={sz}
-                  variant="ghost"
-                  size="sm"
-                  className={`min-h-7 px-2 text-xs ${fontSize === sz ? "toggle-elevate toggle-elevated" : ""}`}
-                  onClick={() => setFontSize(sz)}
-                  data-testid={`button-focus-font-${sz}`}
-                  aria-pressed={fontSize === sz}
-                >
+                <Button key={sz} variant="ghost" size="sm" onClick={() => setFontSize(sz)} data-testid={`button-focus-font-${sz}`} aria-pressed={fontSize === sz}>
                   {sz === "sm" ? labels.fontSm : sz === "md" ? labels.fontMd : labels.fontLg}
                 </Button>
               ))}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(isDark ? "light" : "dark")}
-              data-testid="button-focus-theme-toggle"
-              aria-label={isDark ? labels.lightMode : labels.darkMode}
-            >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <Button variant="ghost" size="icon" className="focus-reader-icon-button" onClick={() => setTheme(isDark ? "light" : "dark")} data-testid="button-focus-theme-toggle" aria-label={isDark ? labels.lightMode : labels.darkMode} title={isDark ? labels.lightMode : labels.darkMode}>
+              {isDark ? <Sun /> : <Moon />}
             </Button>
-            <a
-              href={getWeeklyReportPath(language)}
-              className="text-sm text-primary underline-offset-4 hover:underline"
-              data-testid="link-focus-weekly-report"
-            >
-              {labels.weeklyReport}
-            </a>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleShareClick}
-              disabled={isGeneratingShare}
-              data-testid="button-focus-share"
-            >
-              <Share2 className="me-2 h-4 w-4" />
-              {labels.share}
-            </Button>
+            <DropdownMenu dir={labels.dir}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="focus-reader-icon-button" aria-label={labels.more} title={labels.more} data-testid="button-focus-more"><MoreHorizontal /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="focus-reader-menu" align="end" sideOffset={8}>
+                <DropdownMenuItem asChild><a href={getWeeklyReportPath(language)} data-testid="link-focus-weekly-report"><ChartNoAxesColumnIncreasing />{labels.weeklyReport}</a></DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { void handleShareClick(); }} disabled={isGeneratingShare || (isLoggedIn && !sessionId)} data-testid="button-focus-share"><Share2 />{labels.share}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+          <Button variant="ghost" size="icon" className="focus-reader-icon-button focus-reader-exit" onClick={handleClose} data-testid="button-focus-close" aria-label={labels.exit} title={labels.exit}><X /></Button>
         </div>
-      </div>
+      </header>
 
       {/* Reader body */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="relative z-10 h-[calc(100vh-3.75rem)] overflow-y-auto"
+        className="focus-reader-scroll"
+        data-testid="scroll-focus-reader"
       >
         <article
-          className="mx-auto max-w-2xl px-4 py-10 sm:py-14"
+          className="focus-reader-article"
           data-testid="article-focus-content"
         >
-          <header className="mb-8">
+          <header className="focus-reader-heading">
             {categoryName ? (
-              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="text-focus-article-category">
+              <div className="focus-reader-category" data-testid="text-focus-article-category">
                 {categoryName}
               </div>
             ) : null}
-            <h1 className="mb-3 text-3xl font-bold leading-tight sm:text-4xl" data-testid="text-focus-article-title">
+            <h1 className="focus-reader-title" data-testid="text-focus-article-title">
               {title}
             </h1>
             {subtitle ? (
-              <p className="text-lg text-muted-foreground" data-testid="text-focus-article-subtitle">
+              <p className="focus-reader-subtitle" data-testid="text-focus-article-subtitle">
                 {subtitle}
               </p>
             ) : null}
-            {(authorName || publishedAt) && (
-              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            {(authorName || validPublishedDate) && (
+              <div className="focus-reader-byline">
                 {authorName ? <span data-testid="text-focus-article-author">{authorName}</span> : null}
-                {authorName && publishedAt ? <span aria-hidden="true">•</span> : null}
-                {publishedAt ? (
-                  <time data-testid="text-focus-article-date">
-                    {new Date(publishedAt).toLocaleDateString(
-                      language === "ar" ? "ar-SA" : language === "ur" ? "ur-PK" : "en-US",
-                      { year: "numeric", month: "long", day: "numeric" },
-                    )}
-                  </time>
-                ) : null}
+                {validPublishedDate && <time dateTime={validPublishedDate.toISOString()} data-testid="text-focus-article-date"><Clock aria-hidden="true" />{dateLabel}</time>}
               </div>
             )}
           </header>
 
           {articleImageUrl ? (
             <figure
-              className="mb-8 flex justify-center overflow-hidden rounded-md border bg-muted/30"
+              className="focus-reader-hero"
               data-testid="figure-focus-article-image"
             >
               {/* Preserve the natural aspect ratio of the hero image
@@ -479,7 +453,7 @@ export function FocusReader({
               <img
                 src={articleImageUrl}
                 alt={title}
-                className="block h-auto w-full max-h-[70vh] object-contain"
+                className="focus-reader-image"
                 loading="eager"
                 data-testid="img-focus-article"
               />
@@ -487,15 +461,15 @@ export function FocusReader({
           ) : null}
 
           <div
-            className={`prose max-w-none dark:prose-invert prose-headings:font-semibold prose-img:rounded-md ${FONT_SIZE_CLASSES[fontSize]}`}
+            className={`focus-reader-prose prose max-w-none dark:prose-invert prose-headings:font-semibold prose-img:rounded-md ${FONT_SIZE_CLASSES[fontSize]}`}
+            data-font-size={fontSize}
             data-testid="container-focus-article-body"
-            // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
           />
 
           {!isLoggedIn ? (
             <div
-              className="mt-12 rounded-md border bg-muted/50 p-4 text-sm text-muted-foreground"
+              className="focus-reader-login"
               data-testid="banner-focus-login-cta"
             >
               {labels.loginRequired}
@@ -506,6 +480,7 @@ export function FocusReader({
 
       {/* Session summary / share dialog. Opens automatically on exit
           (after >=10s of focused reading) and from the toolbar Share button. */}
+      {summaryOpen && <div className="focus-reader-dim" aria-hidden="true" />}
       <Dialog
         open={summaryOpen}
         onOpenChange={(v) => {
@@ -517,12 +492,14 @@ export function FocusReader({
           }
         }}
       >
-        <DialogContent dir={labels.dir} data-testid="dialog-focus-share">
+        <DialogContent className="focus-reader-summary" dir={labels.dir} data-testid="dialog-focus-share">
           <DialogHeader>
             <DialogTitle>{labels.shareTitle}</DialogTitle>
             <DialogDescription>{labels.shareDescription}</DialogDescription>
           </DialogHeader>
           <div className="mt-2 space-y-3">
+            {shareError && <p role="alert" className="text-sm text-destructive leading-relaxed" data-testid="text-focus-share-error">{shareError}</p>}
+            {!isLoggedIn && <p className="text-sm text-muted-foreground leading-relaxed">{labels.loginRequired}</p>}
             <div className="rounded-md border bg-muted/40 p-3 text-sm" data-testid="text-focus-share-summary">
               <div className="font-medium">{title}</div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
@@ -566,6 +543,11 @@ export function FocusReader({
               </Button>
             )}
           </div>
+          <DialogClose asChild>
+            <Button variant="outline" className="w-full" data-testid="button-focus-summary-close">
+              {summaryShouldCloseReaderRef.current ? labels.backToArticle : labels.resume}
+            </Button>
+          </DialogClose>
         </DialogContent>
       </Dialog>
     </div>

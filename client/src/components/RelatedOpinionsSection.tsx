@@ -42,7 +42,7 @@ interface RelatedOpinionsSectionProps {
   editorial?: boolean;
 }
 
-function OpinionCard({ article, categoryColor }: { article: OpinionArticle; categoryColor?: string }) {
+function OpinionCard({ article, categoryColor, editorial = false }: { article: OpinionArticle; categoryColor?: string; editorial?: boolean }) {
   const authorName = article.author
     ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "كاتب"
     : "كاتب";
@@ -74,10 +74,11 @@ function OpinionCard({ article, categoryColor }: { article: OpinionArticle; cate
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-muted-foreground mb-1">{authorName}</p>
+              {!editorial && <p className="font-semibold text-sm text-muted-foreground mb-1">{authorName}</p>}
               <h3 className="font-bold text-base leading-tight line-clamp-2 group-hover:text-primary transition-colors">
                 {article.title}
               </h3>
+              {editorial && <p className="article-opinion-author text-xs text-muted-foreground mt-2">{authorName}</p>}
             </div>
           </div>
         </CardContent>
@@ -188,7 +189,7 @@ export function RelatedOpinionsSection({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
             >
-              <OpinionCard article={article} categoryColor={categoryColor} />
+              <OpinionCard article={article} categoryColor={categoryColor} editorial={editorial} />
             </motion.div>
           ))}
         </div>

@@ -1415,68 +1415,13 @@ export default function ArticleDetail() {
               </div>
             )}
 
-            <div className="article-detail-toolbar" data-testid="article-actions">
+            <div className="article-detail-toolbar" data-testid="article-top-share">
               <div className="article-detail-toolbar-row">
                 <div className="article-share-group" onMouseEnter={ensureShortLink} onTouchStart={ensureShortLink} onFocus={ensureShortLink}>
                   <span className="article-share-label">شارك:</span>
                   <SocialShareBar title={article.title} url={`https://sabq.org/article/${slug}`} copyUrl={`https://sabq.org/article/${slug}`} description={article.excerpt || ""} articleId={article.id} className="article-social-links" />
                 </div>
-                {/* Engagement Actions */}
-                <div className="article-engagement-actions flex flex-wrap items-center gap-2">
-                  <Button
-                    variant={article.hasReacted ? "default" : "outline"}
-                    size="sm"
-                    className="article-action gap-2 transition-colors"
-                    onClick={handleReact}
-                    disabled={reactMutation.isPending}
-                    aria-pressed={!!article.hasReacted}
-                    data-testid="button-article-react"
-                  >
-                    <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
-                    <span>إعجاب ({article.reactionsCount || 0})</span>
-                  </Button>
-
-                  <Button
-                    variant={article.isBookmarked ? "default" : "outline"}
-                    size="sm"
-                    className="article-action gap-2 transition-colors"
-                    onClick={handleBookmark}
-                    disabled={bookmarkMutation.isPending}
-                    aria-pressed={!!article.isBookmarked}
-                    data-testid="button-article-bookmark"
-                  >
-                    <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
-                    <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
-                  </Button>
-
-                  {/* Focus Mode trigger (Task #80) */}
-                  <FocusReaderTrigger
-                    language="ar"
-                    className="article-action"
-                    onClick={() => setFocusOpen(true)}
-                  />
-                </div>
               </div>
-
-              {/* Inline AI-flavored feedback after like/save */}
-              {engagementHint && (
-                <div
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300 ${
-                    engagementHint.kind === "off"
-                      ? "border-border bg-muted/50 text-muted-foreground"
-                      : "border-green-500/20 bg-green-500/5 text-green-700 dark:text-green-400"
-                  }`}
-                  role="status"
-                  aria-live="polite"
-                  data-testid="engagement-ai-hint"
-                >
-                  {engagementHint.kind !== "off" && (
-                    <Sparkles className="h-4 w-4 shrink-0 text-green-500" />
-                  )}
-                  <span>{engagementHint.text}</span>
-                </div>
-              )}
-
             </div>
 
             {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
@@ -1603,28 +1548,69 @@ export default function ArticleDetail() {
               </section>
             )}
 
-              <div
-                className="article-bottom-share flex flex-wrap items-center justify-between gap-3"
-                onMouseEnter={ensureShortLink}
-                onTouchStart={ensureShortLink}
-                onFocus={ensureShortLink}
-              >
-                <span className="text-sm font-medium text-muted-foreground">انشر الخبر عبر</span>
-                <SocialShareBar
-                  title={article.title}
-                  // Always share the canonical /article/<slug> URL — the
-                  // /s/<code> shortlink path was hard to read, looked
-                  // like a tracker to recipients, and broke previews on
-                  // WhatsApp because the redirect chain stripped the
-                  // OG meta. The shortLink object stays generated for
-                  // analytics/QR uses elsewhere on the page.
-                  url={`https://sabq.org/article/${slug}`}
-                  copyUrl={`https://sabq.org/article/${slug}`}
-                  description={article.excerpt || ""}
-                  articleId={article.id}
-                  className="article-social-links"
-                />
+            <div className="article-detail-toolbar article-bottom-share" data-testid="article-actions">
+              <div className="article-detail-toolbar-row">
+                <div className="article-share-group" onMouseEnter={ensureShortLink} onTouchStart={ensureShortLink} onFocus={ensureShortLink}>
+                  <span className="article-share-label">شارك:</span>
+                  <SocialShareBar title={article.title} url={`https://sabq.org/article/${slug}`} copyUrl={`https://sabq.org/article/${slug}`} description={article.excerpt || ""} articleId={article.id} className="article-social-links" />
+                </div>
+                {/* Engagement Actions */}
+                <div className="article-engagement-actions flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={article.hasReacted ? "default" : "outline"}
+                    size="sm"
+                    className="article-action gap-2 transition-colors"
+                    onClick={handleReact}
+                    disabled={reactMutation.isPending}
+                    aria-pressed={!!article.hasReacted}
+                    data-testid="button-article-react"
+                  >
+                    <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
+                    <span>إعجاب ({article.reactionsCount || 0})</span>
+                  </Button>
+
+                  <Button
+                    variant={article.isBookmarked ? "default" : "outline"}
+                    size="sm"
+                    className="article-action gap-2 transition-colors"
+                    onClick={handleBookmark}
+                    disabled={bookmarkMutation.isPending}
+                    aria-pressed={!!article.isBookmarked}
+                    data-testid="button-article-bookmark"
+                  >
+                    <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
+                    <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
+                  </Button>
+
+                  {/* Focus Mode trigger (Task #80) */}
+                  <FocusReaderTrigger
+                    language="ar"
+                    className="article-action"
+                    onClick={() => setFocusOpen(true)}
+                  />
+                </div>
               </div>
+
+              {/* Inline AI-flavored feedback after like/save */}
+              {engagementHint && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300 ${
+                    engagementHint.kind === "off"
+                      ? "border-border bg-muted/50 text-muted-foreground"
+                      : "border-green-500/20 bg-green-500/5 text-green-700 dark:text-green-400"
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                  data-testid="engagement-ai-hint"
+                >
+                  {engagementHint.kind !== "off" && (
+                    <Sparkles className="h-4 w-4 shrink-0 text-green-500" />
+                  )}
+                  <span>{engagementHint.text}</span>
+                </div>
+              )}
+
+            </div>
 
             {/* Focus mode overlay (Task #80) */}
             {article && (
