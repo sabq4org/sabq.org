@@ -38,3 +38,6 @@
 
 ## صور محرر الويب المستقلة — 2026-09-09
 `editor-openai-images` مسجل في defaults ومملوك لنظام editorial. خدمة التوليد تقرأ OPENAI_IMAGES_API_KEY وحده وتنفذ مباشرة خارج بوابة failover. لا يغيّر هذا مفتاح OpenAI العام أو صحة المزود العامة؛ الحالة وusage محفوظان في سجل توليد الصور. تفاصيل العقد والتفعيل في ../editorial/SYSTEM.md.
+
+## مختبر DeepSeek — 2026-09-10
+صفحة `/dashboard/deepseek-lab` (‏#1586) تجرّب `deepseek-flash` و`deepseek-v4-pro` على برومبت محرر سبق أو برومبت يلصقه المحرر، مع مقارنة اختيارية بالنموذج المعتمد. الخدمة `server/services/deepseekLabService.ts` تنادي DeepSeek مباشرة بمفتاح `DEEPSEEK_API_KEY` خارج البوابة عمدًا: لا تسجيل في `ai_usage_logs` ولا failover ولا مسار نشر. غياب المفتاح يعطي شارة «غير مضبوط» بلا أعطال. أي ربط مستقبلي يكون بمحوّل بوابة مستقل لا بتوسيع هذه الخدمة.
