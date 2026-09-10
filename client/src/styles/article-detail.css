@@ -178,7 +178,7 @@
 .article-sidebar-heading-description { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: var(--article-muted); font-size: 15px; line-height: 1.7; }
 .article-sidebar-heading-description a { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--article-brand); }
 .article-sidebar-heading-description a svg { width: 15px; height: 15px; }
-.article-sidebar-opinions [data-testid^="related-opinion-"] p { font-size: 15px; }
+.article-sidebar-opinions .article-opinion-author { font-size: 13px; font-weight: 400; }
 .article-sidebar-opinions > section > .space-y-6 > * + *,
 .article-sidebar-opinions .space-y-3 > * + * { margin-top: 0; }
 .article-sidebar-related [data-testid^="link-recommendation-"] .text-xs { font-size: 13px; }

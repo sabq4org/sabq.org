@@ -1,0 +1,68 @@
+/* A single editorial navigation row; scrolls with the page beneath the header. */
+.category-navigation {
+  border-bottom: 1px solid #e3ebf2;
+  background: #fff;
+  color: #526575;
+}
+.category-navigation-inner { display: flex; align-items: stretch; gap: 16px; }
+.category-navigation-scroll { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.category-navigation-scroll::-webkit-scrollbar { display: none; }
+.category-navigation-items { display: flex; align-items: stretch; justify-content: space-between; min-width: max-content; gap: 20px; }
+.category-navigation-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 2px;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  transition: color 150ms ease;
+}
+.category-navigation-link::after {
+  content: "";
+  position: absolute;
+  inset-inline: 2px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: currentColor;
+  opacity: 0;
+}
+.category-navigation-link:hover,
+.category-navigation-link.is-active { color: #087dbb; }
+.category-navigation-link:hover::after,
+.category-navigation-link.is-active::after { opacity: 1; }
+.category-navigation-all {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  min-height: 44px;
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid #e3ebf2;
+  color: #087dbb;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.category-navigation-all svg { width: 17px; height: 17px; }
+.category-navigation-all:hover { color: #065b89; }
+.category-navigation :is(a):focus-visible { outline: 2px solid #087dbb; outline-offset: -3px; border-radius: 4px; }
+.dark .category-navigation { background: #101923; border-color: #2b3947; color: #b8c6d3; }
+.dark .category-navigation-all { border-color: #2b3947; }
+.dark .category-navigation-link:hover,
+.dark .category-navigation-link.is-active,
+.dark .category-navigation-all { color: #53baff; }
+@media (max-width: 639px) {
+  .category-navigation-inner { gap: 12px; }
+  .category-navigation-items { gap: 24px; padding-inline-end: 12px; }
+  .category-navigation-link { min-height: 48px; }
+  .category-navigation-all { gap: 6px; padding-inline-start: 12px; font-size: 13px; }
+  .category-navigation-scroll { mask-image: linear-gradient(to right, transparent, #000 18px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .category-navigation-link { transition: none; }
+}

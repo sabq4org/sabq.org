@@ -21,7 +21,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import "@/styles/header-brand.css";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +51,27 @@ interface HeaderProps {
 
 export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [compactBrand, setCompactBrand] = useState(false);
+
+  useEffect(() => {
+    if (!sticky) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      // Separate thresholds prevent the header's height change from toggling
+      // the state repeatedly near the collapse point (scroll anchoring).
+      setCompactBrand((compact) => window.scrollY > 72 ? true : window.scrollY <= 16 ? false : compact);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [sticky]);
   const [location, navigate] = useLocation();
   const { toast } = useToast();
   const { theme, appTheme } = useTheme();
@@ -115,13 +137,14 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     <header
       role="banner"
       aria-label="رأس الصفحة الرئيسي"
-      className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
+      data-compact-brand={sticky && compactBrand ? "true" : "false"}
+      className={`${sticky ? "sabq-adaptive-header sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
       style={nd96.active ? ND96_SCOPE_STYLE : undefined}
       dir="rtl"
     >
       {nd96.active && <NationalDay96ScopeStyles />}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-4">
+        <div className="sabq-header-row flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
           <div className="hidden md:flex items-center gap-3">
             <Link href="/" onClick={(e) => {
@@ -134,7 +157,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 <img 
                   src={currentLogo} 
                   alt="سبق - SABQ" 
-                  className="h-12 w-auto object-contain"
+                  className="sabq-header-logo sabq-header-logo-desktop h-12 w-auto object-contain"
                   width={751}
                   height={681}
                   loading="eager"
@@ -175,7 +198,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 <img 
                   src={currentLogo} 
                   alt="سبق - SABQ" 
-                  className="h-11 w-auto object-contain"
+                  className="sabq-header-logo sabq-header-logo-mobile h-11 w-auto object-contain"
                   width={751}
                   height={681}
                   loading="eager"

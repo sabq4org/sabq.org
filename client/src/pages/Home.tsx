@@ -1,3 +1,4 @@
+import "@/styles/home-surfaces.css";
 import { useState, useEffect, useRef, useCallback, useMemo, Component, ReactNode, startTransition, Suspense } from "react";
 import { lazyDefault, lazyNamed } from "@/lib/lazyChunk";
 import { useLocation } from "wouter";
@@ -328,7 +329,7 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
         <NavigationBar />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12 flex-1">
@@ -354,7 +355,7 @@ export default function Home() {
   // This is the core fix: a transient blip must never blank a populated page.
   if (error && !homepage) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
         <NavigationBar />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
@@ -382,7 +383,7 @@ export default function Home() {
 
   if (!homepage) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
         <NavigationBar />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
@@ -398,7 +399,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       {/* Non-blocking "refresh failed / retrying" pill. Only appears when a
           background refetch errored while we keep showing the last-good feed —
@@ -427,19 +428,7 @@ export default function Home() {
         </div>
       )}
       {visibleCategories.length > 0 && (
-        <div className="hidden md:block">
-        <CategoryPills
-          categories={visibleCategories}
-          onSelectCategory={(categoryId) => {
-            if (!categoryId) {
-              navigate("/categories");
-              return;
-            }
-            const target = visibleCategories.find((c) => c.id === categoryId);
-            if (target?.slug) navigate(`/category/${target.slug}`);
-          }}
-        />
-        </div>
+        <CategoryPills categories={visibleCategories} />
       )}
 
       <main className="flex-1">
@@ -536,9 +525,9 @@ export default function Home() {
           )}
         </div>
 
-        {/* AI Summary Section with soft gradient background - Lazy loaded */}
+        {/* AI Summary Section — shared homepage surface, lazy loaded */}
         <LazySection>
-          <div className="bg-ai-gradient-soft py-8">
+          <div className="home-surface-band py-8">
             <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="scroll-fade-in">
                 <SmartSummaryBlock />
@@ -577,7 +566,7 @@ export default function Home() {
 
         {/* Weekly AI Insights - directly below the quad categories block */}
         <LazySection>
-          <div className="bg-ai-gradient-soft py-8">
+          <div className="home-surface-band py-8">
             <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="scroll-fade-in">
                 <AIInsightsBlock enabled={true} />

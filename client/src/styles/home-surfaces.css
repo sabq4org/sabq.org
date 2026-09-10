@@ -1,0 +1,47 @@
+/* Homepage surfaces follow the opinion section; shared components elsewhere
+   retain their own theme. Media overlays and semantic icon colors are intact. */
+.home-surface-theme {
+  --home-surface: #f4f8fb;
+  --home-paper: #fff;
+  --home-rule: #e3ebf2;
+}
+
+.dark .home-surface-theme {
+  --home-surface: #172330;
+  --home-paper: #101923;
+  --home-rule: #2b3947;
+}
+
+.home-surface-theme main :is(.bg-card, .shadcn-card) {
+  background-color: var(--home-surface);
+  border-color: var(--home-rule);
+}
+
+.home-surface-theme .home-surface-band,
+.home-surface-theme [data-testid="homepage-opinions"] {
+  background: var(--home-surface);
+  border-color: var(--home-rule);
+}
+
+.home-surface-theme .home-surface-band :is(.shadcn-card, [data-testid^="insight-card-"]),
+.home-surface-theme [data-testid="homepage-opinions-grid"] > * {
+  background: var(--home-paper);
+  border-color: var(--home-rule);
+}
+
+.home-surface-theme .home-surface-band [data-testid^="metric-"] {
+  background: var(--home-surface);
+  border-color: var(--home-rule);
+}
+
+/* These two components receive inline colors from their content settings.
+   Normalize only their outer surfaces, not their images, badges or overlays. */
+.home-surface-theme [data-testid^="muqtarab-topic-card-"],
+.home-surface-theme [data-testid="banner-suggest-angle"] {
+  background: var(--home-surface) !important;
+  border-color: var(--home-rule) !important;
+}
+
+.home-surface-theme [data-testid="quad-categories-block"] {
+  background: var(--home-paper) !important;
+}
