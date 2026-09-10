@@ -1,3 +1,4 @@
+import "@/styles/article-detail.css";
 import { SummaryAudioAttribution } from "@/components/SummaryAudioAttribution";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
@@ -50,7 +51,6 @@ import {
 import {
   Heart,
   Bookmark,
-  Share2,
   Clock,
   Sparkles,
   ChevronRight,
@@ -59,7 +59,6 @@ import {
   VolumeX,
   CheckCircle2,
   Loader2,
-  Eye,
   MessageSquare,
   Archive,
   Zap,
@@ -317,6 +316,17 @@ export default function ArticleDetail() {
       : article?.author,
     [article?.articleType, article?.opinionAuthor, article?.author]
   );
+
+  const { data: bylineProfile } = useQuery<{ title?: string | null }>({
+    queryKey: ["/api/reporters", article?.staff?.slug],
+    enabled: !!article?.staff?.slug && article?.articleType !== "infographic",
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const bylineName = [resolvedAuthor?.firstName, resolvedAuthor?.lastName].filter(Boolean).join(" ").trim()
+    || article?.staff?.nameAr || "";
+  const bylineTitle = bylineProfile?.title?.trim()
+    || (bylineName === "صحيفة سبق" ? "صحيفة إلكترونية سعودية" : article?.reporterId === resolvedAuthor?.id ? "مراسل صحفي" : "كاتب الخبر");
 
   // Fetch existing short link for article (idempotent GET first)
   const { data: existingShortLink, isLoading: isLoadingShortLink, error: shortLinkError } = useQuery<{ shortCode: string; originalUrl: string } | null>({
@@ -928,6 +938,17 @@ export default function ArticleDetail() {
   const publishedDateLabel = article?.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: 'absolute', locale: 'ar' })
     : null;
+  const publicationParts = useMemo(() => {
+    if (!article?.publishedAt) return null;
+    const date = new Date(article.publishedAt);
+    if (Number.isNaN(date.getTime())) return null;
+    const locale = "ar-SA-u-ca-gregory-nu-latn";
+    return {
+      iso: date.toISOString(),
+      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Riyadh" }).format(date),
+      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh" }).format(date),
+    };
+  }, [article?.publishedAt]);
   const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;
   const meaningfulUpdatedDateLabel = editorialModifiedAt
     ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
@@ -1083,7 +1104,7 @@ export default function ArticleDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
+    <div className="article-detail min-h-screen bg-background relative z-10" dir="rtl">
       <Header user={user} />
 
       {/* الإعلان البارز أعلى المقال — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_AD بقي كقاطع طوارئ في الكود. */}
@@ -1094,19 +1115,24 @@ export default function ArticleDetail() {
         </div>
       )}
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+      <main className="article-detail-main container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+        <nav aria-label="مسار التنقل" className="article-breadcrumbs">
+          <Link href="/">الرئيسية</Link>
+          {article.category && <><ChevronRight aria-hidden="true" /><Link href={`/category/${article.category.slug}`}>{article.category.nameAr}</Link></>}
+          <ChevronRight aria-hidden="true" />
+          <span aria-current="page">تفاصيل الخبر</span>
+        </nav>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="article-detail-layout">
           {/* Main Content */}
-          <article className="lg:col-span-2 space-y-6">
-            {/* Article Header Card - TailAdmin Style */}
-            <div className="bg-card border rounded-lg p-6 space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
+          <article className="article-detail-content min-w-0">
+            {/* Editorial header: typography and spacing carry the hierarchy. */}
+            <header className="article-detail-header">
+              <div className="article-detail-labels flex flex-wrap items-center gap-2">
                 {article.category && (
                   <Badge
                     variant="secondary"
-                    className="gap-1 text-black"
-                    style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
+                    className="article-category-label gap-1"
                     data-testid="badge-article-category"
                   >
                     {article.category.icon} {article.category.nameAr}
@@ -1160,21 +1186,19 @@ export default function ArticleDetail() {
                 */}
               </div>
 
-              {/* Subtitle above main title */}
+              <h1 className="article-detail-title" data-testid="text-article-title">
+                {article.title}
+              </h1>
               {article.subtitle && (
-                <p className="text-sm sm:text-base text-muted-foreground font-medium" data-testid="text-article-subtitle">
+                <p className="article-detail-subtitle" data-testid="text-article-subtitle">
                   {article.subtitle}
                 </p>
               )}
 
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-snug" data-testid="text-article-title">
-                {article.title}
-              </h1>
-
-              {/* Author Byline - Clean Inline Version */}
-              {resolvedAuthor && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Avatar className="h-10 w-10 border border-primary/20 shrink-0">
+              <div className="article-detail-byline">
+                {resolvedAuthor && (
+                <div className="article-detail-author flex items-center gap-3">
+                  <Avatar className="article-byline-avatar h-12 w-12 shrink-0">
                     <AvatarImage 
                       src={resolvedAuthor?.profileImageUrl || ""} 
                       alt={`${resolvedAuthor?.firstName || ""} ${resolvedAuthor?.lastName || ""}`.trim() || resolvedAuthor?.email || ""}
@@ -1194,9 +1218,7 @@ export default function ArticleDetail() {
                         data-testid="link-reporter-profile"
                       >
                         <span data-testid="text-author-name">
-                          {resolvedAuthor?.firstName && resolvedAuthor?.lastName
-                            ? `${resolvedAuthor.firstName} ${resolvedAuthor.lastName}`
-                            : resolvedAuthor?.email}
+                          {bylineName}
                         </span>
                         {article.staff.isVerified && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -1204,46 +1226,39 @@ export default function ArticleDetail() {
                       </Link>
                     ) : (
                       <span className="text-sm font-bold" data-testid="text-author-name">
-                        {resolvedAuthor?.firstName && resolvedAuthor?.lastName
-                          ? `${resolvedAuthor.firstName} ${resolvedAuthor.lastName}`
-                          : resolvedAuthor?.email}
+                        {bylineName}
                       </span>
                     )}
-                    {(article.staff as any)?.title && (
-                      <span className="text-xs text-muted-foreground block">
-                        {(article.staff as any).title}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Separator */}
-                  <span className="text-muted-foreground/40 hidden sm:inline">|</span>
-                  
-                  {/* Metadata - Plain Text */}
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                    {timeAgo && (
-                      <time dateTime={article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined} title={publishedDateLabel ?? undefined} className="flex items-center gap-1">
-                        <Clock className="h-3 w-3 opacity-70" />
-                        {timeAgo}{publishedDateLabel ? ` (${publishedDateLabel})` : ""}
-                      </time>
-                    )}
-                    {meaningfulUpdatedDateLabel && (
-                      <time dateTime={editorialModifiedAt} title={meaningfulUpdatedDateLabel} className="text-xs">
-                        (آخر تحديث: {meaningfulUpdatedDateLabel})
-                      </time>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Eye className="h-3 w-3 opacity-70" />
-                      {readingTime} د قراءة
-                    </span>
+                    <span className="article-byline-title" data-testid="text-author-title">{bylineTitle}</span>
                   </div>
 
                 </div>
-              )}
+                )}
+                <div className="article-detail-metadata">
+                  {publicationParts && (
+                    <div className="article-publication-row">
+                      <Clock aria-hidden="true" />
+                      <time dateTime={publicationParts.iso} title={[publishedDateLabel, timeAgo].filter(Boolean).join(" — ")} aria-label={`نُشر في ${publishedDateLabel}`}>
+                        <span>{publicationParts.date}</span>
+                        <span className="article-publication-time">{publicationParts.time}</span>
+                      </time>
+                    </div>
+                  )}
+                  {meaningfulUpdatedDateLabel && (
+                    <div className="article-publication-row article-updated-row">
+                      <span className="article-metadata-label">آخر تحديث</span>
+                      <time dateTime={editorialModifiedAt}>{meaningfulUpdatedDateLabel}</time>
+                    </div>
+                  )}
+                  <div className="article-reading-meta">
+                    <span><BookOpen aria-hidden="true" /> قراءة {readingTime} دقيقة</span>
+                  </div>
+                </div>
 
-            </div>
+              </div>
+            </header>
 
-            {/* Featured Image or Video - Clean TailAdmin Style */}
+            {/* Featured Image or Video */}
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
               <VideoPlayer
                 videoUrl={(article as any).videoUrl}
@@ -1252,7 +1267,7 @@ export default function ArticleDetail() {
                   article.updatedAt,
                 )}
                 title={article.title}
-                className="rounded-lg"
+                className="article-detail-hero rounded-xl"
               />
             ) : article.imageUrl && (() => {
               const heroImageAsset = mediaAssets?.find(
@@ -1278,7 +1293,7 @@ export default function ArticleDetail() {
                   keywordTags={heroImageAsset?.keywordTags}
                   priority={true}
                   aspectRatio={heroAspectRatio}
-                  className=""
+                  className="article-detail-hero"
                   objectPosition={getObjectPosition(article)}
                 />
               );
@@ -1288,7 +1303,7 @@ export default function ArticleDetail() {
             {(aiBullets.length > 0 || (shouldFetchBullets && isLoadingBullets) || article.aiSummary || article.excerpt) && (
               <div
                 dir="rtl"
-                className="bg-muted/30 border rounded-lg p-3 sm:p-4"
+                className="article-detail-summary"
                 data-testid="block-ai-summary"
               >
                 <div className="flex items-start gap-2">
@@ -1297,7 +1312,7 @@ export default function ArticleDetail() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <h3 className="text-sm font-bold" data-testid="text-ai-summary-title">
+                      <h3 className="text-base font-bold" data-testid="text-ai-summary-title">
                         الموجز
                       </h3>
                       <div className="flex items-center gap-2">
@@ -1305,7 +1320,7 @@ export default function ArticleDetail() {
                       <Button
                         variant={isPlaying ? "default" : "ghost"}
                         size="sm"
-                        className="h-7 w-7 p-0"
+                        className="article-summary-audio gap-1.5 px-2.5"
                         onClick={handlePlayAudio}
                         disabled={isLoadingAudio}
                         data-testid="button-listen-summary"
@@ -1318,6 +1333,7 @@ export default function ArticleDetail() {
                         ) : (
                           <Volume2 className="h-3 w-3" />
                         )}
+                        <span className="text-xs">{isPlaying ? "إيقاف" : "استمع"}</span>
                       </Button>
                       </div>
                     </div>
@@ -1331,7 +1347,7 @@ export default function ArticleDetail() {
                     ) : !isSummaryExpanded && summaryNeedsToggle ? (
                       /* مطوي: 3 أسطر فقط */
                       <p
-                        className="line-clamp-3 text-xs sm:text-sm leading-relaxed text-foreground"
+                        className="line-clamp-3 text-sm sm:text-base leading-relaxed text-foreground"
                         data-testid="text-ai-summary-collapsed"
                       >
                         {aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText}
@@ -1346,7 +1362,7 @@ export default function ArticleDetail() {
                             {aiBullets.slice(0, 3).map((bullet, i) => (
                               <li
                                 key={i}
-                                className="flex items-start gap-2 text-xs sm:text-sm leading-relaxed text-foreground"
+                                className="flex items-start gap-2 text-sm sm:text-base leading-relaxed text-foreground"
                                 data-testid={`text-ai-summary-bullet-${i}`}
                               >
                                 <span
@@ -1359,7 +1375,7 @@ export default function ArticleDetail() {
                           </ul>
                         ) : (
                           <p
-                            className="text-xs sm:text-sm leading-relaxed text-foreground"
+                            className="text-sm sm:text-base leading-relaxed text-foreground"
                             data-testid="text-smart-summary"
                           >
                             {summaryDetailText}
@@ -1399,11 +1415,75 @@ export default function ArticleDetail() {
               </div>
             )}
 
+            <div className="article-detail-toolbar" data-testid="article-actions">
+              <div className="article-detail-toolbar-row">
+                <div className="article-share-group" onMouseEnter={ensureShortLink} onTouchStart={ensureShortLink} onFocus={ensureShortLink}>
+                  <span className="article-share-label">شارك:</span>
+                  <SocialShareBar title={article.title} url={`https://sabq.org/article/${slug}`} copyUrl={`https://sabq.org/article/${slug}`} description={article.excerpt || ""} articleId={article.id} className="article-social-links" />
+                </div>
+                {/* Engagement Actions */}
+                <div className="article-engagement-actions flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={article.hasReacted ? "default" : "outline"}
+                    size="sm"
+                    className="article-action gap-2 transition-colors"
+                    onClick={handleReact}
+                    disabled={reactMutation.isPending}
+                    aria-pressed={!!article.hasReacted}
+                    data-testid="button-article-react"
+                  >
+                    <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
+                    <span>إعجاب ({article.reactionsCount || 0})</span>
+                  </Button>
+
+                  <Button
+                    variant={article.isBookmarked ? "default" : "outline"}
+                    size="sm"
+                    className="article-action gap-2 transition-colors"
+                    onClick={handleBookmark}
+                    disabled={bookmarkMutation.isPending}
+                    aria-pressed={!!article.isBookmarked}
+                    data-testid="button-article-bookmark"
+                  >
+                    <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
+                    <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
+                  </Button>
+
+                  {/* Focus Mode trigger (Task #80) */}
+                  <FocusReaderTrigger
+                    language="ar"
+                    className="article-action"
+                    onClick={() => setFocusOpen(true)}
+                  />
+                </div>
+              </div>
+
+              {/* Inline AI-flavored feedback after like/save */}
+              {engagementHint && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300 ${
+                    engagementHint.kind === "off"
+                      ? "border-border bg-muted/50 text-muted-foreground"
+                      : "border-green-500/20 bg-green-500/5 text-green-700 dark:text-green-400"
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                  data-testid="engagement-ai-hint"
+                >
+                  {engagementHint.kind !== "off" && (
+                    <Sparkles className="h-4 w-4 shrink-0 text-green-500" />
+                  )}
+                  <span>{engagementHint.text}</span>
+                </div>
+              )}
+
+            </div>
+
             {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
             <DmsMpuAd id="MPU" lazyLoad={true} />
 
             {/* Article Content or Paywall */}
-            <div className="bg-card border rounded-lg p-6">
+            <div className="article-detail-body">
               {isLoadingPurchaseStatus ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1427,7 +1507,7 @@ export default function ArticleDetail() {
               ) : (
                 <div 
                   ref={articleBodyRef}
-                  className="prose prose-lg dark:prose-invert max-w-none leading-loose text-justify"
+                  className="article-prose prose prose-lg dark:prose-invert max-w-none"
                   dangerouslySetInnerHTML={{ __html: sanitizedArticleHtml }}
                   data-testid="content-article-body"
                 />
@@ -1436,7 +1516,7 @@ export default function ArticleDetail() {
 
             {/* Weekly Photos Section */}
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (
-              <div className="bg-card border rounded-lg p-6">
+              <div className="article-detail-gallery">
                 <WeeklyPhotosDisplay 
                   photos={(article as any).weeklyPhotosData.photos}
                   title="صور الأسبوع"
@@ -1460,7 +1540,7 @@ export default function ArticleDetail() {
               if (mediaAdditionalImages.length === 0 && albumImages.length === 0) return null;
               
               return (
-                <div className="bg-card border rounded-lg p-6 space-y-8">
+                <div className="article-detail-gallery space-y-8">
                   <h3 className="text-lg font-bold mb-4">الصور المرفقة</h3>
                   <div className="space-y-8">
                     {/* Display mediaAssets first */}
@@ -1494,120 +1574,37 @@ export default function ArticleDetail() {
 
             {/* Keywords - from SEO field OR article_tags table (after attached images) */}
             {((article.seo?.keywords && article.seo.keywords.length > 0) || articleTags.length > 0) && (
-              <div className="space-y-3">
+              <section className="article-detail-keywords">
                 <h3 className="text-sm font-semibold text-muted-foreground">الكلمات المفتاحية</h3>
                 <div className="flex flex-wrap gap-2">
                   {/* Display article tags first (from article_tags table - WhatsApp/Email) */}
                   {articleTags.map((tag, index) => (
-                    <Badge 
+                    <Link
                       key={`tag-${tag.id}`}
-                      variant="secondary"
-                      className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
-                      onClick={() => setLocation(`/keyword/${encodeURIComponent(tag.nameAr)}`)}
+                      className="article-keyword"
+                      href={`/keyword/${encodeURIComponent(tag.nameAr)}`}
                       data-testid={`badge-tag-${index}`}
                     >
                       {tag.nameAr}
-                    </Badge>
+                    </Link>
                   ))}
                   {/* Display SEO keywords if no article tags (from SEO field - editor) */}
                   {articleTags.length === 0 && article.seo?.keywords?.map((keyword, index) => (
-                    <Badge 
+                    <Link
                       key={`seo-${index}`}
-                      variant="secondary"
-                      className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
-                      onClick={() => setLocation(`/keyword/${encodeURIComponent(keyword)}`)}
+                      className="article-keyword"
+                      href={`/keyword/${encodeURIComponent(keyword)}`}
                       data-testid={`badge-keyword-${index}`}
                     >
                       {keyword}
-                    </Badge>
+                    </Link>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* Engagement & Share Section - Combined.
-                Laid out as two full-width rows (header+actions, then
-                share) with `justify-between` so the card fills its width
-                instead of leaving a large empty gutter on the side. */}
-            <div className="bg-card border rounded-lg p-4 sm:p-5 space-y-4">
-              {/* Row 1: title (start) + engagement actions (end) */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
-                    {isLoadingShortLink ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-green-500" />
-                    ) : (
-                      <Share2 className="h-5 w-5 text-green-500" />
-                    )}
-                  </div>
-                  <div className="leading-tight">
-                    <h3 className="text-lg font-bold">شارك المقال</h3>
-                    <p className="text-xs text-muted-foreground">تفاعل مع الخبر وشاركه مع غيرك</p>
-                  </div>
-                </div>
-
-                {/* Engagement Actions */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant={article.hasReacted ? "default" : "outline"}
-                    size="sm"
-                    className="gap-2 transition-colors"
-                    onClick={handleReact}
-                    aria-pressed={!!article.hasReacted}
-                    data-testid="button-article-react"
-                  >
-                    <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
-                    <span>إعجاب ({article.reactionsCount || 0})</span>
-                  </Button>
-
-                  <Button
-                    variant={article.isBookmarked ? "default" : "outline"}
-                    size="sm"
-                    className="gap-2 transition-colors"
-                    onClick={handleBookmark}
-                    aria-pressed={!!article.isBookmarked}
-                    data-testid="button-article-bookmark"
-                  >
-                    <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
-                    <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
-                  </Button>
-
-                  {/* Focus Mode trigger (Task #80) */}
-                  <FocusReaderTrigger
-                    language="ar"
-                    onClick={() => setFocusOpen(true)}
-                  />
-                </div>
-              </div>
-
-              {/* Inline AI-flavored feedback after like/save */}
-              {engagementHint && (
-                <div
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300 ${
-                    engagementHint.kind === "off"
-                      ? "border-border bg-muted/50 text-muted-foreground"
-                      : "border-green-500/20 bg-green-500/5 text-green-700 dark:text-green-400"
-                  }`}
-                  role="status"
-                  aria-live="polite"
-                  data-testid="engagement-ai-hint"
-                >
-                  {engagementHint.kind !== "off" && (
-                    <Sparkles className="h-4 w-4 shrink-0 text-green-500" />
-                  )}
-                  <span>{engagementHint.text}</span>
-                </div>
-              )}
-
-              <Separator />
-
-              {/* Row 2: share label (start) + social buttons (end).
-                  Lazy-trigger short-link creation on user intent
-                  (hover/touch/focus). Falls back to the canonical URL
-                  immediately so the share buttons are always usable, even
-                  before (or if) the short link finishes generating. */}
               <div
-                className="flex flex-wrap items-center justify-between gap-3"
+                className="article-bottom-share flex flex-wrap items-center justify-between gap-3"
                 onMouseEnter={ensureShortLink}
                 onTouchStart={ensureShortLink}
                 onFocus={ensureShortLink}
@@ -1625,10 +1622,9 @@ export default function ArticleDetail() {
                   copyUrl={`https://sabq.org/article/${slug}`}
                   description={article.excerpt || ""}
                   articleId={article.id}
-                  className="justify-end"
+                  className="article-social-links"
                 />
               </div>
-            </div>
 
             {/* Focus mode overlay (Task #80) */}
             {article && (
@@ -1691,35 +1687,39 @@ export default function ArticleDetail() {
           </article>
 
           {/* Sidebar */}
-          <aside className="space-y-6">
+          <aside className="article-detail-sidebar" aria-label="المزيد عن الخبر">
             {/* AI Article Analytics */}
+            <div className="article-sidebar-stats">
             <Suspense fallback={<Skeleton className="h-48 w-full" />}>
               <AiArticleStats query={insightsQuery} />
             </Suspense>
+            </div>
 
             {/* Advertisement Slot - Article Sidebar */}
             <AdSlot slotId="sidebar" className="my-6" />
 
             {/* AI-Powered Smart Recommendations */}
-            <AIRecommendationsPanel query={recommendationsQuery} />
+            <div className="article-sidebar-recommendations"><AIRecommendationsPanel query={recommendationsQuery} editorial /></div>
 
             {/* Related Opinion Articles */}
             {article?.category && (
-              <RelatedOpinionsSection
+              <div className="article-sidebar-opinions"><RelatedOpinionsSection
+                editorial
                 categoryId={article.category.id}
                 categoryName={article.category.nameAr}
                 categoryColor={article.category.color || undefined}
                 excludeArticleId={article.id}
                 limit={5}
-              />
+              /></div>
             )}
 
             {relatedArticles.length > 0 && (
-              <RecommendationsWidget
+              <div className="article-sidebar-related"><RecommendationsWidget
+                editorial
                 articles={relatedArticles}
                 title="أخبار مشابهة"
                 reason="قد تعجبك أيضاً"
-              />
+              /></div>
             )}
           </aside>
         </div>
