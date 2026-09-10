@@ -1,3 +1,4 @@
+import { draftDiffersFromArticle } from "@/lib/articleDraft";
 /* eslint-disable no-console, no-restricted-syntax -- legacy debt, predates the
    guardrails: 93 console.log (stripped from prod by vite esbuild.pure) and 14
    raw fetch('/api') callsites. Both get fixed properly as pieces are extracted
@@ -882,13 +883,22 @@ export default function ArticleEditor() {
       }
   }, [article, isNewArticle, id]);
 
-  // Auto-save draft key - unique per article or "new" for new articles
-  const autoSaveKey = `article-draft-${isNewArticle ? 'new' : id}`;
+  // A recoverable URL identity isolates simultaneous drafts and survives reload.
+  // Legacy unowned keys remain untouched; never expose them to another account.
+  const [localDraftId] = useState(() => {
+    const url = new URL(window.location.href);
+    const draftId = url.searchParams.get("localDraft") || crypto.randomUUID();
+    url.searchParams.set("localDraft", draftId);
+    window.history.replaceState(window.history.state, "", url);
+    return draftId;
+  });
+  const autoSaveKey = user?.id
+    ? `article-draft-v2-${user.id}-${isNewArticle ? 'new' : id}-${localDraftId}` : null;
 
   // Function to save draft to localStorage
   const saveDraftToLocalStorage = useCallback(() => {
     // Only save if there's meaningful content
-    if (!title && !content) {
+    if (!autoSaveKey || (isNewArticle && !title && !content)) {
       return;
     }
 
@@ -930,7 +940,7 @@ export default function ArticleEditor() {
       console.error('[Auto-save] Failed to save draft:', error);
     }
   }, [
-    autoSaveKey, title, subtitle, slug, content, excerpt, categoryId, 
+    autoSaveKey, isNewArticle, title, subtitle, slug, content, excerpt, categoryId,
     reporterId, opinionAuthorId, articleType, imageUrl, thumbnailUrl, 
     albumImages, imageFocalPoint, keywords, newsType, isFeatured, isReading, publishType, scheduledAt, 
     hideFromHomepage, isVideoTemplate, videoUrl, videoThumbnailUrl, metaTitle, metaDescription
@@ -939,7 +949,7 @@ export default function ArticleEditor() {
   // Function to clear draft from localStorage
   const clearDraftFromLocalStorage = useCallback(() => {
     try {
-      localStorage.removeItem(autoSaveKey);
+      if (autoSaveKey) localStorage.removeItem(autoSaveKey);
       console.log('[Auto-save] Draft cleared from localStorage');
     } catch (error) {
       console.error('[Auto-save] Failed to clear draft:', error);
@@ -948,31 +958,31 @@ export default function ArticleEditor() {
 
   // Function to restore draft from localStorage
   const restoreDraftFromLocalStorage = useCallback((draft: any) => {
-    if (draft.title) setTitle(draft.title);
-    if (draft.subtitle) setSubtitle(draft.subtitle);
-    if (draft.slug) setSlug(draft.slug);
-    if (draft.content) setContent(draft.content);
-    if (draft.excerpt) setExcerpt(draft.excerpt);
-    if (draft.categoryId) setCategoryId(draft.categoryId);
+    if (draft.title !== undefined) setTitle(draft.title);
+    if (draft.subtitle !== undefined) setSubtitle(draft.subtitle);
+    if (draft.slug !== undefined) setSlug(draft.slug);
+    if (draft.content !== undefined) setContent(draft.content);
+    if (draft.excerpt !== undefined) setExcerpt(draft.excerpt);
+    if (draft.categoryId !== undefined) setCategoryId(draft.categoryId);
     if (draft.reporterId !== undefined) setReporterId(draft.reporterId);
     if (draft.opinionAuthorId !== undefined) setOpinionAuthorId(draft.opinionAuthorId);
-    if (draft.articleType) setArticleType(draft.articleType);
-    if (draft.imageUrl) setImageUrl(draft.imageUrl);
-    if (draft.thumbnailUrl) setThumbnailUrl(draft.thumbnailUrl);
+    if (draft.articleType !== undefined) setArticleType(draft.articleType);
+    if (draft.imageUrl !== undefined) setImageUrl(draft.imageUrl);
+    if (draft.thumbnailUrl !== undefined) setThumbnailUrl(draft.thumbnailUrl);
     if (draft.albumImages && Array.isArray(draft.albumImages)) setAlbumImages(draft.albumImages);
-    if (draft.imageFocalPoint) setImageFocalPoint(draft.imageFocalPoint);
-    if (draft.keywords) setKeywords(draft.keywords);
-    if (draft.newsType) setNewsType(draft.newsType === "featured" ? "regular" : draft.newsType);
+    if (draft.imageFocalPoint !== undefined) setImageFocalPoint(draft.imageFocalPoint);
+    if (draft.keywords !== undefined) setKeywords(draft.keywords);
+    if (draft.newsType !== undefined) setNewsType(draft.newsType === "featured" ? "regular" : draft.newsType);
     if (draft.isFeatured !== undefined) setIsFeatured(draft.isFeatured);
     if (draft.isReading !== undefined) setIsReading(draft.isReading);
-    if (draft.publishType) setPublishType(draft.publishType);
-    if (draft.scheduledAt) setScheduledAt(draft.scheduledAt);
+    if (draft.publishType !== undefined) setPublishType(draft.publishType);
+    if (draft.scheduledAt !== undefined) setScheduledAt(draft.scheduledAt);
     if (draft.hideFromHomepage !== undefined) setHideFromHomepage(draft.hideFromHomepage);
     if (draft.isVideoTemplate !== undefined) setIsVideoTemplate(draft.isVideoTemplate);
-    if (draft.videoUrl) setVideoUrl(draft.videoUrl);
-    if (draft.videoThumbnailUrl) setVideoThumbnailUrl(draft.videoThumbnailUrl);
-    if (draft.metaTitle) setMetaTitle(draft.metaTitle);
-    if (draft.metaDescription) setMetaDescription(draft.metaDescription);
+    if (draft.videoUrl !== undefined) setVideoUrl(draft.videoUrl);
+    if (draft.videoThumbnailUrl !== undefined) setVideoThumbnailUrl(draft.videoThumbnailUrl);
+    if (draft.metaTitle !== undefined) setMetaTitle(draft.metaTitle);
+    if (draft.metaDescription !== undefined) setMetaDescription(draft.metaDescription);
     
     toast({
       title: "تم استعادة المسودة",
@@ -984,7 +994,7 @@ export default function ArticleEditor() {
   useEffect(() => {
     // For new articles, check immediately
     // For existing articles, wait until the article is loaded
-    if (isNewArticle || hasLoadedArticleRef.current) {
+    if (autoSaveKey && (isNewArticle || hasLoadedArticleRef.current)) {
       try {
         const savedDraft = localStorage.getItem(autoSaveKey);
         if (savedDraft) {
@@ -1004,9 +1014,7 @@ export default function ArticleEditor() {
               }
             } else if (article) {
               // Check if draft has significant changes from saved article
-              const hasDraftChanges = 
-                (draft.content && draft.content !== article.content) ||
-                (draft.title && draft.title !== article.title);
+              const hasDraftChanges = draftDiffersFromArticle(draft, article);
               
               if (hasDraftChanges) {
                 setRecoveredDraft(draft);
@@ -1027,7 +1035,7 @@ export default function ArticleEditor() {
   // Auto-save effect - save every 30 seconds when there are changes
   useEffect(() => {
     // Don't auto-save while loading or if nothing has been typed
-    if (!title && !content) {
+    if (isNewArticle && !title && !content) {
       return;
     }
 
@@ -1655,7 +1663,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         console.log('[Save Article] Updating EXISTING article via PATCH /api/admin/articles/' + id);
         const result = await apiRequest(`/api/admin/articles/${id}`, {
           method: "PATCH",
-          body: JSON.stringify(articleData),
+          body: JSON.stringify({ ...articleData, expectedUpdatedAt: articleUpdatedAt }),
         });
         console.log('[Save Article] PATCH result:', result);
         return result;

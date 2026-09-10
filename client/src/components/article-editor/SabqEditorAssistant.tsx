@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { sanitizeEditorialAiResult } from "@/lib/sanitizeEditorialAiResult";
 import { appendReviewedSources } from "@/lib/editorialSources";
 
 type EditorialTaskType =
@@ -124,7 +125,7 @@ export function SabqEditorAssistant({
         }),
         headers: { "Content-Type": "application/json" },
       }),
-    onSuccess: (data) => setResult(data),
+    onSuccess: (data) => setResult(sanitizeEditorialAiResult(data)),
     onError: (error: any) =>
       toast({
         title: "تعذر تنفيذ المهمة",
