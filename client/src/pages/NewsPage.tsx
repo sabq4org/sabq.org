@@ -238,13 +238,13 @@ export default function NewsPage() {
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user} />
 
-      <main className="flex-1 container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="public-page flex-1 container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3" data-testid="heading-news">
+        <div className="public-page-header mb-8">
+          <h1 className="public-page-title text-4xl md:text-5xl font-bold mb-3" data-testid="heading-news">
             الأخبار الذكية
           </h1>
-          <p className="text-lg text-muted-foreground">
+          <p className="public-page-description text-lg text-muted-foreground">
             اكتشف آخر الأخبار مع تحليلات وإحصائيات ذكية مدعومة بالذكاء الاصطناعي
           </p>
         </div>
@@ -256,7 +256,7 @@ export default function NewsPage() {
         <SabqPulseSection />
 
         {/* Enhanced Filter Bar */}
-        <NewsEnhancedFilterBar
+        <div className="public-filter-bar"><NewsEnhancedFilterBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           sortOption={sortOption}
@@ -274,7 +274,7 @@ export default function NewsPage() {
             handleFilterChange();
           }}
           categories={categories}
-        />
+        /></div>
 
         {/* Results Summary */}
         <div className="mb-6 flex items-center justify-between">

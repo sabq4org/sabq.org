@@ -2,11 +2,11 @@ import { ArticleSidebarHeading } from "./ArticleSidebarHeading";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, User, ArrowLeft } from "lucide-react";
+import { BookOpen, ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiUrl } from "@/lib/queryClient";
+import { OpinionCard } from "@/components/public/OpinionCard";
 
 interface OpinionArticle {
   id: string;
@@ -41,52 +41,6 @@ interface RelatedOpinionsSectionProps {
   limit?: number;
   editorial?: boolean;
 }
-
-function OpinionCard({ article, categoryColor, editorial = false }: { article: OpinionArticle; categoryColor?: string; editorial?: boolean }) {
-  const authorName = article.author
-    ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "كاتب"
-    : "كاتب";
-
-  return (
-    <Link href={`/opinion/${article.slug}`}>
-      <Card 
-        className="hover-elevate active-elevate-2 overflow-hidden group"
-        data-testid={`related-opinion-${article.id}`}
-      >
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            {article.author?.profileImageUrl ? (
-              <img
-                src={article.author.profileImageUrl}
-                alt={authorName}
-                className="h-10 w-10 rounded-full object-cover ring-2 ring-offset-2 flex-shrink-0"
-                style={{ ['--tw-ring-color' as any]: categoryColor || 'var(--primary)' }}
-              />
-            ) : (
-              <div 
-                className="h-10 w-10 rounded-full flex items-center justify-center ring-2 ring-offset-2 flex-shrink-0"
-                style={{ 
-                  backgroundColor: categoryColor ? `${categoryColor}20` : 'var(--muted)',
-                  ['--tw-ring-color' as any]: categoryColor || 'var(--primary)'
-                }}
-              >
-                <User className="h-5 w-5" style={{ color: categoryColor || 'var(--muted-foreground)' }} />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              {!editorial && <p className="font-semibold text-sm text-muted-foreground mb-1">{authorName}</p>}
-              <h3 className="font-bold text-base leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-                {article.title}
-              </h3>
-              {editorial && <p className="article-opinion-author text-xs text-muted-foreground mt-2">{authorName}</p>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
 
 function LoadingSkeleton() {
   return (
@@ -189,7 +143,7 @@ export function RelatedOpinionsSection({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
             >
-              <OpinionCard article={article} categoryColor={categoryColor} editorial={editorial} />
+              <OpinionCard article={article} variant="sidebar" />
             </motion.div>
           ))}
         </div>

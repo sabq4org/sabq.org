@@ -15,6 +15,7 @@ import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiUrl } from "@/lib/queryClient";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 
 interface MatchBadgeProps {
   match: MatchResult;
@@ -326,7 +327,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
   if (!articles || articles.length === 0) return null;
 
   return (
-    <section className="space-y-4" dir="rtl">
+    <section className="public-theme space-y-4" dir="rtl">
       <div className="flex items-center gap-2">
         {user ? (
           <Sparkles className="h-6 w-6 text-primary" />
@@ -344,154 +345,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
 
       {/* Mobile View: Vertical List (like RecommendationsWidget) */}
       {isCompact && (
-      <Card className="overflow-hidden lg:hidden border-0 dark:border dark:border-card-border">
-        <CardContent className="p-0">
-          <div className="dark:divide-y">
-            {articles.map((article, index) => {
-              const timeAgo = article.publishedAt
-                ? formatArticleTimestamp(article.publishedAt)
-                : null;
-
-              return (
-                <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
-                    <div
-                      className="block group cursor-pointer"
-                      data-testid={`link-article-mobile-${article.id}`}
-                      onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)}
-                      onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}
-                    >
-                      <div className={`p-4 hover-elevate active-elevate-2 transition-all ${
-                        article.newsType === "breaking" ? "bg-destructive/5" : ""
-                      }`}>
-                        <div className="flex gap-3">
-                          {/* Image - Same dimensions as QuadCategoriesBlock */}
-                          <div className="relative flex-shrink-0 w-28 h-20 rounded-lg overflow-hidden">
-                            {(() => {
-                              const displayImg = getArticleDisplayImageUrl(article);
-                              return displayImg ? (
-                                <OptimizedImage
-                                  src={displayImg}
-                                  alt={article.title}
-                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                  wrapperClassName="w-full h-full"
-                                  objectPosition={getObjectPosition(article, "center")}
-                                  preferSize="small"
-                                  aspectRatio="16/9"
-                                  sizes="112px"
-                                  eager={index < 3}
-                                />
-                              ) : (
-                                <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
-                              );
-                            })()}
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            {/* Badges above title (note: match score % / reason intentionally hidden on phone) */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {/* AI Generated Image Badge (Featured or Thumbnail) */}
-                              {((article as any).isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-violet-500/90 hover:bg-violet-600 text-white border-0" data-testid={`badge-ai-image-${article.id}`}>
-                                  الصورة
-                                  <Brain className="h-2 w-2" aria-hidden="true" />
-                                </Badge>
-                              )}
-
-                              {/* Poll Badge */}
-                              {(article as any).hasPoll && (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-cyan-500/90 hover:bg-cyan-600 text-white border-0" data-testid={`badge-poll-${article.id}`}>
-                                  <BarChart3 className="h-2 w-2" aria-hidden="true" />
-                                  استطلاع
-                                </Badge>
-                              )}
-
-                              {/* Content Type Badge */}
-                              {article.newsType === "breaking" ? (
-                                <Badge variant="destructive" className="text-[10px] h-4 gap-0.5" data-testid={`badge-content-type-${article.id}`}>
-                                  <Zap className="h-2 w-2" aria-hidden="true" />
-                                  عاجل
-                                </Badge>
-                              ) : ((article as any).articleType === 'opinion' || (article as any).articleType === 'column') ? (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium" data-testid={`badge-content-type-${article.id}`}>
-                                  <BookOpen className="h-2 w-2" aria-hidden="true" />
-                                  رأي
-                                </Badge>
-                              ) : (article as any).articleType === 'weekly_photos' ? (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-orange-500/90 hover:bg-orange-600 text-white border-0" data-testid={`badge-content-type-${article.id}`}>
-                                  <Camera className="h-2 w-2" aria-hidden="true" />
-                                  صور
-                                </Badge>
-                              ) : (article as any).articleType === 'infographic' ? (
-                                <Badge 
-                                  variant="secondary"
-                                  className="text-[10px] h-4 text-black"
-                                  style={{ borderRight: '3px solid #8B5CF6', backgroundColor: '#e5e5e6' }}
-                                  data-testid={`badge-content-type-${article.id}`}
-                                >
-                                  إنفوجرافيك
-                                </Badge>
-                              ) : article.category ? (
-                                <Badge 
-                                  variant="secondary"
-                                  className="text-[10px] h-4 text-black"
-                                  style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                                  data-testid={`badge-content-type-${article.id}`}
-                                >
-                                  {article.category.nameAr}
-                                </Badge>
-                              ) : null}
-
-                              {(article as any).isReading && (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0">
-                                  <BookOpen className="h-2 w-2" aria-hidden="true" />
-                                  قراءة
-                                </Badge>
-                              )}
-
-                              {isNewArticle(article.publishedAt) && (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
-                                  <Flame className="h-2 w-2" aria-hidden="true" />
-                                  جديد
-                                </Badge>
-                              )}
-                            </div>
-
-                            {/* Title */}
-                            <h4 className={`font-bold text-sm line-clamp-2 leading-snug transition-colors ${
-                              article.newsType === "breaking"
-                                ? "text-destructive"
-                                : "group-hover:text-primary"
-                            }`} data-testid={`text-article-title-${article.id}`}>
-                              {article.title}
-                            </h4>
-
-                            {/* Meta Info */}
-                            <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-foreground/65">
-                              {timeAgo && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {timeAgo}
-                                </span>
-                              )}
-                              {(article.commentsCount ?? 0) > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
-                                  {article.commentsCount}
-                                </span>
-                              )}
-                            </div>
-
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-              );
-            })}
+      <div className="lg:hidden rounded-2xl overflow-hidden border border-border/60 bg-card">
+        {articles.map((article, index) => (
+          <div key={article.id} onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)} onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}>
+            <NewsArticleCard article={article} viewMode="compact" priority={index < 3} />
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
       )}
 
       {/* Desktop View: Grid with 4 columns */}
@@ -500,138 +360,10 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
         {articles.map((article, index) => {
           const match = matches.get(article.id);
           return (
-            <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
-              <Card 
-                className={`cursor-pointer h-full overflow-hidden border-0 dark:border dark:border-card-border ${
-                  article.newsType === "breaking" ? "bg-destructive/5" : ""
-                }`}
-                data-testid={`card-article-${article.id}`}
-                onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)}
-                onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}
-              >
-                {(() => {
-                  const displayImg = getArticleDisplayImageUrl(article);
-                  return displayImg ? (
-                    <div className="relative aspect-[16/9] overflow-hidden">
-                      <OptimizedImage
-                        src={displayImg}
-                        alt={article.title}
-                        className="w-full h-full object-cover"
-                        wrapperClassName="w-full h-full"
-                        objectPosition={getObjectPosition(article)}
-                        preferSize="small"
-                        aspectRatio="16/9"
-                        sizes="(max-width: 1279px) 100vw, 25vw"
-                        eager={index < 4}
-                      />
-                    </div>
-                  ) : null;
-                })()}
-                
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {/* AI Generated Image Badge (Featured or Thumbnail) */}
-                    {((article as any).isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
-                      <Badge className="text-xs h-5 gap-1 bg-violet-500/90 hover:bg-violet-600 text-white border-0" data-testid={`badge-ai-image-${article.id}`}>
-                        الصورة
-                        <Brain className="h-2.5 w-2.5" aria-hidden="true" />
-                      </Badge>
-                    )}
-
-                    {/* Poll Badge */}
-                    {(article as any).hasPoll && (
-                      <Badge className="text-xs h-5 gap-1 bg-cyan-500/90 hover:bg-cyan-600 text-white border-0" data-testid={`badge-poll-${article.id}`}>
-                        <BarChart3 className="h-2.5 w-2.5" aria-hidden="true" />
-                        استطلاع
-                      </Badge>
-                    )}
-
-                    {article.newsType === "breaking" ? (
-                      <Badge variant="destructive" className="text-xs h-5 gap-1" data-testid={`badge-content-type-${article.id}`}>
-                        <Zap className="h-2.5 w-2.5" aria-hidden="true" />
-                        عاجل
-                      </Badge>
-                    ) : ((article as any).articleType === 'opinion' || (article as any).articleType === 'column') ? (
-                      <Badge className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium" data-testid={`badge-content-type-${article.id}`}>
-                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
-                        رأي
-                      </Badge>
-                    ) : (article as any).articleType === 'weekly_photos' ? (
-                      <Badge className="text-xs h-5 gap-1 bg-orange-500/90 hover:bg-orange-600 text-white border-0" data-testid={`badge-content-type-${article.id}`}>
-                        <Camera className="h-2.5 w-2.5" aria-hidden="true" />
-                        صور
-                      </Badge>
-                    ) : (article as any).articleType === 'infographic' ? (
-                      <Badge 
-                        variant="secondary"
-                        className="text-xs h-5 text-black"
-                        style={{ borderRight: '3px solid #8B5CF6', backgroundColor: '#e5e5e6' }}
-                        data-testid={`badge-content-type-${article.id}`}
-                      >
-                        إنفوجرافيك
-                      </Badge>
-                    ) : article.category ? (
-                      <Badge 
-                        variant="secondary"
-                        className="text-xs h-5 text-black"
-                        style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                        data-testid={`badge-content-type-${article.id}`}
-                      >
-                        {article.category.nameAr}
-                      </Badge>
-                    ) : null}
-
-                    {(article as any).isReading && (
-                      <Badge className="text-xs h-5 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-medium shrink-0">
-                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
-                        قراءة
-                      </Badge>
-                    )}
-
-                    {isNewArticle(article.publishedAt) && (
-                      <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
-                        <Flame className="h-2.5 w-2.5" aria-hidden="true" />
-                        جديد
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <h3 
-                    className={`font-bold text-lg line-clamp-2 ${
-                      article.newsType === "breaking"
-                        ? "text-destructive"
-                        : "text-foreground"
-                    }`}
-                    data-testid={`text-article-title-${article.id}`}
-                  >
-                    {article.title}
-                  </h3>
-                  
-                  {article.excerpt && (
-                    <p className="text-sm font-medium text-foreground/70 line-clamp-2">
-                      {article.excerpt}
-                    </p>
-                  )}
-
-                  {article.publishedAt && (
-                    <div className="flex items-center gap-4 text-xs font-medium text-foreground/65 pt-2">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        <span>
-                          {formatArticleTimestamp(article.publishedAt)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {match && (
-                    <div className="pt-2 border-t border-border/40">
-                      <MatchBadge match={match} articleId={article.id} size="md" />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </Link>
+            <div key={article.id} onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)} onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}>
+              <NewsArticleCard article={article} viewMode="grid" priority={index < 4} />
+              {match && <div className="pt-2 border-t border-border/40"><MatchBadge match={match} articleId={article.id} size="md" /></div>}
+            </div>
           );
         })}
       </div>

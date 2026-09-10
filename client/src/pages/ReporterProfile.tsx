@@ -18,6 +18,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import type { ArticleWithDetails } from "@shared/schema";
 
 function StatCard({ 
   icon: Icon, 
@@ -360,75 +362,26 @@ export default function ReporterProfile() {
             
             {lastArticles && lastArticles.length > 0 ? (
               <div className="flex flex-col gap-4">
-                {lastArticles.map((article, index) => (
-                  <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`} data-testid={`link-article-${article.id}`} className="block">
-                    <Card className="border-border hover-elevate transition-colors">
-                      <CardContent className="p-4">
-                        <div className="flex gap-4">
-                          {/* Article number indicator */}
-                          <div className="shrink-0">
-                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <span className="text-lg font-bold text-primary">
-                                {index + 1}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex items-start gap-3">
-                              <h3 className="font-bold text-base leading-relaxed flex-1 line-clamp-2">
-                                {article.title}
-                              </h3>
-                              {article.isBreaking && (
-                                <Badge variant="destructive" className="shrink-0 gap-1">
-                                  <Zap className="h-3 w-3" />
-                                  عاجل
-                                </Badge>
-                              )}
-                            </div>
-
-                            {article.category && (
-                              <Badge 
-                                variant="secondary"
-                                data-testid={`badge-category-${article.id}`}
-                              >
-                                {article.category.name}
-                              </Badge>
-                            )}
-
-                            {/* Stats footer */}
-                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
-                              {article.publishedAt && (
-                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  {formatDistanceToNow(new Date(article.publishedAt), {
-                                    addSuffix: true,
-                                    locale: ar,
-                                  })}
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                <Eye className="h-3.5 w-3.5" />
-                                {(article.views ?? 0).toLocaleString('en-US')}
-                              </div>
-                              {(article.comments ?? 0) > 0 && (
-                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                  <MessageSquare className="h-3.5 w-3.5" />
-                                  {(article.comments ?? 0).toLocaleString('en-US')}
-                                </div>
-                              )}
-                              <div className="mr-auto flex items-center gap-1 text-sm text-primary">
-                                <span>اقرأ المزيد</span>
-                                <ArrowUpRight className="h-3.5 w-3.5" />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                {lastArticles.map((article, index) => {
+                  const cardArticle = {
+                    ...article,
+                    articleType: "news",
+                    newsType: article.isBreaking ? "breaking" : "regular",
+                    category: article.category ? { nameAr: article.category.name, nameEn: article.category.name, ...article.category } : undefined,
+                    commentsCount: article.comments,
+                  } as unknown as ArticleWithDetails;
+                  return (
+                    <div key={article.id} className="relative">
+                      <span className="pointer-events-none absolute inset-inline-start-3 top-3 z-10 inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-primary/10 px-2 text-sm font-bold text-primary" aria-label={`المقال ${index + 1}`}>
+                        {index + 1}
+                      </span>
+                      <NewsArticleCard article={cardArticle} viewMode="list" metadata={{ views: true, comments: true }} />
+                      <Link href={`/article/${article.englishSlug || article.slug}`} className="mt-1 inline-flex min-h-9 items-center text-sm font-semibold text-primary hover:underline">
+                        اقرأ المزيد
+                      </Link>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <Card className="border-border">

@@ -30,7 +30,7 @@ const iconMap: Record<string, any> = {
 
 export function AIRecommendationsBlock({ articleSlug }: AIRecommendationsBlockProps) {
   const query = useArticleRecommendations(articleSlug);
-  return <AIRecommendationsPanel query={query} />;
+  return <AIRecommendationsPanel query={query} editorial />;
 }
 
 export function AIRecommendationsPanel({ query, editorial = false }: { query: ArticleSidebarQuery<ArticleRecommendation[]>; editorial?: boolean }) {

@@ -17,7 +17,6 @@ import type { User } from "@/hooks/useAuth";
 
 // === CRITICAL PATH (Eager) - Above the fold content ===
 import { Header } from "@/components/Header";
-import { NavigationBar } from "@/components/NavigationBar";
 import { CategoryPills } from "@/components/CategoryPills";
 import { Footer } from "@/components/Footer";
 import { HeroCarousel } from "@/components/HeroCarousel";
@@ -329,9 +328,9 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
-        <NavigationBar />
+        <CategoryPills categories={visibleCategories} />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12 flex-1">
           <Skeleton className="w-full h-[400px] md:h-[500px] rounded-lg" />
           <div className="space-y-4">
@@ -355,9 +354,9 @@ export default function Home() {
   // This is the core fix: a transient blip must never blank a populated page.
   if (error && !homepage) {
     return (
-      <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
-        <NavigationBar />
+        <CategoryPills categories={visibleCategories} />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <div className="text-center py-20">
             <p className="text-destructive text-lg mb-4">
@@ -383,9 +382,9 @@ export default function Home() {
 
   if (!homepage) {
     return (
-      <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
-        <NavigationBar />
+        <CategoryPills categories={visibleCategories} />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <div className="text-center py-20">
             <p className="text-lg font-medium text-foreground/70">
@@ -399,7 +398,7 @@ export default function Home() {
   }
 
   return (
-    <div className="home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       {/* Non-blocking "refresh failed / retrying" pill. Only appears when a
           background refetch errored while we keep showing the last-good feed —

@@ -18,24 +18,32 @@ import { Link } from "wouter";
 import { OptimizedImage } from "./OptimizedImage";
 import { getCacheBustedImageUrl } from "@/lib/imageUtils";
 import type { ArticleWithDetails } from "@shared/schema";
-import { formatDistanceToNow } from "date-fns";
-import { arSA } from "date-fns/locale";
+import { formatArticleTimestamp } from "@/lib/formatTime";
 
 interface InfographicArticleCardProps {
   article: ArticleWithDetails;
   variant?: "grid" | "featured" | "compact";
+  locale?: "ar" | "en" | "ur";
+  href?: string;
 }
 
 export function InfographicArticleCard({ 
   article, 
-  variant = "grid"
+  variant = "grid",
+  locale = "ar",
+  href,
 }: InfographicArticleCardProps) {
   const timeAgo = article.publishedAt
-    ? formatDistanceToNow(new Date(article.publishedAt), { 
-        addSuffix: true, 
-        locale: arSA 
-      })
+    ? formatArticleTimestamp(article.publishedAt, { locale })
     : null;
+  const articleHref = href || `${locale === "ar" ? "" : `/${locale}`}/article/${article.englishSlug || article.slug}`;
+  const labels = locale === "en"
+    ? { type: "Infographic", view: "View infographic" }
+    : locale === "ur"
+      ? { type: "انفوگرافک", view: "انفوگرافک دیکھیں" }
+      : { type: "إنفوجرافيك", view: "استعرض الإنفوجرافيك" };
+  const categoryName = locale === "en" ? article.category?.nameEn || article.category?.nameAr
+    : locale === "ur" ? (article.category as (NonNullable<ArticleWithDetails["category"]> & { nameUr?: string }) | undefined)?.nameUr || article.category?.nameAr : article.category?.nameAr;
 
   // Always prefer horizontal banner (16:9) for card display if available
   // This provides better visual consistency across all card types
@@ -54,7 +62,7 @@ export function InfographicArticleCard({
   // Featured variant - large prominent display
   if (variant === "featured") {
     return (
-      <Link href={`/article/${article.englishSlug || article.slug}`} data-testid={`link-infographic-${article.id}`}>
+      <Link href={articleHref} data-testid={`link-infographic-${article.id}`}>
         <Card 
           className="group overflow-hidden rounded-2xl border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 bg-gradient-to-br from-primary/5 via-background to-accent/5"
           data-testid={`card-infographic-${article.id}`}
@@ -89,7 +97,7 @@ export function InfographicArticleCard({
                     data-testid={`badge-infographic-type-${article.id}`}
                   >
                     <BarChart3 className="h-4 w-4" />
-                    إنفوجرافيك
+                    {labels.type}
                   </Badge>
                 </div>
 
@@ -112,7 +120,7 @@ export function InfographicArticleCard({
                     className="w-fit mb-4 text-sm border-primary/30 text-primary"
                     data-testid={`badge-category-${article.id}`}
                   >
-                    {article.category.icon} {article.category.nameAr}
+                    {article.category.icon} {categoryName}
                   </Badge>
                 )}
 
@@ -154,7 +162,7 @@ export function InfographicArticleCard({
                   data-testid={`button-view-infographic-${article.id}`}
                 >
                   <Maximize2 className="h-5 w-5" />
-                  استعرض الإنفوجرافيك
+                  {labels.view}
                 </Button>
               </div>
             </div>
@@ -167,7 +175,7 @@ export function InfographicArticleCard({
   // Compact variant - use horizontal banner for thumbnails
   if (variant === "compact") {
     return (
-      <Link href={`/article/${article.englishSlug || article.slug}`} data-testid={`link-infographic-${article.id}`}>
+      <Link href={articleHref} data-testid={`link-infographic-${article.id}`}>
         <Card 
           className="group overflow-hidden rounded-xl border border-primary/20 hover:border-primary/40 transition-all hover-elevate bg-gradient-to-r from-primary/5 to-transparent"
           data-testid={`card-infographic-${article.id}`}
@@ -213,7 +221,7 @@ export function InfographicArticleCard({
 
   // Grid variant (default) - Portrait card with distinctive design
   return (
-    <Link href={`/article/${article.englishSlug || article.slug}`} data-testid={`link-infographic-${article.id}`}>
+    <Link href={articleHref} data-testid={`link-infographic-${article.id}`}>
       <Card 
         className="group overflow-hidden rounded-xl border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 hover-elevate bg-gradient-to-b from-primary/5 via-background to-accent/5"
         data-testid={`card-infographic-${article.id}`}
@@ -247,7 +255,7 @@ export function InfographicArticleCard({
                 data-testid={`badge-infographic-type-${article.id}`}
               >
                 <BarChart3 className="h-3.5 w-3.5" />
-                إنفوجرافيك
+                {labels.type}
               </Badge>
             </div>
 
@@ -310,7 +318,7 @@ export function InfographicArticleCard({
               data-testid={`button-view-infographic-${article.id}`}
             >
               <Maximize2 className="h-4 w-4" />
-              استعرض الإنفوجرافيك
+              {labels.view}
             </Button>
           </div>
         </CardContent>

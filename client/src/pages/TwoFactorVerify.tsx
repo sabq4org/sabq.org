@@ -19,7 +19,7 @@ const verifySchema = z.object({
 
 type VerifyFormData = z.infer<typeof verifySchema>;
 
-const verificationSlotClassName = "h-12 w-full rounded-lg first:rounded-l-lg last:rounded-r-lg border-x-2 border-y-2 first:border-l-2 border-slate-400 bg-white text-xl font-semibold text-slate-950 shadow-sm dark:border-slate-500 dark:bg-slate-950 dark:text-white";
+const verificationSlotClassName = "h-12 w-full rounded-lg first:rounded-l-lg last:rounded-r-lg border-2 border-slate-400 bg-white text-xl font-semibold text-slate-950 shadow-sm transition-colors focus-within:border-primary dark:border-slate-500 dark:bg-slate-950 dark:text-white";
 
 export default function TwoFactorVerify() {
   const { toast } = useToast();
@@ -241,7 +241,7 @@ export default function TwoFactorVerify() {
                                 disabled={isLoading}
                                 data-testid="input-authenticator-token"
                               >
-                                <InputOTPGroup className="grid w-full grid-cols-6 gap-1.5 sm:gap-2">
+                                <InputOTPGroup className="public-auth-otp grid w-full grid-cols-6 gap-1.5 sm:gap-2" aria-label="رمز التحقق المكوّن من 6 أرقام">
                                   <InputOTPSlot index={0} className={verificationSlotClassName} />
                                   <InputOTPSlot index={1} className={verificationSlotClassName} />
                                   <InputOTPSlot index={2} className={verificationSlotClassName} />

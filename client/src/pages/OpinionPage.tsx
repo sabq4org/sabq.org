@@ -3,13 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { NavigationBar } from "@/components/NavigationBar";
 import { Footer } from "@/components/Footer";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eye, ChevronLeft, ChevronRight, User, BookOpen } from "lucide-react";
-import { Link } from "wouter";
-import { formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
+import { ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
+import { OpinionCard } from "@/components/public/OpinionCard";
 
 type OpinionArticle = {
   id: string;
@@ -98,18 +95,13 @@ export default function OpinionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="min-h-screen overflow-x-clip bg-background flex flex-col" dir="rtl">
       <Header user={user} />
       <NavigationBar />
 
       <main className="flex-1">
         {/* Hero Section — رأس القسم */}
-        <section className="relative pt-16 pb-8 px-4 overflow-hidden" data-testid="section-hero">
-          <div className="absolute inset-0 h-[50vh]">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
-            <div className="absolute top-20 right-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
-            <div className="absolute bottom-20 left-10 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
-          </div>
+        <section className="public-page-header relative pt-10 pb-8 px-4" data-testid="section-hero">
 
           <div className="container max-w-4xl mx-auto text-center relative">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
@@ -117,11 +109,11 @@ export default function OpinionPage() {
               <span>آراء وتحليلات</span>
             </div>
 
-            <h1 className="text-5xl md:text-7xl font-black mb-6 bg-gradient-to-l from-foreground via-foreground to-muted-foreground bg-clip-text" data-testid="text-page-title">
+            <h1 className="public-page-title mb-4" data-testid="text-page-title">
               مقالات الرأي
             </h1>
 
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-6" data-testid="text-page-tagline">
+            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-4" data-testid="text-page-tagline">
               آراء وتحليلات من كتّابنا المتميزين
             </p>
           </div>
@@ -159,78 +151,13 @@ export default function OpinionPage() {
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
-                <Card key={i} className="h-96 animate-pulse bg-muted/50" />
+                <div key={i} className="h-96 rounded-2xl animate-pulse bg-muted/50" />
               ))}
             </div>
           ) : data?.articles && data.articles.length > 0 ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {data.articles.map((article) => {
-                  const authorName = article.author
-                    ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "كاتب غير معروف"
-                    : "كاتب غير معروف";
-
-                  return (
-                    <Link key={article.id} href={`/opinion/${article.slug}`}>
-                      <Card 
-                        className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-hidden flex flex-col"
-                        data-testid={`card-opinion-${article.id}`}
-                      >
-                        <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
-                          <h3 
-                            className="font-bold text-xl line-clamp-3 text-foreground"
-                            data-testid={`text-opinion-title-${article.id}`}
-                          >
-                            {article.title}
-                          </h3>
-
-                          <div className="flex items-center gap-3">
-                            {article.author?.profileImageUrl ? (
-                              <img 
-                                src={article.author.profileImageUrl}
-                                alt={authorName}
-                                className="h-10 w-10 rounded-full object-cover"
-                                data-testid={`img-author-${article.id}`}
-                              />
-                            ) : (
-                              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                                <User className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            )}
-                            <div className="flex-1">
-                              <p className="font-semibold text-sm text-foreground" data-testid={`text-author-${article.id}`}>
-                                {authorName}
-                              </p>
-                              {article.publishedAt && (
-                                <p className="text-xs text-muted-foreground">
-                                  {formatDistanceToNow(new Date(article.publishedAt), {
-                                    addSuffix: true,
-                                    locale: ar,
-                                  })}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {article.excerpt && (
-                            <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
-                              {article.excerpt}
-                            </p>
-                          )}
-
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
-                            <div className="flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              <span data-testid={`text-views-${article.id}`}>
-                                {article.views.toLocaleString("en-US")}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  );
-                })}
+                {data.articles.map((article) => <OpinionCard key={article.id} article={article} variant="grid" />)}
               </div>
 
               {data.pagination.totalPages > 1 && (

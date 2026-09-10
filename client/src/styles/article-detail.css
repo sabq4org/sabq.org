@@ -1,10 +1,10 @@
 /* Public Arabic news only. Shared cards retain their styles on other pages. */
 .article-detail {
-  --article-ink: #10202e;
-  --article-muted: #647687;
-  --article-rule: #e3ebf2;
-  --article-surface: #f4f8fb;
-  --article-brand: #087dbb;
+  --article-ink: var(--public-ink, #10202e);
+  --article-muted: var(--public-muted, #647687);
+  --article-rule: var(--public-border, #e3ebf2);
+  --article-surface: var(--public-surface, #f4f8fb);
+  --article-brand: var(--public-primary, #087dbb);
 }
 .dark .article-detail {
   --article-ink: #e8eef4;
@@ -142,7 +142,7 @@
 .article-sidebar-recommendations .shadcn-card [class*="bg-gradient-"] svg { color: var(--article-brand); }
 .article-sidebar-recommendations .shadcn-card [class*="shadow-"] { box-shadow: none; }
 .article-sidebar-recommendations a,
-.article-sidebar-related a > div { padding: 18px 0; }
+.article-sidebar-related a:not(.public-card-link) > div { padding: 18px 0; }
 .article-sidebar-recommendations a h4,
 .article-sidebar-related a h4 { font-size: 17px; line-height: 1.75; }
 .article-sidebar-opinions > section { padding-block: 0; }

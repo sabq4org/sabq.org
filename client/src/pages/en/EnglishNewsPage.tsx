@@ -13,6 +13,8 @@ import { Link } from "wouter";
 import { type EnArticle, EnCategory } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { filterAICategories } from "@/utils/filterAICategories";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import type { ArticleWithDetails } from "@shared/schema";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -144,15 +146,15 @@ export default function EnglishNewsPage() {
   return (
     <EnglishLayout>
 
-      <main className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="public-page container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3" data-testid="heading-news">
+        <div className="public-page-header mb-8">
+          <h1 className="public-page-title text-4xl md:text-5xl font-bold mb-3" data-testid="heading-news">
             <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               Smart News
             </span>
           </h1>
-          <p className="text-lg text-muted-foreground">
+          <p className="public-page-description text-lg text-muted-foreground">
             Discover the latest news with AI-powered analytics and insights
           </p>
         </div>
@@ -242,183 +244,9 @@ export default function EnglishNewsPage() {
           </div>
         ) : (
           <>
-            {/* Mobile View: Vertical List */}
-            <Card className="overflow-hidden lg:hidden shadow-sm border border-border/40 dark:border-card-border">
-              <CardContent className="p-0">
-                <div className="divide-y divide-border/50 dark:divide-border">
-                  {currentArticles.map((article) => {
-                    const timeAgo = article.publishedAt
-                      ? formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true })
-                      : null;
-
-                    return (
-                      <div key={article.id}>
-                        <Link href={`/en/article/${article.englishSlug || article.slug}`}>
-                          <div 
-                            className="block group cursor-pointer"
-                            data-testid={`link-article-mobile-${article.id}`}
-                          >
-                            <div className={`p-4 hover-elevate active-elevate-2 transition-all ${
-                              article.newsType === "breaking" ? "bg-destructive/5" : ""
-                            }`}>
-                              <div className="flex gap-3">
-                                {/* Image */}
-                                <div className="relative flex-shrink-0 w-24 h-20 rounded-lg overflow-hidden">
-                                  {article.imageUrl ? (
-                                    <img
-                                      src={article.imageUrl}
-                                      alt={article.title}
-                                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
-                                  )}
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0 space-y-2">
-                                  {/* Breaking/New Badge */}
-                                  {article.newsType === "breaking" ? (
-                                    <Badge 
-                                      variant="destructive" 
-                                      className="text-xs h-5 gap-1"
-                                      data-testid={`badge-breaking-${article.id}`}
-                                    >
-                                      <Zap className="h-3 w-3" />
-                                      Breaking
-                                    </Badge>
-                                  ) : isNewArticle(article.publishedAt) ? (
-                                    <Badge 
-                                      className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600"
-                                      data-testid={`badge-new-${article.id}`}
-                                    >
-                                      <Flame className="h-3 w-3" />
-                                      New
-                                    </Badge>
-                                  ) : null}
-
-                                  {/* Title */}
-                                  <h4 className={`font-bold text-sm line-clamp-2 leading-snug transition-colors ${
-                                    article.newsType === "breaking"
-                                      ? "text-destructive"
-                                      : "group-hover:text-primary"
-                                  }`} data-testid={`text-article-title-${article.id}`}>
-                                    {article.title}
-                                  </h4>
-
-                                  {/* Meta Info */}
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                    {timeAgo && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        {timeAgo}
-                                      </span>
-                                    )}
-                                    {article.views !== undefined && (
-                                      <span className="flex items-center gap-1">
-                                        <Eye className="h-3 w-3" />
-                                        {article.views.toLocaleString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Desktop View: Grid with 4 columns */}
-            <div className="hidden lg:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {currentArticles.map((article) => (
-                <Link key={article.id} href={`/en/article/${article.englishSlug || article.slug}`}>
-                  <Card 
-                    className={`cursor-pointer h-full overflow-hidden shadow-sm border border-border/40 dark:border-card-border ${
-                      article.newsType === "breaking" ? "bg-destructive/5" : ""
-                    }`}
-                    data-testid={`card-article-${article.id}`}
-                  >
-                    {article.imageUrl && (
-                      <div className="relative h-48 overflow-hidden">
-                        <img
-                          src={article.imageUrl}
-                          alt={article.title}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        {article.newsType === "breaking" ? (
-                          <Badge 
-                            variant="destructive" 
-                            className="absolute top-3 left-3 gap-1" 
-                            data-testid={`badge-breaking-${article.id}`}
-                          >
-                            <Zap className="h-3 w-3" />
-                            Breaking
-                          </Badge>
-                        ) : isNewArticle(article.publishedAt) ? (
-                          <Badge 
-                            className="absolute top-3 left-3 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600" 
-                            data-testid={`badge-new-${article.id}`}
-                          >
-                            <Flame className="h-3 w-3" />
-                            New
-                          </Badge>
-                        ) : null}
-                        {article.aiSummary && (
-                          <div className="absolute top-3 right-3">
-                            <Badge variant="secondary" className="bg-primary/90 text-primary-foreground">
-                              <Sparkles className="h-3 w-3 mr-1" />
-                              AI
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    <CardContent className="p-4 space-y-3">
-                      <h3 
-                        className={`font-bold text-lg line-clamp-2 ${
-                          article.newsType === "breaking"
-                            ? "text-destructive"
-                            : "text-foreground"
-                        }`}
-                        data-testid={`text-article-title-${article.id}`}
-                      >
-                        {article.title}
-                      </h3>
-                      
-                      {article.excerpt && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {article.excerpt}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
-                        {article.publishedAt && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>
-                              {formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true })}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {article.views !== undefined && (
-                          <div className="flex items-center gap-1">
-                            <Eye className="h-3 w-3" />
-                            <span>{article.views.toLocaleString()}</span>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {currentArticles.map((article, index) => (
+                <NewsArticleCard key={article.id} article={article as unknown as ArticleWithDetails} viewMode="grid" locale="en" priority={index < 4} metadata={{ views: true }} />
               ))}
             </div>
 

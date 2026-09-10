@@ -1,4 +1,5 @@
-import { SummaryAudioAttribution } from "@/components/SummaryAudioAttribution";
+import { ArticleSummary } from "@/components/public/ArticleSummary";
+import "@/styles/article-detail.css";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams, useLocation, Link } from "wouter";
 import { getObjectPosition } from "@/lib/imageUtils";
@@ -11,12 +12,13 @@ import { RecommendationsWidget } from "@/components/RecommendationsWidget";
 import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
 import { RecentNewsSection } from "@/components/RecentNewsSection";
 import { ImageWithCaption } from "@/components/ImageWithCaption";
+import { SocialShareBar } from "@/components/SocialShareBar";
+import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
@@ -41,13 +43,7 @@ import {
   Eye,
   Bookmark,
   Share2,
-  Sparkles,
-  ChevronUp,
-  ChevronDown,
-  Volume2,
-  VolumeX,
   CheckCircle2,
-  Loader2,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -67,7 +63,7 @@ export default function OpinionDetailPage() {
 
 
   // Smart summary collapsible state
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
@@ -77,6 +73,13 @@ export default function OpinionDetailPage() {
   const { data: article, isLoading } = useQuery<ArticleWithDetails>({
     queryKey: ["/api/opinion", slug],
     enabled: !!slug,
+  });
+
+  const { data: bylineProfile } = useQuery<{ title?: string | null }>({
+    queryKey: ["/api/reporters", article?.staff?.slug],
+    enabled: !!article?.staff?.slug,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   // Silently update URL to use short englishSlug for better social sharing
@@ -468,50 +471,63 @@ export default function OpinionDetailPage() {
   const publishedDateLabel = article.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: 'absolute', locale: 'ar' })
     : null;
+  const publicationParts = (() => {
+    if (!article.publishedAt) return null;
+    const date = new Date(article.publishedAt);
+    if (Number.isNaN(date.getTime())) return null;
+    const locale = "ar-SA-u-ca-gregory-nu-latn";
+    return {
+      iso: date.toISOString(),
+      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Riyadh" }).format(date),
+      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh" }).format(date),
+    };
+  })();
   const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;
   const meaningfulUpdatedDateLabel = editorialModifiedAt
     ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
     : null;
 
+  const authorTitle = bylineProfile?.title?.trim() || "كاتب رأي";
+
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="article-detail public-page min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user} />
       <NavigationBar />
 
       <main className="flex-1">
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="article-detail-main container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <DmsLeaderboardAd />
           <DmsMpuAd topSlot />
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="article-detail-layout">
             {/* Main Content */}
-            <article className="lg:col-span-2 space-y-8">
+            <article className="article-detail-content min-w-0">
               {/* Article Header */}
-              <header className="space-y-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className="bg-amber-600 hover:bg-amber-700 text-white border-0 gap-1 font-medium" data-testid="badge-opinion-type">
+              <header className="article-detail-header">
+                <div className="article-detail-labels flex flex-wrap items-center gap-2">
+                  <Badge className="article-category-label gap-1" data-testid="badge-opinion-type">
                     <BookOpen className="h-3 w-3" />
                     مقال رأي
                   </Badge>
                   {article.category && (
-                    <Badge variant="secondary" data-testid="badge-category">
+                    <Badge variant="secondary" className="article-category-label" data-testid="badge-category">
                       {article.category.icon} {article.category.nameAr}
                     </Badge>
                   )}
                 </div>
 
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight text-foreground" data-testid="text-article-title">
+                <h1 className="article-detail-title" data-testid="text-article-title">
                   {article.title}
                 </h1>
 
                 {article.subtitle && (
-                  <p className="text-xl text-muted-foreground leading-relaxed" data-testid="text-article-subtitle">
+                  <p className="article-detail-subtitle" data-testid="text-article-subtitle">
                     {article.subtitle}
                   </p>
                 )}
 
                 {/* Author & Meta */}
-                <div className="flex flex-wrap items-center gap-4 text-sm">
+                <div className="article-detail-byline">
                   {article.author && (
                     <div className="flex items-center gap-2">
                       {authorProfileHref ? (
@@ -555,12 +571,7 @@ export default function OpinionDetailPage() {
                             {authorName}
                           </p>
                         )}
-                        {timeAgo && (
-                          <time dateTime={article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined} title={publishedDateLabel ?? undefined} className="text-muted-foreground text-xs flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {timeAgo}{publishedDateLabel ? ` (${publishedDateLabel})` : ""}
-                          </time>
-                        )}
+                        {authorTitle && <span className="article-byline-title" data-testid="text-author-title">{authorTitle}</span>}
                         {meaningfulUpdatedDateLabel && (
                           <time dateTime={editorialModifiedAt} title={meaningfulUpdatedDateLabel} className="text-muted-foreground text-xs">
                             آخر تحديث: {meaningfulUpdatedDateLabel}
@@ -570,26 +581,9 @@ export default function OpinionDetailPage() {
                     </div>
                   )}
 
-                  <Separator orientation="vertical" className="h-12" />
-
-                  {/* مشاهدات + إعجابات — بجانب الكاتب (مثل en/ur article detail) */}
-                  <div className="flex items-center gap-4 text-muted-foreground">
-                    <span
-                      className="flex items-center gap-1"
-                      title="المشاهدات"
-                      data-testid="text-views"
-                    >
-                      <Eye className="h-4 w-4" />
-                      {(article.views || 0).toLocaleString("en-US")}
-                    </span>
-                    <span
-                      className="flex items-center gap-1"
-                      title="الإعجابات"
-                      data-testid="text-reactions"
-                    >
-                      <Heart className="h-4 w-4" />
-                      {(article.reactionsCount || 0).toLocaleString("en-US")}
-                    </span>
+                  <div className="article-detail-metadata">
+                    {publicationParts && <div className="article-publication-row"><Clock aria-hidden="true" /><time dateTime={publicationParts.iso} title={[publishedDateLabel, timeAgo].filter(Boolean).join(" — ")} aria-label={`نُشر في ${publishedDateLabel}`}><span>{publicationParts.date}</span><span className="article-publication-time">{publicationParts.time}</span></time></div>}
+                    <div className="article-reading-meta"><span><Eye aria-hidden="true" /> {(article.views || 0).toLocaleString("en-US")} مشاهدة</span></div>
                   </div>
                 </div>
               </header>
@@ -617,84 +611,36 @@ export default function OpinionDetailPage() {
                 );
               })()}
 
-              {/* Smart Summary - Collapsible */}
               {(article.aiSummary || article.excerpt) && (
-                <Collapsible open={isSummaryExpanded} onOpenChange={setIsSummaryExpanded}>
-                  <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <h3 className="font-semibold text-sm text-primary">الموجز الذكي</h3>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <SummaryAudioAttribution provider={audioProvider} />
-                        <Button
-                          aria-label={isPlaying ? "إيقاف الاستماع" : "استماع للموجز"}
-                          variant={isPlaying ? "default" : "ghost"}
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={handlePlayAudio}
-                          disabled={isLoadingAudio}
-                          data-testid="button-listen-summary"
-                        >
-                          {isLoadingAudio ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : isPlaying ? (
-                            <VolumeX className="h-3.5 w-3.5" />
-                          ) : (
-                            <Volume2 className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                        <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" data-testid="button-toggle-summary">
-                            {isSummaryExpanded ? (
-                              <ChevronUp className="h-4 w-4" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </CollapsibleTrigger>
-                      </div>
-                    </div>
-                    <p 
-                      className={`text-foreground/80 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-3' : ''}`}
-                      data-testid="text-smart-summary"
-                    >
-                      {article.aiSummary || article.excerpt}
-                    </p>
-                    <CollapsibleContent>
-                      {/* Extra content shown when expanded - already in the paragraph above */}
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
+                <ArticleSummary
+                  key={article.id}
+                  text={article.aiSummary || article.excerpt || ""}
+                  audioProvider={audioProvider}
+                  isLoadingAudio={isLoadingAudio}
+                  isPlaying={isPlaying}
+                  onPlayAudio={handlePlayAudio}
+                />
               )}
 
-              {/* Keywords - show article tags first, fallback to SEO keywords */}
+              {/* Article Content */}
+              <div
+                className="article-prose prose prose-lg dark:prose-invert max-w-none leading-loose text-justify"
+                dangerouslySetInnerHTML={{ __html: sanitizedArticleHtml }}
+                data-testid="text-article-content"
+              />
+
+              {/* Keywords follow the body, matching the public news detail. */}
               {((article.seo?.keywords && article.seo.keywords.length > 0) || articleTags.length > 0) && (
-                <div className="space-y-3">
+                <div className="article-detail-keywords">
                   <h3 className="text-sm font-semibold text-muted-foreground">الكلمات المفتاحية</h3>
                   <div className="flex flex-wrap gap-2">
-                    {/* Display article tags first if available */}
                     {articleTags.map((tag, index) => (
-                      <Badge 
-                        key={`tag-${tag.id}`}
-                        variant="secondary"
-                        className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
-                        onClick={() => setLocation(`/tag/${tag.slug}`)}
-                        data-testid={`badge-tag-${index}`}
-                      >
+                      <Badge key={`tag-${tag.id}`} variant="secondary" className="article-keyword cursor-pointer" onClick={() => setLocation(`/tag/${tag.slug}`)} data-testid={`badge-tag-${index}`}>
                         {tag.nameAr}
                       </Badge>
                     ))}
-                    {/* Fallback to SEO keywords if no article tags */}
                     {articleTags.length === 0 && article.seo?.keywords?.map((keyword, index) => (
-                      <Badge 
-                        key={`seo-${index}`}
-                        variant="secondary"
-                        className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
-                        onClick={() => setLocation(`/keyword/${encodeURIComponent(keyword)}`)}
-                        data-testid={`badge-keyword-${index}`}
-                      >
+                      <Badge key={`seo-${index}`} variant="secondary" className="article-keyword cursor-pointer" onClick={() => setLocation(`/keyword/${encodeURIComponent(keyword)}`)} data-testid={`badge-keyword-${index}`}>
                         {keyword}
                       </Badge>
                     ))}
@@ -702,18 +648,11 @@ export default function OpinionDetailPage() {
                 </div>
               )}
 
-              {/* Article Content */}
-              <div 
-                className="prose prose-lg dark:prose-invert max-w-none leading-loose text-justify"
-                dangerouslySetInnerHTML={{ __html: sanitizedArticleHtml }}
-                data-testid="text-article-content"
-              />
-
               <Separator />
 
               {/* Author Bio Section */}
               {article.author && (
-                <div className="bg-muted/50 rounded-lg p-6">
+              <div className="bg-muted/50 rounded-lg p-6">
                   <div className="flex items-start gap-4">
                     {authorProfileHref ? (
                       <Link href={authorProfileHref}>
@@ -767,37 +706,47 @@ export default function OpinionDetailPage() {
 
               <Separator />
 
-              {/* Share Actions */}
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  variant={article.hasReacted ? "default" : "outline"}
-                  className="gap-2 hover-elevate"
-                  onClick={handleReact}
-                  data-testid="button-article-react"
-                >
-                  <Heart className={article.hasReacted ? 'fill-current' : ''} />
-                  إعجاب ({article.reactionsCount || 0})
-                </Button>
+              {/* Actions stay below the article body, alongside sharing. */}
+              <div className="article-detail-toolbar article-bottom-share" data-testid="article-actions">
+                <div className="article-detail-toolbar-row">
+                  <div className="article-share-group">
+                    <span className="article-share-label">شارك:</span>
+                    <SocialShareBar title={article.title} url={window.location.href} copyUrl={window.location.href} description={article.excerpt || ""} articleId={article.id} className="article-social-links" />
+                  </div>
+                  <div className="article-engagement-actions flex flex-wrap items-center gap-2">
+                    <Button
+                      variant={article.hasReacted ? "default" : "outline"}
+                      size="sm"
+                      className="article-action gap-2 transition-colors"
+                      onClick={handleReact}
+                      disabled={reactMutation.isPending}
+                      aria-pressed={!!article.hasReacted}
+                      data-testid="button-article-react"
+                    >
+                      <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
+                      <span>إعجاب ({article.reactionsCount || 0})</span>
+                    </Button>
 
-                <Button
-                  variant={article.isBookmarked ? "default" : "outline"}
-                  className="gap-2 hover-elevate"
-                  onClick={handleBookmark}
-                  data-testid="button-article-bookmark"
-                >
-                  <Bookmark className={article.isBookmarked ? 'fill-current' : ''} />
-                  حفظ
-                </Button>
+                    <Button
+                      variant={article.isBookmarked ? "default" : "outline"}
+                      size="sm"
+                      className="article-action gap-2 transition-colors"
+                      onClick={handleBookmark}
+                      disabled={bookmarkMutation.isPending}
+                      aria-pressed={!!article.isBookmarked}
+                      data-testid="button-article-bookmark"
+                    >
+                      <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
+                      <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
+                    </Button>
 
-                <Button
-                  variant="outline"
-                  className="gap-2 hover-elevate"
-                  onClick={handleShare}
-                  data-testid="button-article-share"
-                >
-                  <Share2 />
-                  مشاركة
-                </Button>
+                    <FocusReaderTrigger
+                      language="ar"
+                      className="article-action"
+                      onClick={() => setFocusOpen(true)}
+                    />
+                  </div>
+                </div>
               </div>
 
               <Separator />
@@ -815,7 +764,7 @@ export default function OpinionDetailPage() {
             </article>
 
             {/* Sidebar */}
-            <aside className="space-y-6">
+            <aside className="article-detail-sidebar space-y-6" aria-label="المزيد عن المقال">
               {/* AI-Powered Smart Recommendations */}
               {slug && <AIRecommendationsBlock articleSlug={slug} />}
 
@@ -826,6 +775,21 @@ export default function OpinionDetailPage() {
               />
             </aside>
           </div>
+          <FocusReader
+            open={focusOpen}
+            onClose={() => setFocusOpen(false)}
+            articleId={article.id}
+            language="ar"
+            isLoggedIn={!!user}
+            title={article.title}
+            subtitle={article.excerpt || article.subtitle || null}
+            contentHtml={article.content}
+            authorName={authorName}
+            publishedAt={article.publishedAt}
+            articleSlug={slug}
+            articleImageUrl={article.imageUrl}
+            categoryName={article.category?.nameAr || null}
+          />
         </div>
       </main>
 

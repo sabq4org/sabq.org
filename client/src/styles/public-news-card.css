@@ -1,0 +1,205 @@
+.public-news-card {
+  background: var(--public-card, #fff);
+  border: 1px solid var(--public-border, #e3ebf2);
+  border-radius: 16px;
+  overflow: hidden;
+  color: var(--public-ink, #10202e);
+}
+.public-card-link {
+  display: block;
+  min-width: 0;
+}
+.public-news-card-grid .public-card-link {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.public-news-card-grid .public-card-media-grid {
+  aspect-ratio: 16 / 9;
+}
+.public-news-card-list {
+  display: flex;
+  align-items: stretch;
+  padding: 16px;
+  gap: 16px;
+}
+.public-news-card-list .public-card-link {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  min-width: 0;
+}
+.public-news-card-list .public-card-media-list {
+  width: min(256px, 34%);
+  aspect-ratio: 16 / 10;
+  flex: 0 0 auto;
+  border-radius: 10px;
+}
+.public-news-card-compact .public-card-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+}
+.public-news-card-compact .public-card-media-compact {
+  width: 96px;
+  height: 80px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+}
+.public-card-body {
+  min-width: 0;
+  padding: 16px;
+}
+.public-news-card-grid .public-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.public-news-card-grid .public-meta {
+  margin-top: auto;
+}
+.public-news-card-list .public-card-body,
+.public-news-card-compact .public-card-body {
+  padding: 0;
+}
+.public-news-card-compact .public-card-body {
+  flex: 1;
+}
+.public-labels:empty {
+  display: none;
+}
+.public-labels {
+  margin-bottom: 10px;
+}
+.public-label {
+  min-height: 24px;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.public-label-category {
+  border-inline-start: 3px solid var(--public-primary, #087dbb);
+  background: var(--public-surface, #f4f8fb);
+  color: var(--public-ink, #10202e);
+}
+.public-label-opinion {
+  background: #a16207;
+  color: #fff;
+  border: 0;
+}
+.public-label-format {
+  background: #995008;
+  color: #fff;
+  border: 0;
+}
+.public-label-reading {
+  background: #047857;
+  color: #fff;
+  border: 0;
+}
+.public-label-new {
+  background: #047857;
+  color: #fff;
+  border: 0;
+}
+.public-label-ai {
+  background: #7c3aed;
+  color: #fff;
+  border: 0;
+}
+.public-card-title {
+  margin: 0;
+  font-weight: 700;
+}
+.public-card-excerpt {
+  margin: 8px 0 12px;
+}
+.public-meta {
+  margin-top: 12px;
+}
+.public-meta > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.public-actions {
+  margin-top: 12px;
+}
+.public-action {
+  min-height: 44px;
+  color: var(--public-muted, #647687);
+}
+.public-media-disclosure {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 3px 7px;
+  background: rgb(124 58 237 / 0.9);
+  color: #fff;
+  font-size: 11px;
+}
+.public-media-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.public-media-play::before {
+  content: "";
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--public-primary, #087dbb);
+}
+.public-media-play svg {
+  position: relative;
+  z-index: 1;
+}
+@media (max-width: 767px) {
+  .public-card-body {
+    padding: 12px;
+  }
+  .public-news-card-grid .public-card-link {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    padding: 12px;
+  }
+  .public-news-card-grid .public-card-media-grid {
+    width: 96px;
+    height: 80px;
+    flex: 0 0 auto;
+    border-radius: 10px;
+  }
+  .public-news-card-grid .public-card-body {
+    padding: 0;
+  }
+  .public-news-card-list {
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+  }
+  .public-news-card-list .public-card-link {
+    gap: 12px;
+  }
+  .public-news-card-list .public-card-media-list {
+    width: 104px;
+  }
+  .public-news-card-compact .public-card-title {
+    font-size: 15px;
+  }
+}
+@media (max-width: 420px) {
+  .public-news-card-list .public-card-media-list {
+    width: 88px;
+  }
+  .public-news-card-list {
+    padding: 10px;
+  }
+}

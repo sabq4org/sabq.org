@@ -620,6 +620,8 @@ function VoiceCommandsManager() {
   );
 }
 
+const PublicDesignGallery = lazy(() => import("@/pages/PublicDesignGallery"));
+
 function Router() {
   useAnalytics();
   
@@ -628,6 +630,7 @@ function Router() {
       <ScrollRestoration />
       <AdsTriggerResetter />
       <Switch>
+        {import.meta.env.DEV && <Route path="/__preview/public-design">{() => <LazyRoute component={PublicDesignGallery} />}</Route>}
         {/* English Version Routes */}
         <Route path="/en">{() => <LazyRoute component={EnglishHome} />}</Route>
         <Route path="/en/news">{() => <LazyRoute component={EnglishNewsPage} />}</Route>

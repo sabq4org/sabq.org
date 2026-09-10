@@ -1,5 +1,5 @@
 import "@/styles/article-detail.css";
-import { SummaryAudioAttribution } from "@/components/SummaryAudioAttribution";
+import { ArticleSummary } from "@/components/public/ArticleSummary";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
 import { useArticleInsights, useArticleRecommendations } from "@/hooks/useArticleSidebarData";
@@ -54,9 +54,6 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
-  ChevronDown,
-  Volume2,
-  VolumeX,
   CheckCircle2,
   Loader2,
   MessageSquare,
@@ -93,12 +90,6 @@ export default function ArticleDetail() {
   const [, setLocation] = useLocation();
   
 
-  // الموجز مطوي افتراضياً (3 أسطر) عند فتح الخبر — مثل iOS/Android
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
-  useEffect(() => {
-    setIsSummaryExpanded(false);
-  }, [slug]);
-
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
     retry: false,
@@ -118,26 +109,6 @@ export default function ArticleDetail() {
     if (article) signalContentPainted();
   }, [article]);
 
-  // Parse stored aiSummary text into up to 3 bullets (no extra request needed)
-  const storedBullets = useMemo<string[]>(() => {
-    const raw = article?.aiSummary;
-    if (!raw || typeof raw !== "string") return [];
-    const text = raw.trim();
-    if (!text) return [];
-    const byLine = text
-      .split(/\r?\n+/)
-      .map((l) => l.replace(/^\s*[-•*–·\d.)\s]+/, "").trim())
-      .filter((l) => l.length > 4);
-    if (byLine.length >= 2) return byLine.slice(0, 3);
-    const cleaned = text.replace(/\s+/g, " ").trim();
-    const bySentence = cleaned
-      .split(/(?<=[\.!\?؟])\s+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 4);
-    if (bySentence.length >= 1) return bySentence.slice(0, 3);
-    return [cleaned];
-  }, [article?.aiSummary]);
-
   // If no stored summary, generate bullets in the background via API.
   // The endpoint no longer blocks on OpenAI — on a cold miss it kicks off
   // generation server-side and returns { source: "pending", bullets: [] }.
@@ -145,7 +116,7 @@ export default function ArticleDetail() {
   // seconds without ever blocking the request. Polling stops as soon as
   // bullets arrive (or the server reports a non-pending source), and is hard-
   // capped so a persistent generation failure can't loop forever.
-  const shouldFetchBullets = !!article?.id && storedBullets.length === 0;
+  const shouldFetchBullets = !!article?.id && !article?.aiSummary?.trim();
   const { data: bulletsData, isLoading: isLoadingBullets } = useQuery<{ bullets: string[]; source?: string }>({
     queryKey: ["/api/articles", slug, "ai-bullets"],
     enabled: shouldFetchBullets,
@@ -157,27 +128,8 @@ export default function ArticleDetail() {
       return stillPending && query.state.dataUpdateCount < 5 ? 3500 : false;
     },
   });
-  const aiBullets = storedBullets.length > 0 ? storedBullets : (bulletsData?.bullets || []);
-  // الفقرة الموسّعة غالباً نفس نص النقاط (تقسيم جُمل) — لا نكررها تحت «عرض المزيد»
-  const summaryDetailText = (article?.aiSummary || article?.excerpt || "").trim();
-  const showSummaryDetail = useMemo(() => {
-    if (!summaryDetailText) return false;
-    if (aiBullets.length === 0) return true;
-    const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
-    const joined = normalize(aiBullets.join(" "));
-    const detail = normalize(summaryDetailText);
-    if (!joined) return true;
-    if (joined === detail) return false;
-    const shorter = joined.length <= detail.length ? joined : detail;
-    const longer = joined.length <= detail.length ? detail : joined;
-    return !longer.includes(shorter) || longer.length > shorter.length * 1.35;
-  }, [summaryDetailText, aiBullets]);
-
-  // طي إلى 3 أسطر عند الحاجة (نفس عتبة iOS/Android ≈ 120 حرفاً)
-  const summaryNeedsToggle = useMemo(() => {
-    const text = (aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText).trim();
-    return text.length > 120 || showSummaryDetail;
-  }, [aiBullets, summaryDetailText, showSummaryDetail]);
+  const aiBullets = Array.isArray(bulletsData?.bullets) ? bulletsData.bullets : [];
+  const summaryText = article?.aiSummary?.trim() || aiBullets.join("\n\n") || article?.excerpt || "";
 
   // DMS Ad tracking for article page
   useAdTracking(article?.category?.nameAr || '', article?.id);
@@ -1104,7 +1056,7 @@ export default function ArticleDetail() {
   }
 
   return (
-    <div className="article-detail min-h-screen bg-background relative z-10" dir="rtl">
+    <div className="article-detail public-page min-h-screen bg-background relative z-10" dir="rtl">
       <Header user={user} />
 
       {/* الإعلان البارز أعلى المقال — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_AD بقي كقاطع طوارئ في الكود. */}
@@ -1299,120 +1251,16 @@ export default function ArticleDetail() {
               );
             })()}
 
-            {/* Unified AI Summary - الموجز (3 أسطر مطوية + توسيع + استماع) */}
-            {(aiBullets.length > 0 || (shouldFetchBullets && isLoadingBullets) || article.aiSummary || article.excerpt) && (
-              <div
-                dir="rtl"
-                className="article-detail-summary"
-                data-testid="block-ai-summary"
-              >
-                <div className="flex items-start gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <h3 className="text-base font-bold" data-testid="text-ai-summary-title">
-                        الموجز
-                      </h3>
-                      <div className="flex items-center gap-2">
-                      <SummaryAudioAttribution provider={audioProvider} />
-                      <Button
-                        variant={isPlaying ? "default" : "ghost"}
-                        size="sm"
-                        className="article-summary-audio gap-1.5 px-2.5"
-                        onClick={handlePlayAudio}
-                        disabled={isLoadingAudio}
-                        data-testid="button-listen-summary"
-                        aria-label={isPlaying ? "إيقاف الاستماع" : "استماع للموجز"}
-                      >
-                        {isLoadingAudio ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : isPlaying ? (
-                          <VolumeX className="h-3 w-3" />
-                        ) : (
-                          <Volume2 className="h-3 w-3" />
-                        )}
-                        <span className="text-xs">{isPlaying ? "إيقاف" : "استمع"}</span>
-                      </Button>
-                      </div>
-                    </div>
-
-                    {shouldFetchBullets && isLoadingBullets && aiBullets.length === 0 ? (
-                      <ul className="space-y-2 list-none m-0 p-0" data-testid="list-ai-summary-bullets">
-                        <li><Skeleton className="h-3 w-11/12" /></li>
-                        <li><Skeleton className="h-3 w-10/12" /></li>
-                        <li><Skeleton className="h-3 w-9/12" /></li>
-                      </ul>
-                    ) : !isSummaryExpanded && summaryNeedsToggle ? (
-                      /* مطوي: 3 أسطر فقط */
-                      <p
-                        className="line-clamp-3 text-sm sm:text-base leading-relaxed text-foreground"
-                        data-testid="text-ai-summary-collapsed"
-                      >
-                        {aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText}
-                      </p>
-                    ) : (
-                      <>
-                        {aiBullets.length > 0 ? (
-                          <ul
-                            className="space-y-2 list-none m-0 p-0"
-                            data-testid="list-ai-summary-bullets"
-                          >
-                            {aiBullets.slice(0, 3).map((bullet, i) => (
-                              <li
-                                key={i}
-                                className="flex items-start gap-2 text-sm sm:text-base leading-relaxed text-foreground"
-                                data-testid={`text-ai-summary-bullet-${i}`}
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0"
-                                />
-                                <span>{bullet}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p
-                            className="text-sm sm:text-base leading-relaxed text-foreground"
-                            data-testid="text-smart-summary"
-                          >
-                            {summaryDetailText}
-                          </p>
-                        )}
-
-                        {/* فقرة إضافية عند التوسيع إن اختلفت عن النقاط */}
-                        {isSummaryExpanded && showSummaryDetail && aiBullets.length > 0 && (
-                          <p
-                            className="mt-3 pt-3 border-t text-xs sm:text-sm text-muted-foreground leading-relaxed"
-                            data-testid="text-smart-summary"
-                          >
-                            {summaryDetailText}
-                          </p>
-                        )}
-                      </>
-                    )}
-
-                    {summaryNeedsToggle && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-0 mt-2 gap-1 text-xs text-primary hover:text-primary/80"
-                        onClick={() => setIsSummaryExpanded((v) => !v)}
-                        data-testid="button-toggle-summary"
-                        aria-expanded={isSummaryExpanded}
-                        aria-label={isSummaryExpanded ? "طي الموجز" : "عرض المزيد من الموجز"}
-                      >
-                        {isSummaryExpanded ? "طيّ" : "عرض المزيد"}
-                        <ChevronDown
-                          className={`h-3 w-3 transition-transform duration-200 ${isSummaryExpanded ? "rotate-180" : ""}`}
-                        />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
+            {(summaryText || (shouldFetchBullets && isLoadingBullets)) && (
+              <ArticleSummary
+                key={article.id}
+                text={summaryText}
+                loading={!summaryText && shouldFetchBullets && isLoadingBullets}
+                audioProvider={audioProvider}
+                isLoadingAudio={isLoadingAudio}
+                isPlaying={isPlaying}
+                onPlayAudio={handlePlayAudio}
+              />
             )}
 
             <div className="article-detail-toolbar" data-testid="article-top-share">
