@@ -132,6 +132,10 @@
         "android-native/vara/src/main/kotlin/com/sabq/vara/ui/AccountScreens.kt",
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/predictions/**",
         "docs/PREDICTION_CORE.md",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupScreen.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupRepository.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsHubScreen.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsViewModel.kt",
         "shared/schema.ts",
         "tests/unit/schemaMismatch.test.ts"
       ],
@@ -290,6 +294,23 @@
         "server/services/articleSlugService.ts",
         "tests/unit/articleSlugService.test.ts",
         "docs/editorial/**",
+        "server/services/editorialAiService.ts",
+        "client/src/components/article-editor/SabqEditorAssistant.tsx",
+        "client/src/lib/sanitizeEditorialAiResult.ts",
+        "shared/editorialAiSources.ts",
+        "tests/unit/editorialAiServiceSecurity.test.ts",
+        "tests/unit/sanitizeEditorialAiResult.test.ts",
+        "server/services/publishGate.ts",
+        "server/services/publishGateRules.ts",
+        "tests/unit/publishGate.test.ts",
+        "tests/unit/publisherPermissionDenies.test.ts",
+        "client/src/pages/ArticleEditor.tsx",
+        "server/routes/liveNews.ts",
+        "client/src/pages/MomentByMoment.tsx",
+        "tests/unit/liveNewsVisibility.integration.test.ts",
+        "server/services/articleWriteVersion.ts",
+        "client/src/hooks/useArticleEditLock.ts",
+        "client/src/lib/articleDraft.ts",
         "server/services/newsStatisticsService.ts",
         "tests/unit/statisticsSingleFlight.test.ts",
         "shared/schema.ts",
@@ -382,7 +403,8 @@
         "server/jobs/aiTasksCleanup.ts",
         "client/src/pages/admin/ifox/**",
         "client/src/components/admin/ifox/**",
-        "client/src/pages/ifox/**"
+        "client/src/pages/ifox/**",
+        "server/jobs/ifoxContentGeneratorJob.ts"
       ],
       "aiFeatureKeys": [
         "ifox-content",
@@ -394,7 +416,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "ai-hub",
@@ -569,6 +591,7 @@
         "server/routes/mediaLibrary.ts",
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx",
+        "tests/unit/mediaStoreWebhook.test.ts",
         "server/utils/mediaUploadDiagnostics.ts",
         "tests/unit/mediaUploadDiagnostics.test.ts",
         "shared/schema.ts",
@@ -707,14 +730,15 @@
         "server/notificationBus.ts",
         "server/routes/pushNotificationRoutes.ts",
         "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
-        "docs/APPLE_PUSH_SETUP.md"
+        "docs/APPLE_PUSH_SETUP.md",
+        "server/notificationWorker.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-21"
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "ads",
@@ -783,6 +807,22 @@
         "server/services/userRoleSync.ts",
         "server/routes/promoteCorrespondent.ts",
         "scripts/promote-correspondent.ts",
+        "tests/unit/rbacPersonalDenies.test.ts",
+        "server/sessionRevocations.ts",
+        "tests/unit/sessionRevocations.integration.test.ts",
+        "tests/unit/authSessionRevocation.test.ts",
+        "tests/unit/sessionFailoverStore.test.ts",
+        "tests/unit/sessionDegradedSignal.test.ts",
+        "server/utils/trustedProxyIp.ts",
+        "server/utils/rateLimiting.ts",
+        "sabq app ios/sabq/Stores/AuthStore.swift",
+        "sports app ios/SabqSports/Services/AuthStore.swift",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/AuthRepository.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/auth/**",
+        "android-native/app/src/main/kotlin/com/sabq/smart/feature/auth/**",
+        "android-native/app/src/main/res/xml/backup_rules.xml",
+        "android-native/app/src/main/res/xml/data_extraction_rules.xml",
+        "android-native/vara/src/main/kotlin/com/sabq/vara/core/VaraViewModel.kt",
         "server/utils/trustedProxyIp.ts",
         "cloudflare-worker/api-origin-worker.js",
         "cloudflare-worker/wrangler.api.toml",
@@ -816,6 +856,7 @@
         "server/utils/noindexPaths.ts",
         "web-next/**",
         "functions/_middleware.js",
+        "web-next/lib/articleMetadata.ts",
         "server/services/archiveSeo.ts",
         "server/utils/apiListingRobots.ts",
         "shared/articleHeroPreload.ts",
@@ -1085,7 +1126,8 @@
         "scripts/seed-ops-room.ts",
         "client/src/pages/dashboard/OpsRoom/**",
         "tests/unit/opsRoomEngine.test.ts"
-      ]
+      ],
+      "lastReviewed": "2026-09-05"
     },
     {
       "id": "economy-live",
@@ -1110,6 +1152,45 @@
         "tests/unit/economyNumberGuard.test.ts",
         "tests/fixtures/sama/**"
       ]
+    },
+    {
+      "id": "platform-runtime",
+      "nameAr": "تشغيل المنصة والبنية المشتركة",
+      "nameEn": "Platform Runtime",
+      "status": "active",
+      "category": "infra",
+      "summary": "الإقلاع والقيادة والإيقاف وملفات العقود المشتركة؛ منطق المنتج يبقى عند مالك نظامه.",
+      "docPath": "docs/systems/platform-runtime/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/editorial/SYSTEM.md",
+        "docs/systems/push-notifications/SYSTEM.md",
+        "docs/systems/predictions-core/SYSTEM.md",
+        "docs/systems/seo-ssr/SYSTEM.md",
+        "docs/systems/ai-hub/SYSTEM.md",
+        "docs/systems/ops-room/SYSTEM.md",
+        "docs/systems/ifox/SYSTEM.md",
+        "docs/systems/auth-rbac/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "server/index.ts",
+        "server/bootstrap.ts",
+        "server/leaderElection.ts",
+        "server/leaderCron.ts",
+        "server/shutdown.ts",
+        "server/routes.ts",
+        "server/storage.ts",
+        "server/mobileApiRoutes.ts",
+        "shared/schema.ts",
+        "Dockerfile",
+        ".github/workflows/**",
+        "docs/systems/platform-runtime/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": null,
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-09-05"
     }
   ]
 }
