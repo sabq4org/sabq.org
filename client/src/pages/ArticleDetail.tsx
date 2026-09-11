@@ -1533,15 +1533,13 @@ export default function ArticleDetail() {
             <AdSlot slotId="sidebar" className="my-6" />
 
             {/* AI-Powered Smart Recommendations */}
-            <div className="article-sidebar-recommendations"><AIRecommendationsPanel query={recommendationsQuery} editorial /></div>
+            <div className="article-sidebar-recommendations"><AIRecommendationsPanel query={recommendationsQuery} /></div>
 
             {/* Related Opinion Articles */}
             {article?.category && (
               <div className="article-sidebar-opinions"><RelatedOpinionsSection
-                editorial
                 categoryId={article.category.id}
                 categoryName={article.category.nameAr}
-                categoryColor={article.category.color || undefined}
                 excludeArticleId={article.id}
                 limit={5}
               /></div>
@@ -1549,7 +1547,6 @@ export default function ArticleDetail() {
 
             {relatedArticles.length > 0 && (
               <div className="article-sidebar-related"><RecommendationsWidget
-                editorial
                 articles={relatedArticles}
                 title="اقرأ أيضاً"
                 reason="آخر ما نُشر في القسم"

@@ -135,21 +135,6 @@
 .article-sidebar-stats .shadcn-card { padding: 20px; border-radius: 16px; background: var(--article-surface); }
 .article-sidebar-stats [data-testid^="stat-"] { background: transparent; }
 .article-detail-sidebar [class*="bg-gradient-"] { background-image: none; background-color: var(--article-surface); }
-.article-sidebar-recommendations .shadcn-card > div:first-child,
-.article-sidebar-related .shadcn-card > div:first-child { padding: 0 0 16px; background: transparent; border-color: var(--article-rule); }
-.article-sidebar-recommendations .shadcn-card > div:first-child h3,
-.article-sidebar-related .shadcn-card > div:first-child .text-lg { font-size: 18px; line-height: 1.7; }
-.article-sidebar-recommendations .shadcn-card [class*="bg-gradient-"] svg { color: var(--article-brand); }
-.article-sidebar-recommendations .shadcn-card [class*="shadow-"] { box-shadow: none; }
-.article-sidebar-recommendations a,
-.article-sidebar-related a:not(.public-card-link) > div { padding: 18px 0; }
-.article-sidebar-recommendations a h4,
-.article-sidebar-related a h4 { font-size: 17px; line-height: 1.75; }
-.article-sidebar-opinions > section { padding-block: 0; }
-.article-sidebar-opinions [data-testid^="related-opinion-"] { border-radius: 0; border-bottom: 1px solid var(--article-rule); }
-.article-sidebar-opinions [data-testid^="related-opinion-"] > div { padding: 16px 0; }
-.article-sidebar-opinions [data-testid^="related-opinion-"] img { box-shadow: none; }
-.article-sidebar-opinions h3 { font-size: 19px; line-height: 1.7; }
 .article-detail #comments { border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; color: var(--article-ink); }
 .article-detail #comments > div { padding-inline: 0; }
 .article-detail #comments > div:first-child { border-bottom: 1px solid var(--article-rule); padding-block: 0 20px; margin-bottom: 24px; }
@@ -172,21 +157,32 @@
 .article-reading-meta > span { display: inline-flex; align-items: center; gap: 6px; }
 .article-detail .article-action svg, .article-detail .article-social-links svg { width: 18px; height: 18px; }
 .article-sidebar-heading { padding-bottom: 16px; border-bottom: 1px solid var(--article-rule); }
+/* One container for every list module beside the story: pale-blue surface, one heading, plain rows
+   in the compact news-card shape (thumbnail, title, meta) for news, opinion pieces and AI picks alike. */
+.article-sidebar-module { padding: 18px; border: 1px solid var(--article-rule); border-radius: 16px; background: var(--article-surface); }
+.article-sidebar-module .article-sidebar-heading { margin-bottom: 14px; padding-bottom: 14px; }
+.article-sidebar-module-list { display: grid; }
+.article-sidebar-module-list > * + * { border-top: 1px solid var(--article-rule); }
+/* Plain rows inside the surface: no card box, a hairline between items. */
+.article-detail-sidebar .article-sidebar-module .public-news-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.article-detail-sidebar .article-sidebar-module .public-news-card:focus-within { background: transparent; }
+.article-sidebar-module .public-news-card-compact .public-card-link { align-items: flex-start; gap: 12px; padding: 12px 0; }
+.article-sidebar-module-list > :first-child .public-card-link { padding-top: 0; }
+.article-sidebar-module-list > :last-child .public-card-link { padding-bottom: 0; }
+.article-sidebar-module .public-news-card-compact .public-card-link:hover .public-card-title { color: var(--article-brand); }
+.article-sidebar-module-list > :empty { display: none; }
+.article-detail-sidebar .article-sidebar-module .public-card-media-compact { width: 104px; height: 84px; border-radius: 10px; }
+.article-sidebar-module .public-news-card-compact .public-card-body { padding: 0; }
+.article-detail-sidebar .article-sidebar-module .public-card-title { font-size: 17px; line-height: 1.6; }
+.article-sidebar-module .sidebar-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 6px; font-size: 13px; line-height: 1.6; color: var(--article-muted); }
+.article-sidebar-module .sidebar-card-meta time { display: inline-flex; align-items: center; gap: 4px; }
+.article-sidebar-module .sidebar-card-byline + time::before { content: "·"; margin-inline-end: 4px; }
 .article-sidebar-heading h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; line-height: 1.6; color: var(--article-ink); }
 .article-sidebar-heading-icon { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 8px; background: var(--article-surface); color: var(--article-brand); }
 .article-sidebar-heading-icon svg { width: 20px; height: 20px; }
 .article-sidebar-heading-description { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: var(--article-muted); font-size: 15px; line-height: 1.7; }
 .article-sidebar-heading-description a { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--article-brand); }
 .article-sidebar-heading-description a svg { width: 15px; height: 15px; }
-.article-sidebar-opinions .article-opinion-author { font-size: 13px; font-weight: 400; }
-.article-sidebar-opinions > section > .space-y-6 > * + *,
-.article-sidebar-opinions .space-y-3 > * + * { margin-top: 0; }
-.article-detail-sidebar .public-news-card-compact .public-card-title { font-size: 16px; line-height: 1.65; }
-.article-sidebar-opinions .public-opinion-title { font-size: 19px; line-height: 1.6; }
-.article-sidebar-opinions .public-opinion-card-sidebar { grid-template-columns: 56px minmax(0, 1fr); gap: 8px 14px; }
-.article-sidebar-opinions .public-opinion-avatar { width: 56px; height: 56px; }
-.article-sidebar-opinions .public-opinion-avatar svg { width: 20px; height: 20px; }
-.article-sidebar-related [data-testid^="link-recommendation-"] .text-xs { font-size: 13px; }
 .article-sidebar-stats [data-testid="ai-stats-title"] { font-size: 16px; line-height: 1.6; }
 .article-sidebar-stats [data-testid^="stat-"] .text-\[10px\] { font-size: 13px; line-height: 1.6; }
 .article-sidebar-stats [data-testid^="stat-"] .text-sm { font-size: 18px; }
@@ -209,6 +205,4 @@
   .article-detail .article-social-links button { width: 40px; min-width: 40px; }
   .article-detail .article-action { font-size: 15px; padding-inline: 6px; }
   .article-detail-byline { align-items: flex-start; }
-  .article-detail-sidebar .public-news-card-compact .public-card-title { font-size: 14px; line-height: 1.65; }
-  .article-sidebar-opinions .public-opinion-title { font-size: 19px; line-height: 1.6; }
 }

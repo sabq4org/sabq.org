@@ -49,7 +49,7 @@ export default function PublicDesignGallery() {
       <section aria-label="بطاقات الرأي" className="public-surface rounded-2xl p-6"><PublicSectionHeading title="الرأي" /><div className="public-news-grid"><OpinionCard article={opinion} variant="home" /><OpinionCard article={opinion} variant="grid" /><OpinionCard article={opinion} variant="sidebar" /></div></section>
       <section className="article-detail" aria-label="بطاقات الأخبار الجانبية">
         <div className="article-detail-sidebar article-sidebar-related w-full max-w-[340px]">
-          <RecommendationsWidget editorial title="اقرأ أيضاً" reason="آخر ما نُشر في القسم" articles={[{ ...sample, id: "sidebar-layout", imageUrl: sidebarImage }]} />
+          <RecommendationsWidget title="اقرأ أيضاً" reason="آخر ما نُشر في القسم" articles={[{ ...sample, id: "sidebar-layout", imageUrl: sidebarImage }, { ...sample, id: "sidebar-long", title: "عنوان طويل جداً لخبر جانبي يمتد إلى سطرين كاملين ثم يُقتطع بعد ذلك بأناقة" }, { ...sample, id: "sidebar-no-image", imageUrl: null, title: "خبر بلا صورة" }]} />
         </div>
       </section>
       <section className="article-detail max-w-3xl" aria-label="الموجز المشترك">

@@ -206,7 +206,7 @@ test("sidebar titles start at the image top and images fill their entire frame",
       expect(Math.abs(image.height - media.height)).toBeLessThan(1);
       expect(Math.abs(image.width - media.width)).toBeLessThan(1);
       expect(await card.locator("img").evaluate(image => getComputedStyle(image).objectFit)).toBe("cover");
-      expect(await card.locator(".public-card-title").evaluate(title => getComputedStyle(title).fontSize)).toBe(width === 390 ? "14px" : "16px");
+      expect(await card.locator(".public-card-title").evaluate(title => getComputedStyle(title).fontSize)).toBe("17px");
     }
   }
 });
