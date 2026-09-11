@@ -29,6 +29,13 @@
   border-color: var(--home-rule);
 }
 
+/* Keep the summary card visually separate from its pale blue section band.
+   Match the generic card rule's specificity so this intentional paper surface wins. */
+.home-surface-theme main .home-surface-band [data-testid="card-smart-summary"].shadcn-card {
+  background: var(--home-paper);
+  border-color: var(--home-rule);
+}
+
 .home-surface-theme .home-surface-band [data-testid^="metric-"] {
   background: var(--home-surface);
   border-color: var(--home-rule);

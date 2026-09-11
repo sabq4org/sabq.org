@@ -93,7 +93,7 @@ export function OpinionCard({
       data-testid={`opinion-card-${article.id}`}
     >
       <Quote className="public-opinion-quote" aria-hidden="true" />
-      {variant === "home" && (
+      {(variant === "home" || variant === "grid") && (
         <div className="public-opinion-author-row">
           <Avatar className="public-opinion-avatar h-12 w-12 shrink-0">
             <AvatarImage

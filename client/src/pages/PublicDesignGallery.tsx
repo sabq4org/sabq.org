@@ -18,7 +18,7 @@ const sample = {
   imageUrl: null, category: { id: "sample-local", slug: "saudi", nameAr: "محليات", nameEn: "Local", color: "#087dbb" },
 } as unknown as ArticleWithDetails;
 const sidebarImage = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#087dbb"/><circle cx="160" cy="90" r="60" fill="#f4f8fb"/></svg>')}`;
-const opinion = { id: "public-opinion-sample", slug: "public-opinion-sample", title: "القراءة الجيدة تبدأ بتفاصيل صغيرة", excerpt: "كيف تساعد المسافات والخطوط الواضحة القارئ على الوصول إلى ما يهمه؟", publishedAt: sample.publishedAt as unknown as string, author: { name: "كاتب تجريبي" } };
+const opinion = { id: "public-opinion-sample", slug: "public-opinion-sample", title: "القراءة الجيدة تبدأ بتفاصيل صغيرة", excerpt: "كيف تساعد المسافات والخطوط الواضحة القارئ على الوصول إلى ما يهمه؟", publishedAt: sample.publishedAt as unknown as string, author: { name: "كاتب تجريبي", profileImageUrl: sidebarImage } };
 
 export default function PublicDesignGallery() {
   const [summaryPlaying, setSummaryPlaying] = useState(false);
@@ -43,7 +43,7 @@ export default function PublicDesignGallery() {
         </div>
       </section>
       <section aria-label="بطاقات القائمة"><PublicSectionHeading title="القائمة والتفاعل" /><NewsArticleCard article={sample} viewMode="list" locale={locale} metadata={{ views: true }} /></section>
-      <section aria-label="الصف المختصر"><PublicSectionHeading title="الصف المختصر" /><NewsArticleCard article={sample} viewMode="compact" locale={locale} /></section>
+      <section aria-label="الصف المختصر"><PublicSectionHeading title="الصف المختصر" /><div className="public-news-compact-list"><NewsArticleCard article={sample} viewMode="compact" locale={locale} /></div></section>
       <section aria-label="بطاقة الإنفوجرافيك"><PublicSectionHeading title="الإنفوجرافيك" /><NewsArticleCard article={{ ...sample, id: "infographic", articleType: "infographic" }} viewMode="compact" locale={locale} /></section>
       <section aria-label="تصنيف اللغات"><NewsArticleCard article={{ ...sample, id: "localized-category", category: { id: "localized-only", name: locale === "ur" ? "مقامی خبریں" : "Local section" } as unknown as ArticleWithDetails["category"] }} viewMode="grid" locale={locale} /></section>
       <section aria-label="بطاقات الرأي" className="public-surface rounded-2xl p-6"><PublicSectionHeading title="الرأي" /><div className="public-news-grid"><OpinionCard article={opinion} variant="home" /><OpinionCard article={opinion} variant="grid" /><OpinionCard article={opinion} variant="sidebar" /></div></section>

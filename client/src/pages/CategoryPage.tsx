@@ -270,7 +270,7 @@ function CategoryLandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="public-page min-h-screen bg-background" dir="rtl">
       <Header user={user} />
 
       {/* Keep the category heading text-only for a fast LCP, with the same
@@ -412,7 +412,7 @@ function CategoryLandingPage() {
       </div>
 
       {/* DMS Leaderboard Ad - Desktop only */}
-      <div className="public-page container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
+      <div className="container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
         <DmsLeaderboardAd />
       </div>
 
