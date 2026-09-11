@@ -764,7 +764,7 @@ export default function OpinionDetailPage() {
             </article>
 
             {/* Sidebar */}
-            <aside className="article-detail-sidebar space-y-6" aria-label="المزيد عن المقال">
+            <aside className="article-detail-sidebar" aria-label="المزيد عن المقال">
               {/* AI-Powered Smart Recommendations */}
               {slug && <AIRecommendationsBlock articleSlug={slug} />}
 

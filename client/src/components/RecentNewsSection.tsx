@@ -1,13 +1,10 @@
-import { ArticleSidebarHeading } from "./ArticleSidebarHeading";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import { Newspaper, ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NewsArticleCard } from "@/components/NewsArticleCard";
-import type { ArticleWithDetails } from "@shared/schema";
 import { apiUrl } from "@/lib/queryClient";
+import { ArticleSidebarModule } from "@/components/ArticleSidebarModule";
+import { SidebarArticleCard } from "@/components/SidebarArticleCard";
 
 interface NewsArticle {
   id: string;
@@ -18,6 +15,7 @@ interface NewsArticle {
   featuredImage?: string;
   thumbnailUrl?: string;
   publishedAt?: string;
+  updatedAt?: string;
   articleType?: string;
   category?: {
     id: string;
@@ -33,14 +31,15 @@ interface RecentNewsSectionProps {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-4">
+    <div className="article-sidebar-module" aria-hidden="true">
       <Skeleton className="h-8 w-48" />
-      <div className="space-y-3">
+      <div className="article-sidebar-module-list mt-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex gap-3 p-3 border rounded-lg">
-            <Skeleton className="w-20 h-16 rounded-md flex-shrink-0" />
+          <div key={i} className="flex gap-3 rounded-xl border p-3">
+            <Skeleton className="h-20 w-24 shrink-0 rounded-lg" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-3 w-24" />
             </div>
           </div>
@@ -50,6 +49,7 @@ function LoadingSkeleton() {
   );
 }
 
+/** Latest news beside an opinion piece, in the shared sidebar card shape. */
 export function RecentNewsSection({
   excludeArticleId,
   limit = 5,
@@ -73,50 +73,37 @@ export function RecentNewsSection({
     },
   });
 
-  if (isLoading) {
-    return (
-      <section className="py-4" dir="rtl">
-        <LoadingSkeleton />
-      </section>
-    );
-  }
+  if (isLoading) return <LoadingSkeleton />;
 
-  if (!data || data.articles.length === 0) {
-    return null;
-  }
+  const articles = Array.isArray(data?.articles) ? data.articles.slice(0, limit) : [];
+  if (articles.length === 0) return null;
 
   return (
-    <section className="py-4" dir="rtl">
-      <div className="space-y-4">
-        {/* Header */}
-        <ArticleSidebarHeading
-          title="أخبار نُشرت مؤخراً"
-          description="قد تعجبك أيضاً"
-          icon={Newspaper}
-          action={<Link href="/news"><Button variant="ghost" size="sm" className="gap-1" data-testid="button-view-more-news">المزيد<ArrowLeft className="h-4 w-4" /></Button></Link>}
+    <ArticleSidebarModule
+      title="أخبار نُشرت مؤخراً"
+      description="قد تعجبك أيضاً"
+      icon={Newspaper}
+      testId="sidebar-recent-news"
+      action={
+        <Link href="/news" data-testid="button-view-more-news">
+          المزيد <ArrowLeft aria-hidden="true" />
+        </Link>
+      }
+    >
+      {articles.map((article) => (
+        <SidebarArticleCard
+          key={article.id}
+          item={{
+            id: article.id,
+            href: `/article/${article.englishSlug || article.slug}`,
+            title: article.title,
+            imageUrl: article.imageUrl || article.thumbnailUrl || article.featuredImage || null,
+            updatedAt: article.updatedAt,
+            publishedAt: article.publishedAt,
+            byline: article.category?.nameAr,
+          }}
         />
-
-        {/* News List - No numbers */}
-        <div className="space-y-2">
-          {data?.articles?.slice(0, limit).map((article, index) => (
-            <motion.div
-              key={article.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.03 }}
-            >
-              <NewsArticleCard
-                article={{
-                  ...article,
-                  category: article.category ? { ...article.category, nameEn: article.category.nameAr } : undefined,
-                } as unknown as ArticleWithDetails}
-                viewMode="compact"
-                hideCategory
-              />
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
+      ))}
+    </ArticleSidebarModule>
   );
 }
