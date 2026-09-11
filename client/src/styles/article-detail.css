@@ -171,9 +171,14 @@
 .article-sidebar-module-list > :last-child .public-card-link { padding-bottom: 0; }
 .article-sidebar-module .public-news-card-compact .public-card-link:hover .public-card-title { color: var(--article-brand); }
 .article-sidebar-module-list > :empty { display: none; }
-.article-detail-sidebar .article-sidebar-module .public-card-media-compact { width: 104px; height: 84px; border-radius: 10px; }
+.article-detail-sidebar .article-sidebar-module .public-card-media-compact {
+  width: 104px;
+  height: 84px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--article-ink) 12%, transparent);
+}
 .article-sidebar-module .public-news-card-compact .public-card-body { padding: 0; }
-.article-detail-sidebar .article-sidebar-module .public-card-title { font-size: 17px; line-height: 1.6; }
+.article-detail-sidebar .article-sidebar-module .public-card-title { font-size: 15px; line-height: 1.55; }
 .article-sidebar-module .sidebar-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 6px; font-size: 13px; line-height: 1.6; color: var(--article-muted); }
 .article-sidebar-module .sidebar-card-meta time { display: inline-flex; align-items: center; gap: 4px; }
 .article-sidebar-module .sidebar-card-byline + time::before { content: "·"; margin-inline-end: 4px; }
