@@ -35,11 +35,45 @@ test("opinion cards show the writer image in both homepage and archive layouts",
     const card = opinionSection.locator(`.public-opinion-card-${variant}`);
     const avatar = card.locator(".public-opinion-avatar");
     const quote = card.locator(".public-opinion-quote");
+    const authorRow = card.locator(".public-opinion-author-row");
+    const title = card.locator(".public-opinion-title");
     await expect(avatar.locator("img")).toBeVisible();
     const avatarBox = (await avatar.boundingBox())!;
     const quoteBox = (await quote.boundingBox())!;
+    const authorRowBox = (await authorRow.boundingBox())!;
+    const titleBox = (await title.boundingBox())!;
     expect(quoteBox.x + quoteBox.width).toBeLessThan(avatarBox.x);
+    expect(titleBox.y - (authorRowBox.y + authorRowBox.height)).toBeGreaterThanOrEqual(12);
   }
+  const archiveCard = opinionSection.locator(".public-opinion-card-grid");
+  await expect(archiveCard).not.toContainText("اقرأ المقال");
+  await expect(archiveCard.getByTestId("opinion-views-public-opinion-sample")).toHaveText("1,240 مشاهدة");
+});
+
+test("opinion archive removes the empty category strip below the header", async ({ page }) => {
+  const article = {
+    id: "opinion-archive-sample",
+    slug: "opinion-archive-sample",
+    title: "مقال رأي تجريبي",
+    excerpt: "ملخص تجريبي",
+    publishedAt: "2026-09-10T18:00:00Z",
+    views: 1240,
+    author: { name: "كاتب تجريبي" },
+  };
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
+    if (path === "/api/categories/smart") return route.fulfill({ json: [] });
+    if (path === "/api/opinion") return route.fulfill({ json: { articles: [article], pagination: { page: 1, limit: 12, total: 1, totalPages: 1 } } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/opinion");
+  await expect(page.getByText("مقال رأي تجريبي", { exact: true })).toBeVisible();
+
+  const header = (await page.getByRole("banner", { name: "رأس الصفحة الرئيسي" }).boundingBox())!;
+  const hero = (await page.getByTestId("section-hero").boundingBox())!;
+  expect(Math.abs(hero.y - (header.y + header.height))).toBeLessThan(2);
+  await expect(page.getByTestId("opinion-views-opinion-archive-sample")).toHaveText("1,240 مشاهدة");
 });
 
 test("category results follow the heading without a viewport-sized blank gap", async ({ page }) => {
@@ -162,6 +196,7 @@ test("sidebar titles start at the image top and images fill their entire frame",
       expect(Math.abs(image.height - media.height)).toBeLessThan(1);
       expect(Math.abs(image.width - media.width)).toBeLessThan(1);
       expect(await card.locator("img").evaluate(image => getComputedStyle(image).objectFit)).toBe("cover");
+      expect(await card.locator(".public-card-title").evaluate(title => getComputedStyle(title).fontSize)).toBe(width === 390 ? "14px" : "16px");
     }
   }
 });

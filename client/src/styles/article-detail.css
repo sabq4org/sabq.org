@@ -181,6 +181,8 @@
 .article-sidebar-opinions .article-opinion-author { font-size: 13px; font-weight: 400; }
 .article-sidebar-opinions > section > .space-y-6 > * + *,
 .article-sidebar-opinions .space-y-3 > * + * { margin-top: 0; }
+.article-detail-sidebar .public-news-card-compact .public-card-title,
+.article-sidebar-opinions .public-opinion-title { font-size: 16px; line-height: 1.65; }
 .article-sidebar-related [data-testid^="link-recommendation-"] .text-xs { font-size: 13px; }
 .article-sidebar-stats [data-testid="ai-stats-title"] { font-size: 16px; line-height: 1.6; }
 .article-sidebar-stats [data-testid^="stat-"] .text-\[10px\] { font-size: 13px; line-height: 1.6; }
@@ -204,4 +206,6 @@
   .article-detail .article-social-links button { width: 40px; min-width: 40px; }
   .article-detail .article-action { font-size: 15px; padding-inline: 6px; }
   .article-detail-byline { align-items: flex-start; }
+  .article-detail-sidebar .public-news-card-compact .public-card-title,
+  .article-sidebar-opinions .public-opinion-title { font-size: 14px; line-height: 1.65; }
 }
