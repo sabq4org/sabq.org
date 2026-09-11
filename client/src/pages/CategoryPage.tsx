@@ -287,46 +287,46 @@ function CategoryLandingPage() {
           solid surface as the categories directory and live feed.
           هوية القسم (لون/أيقونة) تُضاف بـ CSS فقط دون صور للحفاظ على LCP. */}
       <div
-        className="public-page-header relative overflow-hidden border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground"
+        className="public-page-header category-page-header relative overflow-hidden border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground"
         data-testid="category-header"
       >
         {/* شريط هوية القسم + توهّج خفيف بلون القسم */}
-        <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent }} aria-hidden="true" />
+        <div className="absolute inset-x-0 top-0 h-0.5 sm:h-1" style={{ backgroundColor: accent }} aria-hidden="true" />
         <div
           className="pointer-events-none absolute inset-0"
           aria-hidden="true"
           style={{
-            background: `radial-gradient(130% 150% at 100% 0%, ${accentTint}, transparent 62%)`,
+            background: `radial-gradient(90% 80% at 100% 0%, ${accentTint}, transparent 58%)`,
           }}
         />
 
-        <div className="public-container container relative mx-auto px-3 sm:px-6 lg:px-8 py-8 lg:py-10">
+        <div className="public-container container relative mx-auto px-4 sm:px-6 lg:px-8">
           {/* Breadcrumb Navigation */}
           <nav
-            className="flex items-center gap-1.5 text-sm text-[#6b7c8a] dark:text-muted-foreground"
+            className="flex flex-wrap items-center gap-1 text-xs text-[#6b7c8a] sm:gap-1.5 sm:text-sm dark:text-muted-foreground"
             data-testid="breadcrumb-navigation"
           >
             <Link href="/">
-              <span className="flex items-center gap-1 hover-elevate px-2 py-1 rounded transition-colors cursor-pointer">
+              <span className="flex items-center gap-1 hover-elevate rounded px-1 py-0.5 transition-colors cursor-pointer sm:px-2 sm:py-1">
                 <Home className="h-3.5 w-3.5" />
                 الرئيسية
               </span>
             </Link>
-            <ArrowLeft className="h-3.5 w-3.5 shrink-0 opacity-60" />
+            <ArrowLeft className="h-3 w-3 shrink-0 opacity-60 sm:h-3.5 sm:w-3.5" />
             <Link href="/categories">
-              <span className="hover-elevate px-2 py-1 rounded transition-colors cursor-pointer">
+              <span className="hover-elevate rounded px-1 py-0.5 transition-colors cursor-pointer sm:px-2 sm:py-1">
                 التصنيفات
               </span>
             </Link>
-            <ArrowLeft className="h-3.5 w-3.5 shrink-0 opacity-60" />
+            <ArrowLeft className="h-3 w-3 shrink-0 opacity-60 sm:h-3.5 sm:w-3.5" />
             <span className="font-semibold text-foreground">{category.nameAr}</span>
           </nav>
 
           {/* Category Header (icon + title + description + features) */}
-          <div className="mt-6 flex items-start gap-4 sm:gap-5">
+          <div className="mt-3 flex items-center gap-3 sm:mt-5 sm:items-start sm:gap-5">
             {(category.icon || isSmartCategory) && (
               <div
-                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm sm:h-16 sm:w-16 sm:text-4xl"
+                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-2xl shadow-sm sm:h-16 sm:w-16 sm:rounded-2xl sm:text-4xl"
                 style={{ backgroundColor: accentTint, boxShadow: `inset 0 0 0 1px ${accentBorder}` }}
                 aria-hidden="true"
               >
@@ -337,15 +337,15 @@ function CategoryLandingPage() {
                     animate={{ scale: [1, 1.12, 1], rotate: [0, 6, -6, 0] }}
                     transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
                   >
-                    <Sparkles className="h-7 w-7 text-primary sm:h-8 sm:w-8" />
+                    <Sparkles className="h-5 w-5 text-primary sm:h-8 sm:w-8" />
                   </motion.span>
                 )}
               </div>
             )}
 
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className="public-page-title text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:gap-x-3 sm:gap-y-2">
+                <h1 className="public-page-title">
                   {category.nameAr}
                 </h1>
                 {isSmartCategory ? (
@@ -376,7 +376,7 @@ function CategoryLandingPage() {
               </div>
 
               {category.description && (
-                <p className="public-page-description mt-2 max-w-3xl leading-relaxed">
+                <p className="public-page-description mt-1 max-w-3xl sm:mt-2">
                   {category.description}
                 </p>
               )}

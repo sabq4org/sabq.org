@@ -87,11 +87,18 @@ test("category results follow the heading without a viewport-sized blank gap", a
     if (path === "/api/categories") return route.fulfill({ json: [category] });
     return route.fulfill({ json: {} });
   });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/category/saudi");
   await expect(page.getByText("خبر محلي تجريبي", { exact: true })).toBeVisible();
-  const header = (await page.getByTestId("category-header").boundingBox())!;
-  const filters = (await page.getByTestId("select-sort").boundingBox())!;
-  expect(filters.y - (header.y + header.height)).toBeLessThan(240);
+  const mobileHeader = (await page.getByTestId("category-header").boundingBox())!;
+  const mobileFilters = (await page.getByTestId("select-sort").boundingBox())!;
+  expect(mobileHeader.height).toBeLessThan(180);
+  expect(mobileFilters.y - (mobileHeader.y + mobileHeader.height)).toBeLessThan(80);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const desktopHeader = (await page.getByTestId("category-header").boundingBox())!;
+  const desktopFilters = (await page.getByTestId("select-sort").boundingBox())!;
+  expect(desktopFilters.y - (desktopHeader.y + desktopHeader.height)).toBeLessThan(240);
 });
 
 test("all card layouts fit mobile, tablet and desktop in both themes", async ({ page }) => {
