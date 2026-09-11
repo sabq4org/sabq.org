@@ -4,6 +4,8 @@
   --public-background: #fff;
   --public-surface: #f4f8fb;
   --public-card: #fff;
+  --public-card-hover: #eaf5fc;
+  --public-card-hover-border: #b9ddf3;
   --public-ink: #10202e;
   --public-muted: #647687;
   --public-border: #e3ebf2;
@@ -15,6 +17,8 @@
   --public-background: #101923;
   --public-surface: #172330;
   --public-card: #101923;
+  --public-card-hover: #16293a;
+  --public-card-hover-border: #31516a;
   --public-ink: #e8eef4;
   --public-muted: #a5b5c4;
   --public-border: #2b3947;

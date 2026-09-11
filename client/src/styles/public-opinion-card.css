@@ -18,7 +18,7 @@
 
 .public-opinion-quote {
   position: absolute;
-  inset-inline-start: 16px;
+  inset-inline-end: 16px;
   top: 16px;
   width: 32px;
   height: 32px;

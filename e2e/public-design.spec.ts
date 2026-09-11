@@ -16,6 +16,50 @@ async function prepare(page: Page) {
 }
 const listCard = (page: Page) => page.locator('.public-news-card-list').first();
 
+test("news cards use the calm blue hover and compact lists stay frameless", async ({ page }) => {
+  await prepare(page);
+  const gridCard = page.locator(".public-news-card-grid").first();
+  const baseColor = await gridCard.evaluate(element => getComputedStyle(element).backgroundColor);
+  await gridCard.hover();
+  await expect.poll(() => gridCard.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(baseColor);
+
+  const compactCard = page.locator(".public-news-compact-list .public-news-card").first();
+  expect(await compactCard.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect(await compactCard.evaluate(element => getComputedStyle(element).boxShadow)).toBe("none");
+});
+
+test("opinion cards show the writer image in both homepage and archive layouts", async ({ page }) => {
+  await prepare(page);
+  const opinionSection = page.getByRole("region", { name: "بطاقات الرأي", exact: true });
+  for (const variant of ["home", "grid"]) {
+    const card = opinionSection.locator(`.public-opinion-card-${variant}`);
+    const avatar = card.locator(".public-opinion-avatar");
+    const quote = card.locator(".public-opinion-quote");
+    await expect(avatar.locator("img")).toBeVisible();
+    const avatarBox = (await avatar.boundingBox())!;
+    const quoteBox = (await quote.boundingBox())!;
+    expect(quoteBox.x + quoteBox.width).toBeLessThan(avatarBox.x);
+  }
+});
+
+test("category results follow the heading without a viewport-sized blank gap", async ({ page }) => {
+  const category = { id: "category-local", slug: "saudi", englishSlug: "saudi", nameAr: "محليات", description: "أخبار المناطق والمدن السعودية", icon: "🗺️", type: "manual" };
+  const article = { id: "category-article", slug: "category-article", englishSlug: "category-article", title: "خبر محلي تجريبي", excerpt: "وصف موجز للخبر المحلي.", publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), articleType: "news", newsType: "regular", imageUrl: null, category };
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
+    if (path === "/api/categories/slug/saudi") return route.fulfill({ json: category });
+    if (path === "/api/categories/saudi/articles") return route.fulfill({ json: [article] });
+    if (path === "/api/categories") return route.fulfill({ json: [category] });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/category/saudi");
+  await expect(page.getByText("خبر محلي تجريبي", { exact: true })).toBeVisible();
+  const header = (await page.getByTestId("category-header").boundingBox())!;
+  const filters = (await page.getByTestId("select-sort").boundingBox())!;
+  expect(filters.y - (header.y + header.height)).toBeLessThan(240);
+});
+
 test("all card layouts fit mobile, tablet and desktop in both themes", async ({ page }) => {
   await prepare(page);
   for (const width of [320, 390, 768, 1024, 1440]) {

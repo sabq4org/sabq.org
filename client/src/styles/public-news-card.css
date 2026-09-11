@@ -4,6 +4,36 @@
   border-radius: 16px;
   overflow: hidden;
   color: var(--public-ink, #10202e);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .public-news-card:hover {
+    background: var(--public-card-hover, #eaf5fc);
+    border-color: var(--public-card-hover-border, #b9ddf3);
+  }
+}
+
+.public-news-card:focus-within {
+  background: var(--public-card-hover, #eaf5fc);
+  border-color: var(--public-card-hover-border, #b9ddf3);
+}
+
+.public-news-compact-list .public-news-card {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .public-news-compact-list .public-news-card:hover {
+    background: var(--public-card-hover, #eaf5fc);
+  }
+}
+
+.public-news-compact-list .public-news-card:focus-within {
+  background: var(--public-card-hover, #eaf5fc);
 }
 .public-card-link {
   display: block;

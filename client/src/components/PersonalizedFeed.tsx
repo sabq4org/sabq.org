@@ -345,7 +345,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
 
       {/* Mobile View: Vertical List (like RecommendationsWidget) */}
       {isCompact && (
-      <div className="lg:hidden rounded-2xl overflow-hidden border border-border/60 bg-card">
+      <div className="public-news-compact-list lg:hidden space-y-1" data-testid="personalized-feed-compact-list">
         {articles.map((article, index) => (
           <div key={article.id} onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)} onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}>
             <NewsArticleCard article={article} viewMode="compact" priority={index < 3} />

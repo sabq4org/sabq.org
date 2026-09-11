@@ -95,7 +95,7 @@ export default function OpinionPage() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-background flex flex-col" dir="rtl">
+    <div className="public-page min-h-screen overflow-x-clip bg-background flex flex-col" dir="rtl">
       <Header user={user} />
       <NavigationBar />
 
@@ -119,8 +119,9 @@ export default function OpinionPage() {
           </div>
         </section>
 
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-8 flex items-center justify-center gap-2">
+        <section className="border-y border-[#e3ebf2] bg-[#f4f8fb] dark:border-border dark:bg-[#171e29]">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="mb-8 flex items-center justify-center gap-2">
             <Button
               variant={sortMode === "trending" ? "default" : "outline"}
               size="sm"
@@ -143,12 +144,12 @@ export default function OpinionPage() {
             >
               الأحدث
             </Button>
-          </div>
+            </div>
 
-          <DmsLeaderboardAd />
-          <DmsMpuAd topSlot />
+            <DmsLeaderboardAd />
+            <DmsMpuAd topSlot />
 
-          {isLoading ? (
+            {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="h-96 rounded-2xl animate-pulse bg-muted/50" />
@@ -215,8 +216,9 @@ export default function OpinionPage() {
                 تابعنا لقراءة آخر التحليلات والآراء
               </p>
             </div>
-          )}
-        </div>
+            )}
+          </div>
+        </section>
       </main>
 
       <Footer />
