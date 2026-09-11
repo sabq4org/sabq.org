@@ -105,26 +105,26 @@ export default async function CategoryPage({
         dir="rtl"
         className="container mx-auto px-4 py-6 sm:px-6 lg:px-8"
       >
-        <header className="mb-6 border-b pb-4">
-          <h1 className="flex items-center gap-2 text-3xl font-bold text-foreground md:text-4xl">
+        <header className="mb-4 border-b pb-3 sm:mb-6 sm:pb-4">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground sm:text-3xl">
             {bundle.color && (
               <span
                 aria-hidden="true"
-                className="inline-block h-6 w-1.5 rounded-full"
+                className="inline-block h-5 w-1.5 rounded-full sm:h-6"
                 style={{ backgroundColor: bundle.color }}
               />
             )}
             {bundle.name}
           </h1>
           {bundle.description && (
-            <p className="mt-2 text-muted-foreground">{bundle.description}</p>
+            <p className="mt-1 hidden text-sm text-muted-foreground sm:mt-2 sm:block">{bundle.description}</p>
           )}
         </header>
 
         {bundle.articles.length > 0 ? (
           <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {bundle.articles.map((item, i) => (
-              <ArticleCard key={item.href} item={item} priority={i === 0} />
+              <ArticleCard key={item.href} item={item} priority={i === 0} unframedMobile />
             ))}
           </section>
         ) : (

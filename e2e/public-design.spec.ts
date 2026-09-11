@@ -95,13 +95,45 @@ test("category results follow the heading without a viewport-sized blank gap", a
   await expect(page.getByText("خبر محلي تجريبي", { exact: true })).toBeVisible();
   const mobileHeader = (await page.getByTestId("category-header").boundingBox())!;
   const mobileFilters = (await page.getByTestId("select-sort").boundingBox())!;
-  expect(mobileHeader.height).toBeLessThan(180);
+  expect(mobileHeader.height).toBeLessThan(160);
   expect(mobileFilters.y - (mobileHeader.y + mobileHeader.height)).toBeLessThan(80);
+  expect(mobileFilters.width).toBeLessThan(180);
+  await expect(page.getByText("وصف موجز للخبر المحلي.")).toBeHidden();
+  const mobileCard = page.locator(".public-news-card").first();
+  expect(await mobileCard.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
 
   await page.setViewportSize({ width: 1280, height: 800 });
   const desktopHeader = (await page.getByTestId("category-header").boundingBox())!;
   const desktopFilters = (await page.getByTestId("select-sort").boundingBox())!;
   expect(desktopFilters.y - (desktopHeader.y + desktopHeader.height)).toBeLessThan(240);
+  await expect(page.getByTestId("category-filter-bar")).toBeVisible();
+  await expect(page.getByText("وصف موجز للخبر المحلي.")).toBeVisible();
+});
+
+test("keyword results follow a compact heading without full-width mobile filters", async ({ page }) => {
+  const article = { id: "keyword-article", slug: "keyword-article", englishSlug: "keyword-article", title: "خبر كلمة مفتاحية تجريبي", excerpt: "وصف موجز لكلمة مفتاحية.", publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), articleType: "news", newsType: "regular", views: 12, commentsCount: 1, imageUrl: null };
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
+    if (path === "/api/keyword/السعودية" || path.endsWith("/keyword/%D8%A7%D9%84%D8%B3%D8%B9%D9%88%D8%AF%D9%8A%D8%A9")) {
+      return route.fulfill({ json: { articles: [article], muqtarabTopics: [] } });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/keyword/" + encodeURIComponent("السعودية"));
+  await expect(page.getByText("خبر كلمة مفتاحية تجريبي", { exact: true })).toBeVisible();
+  const mobileHeader = (await page.getByTestId("keyword-header").boundingBox())!;
+  const mobileFilters = (await page.getByTestId("button-filter-all").boundingBox())!;
+  expect(mobileHeader.height).toBeLessThan(160);
+  expect(mobileFilters.y - (mobileHeader.y + mobileHeader.height)).toBeLessThan(80);
+  await expect(page.getByText("وصف موجز لكلمة مفتاحية.")).toBeHidden();
+  const mobileCard = page.locator(".public-news-card").first();
+  expect(await mobileCard.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByTestId("keyword-filter-bar")).toBeVisible();
+  await expect(page.getByText("وصف موجز لكلمة مفتاحية.")).toBeVisible();
 });
 
 test("categories directory header stays compact instead of a marketing hero", async ({ page }) => {
