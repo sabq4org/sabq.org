@@ -31,7 +31,7 @@ import {
   FileText,
   FolderX,
   Loader2,
-  ArrowRight,
+  ArrowLeft,
   Home,
   FolderOpen,
 } from "lucide-react";
@@ -79,6 +79,11 @@ function estimateReadingTime(content?: string): number {
   const words = content.split(/\s+/).length;
   const minutes = Math.ceil(words / wordsPerMinute);
   return minutes || 1;
+}
+
+// لون هوية القسم مع بديل آمن إن لم يكن hex صالحاً
+function categoryAccentColor(color?: string | null) {
+  return color && /^#([0-9a-fA-F]{6})$/.test(color) ? color : "hsl(var(--primary))";
 }
 
 type SortMode = "newest" | "views" | "engagement";
@@ -241,6 +246,11 @@ function CategoryLandingPage() {
 
   const isSmartCategory = category?.type === "smart" || category?.type === "dynamic" || category?.type === "seasonal";
 
+  // هوية لون القسم لرأس الصفحة (CSS فقط، بلا صور)
+  const accent = categoryAccentColor(category?.color);
+  const accentTint = `color-mix(in srgb, ${accent} 12%, transparent)`;
+  const accentBorder = `color-mix(in srgb, ${accent} 30%, transparent)`;
+
   if (categoryLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -274,49 +284,67 @@ function CategoryLandingPage() {
       <Header user={user} />
 
       {/* Keep the category heading text-only for a fast LCP, with the same
-          solid surface as the categories directory and live feed. */}
-      <div className="public-page-header border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground" data-testid="category-header">
-        <div className="public-container container mx-auto px-3 sm:px-6 lg:px-8 py-8 lg:py-10">
+          solid surface as the categories directory and live feed.
+          هوية القسم (لون/أيقونة) تُضاف بـ CSS فقط دون صور للحفاظ على LCP. */}
+      <div
+        className="public-page-header relative overflow-hidden border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground"
+        data-testid="category-header"
+      >
+        {/* شريط هوية القسم + توهّج خفيف بلون القسم */}
+        <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent }} aria-hidden="true" />
+        <div
+          className="pointer-events-none absolute inset-0"
+          aria-hidden="true"
+          style={{
+            background: `radial-gradient(130% 150% at 100% 0%, ${accentTint}, transparent 62%)`,
+          }}
+        />
+
+        <div className="public-container container relative mx-auto px-3 sm:px-6 lg:px-8 py-8 lg:py-10">
           {/* Breadcrumb Navigation */}
-          <nav className="flex items-center gap-2 text-sm text-[#6b7c8a] dark:text-muted-foreground" data-testid="breadcrumb-navigation">
+          <nav
+            className="flex items-center gap-1.5 text-sm text-[#6b7c8a] dark:text-muted-foreground"
+            data-testid="breadcrumb-navigation"
+          >
             <Link href="/">
               <span className="flex items-center gap-1 hover-elevate px-2 py-1 rounded transition-colors cursor-pointer">
                 <Home className="h-3.5 w-3.5" />
                 الرئيسية
               </span>
             </Link>
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0 opacity-60" />
             <Link href="/categories">
               <span className="hover-elevate px-2 py-1 rounded transition-colors cursor-pointer">
                 التصنيفات
               </span>
             </Link>
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0 opacity-60" />
             <span className="font-semibold text-foreground">{category.nameAr}</span>
           </nav>
 
-          {/* Category Header (title + description) */}
-          {(
-            <div className="mt-4">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                {isSmartCategory && (
-                  <motion.div
-                    animate={{
-                      scale: [1, 1.1, 1],
-                      rotate: [0, 5, -5, 0],
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      repeatDelay: 3,
-                    }}
+          {/* Category Header (icon + title + description + features) */}
+          <div className="mt-6 flex items-start gap-4 sm:gap-5">
+            {(category.icon || isSmartCategory) && (
+              <div
+                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm sm:h-16 sm:w-16 sm:text-4xl"
+                style={{ backgroundColor: accentTint, boxShadow: `inset 0 0 0 1px ${accentBorder}` }}
+                aria-hidden="true"
+              >
+                {category.icon ? (
+                  <span>{category.icon}</span>
+                ) : (
+                  <motion.span
+                    animate={{ scale: [1, 1.12, 1], rotate: [0, 6, -6, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
                   >
-                    <Sparkles className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
-                  </motion.div>
+                    <Sparkles className="h-7 w-7 text-primary sm:h-8 sm:w-8" />
+                  </motion.span>
                 )}
-                {category.icon && (
-                  <span className="text-3xl sm:text-4xl">{category.icon}</span>
-                )}
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="public-page-title text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold">
                   {category.nameAr}
                 </h1>
@@ -346,68 +374,70 @@ function CategoryLandingPage() {
                   )
                 )}
               </div>
+
               {category.description && (
-                <p className="public-page-description text-sm sm:text-base md:text-lg text-[#6b7c8a] dark:text-muted-foreground max-w-3xl mb-2 sm:mb-3 leading-relaxed">
+                <p className="public-page-description mt-2 max-w-3xl leading-relaxed">
                   {category.description}
                 </p>
               )}
+
+              {/* Smart Category Features */}
+              {isSmartCategory && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {category.features?.realtime && (
+                    <Badge
+                      variant="secondary"
+                      className="min-h-8 px-3 py-1.5"
+                      data-testid="badge-feature-realtime"
+                    >
+                      <Flame className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
+                      <span className="text-sm">مباشر</span>
+                    </Badge>
+                  )}
+                  {category.features?.trending && (
+                    <Badge
+                      variant="secondary"
+                      className="min-h-8 px-3 py-1.5"
+                      data-testid="badge-feature-trending"
+                    >
+                      <TrendingUp className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
+                      <span className="text-sm">رائج</span>
+                    </Badge>
+                  )}
+                  {category.features?.ai_powered && (
+                    <Badge
+                      variant="secondary"
+                      className="min-h-8 px-3 py-1.5"
+                      data-testid="badge-feature-ai"
+                    >
+                      <Bot className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
+                      <span className="text-sm">ذكاء اصطناعي</span>
+                    </Badge>
+                  )}
+                  {category.features?.breaking_news && (
+                    <Badge
+                      variant="default"
+                      className="bg-red-600 dark:bg-red-500 text-white min-h-8 px-3 py-1.5"
+                      data-testid="badge-feature-breaking"
+                    >
+                      <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
+                      <span className="text-sm">عاجل</span>
+                    </Badge>
+                  )}
+                  {category.type === "dynamic" && category.updateInterval && (
+                    <Badge
+                      variant="secondary"
+                      className="min-h-8 px-3 py-1.5"
+                      data-testid="badge-update-interval"
+                    >
+                      <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
+                      <span className="text-sm">يتحدث كل {formatUpdateInterval(category.updateInterval)}</span>
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-          {/* Smart Category Features */}
-          {isSmartCategory && (
-            <div className="flex flex-wrap gap-2">
-              {category.features?.realtime && (
-                <Badge
-                  variant="secondary"
-                  className="min-h-8 px-3 py-1.5"
-                  data-testid="badge-feature-realtime"
-                >
-                  <Flame className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                  <span className="text-sm">مباشر</span>
-                </Badge>
-              )}
-              {category.features?.trending && (
-                <Badge
-                  variant="secondary"
-                  className="min-h-8 px-3 py-1.5"
-                  data-testid="badge-feature-trending"
-                >
-                  <TrendingUp className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                  <span className="text-sm">رائج</span>
-                </Badge>
-              )}
-              {category.features?.ai_powered && (
-                <Badge
-                  variant="secondary"
-                  className="min-h-8 px-3 py-1.5"
-                  data-testid="badge-feature-ai"
-                >
-                  <Bot className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                  <span className="text-sm">ذكاء اصطناعي</span>
-                </Badge>
-              )}
-              {category.features?.breaking_news && (
-                <Badge
-                  variant="default"
-                  className="bg-red-600 dark:bg-red-500 text-white min-h-8 px-3 py-1.5"
-                  data-testid="badge-feature-breaking"
-                >
-                  <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                  <span className="text-sm">عاجل</span>
-                </Badge>
-              )}
-              {category.type === "dynamic" && category.updateInterval && (
-                <Badge
-                  variant="secondary"
-                  className="min-h-8 px-3 py-1.5"
-                  data-testid="badge-update-interval"
-                >
-                  <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                  <span className="text-sm">يتحدث كل {formatUpdateInterval(category.updateInterval)}</span>
-                </Badge>
-              )}
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
