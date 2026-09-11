@@ -71,7 +71,7 @@
   line-height: 1.5;
 }
 
-.public-opinion-card-grid .public-opinion-title { margin-top: 0; }
+.public-opinion-card-grid .public-opinion-title { margin-top: 14px; }
 .public-opinion-card-grid .public-opinion-title + .public-opinion-excerpt { margin-top: 8px; }
 .public-opinion-card-home .public-opinion-title { margin-top: 16px; }
 
@@ -94,7 +94,8 @@
 
 .public-opinion-footer-meta,
 .public-opinion-footer time,
-.public-opinion-read {
+.public-opinion-read,
+.public-opinion-views {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -103,7 +104,10 @@
 .public-opinion-footer-meta { gap: 10px; min-width: 0; }
 .public-opinion-footer-meta > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .public-opinion-read { color: var(--public-primary, #087dbb); font-weight: 700; white-space: nowrap; }
-.public-opinion-read svg, .public-opinion-footer time svg { width: 14px; height: 14px; }
+.public-opinion-views { color: var(--public-muted, #647687); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.public-opinion-read svg,
+.public-opinion-views svg,
+.public-opinion-footer time svg { width: 14px; height: 14px; }
 
 .public-opinion-card-sidebar {
   display: grid;

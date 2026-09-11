@@ -18,7 +18,7 @@ const sample = {
   imageUrl: null, category: { id: "sample-local", slug: "saudi", nameAr: "محليات", nameEn: "Local", color: "#087dbb" },
 } as unknown as ArticleWithDetails;
 const sidebarImage = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#087dbb"/><circle cx="160" cy="90" r="60" fill="#f4f8fb"/></svg>')}`;
-const opinion = { id: "public-opinion-sample", slug: "public-opinion-sample", title: "القراءة الجيدة تبدأ بتفاصيل صغيرة", excerpt: "كيف تساعد المسافات والخطوط الواضحة القارئ على الوصول إلى ما يهمه؟", publishedAt: sample.publishedAt as unknown as string, author: { name: "كاتب تجريبي", profileImageUrl: sidebarImage } };
+const opinion = { id: "public-opinion-sample", slug: "public-opinion-sample", title: "القراءة الجيدة تبدأ بتفاصيل صغيرة", excerpt: "كيف تساعد المسافات والخطوط الواضحة القارئ على الوصول إلى ما يهمه؟", publishedAt: sample.publishedAt as unknown as string, views: 1240, author: { name: "كاتب تجريبي", profileImageUrl: sidebarImage } };
 
 export default function PublicDesignGallery() {
   const [summaryPlaying, setSummaryPlaying] = useState(false);

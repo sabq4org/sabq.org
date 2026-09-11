@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { BookOpen, Clock, Quote, User } from "lucide-react";
+import { BookOpen, Clock, Eye, Quote, User } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 import { formatArticleTimestamp } from "@/lib/formatTime";
 
 export type OpinionCardArticle = {
@@ -138,10 +139,20 @@ export function OpinionCard({
             </time>
           )}
         </span>
-        <span className="public-opinion-read">
-          <BookOpen aria-hidden="true" />
-          اقرأ المقال
-        </span>
+        {variant === "grid" ? (
+          <span
+            className="public-opinion-views"
+            data-testid={`opinion-views-${article.id}`}
+          >
+            <Eye aria-hidden="true" />
+            {formatNumber(article.views ?? 0)} مشاهدة
+          </span>
+        ) : (
+          <span className="public-opinion-read">
+            <BookOpen aria-hidden="true" />
+            اقرأ المقال
+          </span>
+        )}
       </div>
     </article>
   );
