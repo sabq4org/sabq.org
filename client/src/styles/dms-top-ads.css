@@ -6,3 +6,27 @@ html[data-sabq-top-ads-disabled] #Leaderboard,
 html[data-sabq-top-ads-disabled] [data-testid="dms-ad-slot-Leaderboard"] {
   display: none !important;
 }
+
+/* Leaderboard is desktop-only (DmsLeaderboardAd: hidden md:block). DMS
+ * skinning yanks #Leaderboard out of that wrapper and reinserts it as a
+ * sibling under the site header. On mobile hide it always. On /news, also
+ * collapse the empty hijacked slot on desktop so it does not leave a hole
+ * between the chrome header and the page header. MPU is unchanged. */
+@media (max-width: 767px) {
+  html #Leaderboard {
+    display: none !important;
+    min-height: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+}
+.news-listing-page > #Leaderboard:not(:has(iframe)) {
+  display: none !important;
+  min-height: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}

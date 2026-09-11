@@ -104,6 +104,33 @@ test("category results follow the heading without a viewport-sized blank gap", a
   expect(desktopFilters.y - (desktopHeader.y + desktopHeader.height)).toBeLessThan(240);
 });
 
+test("categories directory header stays compact instead of a marketing hero", async ({ page }) => {
+  const categories = [
+    { id: "tech", slug: "tech", nameAr: "تقنية", nameEn: "Tech", status: "visible", type: "core", displayOrder: 1, articleCount: 12, hasPulseData: true, pulseLevel: "hot", pulsePercent: 80, color: "#087dbb" },
+    { id: "culture", slug: "culture", nameAr: "ثقافة", nameEn: "Culture", status: "visible", type: "core", displayOrder: 2, articleCount: 8, hasPulseData: true, pulseLevel: "active", pulsePercent: 40, color: "#8b5cf6" },
+  ];
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
+    if (path === "/api/categories") return route.fulfill({ json: categories });
+    return route.fulfill({ json: {} });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/categories");
+  await expect(page.getByTestId("heading-categories")).toBeVisible();
+  const mobileHeader = (await page.getByTestId("categories-header").boundingBox())!;
+  const mobileQuick = (await page.getByRole("heading", { name: "تصفّح سريع" }).boundingBox())!;
+  expect(mobileHeader.height).toBeLessThan(200);
+  expect(mobileQuick.y - (mobileHeader.y + mobileHeader.height)).toBeLessThan(40);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const desktopHeader = (await page.getByTestId("categories-header").boundingBox())!;
+  const desktopQuick = (await page.getByRole("heading", { name: "تصفّح سريع" }).boundingBox())!;
+  expect(desktopHeader.height).toBeLessThan(220);
+  expect(desktopQuick.y - (desktopHeader.y + desktopHeader.height)).toBeLessThan(48);
+});
+
 test("all card layouts fit mobile, tablet and desktop in both themes", async ({ page }) => {
   await prepare(page);
   for (const width of [320, 390, 768, 1024, 1440]) {
