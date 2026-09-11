@@ -48,6 +48,9 @@ test("opinion cards show the writer image in both homepage and archive layouts",
   const archiveCard = opinionSection.locator(".public-opinion-card-grid");
   await expect(archiveCard).not.toContainText("اقرأ المقال");
   await expect(archiveCard.getByTestId("opinion-views-public-opinion-sample")).toHaveText("1,240 مشاهدة");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sidebarTitle = opinionSection.locator(".public-opinion-card-sidebar .public-opinion-title");
+  expect(await sidebarTitle.evaluate(title => getComputedStyle(title).fontSize)).toBe("17px");
 });
 
 test("opinion archive removes the empty category strip below the header", async ({ page }) => {

@@ -67,7 +67,7 @@ export function OpinionCard({
             <User className="h-4 w-4" aria-hidden="true" />
           </AvatarFallback>
         </Avatar>
-        <h3 className="public-opinion-title line-clamp-2 group-hover:text-primary">
+        <h3 className="public-opinion-title line-clamp-3 group-hover:text-primary">
           {article.title}
         </h3>
         <div className="public-opinion-author-meta">
