@@ -100,7 +100,7 @@ export function RelatedOpinionsSection({
     <section className="py-8" dir="rtl">
       <div className="space-y-6">
         {editorial ? (
-          <ArticleSidebarHeading title="من كتاب الرأي" description={`من تصنيف «${categoryName}»`} icon={BookOpen}
+          <ArticleSidebarHeading title="مقالات قد تهمك" description={`من تصنيف «${categoryName}»`} icon={BookOpen}
             action={<Link href={`/opinion?category=${categoryId}`} data-testid="button-view-more-opinions">عرض المزيد <ArrowLeft aria-hidden="true" /></Link>}
           />
         ) : (
@@ -113,7 +113,7 @@ export function RelatedOpinionsSection({
             <div>
               <h2 className="text-lg font-bold flex items-center gap-2">
                 <BookOpen className="h-5 w-5" style={{ color: categoryColor }} />
-                من كتاب الرأي
+                مقالات قد تهمك
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
                 من تصنيف "{categoryName}"
