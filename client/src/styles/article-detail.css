@@ -157,14 +157,20 @@
 .article-reading-meta > span { display: inline-flex; align-items: center; gap: 6px; }
 .article-detail .article-action svg, .article-detail .article-social-links svg { width: 18px; height: 18px; }
 .article-sidebar-heading { padding-bottom: 16px; border-bottom: 1px solid var(--article-rule); }
-/* One container for every list module beside the story: pale-blue surface, one heading, paper cards
+/* One container for every list module beside the story: pale-blue surface, one heading, plain rows
    in the compact news-card shape (thumbnail, title, meta) for news, opinion pieces and AI picks alike. */
 .article-sidebar-module { padding: 18px; border: 1px solid var(--article-rule); border-radius: 16px; background: var(--article-surface); }
 .article-sidebar-module .article-sidebar-heading { margin-bottom: 14px; padding-bottom: 14px; }
-.article-sidebar-module-list { display: grid; gap: 10px; }
+.article-sidebar-module-list { display: grid; }
+.article-sidebar-module-list > * + * { border-top: 1px solid var(--article-rule); }
+/* Plain rows inside the surface: no card box, a hairline between items. */
+.article-detail-sidebar .article-sidebar-module .public-news-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.article-detail-sidebar .article-sidebar-module .public-news-card:focus-within { background: transparent; }
+.article-sidebar-module .public-news-card-compact .public-card-link { align-items: flex-start; gap: 12px; padding: 12px 0; }
+.article-sidebar-module-list > :first-child .public-card-link { padding-top: 0; }
+.article-sidebar-module-list > :last-child .public-card-link { padding-bottom: 0; }
+.article-sidebar-module .public-news-card-compact .public-card-link:hover .public-card-title { color: var(--article-brand); }
 .article-sidebar-module-list > :empty { display: none; }
-.article-detail-sidebar .article-sidebar-module .public-news-card { border: 1px solid var(--article-rule); border-radius: 14px; background: var(--public-card, #fff); box-shadow: none; }
-.article-sidebar-module .public-news-card-compact .public-card-link { align-items: flex-start; gap: 12px; padding: 10px; }
 .article-detail-sidebar .article-sidebar-module .public-card-media-compact { width: 104px; height: 84px; border-radius: 10px; }
 .article-sidebar-module .public-news-card-compact .public-card-body { padding: 0; }
 .article-detail-sidebar .article-sidebar-module .public-card-title { font-size: 17px; line-height: 1.6; }
