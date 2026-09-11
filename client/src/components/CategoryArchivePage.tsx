@@ -30,12 +30,12 @@ export function CategoryArchivePage({ slug, page }: { slug: string; page: number
   useEffect(() => {
     if (data) document.title = `${data.name}${page && page > 1 ? ` — الصفحة ${page}` : ""} | سبق`;
   }, [data, page]);
-  return <div dir="rtl" className="public-page min-h-screen flex flex-col bg-background">
+  return <div dir="rtl" className="public-page category-listing-page min-h-screen flex flex-col bg-background">
     <Header />
     <main id="main-content" className="public-container py-8 flex-1">
       {isLoading ? <p role="status">جاري تحميل الأخبار…</p> : error || !data || page === null ? <><h1 className="text-2xl font-bold">تعذر عرض صفحة الأرشيف</h1><a href={`/category/${encodeURIComponent(slug)}`} className="text-primary">العودة إلى القسم</a></> : <>
-        <header className="public-page-header mb-8"><h1 className="public-page-title">{data.name}</h1>
-        <p className="public-page-description">{data.description}</p></header>
+        <header className="public-page-header category-page-header mb-6"><h1 className="public-page-title">{data.name}</h1>
+        <p className="public-page-description hidden sm:block">{data.description}</p></header>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* SEO bundles expose canonical links, not database IDs. Grid cards
               use the explicit href and have no bookmark/mutation controls. */}

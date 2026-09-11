@@ -5,10 +5,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { 
-  Clock, Tag, Flame, Zap, Eye, BarChart3,
-  Bell, BellOff, Filter, SortDesc, Newspaper, FileText,
-  PenTool, Brain, Sparkles
+import {
+  Clock, Tag, Zap, Eye, BarChart3,
+  Bell, BellOff, Filter, Newspaper, FileText,
+  PenTool, Sparkles, Home,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -16,21 +16,16 @@ import type { ArticleWithDetails } from "@shared/schema";
 import { Header } from "@/components/Header";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
-
-// Format numbers with commas (English numerals)
-const formatNumber = (num: number): string => {
-  return num.toLocaleString('en-US');
-};
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber, formatRelativeTime } from "@/lib/format";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   if (!publishedAt) return false;
@@ -211,72 +206,52 @@ export default function KeywordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background" dir="rtl">
+    <div className="public-page keyword-listing-page min-h-screen flex flex-col bg-background" dir="rtl">
       <Header user={user} />
 
-      <main className="public-page flex-1">
-        {/* Hero Section - Clean & Simple */}
-        <div className="public-page-header border-b bg-card/50">
-          <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              {/* Keyword Info */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Tag className="h-5 w-5 text-primary" />
-                  </div>
-                  <h1 className="public-page-title text-2xl md:text-3xl font-bold text-foreground" data-testid="text-keyword-title">
-                    {keyword}
-                  </h1>
+      <main className="flex-1">
+        <div
+          className="public-page-header keyword-page-header relative overflow-hidden border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground"
+          data-testid="keyword-header"
+        >
+          <div className="public-container container relative mx-auto px-4 sm:px-6 lg:px-8">
+            <nav
+              className="mb-2 flex items-center text-xs text-[#6b7c8a] sm:text-sm dark:text-muted-foreground"
+              aria-label="مسار الصفحة"
+            >
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 leading-none hover:text-primary transition-colors"
+              >
+                <Home className="h-3.5 w-3.5" />
+                الرئيسية
+              </Link>
+            </nav>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 sm:h-11 sm:w-11">
+                  <Tag className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
                 </div>
-                
-                {/* Stats - Inline */}
-                {!isLoading && (
-                <div className="public-page-description flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Newspaper className="h-4 w-4" />
-                      <strong className="text-foreground">{formatNumber(stats.articleCount)}</strong> مقال
-                    </span>
-                    {stats.topicCount > 0 && (
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4" />
-                        <strong className="text-foreground">{formatNumber(stats.topicCount)}</strong> موضوع مُقترب
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1.5">
-                      <Eye className="h-4 w-4" />
-                      <strong className="text-foreground">{formatNumber(stats.views)}</strong> مشاهدة
-                    </span>
-                    {stats.breaking > 0 && (
-                      <span className="flex items-center gap-1.5 text-destructive">
-                        <Zap className="h-4 w-4" />
-                        <strong>{formatNumber(stats.breaking)}</strong> عاجل
-                      </span>
-                    )}
-                    {stats.latest && (
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-4 w-4" />
-                        آخر تحديث: {formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: arSA })}
-                      </span>
-                    )}
-                  </div>
-                )}
+                <h1 className="public-page-title" data-testid="text-keyword-title">
+                  {keyword}
+                </h1>
               </div>
 
-              {/* Follow Button */}
               {user && (
                 <Button
-                  size="default"
+                  size="sm"
                   variant={isFollowing ? "outline" : "default"}
                   onClick={() => isFollowing ? unfollowMutation.mutate() : followMutation.mutate()}
                   disabled={followMutation.isPending || unfollowMutation.isPending}
-                  className="gap-2"
+                  className="h-10 shrink-0 gap-2"
                   data-testid="button-follow-keyword"
                 >
                   {isFollowing ? (
                     <>
                       <BellOff className="h-4 w-4" />
-                      إلغاء المتابعة
+                      <span className="hidden sm:inline">إلغاء المتابعة</span>
+                      <span className="sm:hidden">إلغاء</span>
                     </>
                   ) : (
                     <>
@@ -287,73 +262,90 @@ export default function KeywordPage() {
                 </Button>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Filter & Sort Bar */}
-        <div className="public-filter-bar sticky top-[var(--public-header-height,80px)] z-40 bg-background/95 backdrop-blur-md border-b">
-          <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Filter Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {(Object.keys(filterLabels) as FilterOption[]).map((filter) => {
-                  const { label, icon: Icon } = filterLabels[filter];
-                  const count = filter === 'all' ? stats.total : (articleTypeCounts[filter] || 0);
-                  if (filter !== 'all' && count === 0) return null;
-                  
-                  return (
-                    <Button
-                      key={filter}
-                      size="sm"
-                      variant={filterBy === filter ? "default" : "outline"}
-                      onClick={() => setFilterBy(filter)}
-                      className="gap-1.5 whitespace-nowrap"
-                      data-testid={`button-filter-${filter}`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
-                      {count > 0 && (
-                        <Badge variant="secondary" className="mr-1 h-5 px-1.5 text-xs">
-                          {formatNumber(count)}
-                        </Badge>
-                      )}
-                    </Button>
-                  );
-                })}
+            {!isLoading && (
+              <div className="mt-2 flex items-center gap-x-3 gap-y-1 overflow-x-auto text-xs text-[#6b7c8a] sm:mt-3 sm:gap-x-4 sm:text-sm dark:text-muted-foreground [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <Newspaper className="h-3.5 w-3.5" />
+                  <strong className="tabular-nums text-foreground">{formatNumber(stats.articleCount)}</strong> مقال
+                </span>
+                {stats.topicCount > 0 && (
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <strong className="tabular-nums text-foreground">{formatNumber(stats.topicCount)}</strong> موضوع مُقترب
+                  </span>
+                )}
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5" />
+                  <strong className="tabular-nums text-foreground">{formatNumber(stats.views)}</strong> مشاهدة
+                </span>
+                {stats.breaking > 0 && (
+                  <span className="flex shrink-0 items-center gap-1.5 text-destructive">
+                    <Zap className="h-3.5 w-3.5" />
+                    <strong className="tabular-nums">{formatNumber(stats.breaking)}</strong> عاجل
+                  </span>
+                )}
+                {stats.latest && (
+                  <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                    <Clock className="h-3.5 w-3.5" />
+                    آخر تحديث {formatRelativeTime(stats.latest)}
+                  </span>
+                )}
               </div>
-
-              {/* Sort Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-sort">
-                    <SortDesc className="h-4 w-4" />
-                    {sortLabels[sortBy]}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>ترتيب حسب</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {(Object.keys(sortLabels) as SortOption[]).map((sort) => (
-                    <DropdownMenuItem
-                      key={sort}
-                      onClick={() => setSortBy(sort)}
-                      className={sortBy === sort ? "bg-accent" : ""}
-                      data-testid={`menu-sort-${sort}`}
-                    >
-                      {sortLabels[sort]}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            )}
           </div>
         </div>
 
-        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 pb-4 pt-3 sm:pt-4">
+          <div
+            className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            data-testid="keyword-filter-bar"
+          >
+            {(Object.keys(filterLabels) as FilterOption[]).map((filter) => {
+              const { label, icon: Icon } = filterLabels[filter];
+              const count = filter === "all" ? stats.total : (articleTypeCounts[filter] || 0);
+              if (filter !== "all" && count === 0) return null;
+
+              return (
+                <Button
+                  key={filter}
+                  size="sm"
+                  variant={filterBy === filter ? "default" : "outline"}
+                  onClick={() => setFilterBy(filter)}
+                  className="h-10 shrink-0 gap-1.5 whitespace-nowrap"
+                  data-testid={`button-filter-${filter}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                  {count > 0 && (
+                    <Badge variant="secondary" className="mr-1 h-5 px-1.5 text-xs">
+                      {formatNumber(count)}
+                    </Badge>
+                  )}
+                </Button>
+              );
+            })}
+
+            <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
+              <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="button-sort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(sortLabels) as SortOption[]).map((sort) => (
+                  <SelectItem key={sort} value={sort} data-testid={`menu-sort-${sort}`}>
+                    {sortLabels[sort]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 pb-8">
           {/* Loading State */}
           {isLoading && (
             <div className="space-y-8">
-              <Skeleton className="aspect-[21/9] w-full rounded-2xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                   <Card key={i} className="overflow-hidden">
@@ -430,7 +422,7 @@ export default function KeywordPage() {
                             {topic.title}
                           </h3>
                           {topic.excerpt && (
-                            <p className="text-sm text-muted-foreground line-clamp-3">
+                            <p className="hidden text-sm text-muted-foreground line-clamp-3 sm:block">
                               {topic.excerpt}
                             </p>
                           )}

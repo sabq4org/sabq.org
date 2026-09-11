@@ -25,15 +25,11 @@ import {
   Zap,
   TrendingUp,
   Bot,
-  MessageSquare,
   RefreshCw,
-  SlidersHorizontal,
-  FileText,
   FolderX,
   Loader2,
   ArrowLeft,
   Home,
-  FolderOpen,
 } from "lucide-react";
 import { Link } from "wouter";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
@@ -256,7 +252,7 @@ function CategoryLandingPage() {
       <div className="min-h-screen bg-background">
         <Header user={user} />
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Skeleton className="h-72 w-full mb-8 rounded-xl" />
+          <Skeleton className="h-28 w-full mb-6 rounded-xl" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton key={i} className="h-80 rounded-lg" />
@@ -280,7 +276,7 @@ function CategoryLandingPage() {
   }
 
   return (
-    <div className="public-page min-h-screen bg-background" dir="rtl">
+    <div className="public-page category-listing-page min-h-screen bg-background" dir="rtl">
       <Header user={user} />
 
       {/* Keep the category heading text-only for a fast LCP, with the same
@@ -301,32 +297,27 @@ function CategoryLandingPage() {
         />
 
         <div className="public-container container relative mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Breadcrumb Navigation */}
           <nav
-            className="flex flex-wrap items-center gap-1 text-xs text-[#6b7c8a] sm:gap-1.5 sm:text-sm dark:text-muted-foreground"
+            className="mb-2 flex flex-wrap items-center gap-1 text-xs text-[#6b7c8a] sm:text-sm dark:text-muted-foreground"
             data-testid="breadcrumb-navigation"
+            aria-label="مسار الصفحة"
           >
-            <Link href="/">
-              <span className="flex items-center gap-1 hover-elevate rounded px-1 py-0.5 transition-colors cursor-pointer sm:px-2 sm:py-1">
-                <Home className="h-3.5 w-3.5" />
-                الرئيسية
-              </span>
+            <Link href="/" className="inline-flex items-center gap-1.5 leading-none hover:text-primary transition-colors">
+              <Home className="h-3.5 w-3.5" />
+              الرئيسية
             </Link>
-            <ArrowLeft className="h-3 w-3 shrink-0 opacity-60 sm:h-3.5 sm:w-3.5" />
-            <Link href="/categories">
-              <span className="hover-elevate rounded px-1 py-0.5 transition-colors cursor-pointer sm:px-2 sm:py-1">
-                التصنيفات
-              </span>
+            <ArrowLeft className="h-3 w-3 shrink-0 opacity-60" />
+            <Link href="/categories" className="hover:text-primary transition-colors">
+              التصنيفات
             </Link>
-            <ArrowLeft className="h-3 w-3 shrink-0 opacity-60 sm:h-3.5 sm:w-3.5" />
+            <ArrowLeft className="h-3 w-3 shrink-0 opacity-60" />
             <span className="font-semibold text-foreground">{category.nameAr}</span>
           </nav>
 
-          {/* Category Header (icon + title + description + features) */}
-          <div className="mt-3 flex items-center gap-3 sm:mt-5 sm:items-start sm:gap-5">
+          <div className="flex items-center gap-2.5 sm:gap-3">
             {(category.icon || isSmartCategory) && (
               <div
-                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-2xl shadow-sm sm:h-16 sm:w-16 sm:rounded-2xl sm:text-4xl"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-lg sm:h-11 sm:w-11 sm:rounded-xl sm:text-2xl"
                 style={{ backgroundColor: accentTint, boxShadow: `inset 0 0 0 1px ${accentBorder}` }}
                 aria-hidden="true"
               >
@@ -337,14 +328,14 @@ function CategoryLandingPage() {
                     animate={{ scale: [1, 1.12, 1], rotate: [0, 6, -6, 0] }}
                     transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
                   >
-                    <Sparkles className="h-5 w-5 text-primary sm:h-8 sm:w-8" />
+                    <Sparkles className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
                   </motion.span>
                 )}
               </div>
             )}
 
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:gap-x-3 sm:gap-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <h1 className="public-page-title">
                   {category.nameAr}
                 </h1>
@@ -354,10 +345,10 @@ function CategoryLandingPage() {
                     transition={{ duration: 2, repeat: Infinity }}
                   >
                     <Badge
-                      className="flex items-center gap-1.5 min-h-8 px-3 py-1.5 text-sm bg-primary text-primary-foreground border-0 shadow-lg"
+                      className="flex items-center gap-1 min-h-7 px-2 py-0.5 text-xs bg-primary text-primary-foreground border-0 sm:min-h-8 sm:px-2.5 sm:text-sm"
                       data-testid="badge-category-type"
                     >
-                      <Brain className="h-3.5 w-3.5" />
+                      <Brain className="h-3 w-3" />
                       اختيار ذكي
                     </Badge>
                   </motion.div>
@@ -365,7 +356,7 @@ function CategoryLandingPage() {
                   getCategoryTypeBadge(category.type) && (
                     <Badge
                       variant={getCategoryTypeBadge(category.type)!.variant}
-                      className="flex items-center gap-1 min-h-8 px-3 py-1.5 text-sm"
+                      className="flex items-center gap-1 min-h-7 px-2 py-0.5 text-xs sm:min-h-8 sm:px-2.5 sm:text-sm"
                       data-testid="badge-category-type"
                     >
                       {getCategoryTypeBadge(category.type)!.icon}
@@ -376,62 +367,61 @@ function CategoryLandingPage() {
               </div>
 
               {category.description && (
-                <p className="public-page-description mt-1 max-w-3xl sm:mt-2">
+                <p className="public-page-description mt-1 hidden max-w-3xl sm:block">
                   {category.description}
                 </p>
               )}
 
-              {/* Smart Category Features */}
               {isSmartCategory && (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-2 hidden flex-wrap gap-1.5 sm:flex">
                   {category.features?.realtime && (
                     <Badge
                       variant="secondary"
-                      className="min-h-8 px-3 py-1.5"
+                      className="min-h-7 px-2.5 py-1"
                       data-testid="badge-feature-realtime"
                     >
-                      <Flame className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                      <span className="text-sm">مباشر</span>
+                      <Flame className="h-3 w-3 ml-1" />
+                      <span className="text-xs">مباشر</span>
                     </Badge>
                   )}
                   {category.features?.trending && (
                     <Badge
                       variant="secondary"
-                      className="min-h-8 px-3 py-1.5"
+                      className="min-h-7 px-2.5 py-1"
                       data-testid="badge-feature-trending"
                     >
-                      <TrendingUp className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                      <span className="text-sm">رائج</span>
+                      <TrendingUp className="h-3 w-3 ml-1" />
+                      <span className="text-xs">رائج</span>
                     </Badge>
                   )}
                   {category.features?.ai_powered && (
                     <Badge
                       variant="secondary"
-                      className="min-h-8 px-3 py-1.5"
+                      className="min-h-7 px-2.5 py-1"
                       data-testid="badge-feature-ai"
                     >
-                      <Bot className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                      <span className="text-sm">ذكاء اصطناعي</span>
+                      <Bot className="h-3 w-3 ml-1" />
+                      <span className="text-xs">ذكاء اصطناعي</span>
                     </Badge>
                   )}
                   {category.features?.breaking_news && (
                     <Badge
                       variant="default"
-                      className="bg-red-600 dark:bg-red-500 text-white min-h-8 px-3 py-1.5"
+                      className="bg-red-600 dark:bg-red-500 text-white min-h-7 px-2.5 py-1"
                       data-testid="badge-feature-breaking"
                     >
-                      <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                      <span className="text-sm">عاجل</span>
+                      <Zap className="h-3 w-3 ml-1" />
+                      <span className="text-xs">عاجل</span>
                     </Badge>
                   )}
                   {category.type === "dynamic" && category.updateInterval && (
                     <Badge
                       variant="secondary"
-                      className="min-h-8 px-3 py-1.5"
+                      className="min-h-7 px-2.5 py-1"
                       data-testid="badge-update-interval"
                     >
-                      <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />
-                      <span className="text-sm">يتحدث كل {formatUpdateInterval(category.updateInterval)}</span>
+                      <Clock className="h-3 w-3 ml-1" />
+                      <span className="text-xs">يتحدث كل {formatUpdateInterval(category.updateInterval)}</span>
                     </Badge>
                   )}
                 </div>
@@ -441,91 +431,75 @@ function CategoryLandingPage() {
         </div>
       </div>
 
-      {/* DMS Leaderboard Ad - Desktop only */}
-      <div className="container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
-        <DmsLeaderboardAd />
-      </div>
+      <DmsLeaderboardAd />
 
-      {/* Advanced Filters Bar */}
-      <div className="container mx-auto px-3 sm:px-6 lg:px-8 pb-6">
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          {/* Left Side (RTL): Sort */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-            <Select value={sortMode} onValueChange={(value: SortMode) => setSortMode(value)}>
-              <SelectTrigger className="w-full sm:w-48" data-testid="select-sort">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest" data-testid="option-sort-newest">
-                  الأحدث
-                </SelectItem>
-                <SelectItem value="views" data-testid="option-sort-views">
-                  الأكثر مشاهدة
-                </SelectItem>
-                <SelectItem value="engagement" data-testid="option-sort-engagement">
-                  الأكثر تفاعلاً
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 pb-4 pt-3 sm:pt-4">
+        <div
+          className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          data-testid="category-filter-bar"
+        >
+          <Select value={sortMode} onValueChange={(value: SortMode) => setSortMode(value)}>
+            <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest" data-testid="option-sort-newest">
+                الأحدث
+              </SelectItem>
+              <SelectItem value="views" data-testid="option-sort-views">
+                الأكثر مشاهدة
+              </SelectItem>
+              <SelectItem value="engagement" data-testid="option-sort-engagement">
+                الأكثر تفاعلاً
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-          {/* Right Side: Time and Type Filters */}
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {/* Time Range Filter */}
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
-                <SelectTrigger className="w-full sm:w-40" data-testid="select-time-range">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today" data-testid="option-time-today">
-                    اليوم
-                  </SelectItem>
-                  <SelectItem value="3days" data-testid="option-time-3days">
-                    آخر 3 أيام
-                  </SelectItem>
-                  <SelectItem value="7days" data-testid="option-time-7days">
-                    آخر 7 أيام
-                  </SelectItem>
-                  <SelectItem value="30days" data-testid="option-time-30days">
-                    آخر 30 يوم
-                  </SelectItem>
-                  <SelectItem value="all" data-testid="option-time-all">
-                    الكل
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
+            <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-time-range">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today" data-testid="option-time-today">
+                اليوم
+              </SelectItem>
+              <SelectItem value="3days" data-testid="option-time-3days">
+                آخر 3 أيام
+              </SelectItem>
+              <SelectItem value="7days" data-testid="option-time-7days">
+                آخر 7 أيام
+              </SelectItem>
+              <SelectItem value="30days" data-testid="option-time-30days">
+                آخر 30 يوم
+              </SelectItem>
+              <SelectItem value="all" data-testid="option-time-all">
+                الكل
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-            {/* Article Type Filter */}
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <Select value={articleType} onValueChange={(value: ArticleTypeFilter) => setArticleType(value)}>
-                <SelectTrigger className="w-full sm:w-40" data-testid="select-article-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" data-testid="option-type-all">
-                    الكل
-                  </SelectItem>
-                  <SelectItem value="breaking" data-testid="option-type-breaking">
-                    عاجل
-                  </SelectItem>
-                  <SelectItem value="new" data-testid="option-type-new">
-                    جديد
-                  </SelectItem>
-                  <SelectItem value="opinion" data-testid="option-type-opinion">
-                    رأي
-                  </SelectItem>
-                  <SelectItem value="analysis" data-testid="option-type-analysis">
-                    تحليل
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <Select value={articleType} onValueChange={(value: ArticleTypeFilter) => setArticleType(value)}>
+            <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-article-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" data-testid="option-type-all">
+                الكل
+              </SelectItem>
+              <SelectItem value="breaking" data-testid="option-type-breaking">
+                عاجل
+              </SelectItem>
+              <SelectItem value="new" data-testid="option-type-new">
+                جديد
+              </SelectItem>
+              <SelectItem value="opinion" data-testid="option-type-opinion">
+                رأي
+              </SelectItem>
+              <SelectItem value="analysis" data-testid="option-type-analysis">
+                تحليل
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Active Filters Indicator */}
@@ -578,8 +552,8 @@ function CategoryLandingPage() {
 
       {/* Articles Grid/List */}
       <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold">
+        <div className="mb-3 flex items-center justify-between sm:mb-4">
+          <h2 className="text-base font-bold sm:text-xl">
             آخر الأخبار
             {filteredArticles.length > 0 && (
               <Badge variant="secondary" className="mr-2 min-h-7 px-2.5">
