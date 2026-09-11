@@ -56,6 +56,12 @@
 .dark .category-navigation-link:hover,
 .dark .category-navigation-link.is-active,
 .dark .category-navigation-all { color: #53baff; }
+/* شريط التصنيفات يظهر فقط في النسخة الكاملة (الشاشات الكبيرة).
+   على الجوال (أقل من 768px — نفس حدّ useIsMobile) يُخفى بالكامل؛
+   التصنيفات تبقى متاحة من القائمة الجانبية (☰). */
+@media (max-width: 767px) {
+  .category-navigation { display: none; }
+}
 @media (max-width: 639px) {
   .category-navigation-inner { gap: 12px; }
   .category-navigation-items { gap: 24px; padding-inline-end: 12px; }
