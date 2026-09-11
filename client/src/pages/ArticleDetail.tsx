@@ -1551,8 +1551,8 @@ export default function ArticleDetail() {
               <div className="article-sidebar-related"><RecommendationsWidget
                 editorial
                 articles={relatedArticles}
-                title="أخبار مشابهة"
-                reason="قد تعجبك أيضاً"
+                title="اقرأ أيضاً"
+                reason="آخر ما نُشر في القسم"
               /></div>
             )}
           </aside>

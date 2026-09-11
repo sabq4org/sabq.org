@@ -113,7 +113,7 @@
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   min-width: 0;
-  align-items: center;
+  align-items: start;
   gap: 8px 12px;
   border-bottom: 1px solid var(--public-border, #e3ebf2);
   padding: 14px 0;
@@ -122,8 +122,8 @@
 
 .public-opinion-card-sidebar .public-opinion-title {
   margin: 0;
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 17px;
+  line-height: 1.55;
 }
 
 .public-opinion-card-sidebar .public-opinion-author-meta {
@@ -135,7 +135,7 @@
   .public-opinion-card-home,
   .public-opinion-card-grid { min-height: 220px; padding: 16px; }
   .public-opinion-title { font-size: 18px; line-height: 1.55; }
-  .public-opinion-card-sidebar .public-opinion-title { font-size: 15px; }
+  .public-opinion-card-sidebar .public-opinion-title { font-size: 17px; line-height: 1.55; }
 }
 
 .dark .public-opinion-card-home,
