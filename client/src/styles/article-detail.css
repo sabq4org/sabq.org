@@ -149,7 +149,7 @@
 .article-sidebar-opinions [data-testid^="related-opinion-"] { border-radius: 0; border-bottom: 1px solid var(--article-rule); }
 .article-sidebar-opinions [data-testid^="related-opinion-"] > div { padding: 16px 0; }
 .article-sidebar-opinions [data-testid^="related-opinion-"] img { box-shadow: none; }
-.article-sidebar-opinions h3 { font-size: 17px; line-height: 1.75; }
+.article-sidebar-opinions h3 { font-size: 19px; line-height: 1.7; }
 .article-detail #comments { border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; color: var(--article-ink); }
 .article-detail #comments > div { padding-inline: 0; }
 .article-detail #comments > div:first-child { border-bottom: 1px solid var(--article-rule); padding-block: 0 20px; margin-bottom: 24px; }
@@ -182,7 +182,10 @@
 .article-sidebar-opinions > section > .space-y-6 > * + *,
 .article-sidebar-opinions .space-y-3 > * + * { margin-top: 0; }
 .article-detail-sidebar .public-news-card-compact .public-card-title { font-size: 16px; line-height: 1.65; }
-.article-sidebar-opinions .public-opinion-title { font-size: 17px; line-height: 1.55; }
+.article-sidebar-opinions .public-opinion-title { font-size: 19px; line-height: 1.6; }
+.article-sidebar-opinions .public-opinion-card-sidebar { grid-template-columns: 56px minmax(0, 1fr); gap: 8px 14px; }
+.article-sidebar-opinions .public-opinion-avatar { width: 56px; height: 56px; }
+.article-sidebar-opinions .public-opinion-avatar svg { width: 20px; height: 20px; }
 .article-sidebar-related [data-testid^="link-recommendation-"] .text-xs { font-size: 13px; }
 .article-sidebar-stats [data-testid="ai-stats-title"] { font-size: 16px; line-height: 1.6; }
 .article-sidebar-stats [data-testid^="stat-"] .text-\[10px\] { font-size: 13px; line-height: 1.6; }
@@ -207,5 +210,5 @@
   .article-detail .article-action { font-size: 15px; padding-inline: 6px; }
   .article-detail-byline { align-items: flex-start; }
   .article-detail-sidebar .public-news-card-compact .public-card-title { font-size: 14px; line-height: 1.65; }
-  .article-sidebar-opinions .public-opinion-title { font-size: 17px; line-height: 1.55; }
+  .article-sidebar-opinions .public-opinion-title { font-size: 19px; line-height: 1.6; }
 }
