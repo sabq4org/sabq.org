@@ -11,7 +11,6 @@ import {
   Layers,
   Newspaper,
   Search,
-  Sparkles,
   TrendingUp,
 } from "lucide-react";
 import { Footer } from "@/components/Footer";
@@ -250,83 +249,69 @@ export function CategoriesDirectory({
 
   return (
     <>
-      <section className="public-page-header" data-testid="categories-header">
-
-        <div className="container relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <section className="public-page-header categories-directory-header" data-testid="categories-header">
+        <div className="public-container">
           <nav
-            className="mb-6 flex items-center gap-2 text-sm text-[#6b7c8a] dark:text-muted-foreground"
+            className="mb-2 flex items-center text-xs text-[#6b7c8a] sm:text-sm dark:text-muted-foreground"
             data-testid="breadcrumb-navigation"
+            aria-label="مسار الصفحة"
           >
-            <Link href="/">
-              <span className="flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/60">
-                <Home className="h-3.5 w-3.5" />
-                الرئيسية
-              </span>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 leading-none hover:text-primary transition-colors"
+            >
+              <Home className="h-3.5 w-3.5" />
+              الرئيسية
             </Link>
-            <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
-            <span className="font-semibold text-foreground">التصنيفات</span>
           </nav>
 
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-end">
-            <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-sm">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                دليل أقسام سبق الإخباري
-              </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+            <div className="min-w-0">
               <h1
                 className="public-page-title"
                 data-testid="heading-categories"
               >
                 التصنيفات
               </h1>
-              <p className="public-page-description max-w-2xl">
-                تصفّح أقسام الصحيفة الرسمية — من السياسة والاقتصاد إلى الرياضة والثقافة —
-                مع مؤشرات النشاط التحريري وعدد التغطيات في كل قسم.
+              <p className="public-page-description mt-1 hidden max-w-2xl sm:block">
+                تصفّح أقسام الصحيفة الرسمية — من السياسة والاقتصاد إلى الرياضة والثقافة.
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl border bg-background/80 p-4 backdrop-blur-sm">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground">
-                  <Layers className="h-4 w-4" />
-                  <span className="text-xs">الأقسام</span>
-                </div>
-                <p className="text-2xl font-bold">{formatNumber(filteredCategories.length)}</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:gap-x-4 sm:text-sm text-[#6b7c8a] dark:text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5" />
+                <span className="font-bold tabular-nums text-foreground">{formatNumber(filteredCategories.length)}</span>
+                <span>قسم</span>
               </div>
-              <div className="rounded-2xl border bg-background/80 p-4 backdrop-blur-sm">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground">
-                  <Newspaper className="h-4 w-4" />
-                  <span className="text-xs">الأخبار</span>
-                </div>
-                <p className="text-2xl font-bold">{formatNumber(totalArticles)}</p>
+              <div className="flex items-center gap-1.5">
+                <Newspaper className="h-3.5 w-3.5" />
+                <span className="font-bold tabular-nums text-foreground">{formatNumber(totalArticles)}</span>
+                <span>خبر</span>
               </div>
-              <div className="rounded-2xl border bg-background/80 p-4 backdrop-blur-sm">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground">
-                  <TrendingUp className="h-4 w-4" />
-                  <span className="text-xs">الأكثر متابعة</span>
-                </div>
-                <p className="truncate text-sm font-bold">
-                  {hotCategory?.nameAr ?? "—"}
-                </p>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5" />
+                <span>الأكثر متابعة</span>
+                <span className="truncate font-bold text-foreground">{hotCategory?.nameAr ?? "—"}</span>
               </div>
             </div>
           </div>
 
-          <div className="relative mt-8 max-w-2xl">
-            <Search className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative mt-3 max-w-xl">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
               placeholder="ابحث عن قسم أو موضوع..."
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="h-12 rounded-2xl border-primary/10 bg-background/90 pr-11 text-base shadow-sm backdrop-blur-sm"
+              className="h-11 rounded-xl border-primary/10 bg-background/90 pr-10 text-sm shadow-sm"
               data-testid="input-search-categories"
             />
           </div>
         </div>
       </section>
 
-      <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <div className="public-container py-5 lg:py-6">
         {!isLoading && !searchQuery && categories.length > 0 ? (
           <section className="mb-10">
             <div className="mb-4 flex items-center gap-2">

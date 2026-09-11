@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronRight, ChevronLeft } from "lucide-react";
+import { ChevronRight, ChevronLeft, Home } from "lucide-react";
+import { Link } from "wouter";
 import type { ArticleWithDetails, Category } from "@shared/schema";
 import { filterAICategories } from "@/utils/filterAICategories";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
@@ -235,19 +236,33 @@ export default function NewsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="public-page news-listing-page min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user} />
 
-      <main className="public-page flex-1 container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Header */}
-        <div className="public-page-header mb-8">
-          <h1 className="public-page-title text-4xl md:text-5xl font-bold mb-3" data-testid="heading-news">
+      <section className="public-page-header news-page-header" data-testid="news-header">
+        <div className="public-container">
+          <nav
+            className="mb-2 flex items-center text-xs text-[#6b7c8a] sm:text-sm dark:text-muted-foreground"
+            aria-label="مسار الصفحة"
+          >
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 leading-none hover:text-primary transition-colors"
+            >
+              <Home className="h-3.5 w-3.5" />
+              الرئيسية
+            </Link>
+          </nav>
+          <h1 className="public-page-title" data-testid="heading-news">
             الأخبار الذكية
           </h1>
-          <p className="public-page-description text-lg text-muted-foreground">
+          <p className="public-page-description hidden sm:block">
             اكتشف آخر الأخبار مع تحليلات وإحصائيات ذكية مدعومة بالذكاء الاصطناعي
           </p>
         </div>
+      </section>
+
+      <main className="flex-1 public-container py-5 lg:py-6">
 
         {/* DMS Ads - Leaderboard for desktop, MPU for mobile */}
         <DmsLeaderboardAd />
@@ -256,7 +271,7 @@ export default function NewsPage() {
         <SabqPulseSection />
 
         {/* Enhanced Filter Bar */}
-        <div className="public-filter-bar"><NewsEnhancedFilterBar
+        <NewsEnhancedFilterBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           sortOption={sortOption}
@@ -274,7 +289,7 @@ export default function NewsPage() {
             handleFilterChange();
           }}
           categories={categories}
-        /></div>
+        />
 
         {/* Results Summary */}
         <div className="mb-6 flex items-center justify-between">
@@ -401,7 +416,7 @@ export default function NewsPage() {
                 ))}
               </div>
             ) : (
-              <Card className="overflow-hidden">
+              <Card className="news-compact-wrap overflow-hidden">
                 <CardContent className="p-0 divide-y">
                   {currentArticles.map((article) => (
                     <NewsArticleCard

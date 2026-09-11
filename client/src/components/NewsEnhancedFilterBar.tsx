@@ -43,25 +43,22 @@ export function NewsEnhancedFilterBar({
   categories,
 }: EnhancedFilterBarProps) {
   return (
-    <div className="public-filter-bar space-y-4 mb-6">
-      {/* Search Bar */}
+    <div className="mb-4 space-y-2" data-testid="news-filter-bar">
       <div className="relative">
-        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
           placeholder="ابحث في الأخبار..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="pr-10"
+          className="h-10 pr-10"
           data-testid="input-search-news"
         />
       </div>
 
-      {/* Filters Row */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Sort Dropdown */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Select value={sortOption} onValueChange={onSortChange}>
-          <SelectTrigger className="w-[180px]" data-testid="select-sort">
+          <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-sort">
             <SelectValue placeholder="ترتيب حسب" />
           </SelectTrigger>
           <SelectContent>
@@ -73,9 +70,8 @@ export function NewsEnhancedFilterBar({
           </SelectContent>
         </Select>
 
-        {/* Time Range */}
         <Select value={timeRange} onValueChange={onTimeRangeChange}>
-          <SelectTrigger className="w-[150px]" data-testid="select-time-range">
+          <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-time-range">
             <SelectValue placeholder="الوقت" />
           </SelectTrigger>
           <SelectContent>
@@ -86,9 +82,8 @@ export function NewsEnhancedFilterBar({
           </SelectContent>
         </Select>
 
-        {/* Category Filter */}
         <Select value={selectedCategory} onValueChange={onCategoryChange}>
-          <SelectTrigger className="w-[150px]" data-testid="select-category">
+          <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-category">
             <SelectValue placeholder="الفئة" />
           </SelectTrigger>
           <SelectContent>
@@ -101,8 +96,7 @@ export function NewsEnhancedFilterBar({
           </SelectContent>
         </Select>
 
-        {/* View Mode Toggle */}
-        <div className="mr-auto flex gap-1 border rounded-md p-1">
+        <div className="mr-auto flex shrink-0 gap-1 rounded-md border p-0.5">
           <Button
             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
             size="sm"

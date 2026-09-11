@@ -29,6 +29,13 @@
 .public-page-header { padding-block: 32px; border-bottom: 1px solid var(--public-border); background: var(--public-surface); color: var(--public-ink); }
 /* رأس التصنيف: نفس هوية الديسكتوب، بحشو أقل على الجوال حتى لا يظهر شريط فارغ */
 .public-page-header.category-page-header { padding-block: 28px; }
+/* دليل الأقسام: رأس صحفي مضغوط بدل بطل تسويقي */
+.public-page-header.categories-directory-header,
+.public-page-header.news-page-header { padding-block: 16px; }
+.categories-directory-header .public-page-title,
+.news-page-header .public-page-title { font-size: 28px; line-height: 1.3; }
+.categories-directory-header .public-page-description,
+.news-page-header .public-page-description { margin-top: 4px; font-size: 14px; line-height: 1.6; }
 .public-page-title { color: var(--public-ink); margin: 0; font-size: 40px; line-height: 1.5; font-weight: 800; letter-spacing: normal; text-wrap: pretty; overflow-wrap: anywhere; }
 .public-page-description { margin-top: 8px; font-size: 16px; line-height: 1.8; color: var(--public-muted); }
 .public-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 24px; }
@@ -58,8 +65,12 @@
   .public-container { padding-inline: 16px; }
   .public-page-header { padding-block: 24px; }
   .public-page-header.category-page-header { padding-block: 14px; }
+  .public-page-header.categories-directory-header,
+  .public-page-header.news-page-header { padding-block: 12px; }
   .public-page-title { font-size: 30px; }
   .category-page-header .public-page-title { font-size: 26px; line-height: 1.35; }
+  .categories-directory-header .public-page-title,
+  .news-page-header .public-page-title { font-size: 22px; }
   .category-page-header .public-page-description { margin-top: 4px; font-size: 14px; line-height: 1.65; }
   .public-page-description { font-size: 15px; }
   .public-section-heading { margin-bottom: 20px; gap: 8px 16px; }

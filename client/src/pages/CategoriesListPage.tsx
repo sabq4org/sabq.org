@@ -55,7 +55,7 @@ export default function CategoriesListPage() {
   return (
     <div className="public-page min-h-screen bg-background" dir="rtl">
       <Header user={user} />
-      <main className="public-page-main public-container">
+      <main>
         <CategoriesDirectory
           categories={visibleCategories}
           filteredCategories={filteredCategories}
