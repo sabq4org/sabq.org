@@ -19,7 +19,8 @@ export function EditorialResearchPanel({ onReview }: { onReview: (result: Resear
   const request = useRef<{ topic: string; requestId: string } | null>(null);
   const key = [prefix, "jobs", user?.id];
   const capabilities = useQuery<ResearchCapabilities>({ queryKey: [prefix, "capabilities", user?.id], queryFn: () => apiRequest(`${prefix}/capabilities`), enabled: Boolean(user?.id) && canResearch, retry: false });
-  const history = useQuery<ResearchJob[]>({ queryKey: key, queryFn: () => apiRequest(`${prefix}/jobs`), enabled: Boolean(user?.id) && canResearch, retry: false, refetchInterval: query => (query.state.data ?? []).some(j => ACTIVE_RESEARCH_STATUSES.includes(j.status)) ? 4000 : false });
+  const historyAvailable = capabilities.data?.historyAvailable ?? capabilities.data?.enabled ?? false;
+  const history = useQuery<ResearchJob[]>({ queryKey: key, queryFn: () => apiRequest(`${prefix}/jobs`), enabled: Boolean(user?.id) && canResearch && historyAvailable, retry: false, refetchInterval: query => (query.state.data ?? []).some(j => ACTIVE_RESEARCH_STATUSES.includes(j.status)) ? 4000 : false });
   const jobs = Array.isArray(history.data) ? history.data : [];
   const selected = jobs.find(j => j.id === selectedId) ?? jobs[0];
   const active = jobs.some(j => ACTIVE_RESEARCH_STATUSES.includes(j.status));
@@ -36,6 +37,12 @@ export function EditorialResearchPanel({ onReview }: { onReview: (result: Resear
   const cancel = useMutation({ mutationFn: (id: string) => apiRequest<ResearchJob>(`${prefix}/jobs/${id}/cancel`, { method: "POST" }), onSuccess: updateJob });
   const error = create.error ?? cancel.error ?? history.error ?? capabilities.error;
   if (!canResearch) return null;
+  if (!historyAvailable) return <div className="space-y-4" dir="rtl" data-testid="editorial-research-panel">
+    <Alert variant={capabilities.isError ? "destructive" : "default"}><AlertDescription role="status">
+      {capabilities.isPending ? "جارٍ التحقق من توفر مساعد البحث..." : capabilities.isError ? "تعذر التحقق من توفر مساعد البحث. حاول تحديث الحالة." : capabilities.data?.reason ?? "مساعد البحث غير مفعّل حاليًا."}
+    </AlertDescription></Alert>
+    <Button size="sm" variant="outline" onClick={() => { void capabilities.refetch(); }} disabled={capabilities.isFetching} className="gap-1"><RotateCw className="h-3 w-3" /> تحديث الحالة</Button>
+  </div>;
   return <div className="space-y-4" dir="rtl" data-testid="editorial-research-panel">
     <p className="text-sm text-muted-foreground leading-6">اكتب موضوعًا للبحث في المصادر العامة. يصلك تقرير ومصادر ونقاط تحتاج مراجعتك، ويمكنك العودة إلى المهمة بعد إغلاق الصفحة.</p>
     {(capabilities.data && !capabilities.data.enabled) && <Alert><AlertDescription>{capabilities.data.reason}</AlertDescription></Alert>}

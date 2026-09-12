@@ -34,4 +34,4 @@ export interface ResearchJob {
   error: string | null; research: ResearchBundle | null; result: ResearchResult | null;
   usage: ResearchUsage | null;
 }
-export interface ResearchCapabilities { enabled: boolean; reason: string | null; dailyLimit: number; maxMinutes: number }
+export interface ResearchCapabilities { enabled: boolean; historyAvailable?: boolean; reason: string | null; dailyLimit: number; maxMinutes: number }

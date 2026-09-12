@@ -157,6 +157,13 @@ suite("editorial research — local PostgreSQL and authenticated HTTP", () => {
     vi.stubEnv("EDITORIAL_RESEARCH_WORKER_ENABLED", "false");
     await expect(createResearchJob("editor-a", input())).rejects.toMatchObject({code:"disabled"});
     expect(state.create).not.toHaveBeenCalled();
+    const disabled = await fetch(base + "/api/editorial-research/capabilities", { headers });
+    expect(await disabled.json()).toMatchObject({ enabled: false, historyAvailable: false });
+    vi.stubEnv("EDITORIAL_RESEARCH_WORKER_ENABLED", "true");
+    vi.stubEnv("EDITORIAL_RESEARCH_ENABLED", "false");
+    const draining = await fetch(base + "/api/editorial-research/capabilities", { headers });
+    expect(await draining.json()).toMatchObject({ enabled: false, historyAvailable: true });
+    await expect(createResearchJob("editor-a", input())).rejects.toMatchObject({code:"disabled"});
   });
   it("fails closed when sources were not opened", async () => {
     const job = await createResearchJob("editor-a", input()); await processResearchJobs();

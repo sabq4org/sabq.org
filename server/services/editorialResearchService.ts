@@ -15,7 +15,7 @@ const active = inArray(jobs.status, ACTIVE_RESEARCH_STATUSES);
 const safeHtml = (html: string) => DOMPurify.sanitize(html, { ALLOWED_TAGS: ["p", "br", "strong", "em", "ul", "ol", "li", "h2", "h3", "blockquote"], ALLOWED_ATTR: [] });
 export function researchCapabilities(): ResearchCapabilities {
   const enabled = process.env.EDITORIAL_RESEARCH_ENABLED === "true" && process.env.EDITORIAL_RESEARCH_WORKER_ENABLED === "true" && Boolean(process.env.OPENAI_API_KEY);
-  return { enabled, reason: enabled ? null : "مساعد البحث التجريبي غير مفعّل حاليًا.", dailyLimit: RESEARCH_DAILY_LIMIT, maxMinutes: RESEARCH_MAX_MS / 60000 };
+  return { enabled, historyAvailable: process.env.EDITORIAL_RESEARCH_WORKER_ENABLED === "true", reason: enabled ? null : "مساعد البحث التجريبي غير مفعّل حاليًا.", dailyLimit: RESEARCH_DAILY_LIMIT, maxMinutes: RESEARCH_MAX_MS / 60000 };
 }
 function publicJob(row: Row): ResearchJob {
   return { id: row.id, topic: row.topic, status: row.status as ResearchStatus, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), research: row.research, result: row.status === "completed" ? row.result : null, usage: row.usage, error: row.error };

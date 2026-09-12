@@ -97,3 +97,26 @@ test('removes research and its preview when the current user loses the system ad
   await expect(page.getByTestId('open-editorial-research')).toHaveCount(0);
   await expect(page.getByTestId('button-sabq-apply-body')).toHaveCount(0);
 });
+
+test('shows only the disabled state and never requests unconfigured job storage', async ({page}) => {
+  let jobRequests = 0, capabilitiesRequests = 0;
+  await page.route('**/api/editorial-research/capabilities', route => { capabilitiesRequests++; return route.fulfill({json:{enabled:false,historyAvailable:false,reason:'مساعد البحث التجريبي غير مفعّل حاليًا.',dailyLimit:5,maxMinutes:5}}); });
+  await page.route('**/api/editorial-research/jobs', route => { jobRequests++; return route.fulfill({status:503,json:{message:'storage not configured'}}); });
+  await openPanel(page);
+  await expect(page.getByTestId('editorial-research-panel').getByRole('status')).toContainText('غير مفعّل');
+  await expect(page.getByTestId('research-topic')).toHaveCount(0);
+  await expect(page.getByText('مهامك الأخيرة')).toHaveCount(0);
+  await page.getByRole('button',{name:'تحديث الحالة',exact:true}).click();
+  await expect.poll(()=>capabilitiesRequests).toBe(2);
+  expect(jobRequests).toBe(0);
+});
+test('keeps history and cancellation available while admission is disabled', async ({page}) => {
+  let current = job('researching');
+  await page.route('**/api/editorial-research/capabilities', route => route.fulfill({json:{enabled:false,historyAvailable:true,reason:'مساعد البحث التجريبي غير مفعّل حاليًا.',dailyLimit:5,maxMinutes:5}}));
+  await page.route('**/api/editorial-research/jobs',route=>route.fulfill({json:[current]}));
+  await page.route('**/api/editorial-research/jobs/*/cancel',route=>{current=job('cancelled');return route.fulfill({json:current});});
+  await openPanel(page);
+  await expect(page.getByTestId('research-start')).toBeDisabled();
+  await page.getByRole('button',{name:'إلغاء المهمة',exact:true}).click();
+  await expect(page.getByTestId('research-status')).toHaveText('أُلغيت المهمة');
+});

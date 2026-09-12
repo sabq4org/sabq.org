@@ -7,6 +7,7 @@
 - **الصلاحية:** الخاصية مخفية عن غير مسؤول النظام، وجميع مسارات API ترفضهم بـ403 حتى مع صلاحية `articles.ai_generate` أو `*`. دور `admin` العام لا يكفي. تستخدم الواجهة والخادم قائمة الأدوار نفسها، وتبقى ملكية كل مهمة لصاحبها.
 - **Web:** «محرر سبق» → «بحث وإعداد تقرير»، موضوع، سجل مهام خاص، حالة، ملخص بحث، مصادر، نقاط غير محسومة، مراجعة التقرير، إدراج يدوي. متجاوب وRTL، استعادة من قاعدة البيانات بعد إغلاق الصفحة.
 - **API:** `GET /api/editorial-research/capabilities` و`GET/POST /api/editorial-research/jobs` و`GET /api/editorial-research/jobs/:id` و`POST .../:id/cancel`. Passport + دور مسؤول النظام فقط (`system_admin` أو `system.admin` أو `superadmin` أو `super_admin`)؛ POST يمر عبر CSRF الحالي. جسم الإنشاء `{requestId: UUID, topic: string(20..2000)}` فقط.
+- **حالة التعطيل:** capabilities تعيد `historyAvailable` مستقلًا عن قبول مهام جديدة؛ عند إيقاف العامل تظهر رسالة التعطيل وزر تحديث فقط ولا تطلب الواجهة جدول المهام. عند إيقاف القبول مع بقاء العامل يعمل يبقى السجل والإلغاء متاحين لتفريغ المهام.
 - **Schema:** جدول إضافي `editorial_research_jobs` كما في `shared/schema.ts`؛ SQL المخصص لا يحذف بيانات أو يعدل جداول أخرى.
 - **Mobile:** `status:deferred-to-v2`؛ اختبار الاستخدام التحريري أولًا، لا تعديل مستهلكي API الحاليين.
 
@@ -14,7 +15,7 @@
 
 1. طبّق `scripts/sql/add-editorial-research-jobs-2026-09-12.sql` على قاعدة التطوير المحلية فقط؛ يجب أن يوجد جدول users.
 2. في بيئة الخادم، استخدم `OPENAI_API_KEY` المجهز بصلاحيات agents read/write وresponses write. لا تضف المفتاح إلى sandbox أو VITE أو ملفات المشروع.
-3. فعّل `EDITORIAL_RESEARCH_ENABLED=true` و`EDITORIAL_RESEARCH_WORKER_ENABLED=true`، وتأكد أن إعداد الخادم يسمح بالـbackground jobs. كلا المفتاحين مطفأ افتراضيًا.
+3. فعّل `EDITORIAL_RESEARCH_ENABLED=true` و`EDITORIAL_RESEARCH_WORKER_ENABLED=true`، وتأكد أن `ENABLE_BACKGROUND_WORKERS=true`. يعمل عامل البحث على جميع نسخ الخادم المفعلة، وتمنع leases في SQL تكرار المعالجة دون الاعتماد على اختيار قائد عند الإقلاع. كلا المفتاحين مطفأ افتراضيًا.
 4. افتح محرر الويب بحساب مسؤول النظام، ثم «محرر سبق» → «بحث وإعداد تقرير».
 5. اختبر مصدرًا عامًا معلومًا أولًا؛ راجع الادعاءات والمصادر يدويًا، ثم أدرج النتيجة عند قبولها. لا حفظ/نشر مقال تلقائي.
 
