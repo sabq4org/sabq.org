@@ -44,8 +44,8 @@ const ICONS: Record<string, LucideIcon> = {
  * بطاقة الهاتف: عنوان قصير + شارة الحداثة، رقم واحد كبير، الفترة، ثم المصدر ورابط التفاصيل.
  * البطاقة كلها رابط إلى /economy، بحد علوي بلون الهوية ينحني مع الزوايا كما في التطبيق.
  */
-function EconomyHomeTeaser({ title, figure, unit, caption, badge, cta, ariaLabel }: {
-  title: string; figure: string; unit?: string; caption: string; badge: string | null; cta: string; ariaLabel: string;
+function EconomyHomeTeaser({ title, figure, unit, unitNote, caption, badge, cta, ariaLabel }: {
+  title: string; figure: string; unit?: string; unitNote?: string; caption: string; badge: string | null; cta: string; ariaLabel: string;
 }) {
   return (
     <section className="py-2" aria-label={ariaLabel} data-testid="economy-home-block">
@@ -53,14 +53,14 @@ function EconomyHomeTeaser({ title, figure, unit, caption, badge, cta, ariaLabel
         href="/economy"
         className="block rounded-2xl border border-card-border border-t-[3px] border-t-primary bg-card p-3.5 transition-colors hover:border-primary/60"
         data-testid="economy-home-teaser"
-        aria-label={`${title}: ${figure}${unit ? ` ${unit}` : ""} — عرض تفاصيل الاقتصاد بالقطاعات والمدن`}
+        aria-label={`${title}: ${figure}${unit ? ` ${unit}` : ""}${unitNote ? ` ${unitNote}` : ""} — عرض تفاصيل الاقتصاد بالقطاعات والمدن`}
       >
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-[14px] font-bold leading-snug text-foreground">{title}</h2>
           {badge && <NewBadge label={badge} />}
         </div>
         <div className="mt-2 text-[32px] font-black leading-none tabular-nums text-primary truncate" data-testid="economy-home-figure">
-          {figure}{unit && <span className="mr-1.5 text-base font-bold">{unit}</span>}
+          {figure}{unit && <span className="mr-1.5 text-base font-bold">{unit}</span>}{unitNote && <span className="mr-1 text-[11px] font-medium text-muted-foreground">{unitNote}</span>}
         </div>
         <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{caption}</p>
         <div className="mt-2 flex items-baseline justify-between gap-2">
@@ -129,6 +129,7 @@ export function EconomyNumbersBlock() {
         title="أين أنفق السعوديون؟"
         figure={fmtSar(w.totalValue)}
         unit="ريال"
+        unitNote="في أسبوع"
         caption={`إنفاق نقاط البيع · ${w.weekLabelAr}`}
         badge={isFresh(w.ingestedAt) ? "أرقام جديدة" : null}
         cta="أين صُرفت؟"
