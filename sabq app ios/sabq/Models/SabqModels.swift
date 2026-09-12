@@ -421,6 +421,8 @@ struct Article: Identifiable, Equatable, Hashable {
     /// اسم القسم كما أرسله الخادم عندما لا يطابق أحد الأقسام الثابتة.
     /// nil = الاسم من `category.title`.
     var categoryLabel: String? = nil
+    /// معرّف التصنيف في الخادم (لبلوك مقالات الرأي المرتبطة). nil في الحمولات القديمة.
+    var categoryId: String? = nil
     let author: String
     let publishDate: Date
     let isBreaking: Bool
@@ -543,6 +545,7 @@ struct Article: Identifiable, Equatable, Hashable {
             bodyHTML: bodyHTML,
             category: ArticleCategory(fromSection: api.categoryName),
             categoryLabel: Self.resolveCategoryLabel(name: api.categoryName, slug: api.categorySlug),
+            categoryId: api.categoryId,
             author: api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? "سبق",
             publishDate: Self.parsePublishedAt(api.publishedAt),
             isBreaking: api.newsType == "breaking",

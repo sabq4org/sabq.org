@@ -118,6 +118,8 @@ nonisolated struct APIArticle: Decodable {
     let englishSlug: String?
     let categoryName: String?
     let categorySlug: String?
+    /// معرّف التصنيف — يلزم لبلوك «مقالات قد تهمك» (`/api/opinion/related/category/:id`).
+    let categoryId: String?
     let authorName: String?
     let publishedAt: String
     let articleType: String?
@@ -178,11 +180,15 @@ nonisolated struct APIArticle: Decodable {
             categoryName = (try? cat.decode(String.self, forKey: FlexKey("nameAr")))
                 ?? (try? cat.decode(String.self, forKey: FlexKey("name")))
             categorySlug = try? cat.decode(String.self, forKey: FlexKey("slug"))
+            categoryId = (try? cat.decode(String.self, forKey: FlexKey("id")))
+                ?? (try? cat.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         } else {
             categoryName = (try? c.decode(String.self, forKey: FlexKey("category_name")))
                 ?? (try? c.decode(String.self, forKey: FlexKey("section")))
             categorySlug = (try? c.decode(String.self, forKey: FlexKey("category_slug")))
                 ?? (try? c.decode(String.self, forKey: FlexKey("section_slug")))
+            categoryId = (try? c.decode(String.self, forKey: FlexKey("categoryId")))
+                ?? (try? c.decode(String.self, forKey: FlexKey("category_id")))
         }
 
         if let auth = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("author")) {

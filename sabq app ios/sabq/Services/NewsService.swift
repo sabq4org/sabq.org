@@ -231,6 +231,13 @@ enum NewsService {
         return deduplicatedOpinions(articleOpinions + paginatedOpinions)
     }
 
+    /// مقالات رأي من تصنيف الخبر نفسه — بلوك «مقالات قد تهمك» في صفحة الخبر
+    /// (نقل الويب #1609/#1624). الفشل يعيد قائمة فارغة فيختفي البلوك كما في الويب.
+    static func fetchRelatedOpinions(categoryId: String, excludeId: String?, limit: Int = 5) async -> [OpinionArticle] {
+        let opinions = (try? await APIClient.shared.fetchRelatedOpinions(categoryId: categoryId, excludeId: excludeId, limit: limit)) ?? []
+        return deduplicatedOpinions(opinions.map(OpinionArticle.from))
+    }
+
     static func fetchOpinionDetail(slug: String) async -> OpinionArticle? {
         guard let opinion = try? await APIClient.shared.fetchOpinion(slug: slug) else { return nil }
         return OpinionArticle.from(opinion)
