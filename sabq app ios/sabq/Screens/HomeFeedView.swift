@@ -928,14 +928,13 @@ struct HomeFeedView: View {
 
     // MARK: - Opinions Preview
 
-    // «آراء تستحق القراءة» — بروح بلوك «مقالات قد تهمك» داخل تفاصيل الخبر
-    // (الحاوية الموحدة نفسها) لكن بترتيب مضغوط: صف قائد واحد بصورة المقال أو
-    // الكاتب، ثم شبكة عمودين من بطاقات صغيرة (صورة الكاتب الدائرية + العنوان).
-    // خمس مواد في نحو ثلث مساحة البطاقات الكبيرة السابقة (قرار المالك 2026-09-12).
+    // «آراء تستحق القراءة» — الحاوية الموحدة نفسها (بلوك تفاصيل الخبر) وست
+    // بطاقات متماثلة في شبكة عمودين بلا تمييز لمقال عن البقية (قرار المالك
+    // 2026-09-12): صورة الكاتب الدائرية + الاسم + العنوان في سطرين + الوقت.
     @ViewBuilder
     private var opinionsPreviewSection: some View {
-        let opinions = Array(articlesStore.opinions.prefix(5))
-        if let lead = opinions.first {
+        let opinions = Array(articlesStore.opinions.prefix(6))
+        if !opinions.isEmpty {
             ArticleSidebarModule(
                 title: "آراء تستحق القراءة",
                 description: "أحدث ما كتبه كتّاب سبق",
@@ -951,30 +950,15 @@ struct HomeFeedView: View {
                     .buttonStyle(.plain)
                 }
             ) {
-                NavigationLink(value: lead) {
-                    SidebarArticleRow(
-                        title: lead.title,
-                        imageURL: lead.imageURL.flatMap { $0.isEmpty ? nil : $0 } ?? lead.authorImageURL,
-                        byline: lead.authorName,
-                        bylineAvatarURL: lead.authorImageURL,
-                        date: lead.relativeDate,
-                        placeholderIcon: "text.quote"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                if opinions.count > 1 {
-                    SidebarRowDivider()
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        ForEach(opinions.dropFirst()) { opinion in
-                            NavigationLink(value: opinion) {
-                                opinionMiniTile(opinion)
-                            }
-                            .buttonStyle(.plain)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(opinions) { opinion in
+                        NavigationLink(value: opinion) {
+                            opinionMiniTile(opinion)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.top, 12)
                 }
+                .padding(.top, 12)
             }
         }
     }
