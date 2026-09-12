@@ -6,18 +6,18 @@ import SwiftUI
 
 struct SabqPlusRoute: Hashable {}
 
-struct PlusTierInfo: Codable, Equatable {
+nonisolated struct PlusTierInfo: Codable, Equatable {
     let level: Int
     let nameAr: String
     let color: String
 }
 
-struct PlusNextTier: Codable, Equatable {
+nonisolated struct PlusNextTier: Codable, Equatable {
     let nameAr: String
     let minLifetimePoints: Int
 }
 
-struct PlusSummary: Codable, Equatable {
+nonisolated struct PlusSummary: Codable, Equatable {
     let totalPoints: Int
     let lifetimePoints: Int
     let sarValue: Double
@@ -29,7 +29,7 @@ struct PlusSummary: Codable, Equatable {
     let predictionMultiplier: Double
 }
 
-struct PlusReward: Codable, Identifiable, Equatable {
+nonisolated struct PlusReward: Codable, Identifiable, Equatable {
     let id: String
     let partnerName: String
     let offer: String
@@ -41,13 +41,13 @@ struct PlusReward: Codable, Identifiable, Equatable {
     let remainingStock: Int?
 }
 
-struct PlusCatalog: Codable, Equatable {
+nonisolated struct PlusCatalog: Codable, Equatable {
     let balance: Int
     let pointsPerSar: Int
     let rewards: [PlusReward]
 }
 
-struct PlusVoucher: Codable, Equatable, Identifiable {
+nonisolated struct PlusVoucher: Codable, Equatable, Identifiable {
     var id: String { redemptionId }
     let code: String
     let expiresAt: String
@@ -60,14 +60,14 @@ struct PlusVoucher: Codable, Equatable, Identifiable {
     let redemptionId: String
 }
 
-struct PlusRedeemResponse: Codable {
+nonisolated struct PlusRedeemResponse: Codable {
     let success: Bool
     let message: String?
     let remainingBalance: Int?
     let voucher: PlusVoucher?
 }
 
-struct PlusRedemption: Codable, Identifiable, Equatable {
+nonisolated struct PlusRedemption: Codable, Identifiable, Equatable {
     let id: String
     let partnerName: String?
     let offer: String?
@@ -81,7 +81,7 @@ struct PlusRedemption: Codable, Identifiable, Equatable {
     let category: String?
 }
 
-struct PlusRedemptionsResponse: Codable {
+nonisolated struct PlusRedemptionsResponse: Codable {
     let success: Bool
     let redemptions: [PlusRedemption]
 }

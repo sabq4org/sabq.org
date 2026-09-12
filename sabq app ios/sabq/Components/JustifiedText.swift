@@ -1,6 +1,108 @@
 import SwiftUI
 import UIKit
 
+// MARK: - مفاتيح الكاش (قابلة للاختبار)
+//
+// جسور UIKit في القارئ تعيد الرسم فقط عندما يتغيّر «مفتاح العرض». قبل تدقيق
+// iOS 27 (F01) كان مفتاح الفقرات الغنية يحوي طول النص وبصمته وتباعد الأسطر
+// فقط، فتغيير حجم الخط/نوعه/لونه مع ثبات النص كان يُرجع الدالة قبل تحديث
+// attributedText — ولا يتغيّر جسم المقال من ورقة «Aa». المفاتيح هنا تضم كل
+// ما يؤثر في الرسم، وهي Equatable صريحة كي تغطيها اختبارات الوحدة.
+
+/// كل خصائص العرض التي تؤثر في رسم فقرة داخل UITextView.
+nonisolated struct JustifiedTextStyle: Equatable {
+    var fontSize: CGFloat
+    var weight: UIFont.Weight
+    var useSerifReader: Bool
+    var lineSpacing: CGFloat
+    /// اللون بعد حلّه للمظهر الحالي (فاتح/داكن) بصيغة RGBA ثابتة — لا نعتمد
+    /// على `UIColor.hashValue` لأن الألوان الديناميكية تُنشأ من جديد كل رسم.
+    var colorKey: String
+    /// فئة حجم النص في النظام (Dynamic Type) — تغييرها من الإعدادات يجب أن
+    /// يعيد بناء الفقرة بحجم مقيس.
+    var sizeCategory: UIContentSizeCategory
+
+    /// الحجم النهائي بعد تطبيق مقياس النظام على حجم القارئ. نستخدم مقياس
+    /// `.body` تحديدًا لأن `Font.custom(_:size:)` في بقية الشاشة يتدرّج
+    /// نسبةً إلى body، فيبقى جسم المقال والعناوين على المقياس نفسه (F02).
+    var scaledFontSize: CGFloat {
+        JustifiedTextStyle.scaled(fontSize, for: sizeCategory)
+    }
+
+    nonisolated static func scaled(_ size: CGFloat, for category: UIContentSizeCategory) -> CGFloat {
+        let traits = UITraitCollection(preferredContentSizeCategory: category)
+        return UIFontMetrics(forTextStyle: .body).scaledValue(for: size, compatibleWith: traits)
+    }
+
+    /// مفتاح لون مستقر: يحلّ الألوان الديناميكية للمظهر المطلوب ثم يُخرج
+    /// المكوّنات الأربعة بدقة ثلاث منازل.
+    nonisolated static func colorKey(_ color: UIColor, darkMode: Bool) -> String {
+        let traits = UITraitCollection(userInterfaceStyle: darkMode ? .dark : .light)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "%.3f,%.3f,%.3f,%.3f", r, g, b, a)
+    }
+}
+
+/// مفتاح الفقرة النصية البسيطة (المسار القديم لمقالات النص الخام).
+nonisolated struct JustifiedPlainKey: Equatable {
+    var text: String
+    var style: JustifiedTextStyle
+}
+
+/// مفتاح الفقرة الغنية (مسار HTML عبر ArticleHtmlParser).
+nonisolated struct JustifiedRunsKey: Equatable {
+    var runs: [InlineRun]
+    var style: JustifiedTextStyle
+}
+
+// MARK: - مساعدات مشتركة
+
+private extension EnvironmentValues {
+    var justifiedSizeCategory: UIContentSizeCategory {
+        UIContentSizeCategory(sizeCategory)
+    }
+}
+
+private func makeReaderTextView() -> UITextView {
+    let tv = UITextView()
+    tv.isEditable = false
+    tv.isSelectable = true
+    tv.isScrollEnabled = false
+    tv.backgroundColor = .clear
+    tv.textContainerInset = .zero
+    tv.textContainer.lineFragmentPadding = 0
+    // نقيس الخط بأنفسنا عبر UIFontMetrics (انظر JustifiedTextStyle) — لو
+    // فعّلنا هذا المفتاح أيضًا لتضاعف التكبير.
+    tv.adjustsFontForContentSizeCategory = false
+    // Hug strongly along the vertical axis so the view sizes to the
+    // text height inside a SwiftUI VStack. On the horizontal axis we
+    // keep low hugging + low resistance so SwiftUI's proposed width
+    // wins — without that, a long unbreakable word can balloon the
+    // intrinsic content size and clip the left edge of the column.
+    tv.setContentHuggingPriority(.required, for: .vertical)
+    tv.setContentCompressionResistancePriority(.required, for: .vertical)
+    tv.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    return tv
+}
+
+private func justifiedParagraphStyle(lineSpacing: CGFloat) -> NSParagraphStyle {
+    let ps = NSMutableParagraphStyle()
+    ps.alignment = .justified
+    ps.lineSpacing = lineSpacing
+    ps.baseWritingDirection = .rightToLeft
+    return ps
+}
+
+private func readerFont(size: CGFloat, weight: UIFont.Weight, serif: Bool) -> UIFont {
+    let base = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
+    let descriptor = serif ? (base.withDesign(.serif) ?? base) : base
+    return UIFont(descriptor: descriptor, size: size)
+}
+
+// MARK: - فقرة نصية بسيطة
+
 /// Renders body paragraphs with `NSTextAlignment.justified` so Arabic
 /// text fills the column to both edges — SwiftUI's `Text` only supports
 /// leading/center/trailing, so we drop down to `UITextView` for this.
@@ -14,8 +116,8 @@ import UIKit
 /// paragraph for every scroll tick. Building an `NSAttributedString` +
 /// font descriptor every time costs ~0.5ms per paragraph, which
 /// multiplied by 20 paragraphs × 60fps is the entire frame budget gone.
-/// We cache the last build inside the Coordinator keyed by a cheap
-/// fingerprint of the inputs, and no-op when nothing changed.
+/// We keep the last render key inside the Coordinator and no-op when
+/// nothing changed.
 struct JustifiedText: UIViewRepresentable {
     let text: String
     let fontSize: CGFloat
@@ -25,43 +127,43 @@ struct JustifiedText: UIViewRepresentable {
     let textColor: UIColor
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
-        tv.isEditable = false
-        tv.isSelectable = true
-        tv.isScrollEnabled = false
-        tv.backgroundColor = .clear
-        tv.textContainerInset = .zero
-        tv.textContainer.lineFragmentPadding = 0
-        tv.adjustsFontForContentSizeCategory = false
+        let tv = makeReaderTextView()
         tv.dataDetectorTypes = []
-        // Hug strongly along the vertical axis so the view sizes to the
-        // text height inside a SwiftUI VStack. On the horizontal axis we
-        // keep low hugging + low resistance so SwiftUI's proposed width
-        // wins — without that, a long unbreakable word can balloon the
-        // intrinsic content size and clip the left edge of the column.
-        tv.setContentHuggingPriority(.required, for: .vertical)
-        tv.setContentCompressionResistancePriority(.required, for: .vertical)
-        tv.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return tv
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
-        var fingerprint: String = ""
+        var lastKey: JustifiedPlainKey?
+    }
+
+    private func renderKey(_ context: Context) -> JustifiedPlainKey {
+        JustifiedPlainKey(
+            text: text,
+            style: JustifiedTextStyle(
+                fontSize: fontSize,
+                weight: weight,
+                useSerifReader: useSerifReader,
+                lineSpacing: lineSpacing,
+                colorKey: JustifiedTextStyle.colorKey(textColor, darkMode: context.environment.colorScheme == .dark),
+                sizeCategory: context.environment.justifiedSizeCategory
+            )
+        )
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        // Fingerprint covers every input that affects layout. If unchanged,
-        // the UITextView's existing attributedText is still correct and we
-        // skip the (expensive) rebuild + assignment.
-        let fp = "\(text.count)|\(text.hashValue)|\(fontSize)|\(weight.rawValue)|\(useSerifReader ? 1 : 0)|\(lineSpacing)|\(textColor.hashValue)"
-        if fp == context.coordinator.fingerprint && uiView.attributedText.length > 0 {
+        let key = renderKey(context)
+        if key == context.coordinator.lastKey && uiView.attributedText.length > 0 {
             return
         }
-        context.coordinator.fingerprint = fp
-        uiView.attributedText = buildAttributed()
+        context.coordinator.lastKey = key
+        let size = key.style.scaledFontSize
+        uiView.attributedText = NSAttributedString(string: text, attributes: [
+            .font: readerFont(size: size, weight: weight, serif: useSerifReader),
+            .foregroundColor: textColor,
+            .paragraphStyle: justifiedParagraphStyle(lineSpacing: lineSpacing),
+        ])
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -72,79 +174,72 @@ struct JustifiedText: UIViewRepresentable {
         let fitted = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         return CGSize(width: width, height: ceil(fitted.height))
     }
-
-    private func buildAttributed() -> NSAttributedString {
-        let ps = NSMutableParagraphStyle()
-        ps.alignment = .justified
-        ps.lineSpacing = lineSpacing
-        ps.baseWritingDirection = .rightToLeft
-        let font: UIFont = {
-            let descriptor = useSerifReader
-                ? UIFont.systemFont(ofSize: fontSize, weight: weight)
-                    .fontDescriptor.withDesign(.serif) ?? UIFont.systemFont(ofSize: fontSize, weight: weight).fontDescriptor
-                : UIFont.systemFont(ofSize: fontSize, weight: weight).fontDescriptor
-            return UIFont(descriptor: descriptor, size: fontSize)
-        }()
-        return NSAttributedString(string: text, attributes: [
-            .font: font,
-            .foregroundColor: textColor,
-            .paragraphStyle: ps,
-        ])
-    }
 }
 
-/// Same UITextView wrapper but takes an `NSAttributedString` directly so
-/// the rich-HTML pipeline (ArticleContentView) can preserve inline
-/// bold/italic/link runs while still justifying the paragraph.
+// MARK: - فقرة غنية (bold/italic/روابط)
+
+/// Same UITextView wrapper for the rich-HTML pipeline (ArticleContentView):
+/// takes the parsed `InlineRun`s plus the reader style and builds the
+/// attributed string itself, so inline bold/italic/link runs survive and
+/// the paragraph is still justified.
 ///
-/// Performance: same coordinator-memoization trick as `JustifiedText`.
-/// The attributed input is identified by length + lineSpacing + a hash
-/// of its raw string content — cheap to compute, sufficient to detect a
-/// real edit. Without this, every scroll tick paid for a full
-/// NSMutableAttributedString copy + paragraph style application on
-/// every paragraph in the body.
+/// Performance: the attributed string is built **only** when the runs or
+/// any style input changes (font size, serif toggle, colour, Dynamic Type
+/// category, line spacing). Previously the caller rebuilt the attributed
+/// string on every scroll tick and this view compared only text + line
+/// spacing — which is exactly why the «Aa» sheet did not resize the body.
 struct JustifiedAttributedText: UIViewRepresentable {
-    let attributed: NSAttributedString
+    let runs: [InlineRun]
+    let baseSize: CGFloat
+    let baseWeight: UIFont.Weight
+    let useSerifReader: Bool
+    let textColor: UIColor
     let lineSpacing: CGFloat
     var onLinkTap: ((URL) -> Void)? = nil
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
-        tv.isEditable = false
-        tv.isSelectable = true
-        tv.isScrollEnabled = false
-        tv.backgroundColor = .clear
-        tv.textContainerInset = .zero
-        tv.textContainer.lineFragmentPadding = 0
+        let tv = makeReaderTextView()
         tv.dataDetectorTypes = .link
         tv.delegate = context.coordinator
-        tv.setContentHuggingPriority(.required, for: .vertical)
-        tv.setContentCompressionResistancePriority(.required, for: .vertical)
-        tv.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return tv
     }
 
+    private func renderKey(_ context: Context) -> JustifiedRunsKey {
+        JustifiedRunsKey(
+            runs: runs,
+            style: JustifiedTextStyle(
+                fontSize: baseSize,
+                weight: baseWeight,
+                useSerifReader: useSerifReader,
+                lineSpacing: lineSpacing,
+                colorKey: JustifiedTextStyle.colorKey(textColor, darkMode: context.environment.colorScheme == .dark),
+                sizeCategory: context.environment.justifiedSizeCategory
+            )
+        )
+    }
+
     func updateUIView(_ uiView: UITextView, context: Context) {
-        let fp = "\(attributed.length)|\(attributed.string.hashValue)|\(lineSpacing)"
-        if fp == context.coordinator.fingerprint && uiView.attributedText.length > 0 {
-            // Still refresh the link handler — cheap and might have changed.
-            context.coordinator.onLinkTap = onLinkTap
+        // Still refresh the link handler — cheap and might have changed.
+        context.coordinator.onLinkTap = onLinkTap
+
+        let key = renderKey(context)
+        if key == context.coordinator.lastKey && uiView.attributedText.length > 0 {
             return
         }
-        context.coordinator.fingerprint = fp
+        context.coordinator.lastKey = key
 
-        let m = NSMutableAttributedString(attributedString: attributed)
+        let m = NSMutableAttributedString(attributedString: InlineRunAttributing.attributedString(
+            runs: runs,
+            baseSize: key.style.scaledFontSize,
+            baseWeight: baseWeight,
+            useSerifReader: useSerifReader,
+            textColor: textColor
+        ))
         // Apply justified paragraph style across the whole string
         // without clobbering the inline font/colour runs.
         let fullRange = NSRange(location: 0, length: m.length)
-        let ps = NSMutableParagraphStyle()
-        ps.alignment = .justified
-        ps.lineSpacing = lineSpacing
-        ps.baseWritingDirection = .rightToLeft
-        m.addAttribute(.paragraphStyle, value: ps, range: fullRange)
+        m.addAttribute(.paragraphStyle, value: justifiedParagraphStyle(lineSpacing: lineSpacing), range: fullRange)
         uiView.attributedText = m
-        context.coordinator.onLinkTap = onLinkTap
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -157,7 +252,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var onLinkTap: ((URL) -> Void)?
-        var fingerprint: String = ""
+        var lastKey: JustifiedRunsKey?
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
                       defaultAction: UIAction) -> UIAction? {
             if case .link(let url) = textItem.content, let handler = onLinkTap {
@@ -184,10 +279,7 @@ enum InlineRunAttributing {
         for run in runs {
             var weight = baseWeight
             if run.bold { weight = .bold }
-            var descriptor = useSerifReader
-                ? UIFont.systemFont(ofSize: baseSize, weight: weight)
-                    .fontDescriptor.withDesign(.serif) ?? UIFont.systemFont(ofSize: baseSize, weight: weight).fontDescriptor
-                : UIFont.systemFont(ofSize: baseSize, weight: weight).fontDescriptor
+            var descriptor = readerFont(size: baseSize, weight: weight, serif: useSerifReader).fontDescriptor
             if run.italic, let italicDesc = descriptor.withSymbolicTraits(.traitItalic) {
                 descriptor = italicDesc
             }

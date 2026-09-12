@@ -23,17 +23,12 @@
 	<string>fYZEmXdzQuKjai7EUD7PXA</string>
 	<key>GA4_MEASUREMENT_ID</key>
 	<string>G-26QJ46Q70B</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>remote-notification</string>
+	</array>
 	<key>GIDClientID</key>
 	<string>664097075837-8cle4eq9agqnt3em9p9k0ae56dtb99h2.apps.googleusercontent.com</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
 </dict>
 </plist>

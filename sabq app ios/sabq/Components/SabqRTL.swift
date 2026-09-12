@@ -90,7 +90,16 @@ private struct SabqRTLLabel: UIViewRepresentable {
         label.numberOfLines = numberOfLines
         label.semanticContentAttribute = .forceRightToLeft
         label.textAlignment = .right
-        applyAttributedText(to: label)
+        applyAttributedText(to: label, font: scaledFont(context))
+    }
+
+    /// الخط بعد مقياس Dynamic Type للنظام (نسبةً إلى body، كما تتدرّج خطوط
+    /// `Font.custom` في بقية البطاقة) — كان العنوان يُمرَّر بحجم ثابت فلا
+    /// يستجيب لإعداد تكبير النص (تدقيق iOS 27، F02).
+    private func scaledFont(_ context: Context) -> UIFont {
+        let category = UIContentSizeCategory(context.environment.sizeCategory)
+        let traits = UITraitCollection(preferredContentSizeCategory: category)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: font, compatibleWith: traits)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
@@ -98,18 +107,15 @@ private struct SabqRTLLabel: UIViewRepresentable {
         guard width.isFinite, width > 0 else { return nil }
         // بدون preferredMaxLayoutWidth يبقى intrinsic ضيقاً فيبدو العنوان «في الوسط».
         uiView.preferredMaxLayoutWidth = width
-        applyAttributedText(to: uiView)
+        let font = scaledFont(context)
+        applyAttributedText(to: uiView, font: font)
         let fitted = uiView.sizeThatFits(
             CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         )
-        return CGSize(width: width, height: max(ceil(fitted.height), uiFontLineHeight()))
+        return CGSize(width: width, height: max(ceil(fitted.height), ceil(font.lineHeight + lineSpacing)))
     }
 
-    private func uiFontLineHeight() -> CGFloat {
-        ceil(font.lineHeight + lineSpacing)
-    }
-
-    private func applyAttributedText(to label: UILabel) {
+    private func applyAttributedText(to label: UILabel, font: UIFont) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = .rightToLeft
         // .right صريح — .natural داخل UILabel المضمّن يُحلّ كـ LTR فيُحاذى لليسار.

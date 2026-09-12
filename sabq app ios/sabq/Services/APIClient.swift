@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -59,7 +60,16 @@ actor APIClient {
     /// session lifts the resource cap so those calls can complete.
     private let longSession: URLSession
     private let decoder: JSONDecoder
-    private var authToken: String?
+    private var authToken: String? {
+        didSet {
+            let present = authToken != nil
+            sessionFlag.withLock { $0 = present }
+        }
+    }
+    /// مرآة خيطية-آمنة لوجود التوكن كي تقرأها الواجهات (MainActor) بلا
+    /// عبور الـactor — كانت `hasSession` معزولة فتُقرأ من RoshnView بتحذير
+    /// «actor-isolated property … from the main actor» (تدقيق iOS 27، F12).
+    private nonisolated let sessionFlag = OSAllocatedUnfairLock(initialState: false)
     private var csrfToken: String?
 
     private init() {
@@ -120,6 +130,9 @@ actor APIClient {
         } else {
             authToken = KeychainHelper.load(forKey: "sabq_auth_token")
         }
+        // didSet لا يعمل داخل init — نزامن المرآة يدويًا.
+        let present = authToken != nil
+        sessionFlag.withLock { $0 = present }
     }
 
     // MARK: - Auth
@@ -163,8 +176,8 @@ actor APIClient {
     /// on init). Replaces the prior UserDefaults flag — keychain
     /// presence is now the single source of truth so the session can't
     /// be flipped on by editing UserDefaults from outside the app.
-    var hasSession: Bool {
-        authToken != nil
+    nonisolated var hasSession: Bool {
+        sessionFlag.withLock { $0 }
     }
 
     // MARK: - CSRF

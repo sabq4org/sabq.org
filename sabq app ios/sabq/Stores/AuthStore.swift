@@ -62,7 +62,7 @@ final class AuthStore {
     // فحص الجلسة ينطلق من كل نسخة مهملة. ContentView.task يستدعي checkAuth.
 
     func checkAuth() async {
-        guard await APIClient.shared.hasSession else { return }
+        guard APIClient.shared.hasSession else { return }
 
         // مهلة الجلسة — نافذة منزلقة من آخر نشاط موثّق لا من آخر تسجيل دخول:
         // كانت تُحسب من الدخول التفاعلي فقط فيُطرد المستخدم النشط يوميًّا في

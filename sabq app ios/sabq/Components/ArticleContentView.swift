@@ -166,15 +166,14 @@ struct ArticleContentView: View {
     }
 
     private func paragraph(_ runs: [InlineRun]) -> some View {
-        let attributed = InlineRunAttributing.attributedString(
+        // البناء الفعلي للنص المنسّق يحدث داخل الجسر عند تغيّر المدخلات فقط —
+        // لا هنا في كل إعادة رسم أثناء التمرير (تدقيق iOS 27، F01).
+        JustifiedAttributedText(
             runs: runs,
             baseSize: CGFloat(fontSize),
             baseWeight: .regular,
             useSerifReader: useReaderFont,
-            textColor: UIColor(SabqTheme.ink.opacity(0.92))
-        )
-        return JustifiedAttributedText(
-            attributed: attributed,
+            textColor: UIColor(SabqTheme.ink.opacity(0.92)),
             lineSpacing: CGFloat(lineSpacing) + 3
         )
         .frame(maxWidth: .infinity, alignment: .leading)
