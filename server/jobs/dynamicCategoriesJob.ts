@@ -1,10 +1,11 @@
+import { isLeader } from "../leaderElection";
 /**
  * Dynamic Categories Job
  * يحدّث التصنيفات الديناميكية تلقائياً (الآن، مختارات AI)
  */
 import { log } from "../utils/logger";
 
-import cron from "node-cron";
+import cron from "../leaderCron";
 import { db } from "../db";
 import { 
   articles, 
@@ -235,7 +236,7 @@ export function startDynamicCategoriesJob() {
 
   // Run immediately on startup
   log.info('[Dynamic Categories Job] 🚀 Running initial update...');
-  updateDynamicCategories().catch(err => {
+  if (isLeader()) updateDynamicCategories().catch(err => {
     console.error('[Dynamic Categories Job] ❌ Initial update failed:', err);
   });
 

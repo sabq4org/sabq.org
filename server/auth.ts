@@ -3,7 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import AppleStrategy from "passport-apple";
 import session from "express-session";
-import type { Express, RequestHandler } from "express";
+import type { Express, Request, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
@@ -15,6 +15,7 @@ import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { getRedisSessionAdapter } from "./redis";
 import { RedisStore } from "connect-redis";
+import { PgSessionRevocations } from "./sessionRevocations";
 import {
   SESSION_DEGRADED_HEADER,
   SessionFailoverStore,
@@ -26,6 +27,7 @@ import {
  * ليعرف هل تعذّرت قراءة جلسة هذا الطلب فيَسِم الرد بالترويسة.
  */
 let activeFailoverStore: SessionFailoverStore | null = null;
+const sessionRevocations = new PgSessionRevocations(getSessionFallbackPool);
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -39,11 +41,11 @@ export function getSession() {
   const pgStore = new pgStoreFactory({
     pool: sessionPool,
     createTableIfMissing: false,
-    ttl: sessionTtl,
+    ttl: Math.floor(sessionTtl / 1000), // connect-pg-simple expects seconds.
     tableName: "sessions",
   });
 
-  let store: session.Store = pgStore;
+  let store: session.Store;
   const redis = getRedisSessionAdapter();
   if (redis) {
     // Redis أساسي + Postgres احتياطي: عند انقطاع Upstash / Static IP
@@ -53,11 +55,13 @@ export function getSession() {
       prefix: "sess:",
       ttl: Math.floor(sessionTtl / 1000),
     });
-    const failoverStore = new SessionFailoverStore(redisStore, pgStore);
+    const failoverStore = new SessionFailoverStore(redisStore, pgStore, sessionRevocations);
     activeFailoverStore = failoverStore;
     store = failoverStore;
     console.log("[Session] Redis primary + isolated PostgreSQL failover (commandTimeout 2.5s)");
   } else {
+    activeFailoverStore = new SessionFailoverStore(null, pgStore, sessionRevocations);
+    store = activeFailoverStore;
     console.log("[Session] Using isolated PostgreSQL store (add REDIS_URL for Redis primary + failover)");
   }
 
@@ -502,9 +506,13 @@ export async function setupAuth(app: Express) {
     console.log("⚠️  Apple OAuth not configured (APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, or APPLE_PRIVATE_KEY missing)");
   }
 
-  passport.serializeUser((user: any, done) => {
-    console.log('🔹 SerializeUser:', user.id);
-    done(null, user.id);
+  passport.serializeUser(async (req: Request, user: any, done: (err: unknown, id?: string) => void) => {
+    try {
+      req.session.webAuthGeneration = await sessionRevocations.generationForUser(user.id);
+      done(null, user.id);
+    } catch (error) {
+      done(error);
+    }
   });
 
   passport.deserializeUser(async (id: string, done) => {
@@ -581,6 +589,13 @@ export async function invalidateAllUserSessions(
   userId: string,
   opts?: { exceptWebSid?: string; exceptMobileTokenHash?: string },
 ): Promise<void> {
+  // Must succeed before acknowledging revocation; cleanup below is best-effort only.
+  let revocationError: unknown;
+  try {
+    await sessionRevocations.revokeUser(userId, opts?.exceptWebSid);
+  } catch (error) {
+    revocationError = error; // Still attempt independent mobile/cache/store cleanup.
+  }
   invalidateUserSessionCache(userId);
 
   // Mobile bearer tokens (keep the caller's own token on a self-service change).
@@ -692,6 +707,7 @@ export async function invalidateAllUserSessions(
   } catch (e) {
     console.error("[Session] Redis session purge failed:", e);
   }
+  if (revocationError) throw revocationError;
 }
 
 // Bounded activity update cache to prevent memory leaks

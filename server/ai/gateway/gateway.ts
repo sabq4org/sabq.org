@@ -53,7 +53,7 @@ export interface GatewayDeps {
   notifyIncident(incident: AIIncident): void;
   /** Max concurrent provider calls across the whole process. */
   concurrency?: number;
-  /** Per-attempt timeout. Default 90s (matches ai-manager). */
+  /** Total queue + attempts + failover deadline. Default 90s (matches ai-manager). */
   timeoutMs?: number;
   /** In-model retries for transient errors. Default 2 (matches ai-manager). */
   retries?: number;
@@ -61,17 +61,6 @@ export interface GatewayDeps {
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_RETRIES = 2;
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      const t = setTimeout(() => reject(new Error(message)), timeoutMs);
-      // Don't keep the process alive for an abandoned race branch.
-      (t as unknown as { unref?: () => void }).unref?.();
-    }),
-  ]);
-}
 
 function dedupeCandidates(candidates: ModelRef[]): ModelRef[] {
   const seen = new Set<string>();
@@ -107,15 +96,15 @@ export class AIGateway {
       : [{ role: "user" as const, content: req.prompt ?? "" }];
 
     const { cfg, candidates } = await this.prepare("complete", req.feature, req.model);
-    const timeoutMs = req.timeoutMs ?? this.timeoutMs;
 
-    const outcome = await this.runChain("complete", req, cfg, candidates, (model, adapter) =>
+    const outcome = await this.runChain("complete", req, cfg, candidates, (model, adapter, signal, timeoutMs) =>
       adapter.complete!(model.modelId, {
         messages,
         maxTokens: req.options?.maxTokens ?? cfg.maxTokens ?? undefined,
         temperature: req.options?.temperature ?? cfg.temperature ?? undefined,
         jsonMode: req.options?.jsonMode,
         timeoutMs,
+        signal,
       }),
     );
 
@@ -141,10 +130,9 @@ export class AIGateway {
   async embed(req: EmbedRequest): Promise<EmbedResult> {
     const input = Array.isArray(req.input) ? req.input : [req.input];
     const { cfg, candidates } = await this.prepare("embed", req.feature, req.model);
-    const timeoutMs = req.timeoutMs ?? this.timeoutMs;
 
-    const outcome = await this.runChain("embed", req, cfg, candidates, (model, adapter) =>
-      adapter.embed!(model.modelId, { input, dimensions: req.dimensions, timeoutMs }),
+    const outcome = await this.runChain("embed", req, cfg, candidates, (model, adapter, signal, timeoutMs) =>
+      adapter.embed!(model.modelId, { input, dimensions: req.dimensions, timeoutMs, signal }),
     );
 
     const usage = { inputTokens: outcome.result.inputTokens, outputTokens: 0 };
@@ -162,15 +150,15 @@ export class AIGateway {
 
   async generateImage(req: ImageRequest): Promise<ImageResult> {
     const { cfg, candidates } = await this.prepare("image", req.feature, req.model);
-    const timeoutMs = req.timeoutMs ?? this.timeoutMs;
 
-    const outcome = await this.runChain("image", req, cfg, candidates, (model, adapter) =>
+    const outcome = await this.runChain("image", req, cfg, candidates, (model, adapter, signal, timeoutMs) =>
       adapter.image!(model.modelId, {
         prompt: req.prompt,
         size: req.options?.size,
         quality: req.options?.quality,
         n: req.options?.n,
         timeoutMs,
+        signal,
       }),
     );
 
@@ -188,14 +176,14 @@ export class AIGateway {
 
   async tts(req: TTSRequest): Promise<TTSResult> {
     const { cfg, candidates } = await this.prepare("tts", req.feature, req.model);
-    const timeoutMs = req.timeoutMs ?? this.timeoutMs;
 
-    const outcome = await this.runChain("tts", req, cfg, candidates, (model, adapter) =>
+    const outcome = await this.runChain("tts", req, cfg, candidates, (model, adapter, signal, timeoutMs) =>
       adapter.tts!(model.modelId, {
         text: req.text,
         voice: req.voice,
         format: req.format,
         timeoutMs,
+        signal,
       }),
     );
 
@@ -283,20 +271,34 @@ export class AIGateway {
     return Boolean(adapter && typeof adapter[op] === "function" && adapter.isConfigured());
   }
 
-  private runChain<TRes>(
+  private async runChain<TRes>(
     op: AIOperation,
-    req: { feature: string; userId?: string },
+    req: { feature: string; userId?: string; timeoutMs?: number },
     cfg: ResolvedFeatureConfig,
     candidates: ModelRef[],
-    call: (model: ModelRef, adapter: ProviderAdapter) => Promise<TRes>,
+    call: (model: ModelRef, adapter: ProviderAdapter, signal: AbortSignal, timeoutMs: number) => Promise<TRes>,
   ): Promise<FailoverOutcome<TRes>> {
-    return executeWithFailover<TRes>({
+    const controller = new AbortController();
+    const timeoutMs = req.timeoutMs ?? this.timeoutMs;
+    const deadline = Date.now() + timeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new AIGatewayError("AI request deadline exceeded", { code: "TIMEOUT" });
+        controller.abort(error);
+        reject(error);
+      }, timeoutMs);
+    });
+    const work = executeWithFailover<TRes>({
       feature: req.feature,
       candidates,
       allowFailover: cfg.allowFailover,
       isConfigured: (m) => this.supports(op, m),
-      isAvailable: (m) => this.deps.breaker.isAvailable(m),
-      run: (m) => this.limiter(() => this.attempt(op, m, call)),
+      isAvailable: (m) => !controller.signal.aborted && this.deps.breaker.isAvailable(m),
+      run: (m) => this.limiter(() => {
+        controller.signal.throwIfAborted();
+        return this.attempt(op, m, call, controller.signal, deadline);
+      }),
       onSuccess: (m) => this.deps.breaker.recordSuccess(m),
       onFailure: (m, err) => {
         this.deps.breaker.recordFailure(m, err);
@@ -332,27 +334,35 @@ export class AIGateway {
       }
       throw err;
     });
+    // If a provider ignores cancellation, keep its concurrency slot occupied
+    // until it settles. Expired queued requests can never start transport.
+    try { return await Promise.race([work, expired]); }
+    finally { clearTimeout(timer); }
   }
 
   private async attempt<TRes>(
     op: AIOperation,
     model: ModelRef,
-    call: (model: ModelRef, adapter: ProviderAdapter) => Promise<TRes>,
+    call: (model: ModelRef, adapter: ProviderAdapter, signal: AbortSignal, timeoutMs: number) => Promise<TRes>,
+    signal: AbortSignal,
+    deadline: number,
   ): Promise<TRes> {
     const adapter = this.deps.getAdapter(model.provider)!;
-    const timeoutMessage = `AI model ${model.provider}/${model.modelId} timed out`;
+
 
     try {
       return await pRetry(
         async () => {
           try {
-            return await withTimeout(call(model, adapter), this.timeoutMs + 1000, timeoutMessage);
+            signal.throwIfAborted();
+            return await call(model, adapter, signal, Math.max(1, deadline - Date.now()));
           } catch (err) {
             throw normalizeProviderError(model.provider, model.modelId, err);
           }
         },
         {
           retries: this.retries,
+          signal,
           minTimeout: 1000,
           shouldRetry: ({ error }: { error: unknown }) =>
             error instanceof AIGatewayError && isRetryableWithinModel(error),

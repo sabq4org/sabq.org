@@ -117,10 +117,17 @@ export function decidePublish(input: {
   nextStatus: unknown;
   gate: PublishGateState;
   permissions: string[];
+  deniedPermissionCodes?: string[];
 }): PublishDenial | null {
   const { nextStatus, gate, permissions } = input;
 
   if (!isPublishingStatus(nextStatus)) return null;
+
+  // Personal denial wins over every grant, including publisher auto-publish.
+  // Superuser permission data deliberately supplies no personal denies.
+  if (input.deniedPermissionCodes?.includes("articles.publish")) {
+    return { httpStatus: 403, message: "ليس لديك صلاحية نشر المقالات. يرجى الحفظ كمسودة.", code: "NO_PUBLISH_PERMISSION" };
+  }
 
   // Publisher-agency accounts have a contractual publishing window
   // (`publishers.publishing_ends_at`). Once it closes they must be blocked

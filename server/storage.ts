@@ -617,7 +617,7 @@ export interface IStorage {
   getArticleBySlug(slug: string, userId?: string, userRole?: string): Promise<ArticleWithDetails | undefined>;
   getLatestArticlesForFooter(limit: number): Promise<{ id: number; title: string; slug: string }[]>;
   getArticleById(id: string, userId?: string): Promise<ArticleWithDetails | undefined>;
-  createArticle(article: InsertArticle): Promise<Article>;
+  createArticle(article: InsertArticle, executor?: Pick<typeof db, "insert">): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article>;
   deleteArticle(id: string): Promise<void>;
   incrementArticleViews(id: string): Promise<void>;
@@ -3723,17 +3723,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserPermissions(userId: string): Promise<string[]> {
-    const results = await db
-      .select({
-        code: permissions.code,
-      })
-      .from(userRoles)
-      .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
-      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-      .where(eq(userRoles.userId, userId))
-      .groupBy(permissions.code);
-
-    return results.map(r => r.code);
+    // Legacy callers must respect the same personal overrides as RBAC middleware.
+    const { getUserPermissions } = await import("./rbac");
+    return getUserPermissions(userId);
   }
 
   async logActivity(activity: {
@@ -4335,7 +4327,7 @@ export class DatabaseStorage implements IStorage {
     } as unknown as ArticleWithDetails;
   }
 
-  async createArticle(article: InsertArticle): Promise<Article> {
+  async createArticle(article: InsertArticle, executor?: Pick<typeof db, "insert">): Promise<Article> {
     // Auto-generate short englishSlug if not provided
     const articleWithSlug = {
       ...article,
@@ -4392,7 +4384,7 @@ export class DatabaseStorage implements IStorage {
     // "ذكاء اصطناعي" badge on the hero image.
     await this.applyAiImageFlagFromMedia(articleWithSlug);
 
-    const [created] = await db.insert(articles).values([articleWithSlug as any]).returning();
+    const [created] = await (executor ?? db).insert(articles).values([articleWithSlug as any]).returning();
     return created;
   }
 

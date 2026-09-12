@@ -122,6 +122,9 @@ const STATIC_EXTENSIONS = [
 // them to discover the noindex. Now Google crawls, sees the header, and drops
 // them. KEEP IN SYNC with server/utils/noindexPaths.ts.
 const NOINDEX_PREFIXES = [
+  "/survey", "/meet", "/verify", "/en/settings", "/ur/settings",
+  "/plus-preview", "/nd96-preview", "/preferences", "/loyalty",
+  "/sports2", "/sports3", "/sports4", "/sports5",
   // dashboards / admin / internal tooling
   "/dashboard", "/en/dashboard", "/ur/dashboard",
   "/admin", "/ifox",
@@ -149,7 +152,7 @@ const NOINDEX_PREFIXES = [
 // Boundary-aware prefix match (mirrors isNoindexPath in
 // server/utils/noindexPaths.ts): `/profile` matches `/profile` and
 // `/profile/123` but NOT `/profiles`. Trailing-slash prefixes are normalized.
-function isNoindexPrefix(p) {
+export function isNoindexPrefix(p) {
   for (let prefix of NOINDEX_PREFIXES) {
     if (prefix.endsWith("/")) prefix = prefix.slice(0, -1);
     if (p === prefix || p.startsWith(prefix + "/")) return true;
@@ -491,6 +494,21 @@ export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret)
   return fetchWithStallRetry(target, init, { deadlineMs: timeoutMs });
 }
 
+// Complete the bounded SSR body before serving or caching it. A failed render
+// falls through to the normal SPA path, but genuine 404/410 responses survive.
+export async function fetchSsrResponse(request, nextOrigin, timeoutMs = 5000) {
+  const response = await proxyToApi(request, nextOrigin, timeoutMs);
+  if (response.status >= 500) {
+    await response.body?.cancel();
+    throw new Error(`SSR upstream ${response.status}`);
+  }
+  const body = await response.arrayBuffer();
+  const headers = new Headers(response.headers);
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+  return new Response([204, 205, 304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers });
+}
+
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
 export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) {
   const cache = caches.default;
@@ -701,11 +719,11 @@ function getApiCacheTtl(path, request) {
   return 0;
 }
 
-function apiCacheKey(requestUrl) {
+export function apiCacheKey(requestUrl) {
   const u = new URL(requestUrl);
   // Keep only essential query parameters that alter the backend response
   const cleanParams = new URLSearchParams();
-  const keepParams = ["limit", "offset", "page", "q", "category", "type"];
+  const keepParams = ["limit", "offset", "page", "q", "category", "type", "withStats", "includeIfox"];
   for (const p of keepParams) {
     if (u.searchParams.has(p)) {
       cleanParams.set(p, u.searchParams.get(p));

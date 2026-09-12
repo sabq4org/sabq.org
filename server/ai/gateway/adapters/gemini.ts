@@ -47,7 +47,7 @@ export const geminiAdapter: ProviderAdapter = {
       },
     });
 
-    const result = await model.generateContent({ contents });
+    const result = await model.generateContent({ contents }, { timeout: params.timeoutMs, signal: params.signal });
     const response = result.response;
 
     return {

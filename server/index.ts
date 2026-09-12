@@ -1,3 +1,4 @@
+import { installShutdown } from "./shutdown";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
@@ -1512,41 +1513,11 @@ if (!(globalThis as any).__sabqServer) {
       // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
       const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
       
-      const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop, onBecomeLeader } = await import("./leaderElection");
+      const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop } = await import("./leaderElection");
       await tryBecomeLeader();
       startLeaderElectionLoop(60000);
       
-      if (enableBackgroundWorkers) {
-        onBecomeLeader(async () => {
-          console.log("[Server] Starting background workers after leader failover...");
-          try {
-            const { startNotificationWorker } = await import("./notificationWorker");
-            startNotificationWorker();
-          } catch (error) {
-            console.error("[Server] Error starting notification worker after failover:", error);
-          }
-          try {
-            const { startPushWorker } = await import("./jobs/pushWorker");
-            startPushWorker();
-          } catch (error) {
-            console.error("[Server] Error starting push worker after failover:", error);
-          }
-          try {
-            if (
-              process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false'
-              && runNewsletterSchedulerInWeb
-            ) {
-              const { newsletterScheduler } = await import("./services/newsletterScheduler");
-              newsletterScheduler.start();
-              console.log("[Server] Newsletter scheduler started after failover");
-            }
-          } catch (error) {
-            console.error("[Server] Error starting newsletter scheduler after failover:", error);
-          }
-        });
-      }
-      
-      const shouldRunBackgroundJobs = enableBackgroundWorkers && isLeader();
+      const shouldRunBackgroundJobs = enableBackgroundWorkers;
       
       if (!enableBackgroundWorkers) {
         console.log("[Server] Background workers disabled (ENABLE_BACKGROUND_WORKERS not set)");
@@ -1645,7 +1616,7 @@ if (!(globalThis as any).__sabqServer) {
         setTimeout(async () => {
           try {
             const { runOneShotStoriesArchive } = await import("./jobs/oneShotStoriesArchive");
-            await runOneShotStoriesArchive();
+            if (isLeader()) await runOneShotStoriesArchive();
           } catch (error) {
             console.error("[Server] Error running one-shot stories archive:", error);
           }
@@ -2082,13 +2053,4 @@ if (!(globalThis as any).__sabqServer) {
 })();
 
 
-if (!(globalThis as any).__sabqServer) {
-  process.on("SIGTERM", () => {
-    console.log("[Server] SIGTERM signal received: closing HTTP server");
-    process.exit(0);
-  });
-  process.on("SIGINT", () => {
-    console.log("[Server] SIGINT signal received: closing HTTP server");
-    process.exit(0);
-  });
-}
+installShutdown(server);

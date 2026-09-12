@@ -286,12 +286,13 @@ export class ElevenLabsService {
     this.apiKey = apiKey;
   }
 
-  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000, retry = true): Promise<Buffer> {
+  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000, retry = true, signal?: AbortSignal): Promise<Buffer> {
     if (isElevenLabsQuotaCoolingDown()) {
       const err: any = new Error('quota_exceeded: ElevenLabs cooling down after payment/quota failure');
       err.status = 402;
       throw err;
     }
+    if (signal) return this._textToSpeechRequest(options, timeoutMs, signal);
     if (!retry) return this._textToSpeechRequest(options, timeoutMs);
     return retryWithBackoff(
       () => this._textToSpeechRequest(options, timeoutMs),
@@ -318,7 +319,7 @@ export class ElevenLabsService {
     );
   }
 
-  private async _textToSpeechRequest(options: TTSOptions, timeoutMs: number): Promise<Buffer> {
+  private async _textToSpeechRequest(options: TTSOptions, timeoutMs: number, signal?: AbortSignal): Promise<Buffer> {
     const voiceId = options.voiceId || this.defaultVoiceId;
     const model = options.model || 'eleven_multilingual_v2';
     // Leaf-level تفقيط so direct callers (summary-audio, job queue) get spoken numbers.
@@ -344,7 +345,7 @@ export class ElevenLabsService {
           'xi-api-key': this.apiKey
         },
         body: JSON.stringify(requestBody),
-        signal: controller.signal
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       });
 
       if (!response.ok) {
@@ -359,6 +360,7 @@ export class ElevenLabsService {
       }
 
       const audioBuffer = await response.arrayBuffer();
+      clearTimeout(timeoutId);
       return Buffer.from(audioBuffer);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

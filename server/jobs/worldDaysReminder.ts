@@ -1,4 +1,5 @@
-import cron from "node-cron";
+import { isLeader } from "../leaderElection";
+import cron from "../leaderCron";
 import { storage } from "../storage";
 
 const LOG_PREFIX = "[WorldDaysReminder]";
@@ -176,6 +177,7 @@ export function startWorldDaysReminderJob() {
   console.log(`${LOG_PREFIX} ✅ Scheduler started (runs daily at 08:00 Saudi time / 05:00 UTC)`);
   
   setTimeout(async () => {
+    if (!isLeader()) return;
     console.log(`${LOG_PREFIX} 🔄 Running initial check on startup...`);
     await runWorldDaysReminderJob();
   }, 5000);
