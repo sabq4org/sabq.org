@@ -28,6 +28,34 @@ describe("editorial research provider", () => {
     expect(body.agent.tools.map(t => t.type)).toEqual(["web_search"]);
     expect(body.metadata.request_id).toBe("request-1");
   });
+  it("diagnoses search-only output without trusting claims that a source was opened", () => {
+    const candidate = items();
+    candidate[0].content![0].text = JSON.stringify({ ...bundle, sources: [{ ...bundle.sources[0], evidence: "فُتح الرابط واستُخدم النص المفهرس." }] });
+    candidate[1].action = { type: "search" };
+    candidate.push({ ...items()[1], turn_id: "other-turn" });
+    try { extractResearch(candidate, "turn-1"); expect.fail("must reject unrecorded opening"); }
+    catch (error) {
+      expect(error).toMatchObject({ code: "unopened_source", diagnostics: { sourceCount: 1, unmatchedSourceCount: 1, openedUrlCount: 0, searchCallCount: 1 } });
+      expect(JSON.stringify(error)).not.toContain(bundle.sources[0].url);
+    }
+  });
+  it("distinguishes unreadable sources from malformed output and never accepts an empty dossier", () => {
+    const candidate = items(); candidate[0].content![0].text = JSON.stringify({ ...bundle, sources: [] });
+    try { extractResearch(candidate, "turn-1"); expect.fail("empty sources must fail closed"); }
+    catch (error) { expect(error).toMatchObject({ code: "no_readable_sources" }); }
+    candidate[0].content![0].text = JSON.stringify({ sources: [] });
+    try { extractResearch(candidate, "turn-1"); expect.fail("invalid response must fail closed"); }
+    catch (error) { expect(error).toMatchObject({ code: "invalid_output" }); }
+  });
+  it("matches encoded Arabic URLs but requires an independently recorded opening for each source", () => {
+    const url = "https://example.com/أخبار/بيان";
+    const candidate = items();
+    candidate[0].content![0].text = JSON.stringify({ ...bundle, sources: [...bundle.sources, { ...bundle.sources[0], url }] });
+    candidate.push({ ...items()[1], action: { type: "open_page", url: encodeURI(url) + "#details" } });
+    expect(extractResearch(candidate, "turn-1").sources).toHaveLength(2);
+    candidate[2].action!.url = "turn0search0";
+    expect(() => extractResearch(candidate, "turn-1")).toThrow(/فتح/);
+  });
   it("does not retry ambiguous creation and keeps upstream bodies out of errors", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-secret");
     const fetcher = vi.fn().mockRejectedValue(new Error("synthetic-secret")); vi.stubGlobal("fetch", fetcher);

@@ -170,4 +170,12 @@ suite("editorial research — local PostgreSQL and authenticated HTTP", () => {
     state.items.mockResolvedValueOnce([{ type: "message", role: "assistant", status: "completed", phase: "final_answer", turn_id: "turn_test", content: [{ type: "output_text", text: JSON.stringify(bundle) }] }]);
     await processResearchJobs(); expect((await getResearchJob("editor-a", job.id))?.status).toBe("failed"); expect(state.edit).not.toHaveBeenCalled();
   });
+  it("finishes unreadable-source failures without invoking the editor and cleans up the session", async () => {
+    const job = await createResearchJob("editor-a", input()); await processResearchJobs();
+    state.items.mockResolvedValueOnce([{ type: "message", role: "assistant", status: "completed", phase: "final_answer", turn_id: "turn_test", content: [{ type: "output_text", text: JSON.stringify({ ...bundle, sources: [] }) }] }]);
+    await processResearchJobs(); const failed = await getResearchJob("editor-a", job.id);
+    expect(failed).toMatchObject({ status: "failed", result: null, research: null });
+    expect(failed?.error).toContain("تعذر قراءة نصوص المصادر"); expect(state.edit).not.toHaveBeenCalled();
+    await processResearchJobs(); expect(state.request).toHaveBeenCalledWith("sessions/sess_test", "DELETE");
+  });
 });
