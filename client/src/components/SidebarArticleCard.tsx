@@ -15,6 +15,8 @@ export type SidebarArticleCardItem = {
   publishedAt?: string | Date | null;
   /** Author name for opinion pieces, section name for recommendations. */
   byline?: string | null;
+  /** Small round author photo shown before the byline (opinion pieces). */
+  bylineAvatarUrl?: string | null;
   /** Focal point and AI-image flags flow through untouched when a full article is given. */
   media?: Partial<ArticleWithDetails>;
 };
@@ -59,7 +61,20 @@ export function SidebarArticleCard({
           </h3>
           {(item.byline || hasDate) && (
             <div className="public-meta sidebar-card-meta">
-              {item.byline && <span className="sidebar-card-byline">{item.byline}</span>}
+              {item.byline && (
+                <span className="sidebar-card-byline">
+                  {item.bylineAvatarUrl && (
+                    <img
+                      src={item.bylineAvatarUrl}
+                      alt=""
+                      className="sidebar-card-avatar"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )}
+                  {item.byline}
+                </span>
+              )}
               {hasDate && publishedDate && (
                 <time
                   dateTime={publishedDate.toISOString()}

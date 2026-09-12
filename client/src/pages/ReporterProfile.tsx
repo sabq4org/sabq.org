@@ -362,7 +362,7 @@ export default function ReporterProfile() {
             
             {lastArticles && lastArticles.length > 0 ? (
               <div className="flex flex-col gap-4">
-                {lastArticles.map((article, index) => {
+                {lastArticles.map((article) => {
                   const cardArticle = {
                     ...article,
                     articleType: "news",
@@ -371,10 +371,7 @@ export default function ReporterProfile() {
                     commentsCount: article.comments,
                   } as unknown as ArticleWithDetails;
                   return (
-                    <div key={article.id} className="relative">
-                      <span className="pointer-events-none absolute inset-inline-start-3 top-3 z-10 inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-primary/10 px-2 text-sm font-bold text-primary" aria-label={`المقال ${index + 1}`}>
-                        {index + 1}
-                      </span>
+                    <div key={article.id}>
                       <NewsArticleCard article={cardArticle} viewMode="list" metadata={{ views: true, comments: true }} />
                       <Link href={`/article/${article.englishSlug || article.slug}`} className="mt-1 inline-flex min-h-9 items-center text-sm font-semibold text-primary hover:underline">
                         اقرأ المزيد
