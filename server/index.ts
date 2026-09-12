@@ -1669,6 +1669,12 @@ if (!(globalThis as any).__sabqServer) {
         console.log('[Server] Newsletter scheduler delegated to newsletter-worker');
       }
       
+      // Separate admission and worker flags permit draining before disabling the feature.
+      if (shouldRunBackgroundJobs && process.env.EDITORIAL_RESEARCH_WORKER_ENABLED === "true") {
+        const { startEditorialResearchJob } = await import("./jobs/editorialResearchJob");
+        startEditorialResearchJob();
+      }
+
       const enableAITasksScheduler = process.env.ENABLE_AI_TASKS_SCHEDULER !== 'false';
       const enableIfoxGenerator = process.env.ENABLE_IFOX_GENERATOR !== 'false';
       

@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-07",
+  "updatedAt": "2026-09-12",
   "systems": [
     {
       "id": "account-center",
@@ -323,7 +323,16 @@
         "client/src/lib/applyProofreadIssue.ts",
         "tests/unit/proofreadService.test.ts",
         "tests/unit/proofreadService.live.test.ts",
-        "e2e/proofread-editor.spec.ts"
+        "e2e/proofread-editor.spec.ts",
+        "shared/editorialResearch.ts",
+        "server/services/editorialResearchProvider.ts",
+        "server/services/editorialResearchService.ts",
+        "server/routes/editorialResearch.ts",
+        "server/jobs/editorialResearchJob.ts",
+        "client/src/components/article-editor/EditorialResearchPanel.tsx",
+        "tests/unit/editorialResearch*.test.ts",
+        "e2e/editorial-research.spec.ts",
+        "scripts/sql/add-editorial-research-jobs-2026-09-12.sql"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -354,13 +363,14 @@
         "opinion-writer-style-profile",
         "coverage-gap-matcher",
         "editor-openai-images",
-        "proofread"
+        "proofread",
+        "editorial-research"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-09"
+      "lastReviewed": "2026-09-12"
     },
     {
       "id": "ifox",

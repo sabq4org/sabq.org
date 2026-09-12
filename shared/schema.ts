@@ -15423,3 +15423,23 @@ export const economyReports = pgTable("economy_reports", {
 
 export type EconomyObservation = typeof economyObservations.$inferSelect;
 export type EconomyReport = typeof economyReports.$inferSelect;
+
+// Durable editorial research jobs; Agents API sessions are private to the initiating editor.
+export const editorialResearchJobs = pgTable("editorial_research_jobs", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  topic: text("topic").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("queued"),
+  sessionId: text("session_id"),
+  research: jsonb("research").$type<import("./editorialResearch").ResearchBundle>(),
+  result: jsonb("result").$type<import("./editorialResearch").ResearchResult>(),
+  usage: jsonb("usage").$type<import("./editorialResearch").ResearchUsage>(),
+  error: text("error"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  remoteClosedAt: timestamp("remote_closed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index("editorial_research_jobs_owner_created_idx").on(table.userId, table.createdAt),
+  index("editorial_research_jobs_status_idx").on(table.status),
+]);
