@@ -26,7 +26,13 @@ export function useAnalyticsPageMetadata(title: string | null) {
   useEffect(() => {
     if (title === null) return;
     document.title = title;
-    signalAnalyticsPageReady(href, title);
+    // Let Wouter finish replacing the outgoing route on popstate. Its effects
+    // can briefly observe the incoming URL; cleanup cancels their pending commit.
+    const frame = requestAnimationFrame(() => {
+      document.title = title;
+      signalAnalyticsPageReady(href, title);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [path, search, href, title]);
 }
 
@@ -36,7 +42,9 @@ export function AnalyticsRouteCommit() {
   const search = useSearch();
   const href = typeof window === "undefined" ? "" : window.location.href;
   useEffect(() => {
-    if (!hasExplicitAnalyticsMetadata(path)) signalAnalyticsPageReady(href, document.title);
+    if (hasExplicitAnalyticsMetadata(path)) return;
+    const frame = requestAnimationFrame(() => signalAnalyticsPageReady(href, document.title));
+    return () => cancelAnimationFrame(frame);
   }, [path, search, href]);
   return null;
 }
