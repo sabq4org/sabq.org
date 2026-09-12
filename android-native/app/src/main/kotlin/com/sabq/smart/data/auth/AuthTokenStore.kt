@@ -12,22 +12,19 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.authDataStore by preferencesDataStore(name = "auth_prefs")
+private val ENCRYPTED_TOKEN_KEY = stringPreferencesKey("bearer_token_encrypted_v1")
 private val TOKEN_KEY = stringPreferencesKey("bearer_token")
 
-/**
- * Bearer-token storage backed by DataStore Preferences. iOS persists
- * the same token in Keychain via `KeychainStore.save(forKey: "authToken")`
- * (Services/APIClient.swift line 7). Android DataStore is the
- * idiomatic equivalent — encrypted on-device, async-friendly.
- *
- * Excluded from auto-backup + cloud-restore via
- * `res/xml/backup_rules.xml`.
+/** Keystore-encrypted bearer storage with atomic migration from legacy plaintext.
+ * The DataStore file is excluded from both cloud backup and device transfer.
  */
 @Singleton
 class AuthTokenStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    val token: Flow<String?> = context.authDataStore.data.map { it[TOKEN_KEY] }
+    val token: Flow<String?> = context.authDataStore.data.map { prefs ->
+        prefs[ENCRYPTED_TOKEN_KEY]?.let(AuthTokenCipher::decrypt) ?: if (prefs[ENCRYPTED_TOKEN_KEY] == null) prefs[TOKEN_KEY] else null
+    }
 
     // In-memory mirror of the persisted token. The auth interceptor runs
     // on every HTTP request; reading DataStore there via `runBlocking`
@@ -47,6 +44,14 @@ class AuthTokenStore @Inject constructor(
     fun isPrimed(): Boolean = primed
 
     suspend fun current(): String? {
+        context.authDataStore.edit { prefs ->
+            val legacy = prefs[TOKEN_KEY]
+            if (prefs[ENCRYPTED_TOKEN_KEY] == null && !legacy.isNullOrBlank()) {
+                // If encryption fails, the transaction leaves the original intact.
+                prefs[ENCRYPTED_TOKEN_KEY] = AuthTokenCipher.encrypt(legacy)
+            }
+            if (prefs[ENCRYPTED_TOKEN_KEY] != null) prefs.remove(TOKEN_KEY)
+        }
         val value = token.first()
         cached = value
         primed = true
@@ -60,8 +65,9 @@ class AuthTokenStore @Inject constructor(
 
     suspend fun set(value: String?) {
         context.authDataStore.edit { prefs ->
-            if (value.isNullOrBlank()) prefs.remove(TOKEN_KEY)
-            else prefs[TOKEN_KEY] = value
+            if (value.isNullOrBlank()) prefs.remove(ENCRYPTED_TOKEN_KEY)
+            else prefs[ENCRYPTED_TOKEN_KEY] = AuthTokenCipher.encrypt(value)
+            prefs.remove(TOKEN_KEY)
         }
         cached = value?.takeIf { it.isNotBlank() }
         primed = true

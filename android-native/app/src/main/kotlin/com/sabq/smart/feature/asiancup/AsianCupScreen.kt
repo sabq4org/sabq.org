@@ -49,7 +49,9 @@ fun AsianCupScreen(
                 else -> when (state.tab) {
                     AsianCupViewModel.Tab.HOME -> AcHome(state, onOpenMatch)
                     AsianCupViewModel.Tab.MATCHES -> AcMatches(state.fixtures, onOpenMatch)
-                    AsianCupViewModel.Tab.PREDICTIONS -> AcPredictions(state, onRequireLogin, viewModel::submit)
+                    AsianCupViewModel.Tab.PREDICTIONS -> com.sabq.smart.feature.predictions.PredictionCenterScreen(
+                        onBack = { viewModel.select(AsianCupViewModel.Tab.HOME) },
+                        onRequireLogin = onRequireLogin, initialCompetition = "asian-cup-2027")
                     AsianCupViewModel.Tab.GROUPS -> AcGroups(state.groups)
                     AsianCupViewModel.Tab.MORE -> AcMore(state, onOpenTeam)
                 }
