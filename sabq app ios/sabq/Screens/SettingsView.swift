@@ -14,6 +14,8 @@ struct SettingsView: View {
         return build.isEmpty ? "الإصدار \(short)" : "الإصدار \(short) (\(build))"
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
     /// Pending-revision count drives the "مقالات تنتظر التعديل" card
@@ -46,10 +48,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 20) {
-                CompactScreenHeader(
-                    title: "المزيد",
-                    subtitle: "إعدادات التطبيق وعن سبق"
-                )
+                SabqPageIntro("إعدادات التطبيق وعن سبق")
 
                 profileSection
                 if authStore.isLoggedIn {
@@ -70,8 +69,11 @@ struct SettingsView: View {
             .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 40)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
+        .navigationTitle("حسابي")
+        .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
         .sabqRTL()
         .sabqScreen("More")
@@ -716,11 +718,7 @@ struct SettingsView: View {
     /// Dashboard / loyalty / press-card entries share one compact grid so the
     /// account screen uses horizontal space instead of four full-width rows.
     private var accountShortcutsGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10)
-        ]
-        return LazyVGrid(columns: columns, spacing: 10) {
+        SurfaceCard {
             if let user = authStore.currentUser, user.isPlatformAdmin {
                 NavigationLink(value: AdminDashboardRoute()) {
                     accountShortcutTile(
@@ -779,43 +777,11 @@ struct SettingsView: View {
         icon: String,
         tint: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(tint.opacity(0.12))
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(SabqTheme.outline, lineWidth: 0.5)
-        )
+        settingsRow(title: title, subtitle: subtitle, icon: icon, tint: tint)
+            .frame(minHeight: 44)
     }
 
     // MARK: - Display
-
 
     /// اختصار لشاشة اختيار أنواع تنبيهات المباريات (هدف/كرت/فار…) للفِرق المتابَعة.
     private var matchAlertsSection: some View {
@@ -872,7 +838,7 @@ struct SettingsView: View {
                         Text(mode.arabicLabel).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
+                .modifier(SabqAdaptivePickerStyle())
             }
         }
     }
@@ -905,9 +871,8 @@ struct SettingsView: View {
                         Text(mode.arabicLabel).tag(mode.rawValue)
                     }
                 }
-                .pickerStyle(.segmented)
+                .modifier(SabqAdaptivePickerStyle())
             }
-
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -927,7 +892,7 @@ struct SettingsView: View {
                     Text("موسّع").tag("spacious")
                     Text("كلاسيكي").tag("classic")
                 }
-                .pickerStyle(.segmented)
+                .modifier(SabqAdaptivePickerStyle())
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -935,11 +900,11 @@ struct SettingsView: View {
                     .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
-                HStack(spacing: 0) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 100 : 48))], spacing: 12) {
                     ForEach(AppAccent.allCases) { accent in
                         let isSelected = accentRaw == accent.rawValue
                         Button {
-                            withAnimation(.spring(response: 0.3)) {
+                            withAnimation(reduceMotion ? nil : .spring(response: 0.3)) {
                                 accentRaw = accent.rawValue
                             }
                         } label: {
@@ -947,6 +912,13 @@ struct SettingsView: View {
                                 Circle()
                                     .fill(accent.color)
                                     .frame(width: 40, height: 40)
+                                    .overlay {
+                                        if isSelected {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
                                     .overlay(
                                         Circle()
                                             .stroke(Color.white, lineWidth: isSelected ? 3 : 0)
@@ -964,7 +936,9 @@ struct SettingsView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel(accent.title)
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        .frame(maxWidth: .infinity, minHeight: 44)
                     }
                 }
             }
@@ -992,6 +966,8 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Slider(value: $textSize, in: 14...24, step: 1)
+                        .accessibilityLabel("حجم خط المقالات")
+                        .accessibilityValue("\(Int(textSize)) نقطة")
                         .tint(SabqTheme.primaryEnd)
 
                     Text("أ")
@@ -1155,7 +1131,7 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Toggle("", isOn: isOn)
+            Toggle(title, isOn: isOn)
                 .tint(SabqTheme.primaryEnd)
                 .labelsHidden()
         }

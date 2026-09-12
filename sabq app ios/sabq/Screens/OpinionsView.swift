@@ -15,10 +15,7 @@ struct OpinionsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
-                CompactScreenHeader(
-                    title: "المقالات",
-                    subtitle: "أكثر مقالات الرأي قراءةً، وأحدث ما نشر"
-                )
+                SabqPageIntro("أكثر مقالات الرأي قراءةً، وأحدث ما نشر")
 
                 if isLoading && latest.isEmpty && mostViewed.isEmpty {
                     loadingSection
@@ -49,6 +46,8 @@ struct OpinionsView: View {
         .refreshable {
             await loadAll(isRefresh: true)
         }
+        .navigationTitle("المقالات")
+        .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
         .sabqRTL()
         .task {

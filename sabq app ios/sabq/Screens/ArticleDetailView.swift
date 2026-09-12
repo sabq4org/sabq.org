@@ -789,90 +789,93 @@ struct ArticleDetailView: View {
         .buttonStyle(.plain)
     }
 
-    // Publication metadata between title and excerpt. Single calm row,
-    // tertiary ink, bullet separators — should not visually disrupt the
-    // text flow above or below it.
-    // سطر الكاتب كما في الويب (#1598): صورة 48 + الاسم (رابط ملف الكاتب) وعلامة
-    // التوثيق + الصفة، ثم التاريخ | الوقت بتوقيت الرياض، و«آخر تحديث» عند وجود
-    // تعديل تحريري، و«قراءة N دقيقة». يُقرأ من `displayArticle` كي يتحدّث من
-    // قيمة الفيد المخزّنة إلى حمولة التفاصيل (المراسل المختار في اللوحة).
+    // Two compact lines beside the avatar: author and role, then publication details.
+    // Keep the full update timestamp available without adding another visual line.
     private var articleMeta: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                OpinionAuthorAvatar(
-                    name: displayArticle.author,
-                    imageURL: displayArticle.authorImageURL,
-                    size: 48
-                )
-                VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 8) {
+            OpinionAuthorAvatar(
+                name: displayArticle.author,
+                imageURL: displayArticle.authorImageURL,
+                size: 34
+            )
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
                     NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Text(displayArticle.author)
-                                .font(SabqFonts.app(size: 15, weight: .bold))
+                                .font(SabqFonts.app(size: 13, weight: .bold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
-                                .truncationMode(.tail)
                             if displayArticle.isAuthorVerified {
                                 Image(systemName: "checkmark.seal.fill")
-                                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                             }
                         }
                     }
                     .buttonStyle(.plain)
+                    .layoutPriority(1)
 
+                    Text("·")
+                        .accessibilityHidden(true)
                     Text(reporterTitle ?? displayArticle.authorRole ?? "كاتب الخبر")
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock")
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                    Text(displayArticle.publicationDate)
-                        .lineLimit(1)
-                    Text(displayArticle.publicationClock)
-                        .padding(.leading, 8)
-                        .overlay(alignment: .leading) {
-                            Rectangle()
-                                .fill(SabqTheme.outline)
-                                .frame(width: 1, height: 12)
-                        }
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-                .font(SabqFonts.app(size: 13, weight: .regular))
-                .foregroundStyle(SabqTheme.ink)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("نُشر في \(displayArticle.publicationDate) \(displayArticle.publicationClock)")
+                .font(SabqFonts.app(size: 10.5, weight: .regular))
+                .foregroundStyle(SabqTheme.secondaryInk)
 
                 if let updated = displayArticle.lastUpdatedLabel {
-                    HStack(spacing: 6) {
-                        Text("آخر تحديث")
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                        Text(updated)
-                            .foregroundStyle(SabqTheme.ink)
-                            .monospacedDigit()
+                    Menu {
+                        Text("نُشر في \(displayArticle.publicationDate) \(displayArticle.publicationClock)")
+                        Text("آخر تحديث: \(updated)")
+                    } label: {
+                        HStack(spacing: 3) {
+                            publicationSummary
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 10))
+                        }
                     }
-                    .font(SabqFonts.app(size: 13, weight: .regular))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(publicationAccessibilityLabel)، آخر تحديث: \(updated)")
+                    .accessibilityHint("عرض تفاصيل النشر والتحديث")
+                } else {
+                    publicationSummary
+                        .accessibilityLabel(publicationAccessibilityLabel)
                 }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "book")
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                    Text(displayArticle.readingLabel)
-                        .monospacedDigit()
-                }
-                .font(SabqFonts.app(size: 13, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var publicationSummary: some View {
+        HStack(spacing: 8) {
+            publicationItem(displayArticle.publicationDate, icon: "calendar")
+            publicationItem(displayArticle.publicationClock, icon: "clock")
+            publicationItem(displayArticle.readingLabel, icon: "book")
+        }
+        .font(SabqFonts.app(size: 11, weight: .regular))
+        .foregroundStyle(SabqTheme.secondaryInk)
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .accessibilityElement(children: .ignore)
+    }
+
+    private func publicationItem(_ text: String, icon: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .regular))
+                .accessibilityHidden(true)
+            Text(text)
+        }
+    }
+
+    private var publicationAccessibilityLabel: String {
+        "نُشر في \(displayArticle.publicationDate) \(displayArticle.publicationClock)، \(displayArticle.readingLabel)"
     }
 
     // MARK: - Action Bar

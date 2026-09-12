@@ -7,13 +7,11 @@ import SwiftUI
 // قسم «أعمال» يبقى للأخبار فقط؛ الأرقام هنا وفي بلوك الرئيسية لا غير.
 
 struct EconomyView: View {
-    @Environment(\.dismiss) private var dismiss
     private let store = EconomyStore.shared
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 28) {
-                topBar
                 hero
 
                 if let s = store.snapshot, !s.indicators.isEmpty {
@@ -41,11 +39,11 @@ struct EconomyView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            .padding(.bottom, 120)
+            .padding(.bottom, 32)
         }
         .background(SabqTheme.background.ignoresSafeArea())
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("الاقتصاد بالأرقام")
+        .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refreshAll() }
         .task {
             await store.loadSnapshotIfNeeded(maxAge: 60)
@@ -54,24 +52,6 @@ struct EconomyView: View {
     }
 
     // MARK: الرأس
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                SabqHaptics.light()
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(SabqTheme.surface))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("رجوع")
-            Spacer(minLength: 0)
-        }
-    }
 
     private var hero: some View {
         VStack(spacing: 14) {

@@ -114,22 +114,38 @@ struct EconomySparkline: View {
     }
 }
 
-// MARK: - بلوك الرئيسية «أين أنفق السعوديون أموالهم هذا الأسبوع؟»
-//
-// نقل `EconomyNumbersBlock.tsx`: وضعان متبادلان — نشرة شهرية جديدة (< 48 ساعة)
-// تحوّل البلوك إلى «السعوديون في {شهر} بالأرقام»، وإلا بلوك الإنفاق الأسبوعي.
-// يختفي كليًا بلا بيانات (لا هيكل ولا أصفار).
+// MARK: - رقم اقتصادي واحد في الرئيسية
+// تبقى التفاصيل في EconomyView، وتحافظ البطاقة على أولوية النشرة الشهرية
+// وشارة الحداثة لمدة 48 ساعة من ingestedAt كما في الويب.
 
 struct EconomyHomeBlock: View {
     private let store = EconomyStore.shared
 
     var body: some View {
-        Group {
-            switch EconomyFormat.homeMode(store.snapshot) {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            switch EconomyFormat.homeMode(store.snapshot, now: context.date) {
             case .monthly:
-                if let m = store.snapshot?.monthly { monthlyBlock(m) }
+                if let monthly = store.snapshot?.monthly, let card = monthly.cards.first {
+                    teaser(
+                        title: "رقم من \(monthly.monthLabelAr)",
+                        figure: card.figure,
+                        caption: card.key == "mobileVsCard"
+                            ? "من إنفاق نقاط البيع تم بالجوال"
+                            : (card.seriesLabelAr ?? card.cardTitle),
+                        badge: "نشرة جديدة",
+                        cta: "أرقام الشهر"
+                    )
+                }
             case .weekly:
-                if let w = store.snapshot?.weekly { weeklyBlock(w) }
+                if let weekly = store.snapshot?.weekly {
+                    teaser(
+                        title: "أين أنفق السعوديون؟",
+                        figure: "\(EconomyFormat.fmtSar(weekly.totalValue)) ريال",
+                        caption: "إنفاق نقاط البيع · \(weekly.weekLabelAr)",
+                        badge: EconomyFormat.isFresh(weekly.ingestedAt, now: context.date) ? "أرقام جديدة" : nil,
+                        cta: "أين صُرفت؟"
+                    )
+                }
             case .hidden:
                 EmptyView()
             }
@@ -137,168 +153,54 @@ struct EconomyHomeBlock: View {
         .task { await store.loadSnapshotIfNeeded(maxAge: 300) }
     }
 
-    // MARK: الأسبوعي
-
-    private func weeklyBlock(_ w: EconomyWeeklySummary) -> some View {
-        container(label: "أين أنفق السعوديون أموالهم هذا الأسبوع") {
-            header(
-                eyebrow: "بيانات البنك المركزي السعودي · الأسبوع \(w.weekLabelAr)",
-                badge: EconomyFormat.isFresh(w.ingestedAt) ? "أرقام جديدة" : nil,
-                title: "أين أنفق السعوديون أموالهم هذا الأسبوع؟",
-                headline: w.headline,
-                cta: "التفاصيل بالقطاعات والمدن"
-            )
-
-            NavigationLink(value: EconomyRoute()) { totalCard(w) }
-                .buttonStyle(.plain)
-
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(w.topSectors.prefix(5)) { s in
-                    NavigationLink(value: EconomyRoute()) { sectorCard(s) }
-                        .buttonStyle(.plain)
+    private func teaser(title: String, figure: String, caption: String,
+                        badge: String?, cta: String) -> some View {
+        NavigationLink(value: EconomyRoute()) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(SabqFonts.editorial(.subheadline, size: 14, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                    Spacer(minLength: 0)
+                    if let badge { EconomyNewBadge(label: badge) }
                 }
-            }
-        }
-    }
 
-    private func totalCard(_ w: EconomyWeeklySummary) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("إجمالي الإنفاق في أسبوع")
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .opacity(0.9)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(EconomyFormat.fmtSar(w.totalValue))
-                    .font(SabqFonts.app(size: 24, weight: .heavy))
+                Text(figure)
+                    .font(SabqFonts.editorial(.largeTitle, size: 32, weight: .heavy))
                     .monospacedDigit()
-                Text("ريال")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-            }
-            HStack {
-                Text("\(EconomyFormat.fmtCount(w.totalCount)) عملية")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .opacity(0.9)
-                Spacer(minLength: 0)
-                Text("\(w.totalChangePct >= 0 ? "▲" : "▼") \(EconomyFormat.fmtPct(w.totalChangePct))")
-                    .font(SabqFonts.app(size: 11, weight: .bold))
-                    .monospacedDigit()
-                    .environment(\.layoutDirection, .leftToRight)
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.primaryEnd))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func sectorCard(_ s: EconomySectorSummary) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: EconomyFormat.sectorSymbol(s.en))
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
-                    .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SabqTheme.primaryEnd.opacity(0.10)))
-                Spacer(minLength: 0)
-                EconomyChangeChip(value: s.changePct)
-            }
-            Text(s.ar)
-                .font(SabqFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-                .lineLimit(1)
-            Text("\(EconomyFormat.fmtSar(s.value)) ريال · \(EconomyFormat.fmtPct(s.share, 0)) من الإنفاق")
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-        }
-        .padding(12)
-        // ملء ارتفاع الصف كي تتساوى بطاقات الشبكة (LazyVGrid يقترح ارتفاع أطول خلية)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.surface)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
-        )
-    }
-
-    // MARK: الشهري
-
-    private func monthlyBlock(_ m: EconomyMonthlySummary) -> some View {
-        container(label: "السعوديون في \(m.monthLabelAr) بالأرقام") {
-            header(
-                eyebrow: "النشرة الإحصائية الشهرية · البنك المركزي السعودي",
-                badge: "نشرة جديدة",
-                title: "السعوديون في \(m.monthLabelAr) بالأرقام",
-                headline: m.headline,
-                cta: "كل أرقام الشهر"
-            )
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(m.cards.prefix(6)) { card in
-                    NavigationLink(value: EconomyRoute()) {
-                        EconomyMonthlyCardView(card: card, compact: true)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    // MARK: الهيكل
-
-    private func container<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(SabqTheme.surface)
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(label)
-    }
-
-    private func header(eyebrow: String, badge: String?, title: String, headline: String, cta: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "building.columns")
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
-                Text(eyebrow)
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                if let badge { EconomyNewBadge(label: badge) }
-            }
-            .foregroundStyle(SabqTheme.primaryEnd)
+                    .minimumScaleFactor(0.65)
+                    .accessibilityIdentifier("economy.home.figure")
 
-            Text(title)
-                .font(SabqFonts.app(size: 20, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
+                Text(caption)
+                    .font(SabqFonts.editorial(.caption, size: 11, weight: .regular))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Text(headline)
-                .font(SabqFonts.app(size: 13, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-
-            NavigationLink(value: EconomyRoute()) {
-                HStack(spacing: 6) {
-                    Text(cta)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                    Image(systemName: "chevron.left")
-                        .font(SabqFonts.app(size: 11, weight: .bold))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("المصدر: البنك المركزي السعودي")
+                        .font(SabqFonts.editorial(.caption2, size: 10, weight: .regular))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 4) {
+                        Text(cta)
+                            .font(SabqFonts.editorial(.caption, size: 11, weight: .bold))
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Capsule(style: .continuous).fill(SabqTheme.primaryEnd))
             }
-            .buttonStyle(.plain)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .economyAccentCard(tone: SabqTheme.primaryEnd, radius: 16)
         }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("عرض تفاصيل الاقتصاد بالقطاعات والمدن")
+        .accessibilityIdentifier("economy.home.teaser")
     }
 }
 

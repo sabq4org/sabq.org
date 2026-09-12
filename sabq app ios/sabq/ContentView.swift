@@ -24,7 +24,7 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $navigation.selectedTab) {
             ForEach(AppTab.allCases) { tab in
-                SabqTabNavigation(path: path(for: tab)) {
+                SabqTabNavigation(path: path(for: tab), usesReaderColumns: tab != .profile) {
                     tabRoot(tab)
                 }
                 .tabItem { Label(tab.title, systemImage: tab.systemImage) }

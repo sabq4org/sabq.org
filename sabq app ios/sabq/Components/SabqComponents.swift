@@ -27,32 +27,37 @@ enum SabqHaptics {
 // MARK: - Shimmer Effect
 
 struct ShimmerModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: CGFloat = 0
 
     func body(content: Content) -> some View {
-        content
-            .overlay(
-                GeometryReader { geo in
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            Color.white.opacity(0.25),
-                            .clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.6)
-                    .offset(x: phase * (geo.size.width * 1.6) - geo.size.width * 0.3)
-                    .blendMode(.softLight)
+        if reduceMotion {
+            content
+        } else {
+            content
+                .overlay(
+                    GeometryReader { geo in
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                Color.white.opacity(0.25),
+                                .clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: geo.size.width * 0.6)
+                        .offset(x: phase * (geo.size.width * 1.6) - geo.size.width * 0.3)
+                        .blendMode(.softLight)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onAppear {
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                        phase = 1
+                    }
                 }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .onAppear {
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
+        }
     }
 }
 
@@ -1222,6 +1227,19 @@ struct SurfaceCard<Content: View>: View {
 
 // MARK: - Screen Header
 
+struct SabqPageIntro: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(SabqFonts.editorial(.subheadline, size: 14))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct CompactScreenHeader: View {
     @Environment(\.legibilityWeight) private var legibilityWeight
     let title: String
@@ -1649,6 +1667,8 @@ struct CompactArticleRow: View {
     /// / the live "أخبار جديدة" banner (`ArticlesStore.isRecentlyAdded`).
     /// Defaulted so the eight non-home call sites stay source-compatible.
     var isNew: Bool = false
+    /// The category page already names the section in its header.
+    var showsCategory: Bool = true
 
     // Reader can flip between the legacy thumbnail-on-the-side layout
     // ("classic") and the experimental image-on-top hero layout
@@ -1672,11 +1692,15 @@ struct CompactArticleRow: View {
     private var classicLayout: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    StatusChip(title: article.categoryTitle, tint: article.category.tint)
-                    if article.isBreaking { breakingPill }
-                    if article.isReading { readingPill }
-                    if isNew { newPill }
+                if showsCategory || article.isBreaking || article.isReading || isNew {
+                    HStack(spacing: 8) {
+                        if showsCategory {
+                            StatusChip(title: article.categoryTitle, tint: article.category.tint)
+                        }
+                        if article.isBreaking { breakingPill }
+                        if article.isReading { readingPill }
+                        if isNew { newPill }
+                    }
                 }
 
                 SabqRTLText(
@@ -1753,13 +1777,17 @@ struct CompactArticleRow: View {
                     inset: 10
                 )
 
-            HStack(spacing: 6) {
-                if article.isBreaking { breakingPill }
-                if article.isReading { readingPill }
-                if isNew { newPill }
-                StatusChip(title: article.categoryTitle, tint: article.category.tint)
+            if showsCategory || article.isBreaking || article.isReading || isNew {
+                HStack(spacing: 6) {
+                    if article.isBreaking { breakingPill }
+                    if article.isReading { readingPill }
+                    if isNew { newPill }
+                    if showsCategory {
+                        StatusChip(title: article.categoryTitle, tint: article.category.tint)
+                    }
+                }
+                .padding(10)
             }
-            .padding(10)
         }
     }
 
@@ -1932,69 +1960,39 @@ struct EmptyStateView: View {
     var action: (() -> Void)? = nil
     var actionTitle: String? = nil
 
-    @State private var isAnimating = false
-
     var body: some View {
-        VStack(spacing: 20) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [tint.opacity(0.12), tint.opacity(0.03)],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 60
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .scaleEffect(isAnimating ? 1.05 : 0.95)
-                    .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 28, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint)
+                .frame(width: 56, height: 56)
+                .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityHidden(true)
 
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 42, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .symbolEffect(.pulse, isActive: isAnimating)
-            }
-
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .multilineTextAlignment(.center)
-
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .frame(maxWidth: 300)
-            }
+            Text(title)
+                .font(SabqFonts.editorial(.headline, size: 18, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle)
+                .font(SabqFonts.editorial(.subheadline, size: 14))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360)
 
             if let action, let actionTitle {
-                Button {
+                Button(actionTitle) {
                     SabqHaptics.light()
                     action()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(SabqFonts.app(size: 14, weight: .semibold))
-                        Text(actionTitle)
-                            .font(SabqFonts.app(size: 14, weight: .bold))
-                    }
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(tint.opacity(0.10))
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .tint(tint)
+                .controlSize(.large)
             }
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .onAppear { isAnimating = true }
+        .padding(.vertical, 24)
     }
 }
 
@@ -2218,6 +2216,20 @@ struct FlowLayout: Layout {
             subview.place(at: CGPoint(x: currentX, y: currentY), proposal: .unspecified)
             currentX += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+struct SabqAdaptivePickerStyle: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            content.pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content.pickerStyle(.segmented)
         }
     }
 }

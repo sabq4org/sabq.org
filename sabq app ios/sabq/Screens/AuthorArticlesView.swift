@@ -16,7 +16,6 @@ struct AuthorArticlesView: View {
 
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
-    @Environment(\.dismiss) private var dismiss
 
     @State private var page: APIAuthorPage?
     @State private var isLoading = true
@@ -56,19 +55,8 @@ struct AuthorArticlesView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle(authorName)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-        }
         .task {
             guard !hasFetched else { return }
             hasFetched = true

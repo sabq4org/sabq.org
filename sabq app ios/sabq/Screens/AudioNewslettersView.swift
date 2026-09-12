@@ -7,7 +7,6 @@ struct AudioNewslettersRoute: Hashable {}
 // GET /api/audio-newsletters. Tapping a row expands the row to an
 // active-player state — no separate detail page needed for this surface.
 struct AudioNewslettersView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var newsletters: [APIAudioNewsletter] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -54,42 +53,14 @@ struct AudioNewslettersView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("النشرات الصوتية")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .task { await load() }
         .onDisappear { stopIfOurs() }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.coral.opacity(0.14))
-                    .frame(width: 56, height: 56)
-                Image(systemName: "waveform")
-                    .font(SabqFonts.app(size: 24, weight: .light))
-                    .foregroundStyle(SabqTheme.coral)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("النشرات الصوتية")
-                    .font(SabqFonts.app(size: 20, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                Text("أبرز ما يحدث، باختصار صوتي")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-            }
-            Spacer(minLength: 0)
-        }
+        SabqPageIntro("أبرز ما يحدث، باختصار صوتي")
     }
 
     private func newsletterRow(_ n: APIAudioNewsletter) -> some View {

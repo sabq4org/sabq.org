@@ -178,7 +178,16 @@ struct HomeFeedView: View {
                     featuredSection
                         .animatedAppear(index: 2)
 
-                    // رياضة مباشرة تحت الهيرو — ظاهرة دائماً (تختفي ذاتياً بلا بيانات)
+                    // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
+                    // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
+                    // الشرط هنا لا داخل البلوك: Group بمحتوى EmptyView لا يشغّل .task
+                    // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
+                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                        EconomyHomeBlock()
+                            .animatedAppear(index: 3)
+                    }
+
+                    // بطاقات البطولات تأتي بعد بطاقة الاقتصاد، وتختفي ذاتيًا بلا بيانات.
                     WorldCupHomeStrip()
                         .animatedAppear(index: 3)
 
@@ -190,15 +199,6 @@ struct HomeFeedView: View {
 
                     RoshnHomeStrip()
                         .animatedAppear(index: 3)
-
-                    // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
-                    // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
-                    // الشرط هنا لا داخل البلوك: Group بمحتوى EmptyView لا يشغّل .task
-                    // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
-                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
-                        EconomyHomeBlock()
-                            .animatedAppear(index: 3)
-                    }
 
                     // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {

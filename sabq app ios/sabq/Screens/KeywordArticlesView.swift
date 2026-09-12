@@ -4,7 +4,6 @@ struct KeywordArticlesView: View {
     let keyword: String
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
-    @Environment(\.dismiss) private var dismiss
     @State private var items: [KeywordContentItem] = []
     @State private var isLoading = true
     @State private var loadError: String? = nil
@@ -70,17 +69,8 @@ struct KeywordArticlesView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle(keyword)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .task { await loadArticles() }
     }
 
