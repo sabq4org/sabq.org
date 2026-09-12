@@ -116,6 +116,7 @@ export function ensureAnalyticsReady(): boolean {
       const location = sanitizeAnalyticsUrl(typeof explicitLocation === "string" ? explicitLocation : window.location.href);
       const defaults = {
         ...analyticsContext,
+        page_title: document.title || "سبق",
         page_location: location,
         page_referrer: analyticsContext.page_location === location
           ? analyticsContext.page_referrer ?? sanitizeAnalyticsUrl(document.referrer || "")
@@ -141,9 +142,12 @@ export function ensureAnalyticsReady(): boolean {
 
 /** Snapshot for delayed reading events that belong to the page being left. */
 export function getAnalyticsPageContext(): { page_title?: string; page_referrer?: string } {
+  const current = typeof window !== "undefined" ? sanitizeAnalyticsUrl(window.location.href) : "";
   return {
-    ...(typeof analyticsContext.page_title === "string" ? { page_title: analyticsContext.page_title } : {}),
-    ...(typeof analyticsContext.page_referrer === "string" ? { page_referrer: analyticsContext.page_referrer } : {}),
+    page_title: typeof document !== "undefined" ? document.title : undefined,
+    page_referrer: analyticsContext.page_location === current
+      ? String(analyticsContext.page_referrer ?? "")
+      : String(analyticsContext.page_location ?? (typeof document !== "undefined" ? sanitizeAnalyticsUrl(document.referrer || "") : "")),
   };
 }
 

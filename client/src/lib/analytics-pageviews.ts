@@ -49,9 +49,12 @@ export function synchronizeAnalyticsNavigation() {
 
 /** The page that owns the data explicitly commits its final metadata. */
 export function signalAnalyticsPageReady(href: string, title: string) {
-  const current = analyticsLocationKey(window.location.href);
-  coordinator.navigate(current, document.referrer ? analyticsLocationKey(document.referrer) : "");
-  coordinator.ready(analyticsLocationKey(href), title);
+  // Only the Router layout effect may start a visit. On popstate an outgoing
+  // page can render with the new browser URL before Switch replaces it; allowing
+  // its metadata effect to navigate here would claim the incoming page's visit.
+  const location = analyticsLocationKey(href);
+  if (location !== analyticsLocationKey(window.location.href)) return;
+  coordinator.ready(location, title);
   coordinator.flush();
 }
 

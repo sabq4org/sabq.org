@@ -1,26 +1,32 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Router, useLocation } from "wouter";
+import { Link, Router, Route, Switch, useLocation } from "wouter";
 import { useAnalytics, useAnalyticsPageMetadata, AnalyticsRouteCommit } from "@/hooks/use-analytics";
 
-function Metadata({ title }: { title: string | null }) {
-  useAnalyticsPageMetadata(title);
-  return null;
+history.replaceState(history.state, "", "/");
+let cachedArticleReady = false;
+function Home() {
+  useLocation();
+  useAnalyticsPageMetadata("الرئيسية | سبق");
+  return <section><h1>الرئيسية</h1><Link href="/article/same">article</Link><Link href="/category/news">category</Link></section>;
 }
-
+function Article() {
+  useLocation();
+  const [ready, setReady] = useState(cachedArticleReady);
+  useAnalyticsPageMetadata(ready ? "عنوان نهائي | سبق" : null);
+  return <section><h1>الخبر</h1><button onClick={() => { cachedArticleReady = true; setReady(true); }}>ready</button><Link href="/category/news">category</Link></section>;
+}
+function Category() {
+  useLocation();
+  useAnalyticsPageMetadata("تصنيف الأخبار | سبق");
+  return <section><h1>التصنيف</h1><Link href="/">home</Link><Link href="/category/news?page=2">page two</Link><button onClick={() => undefined}>ready</button></section>;
+}
 function App() {
-  const [path, navigate] = useLocation();
-  const [title, setTitle] = useState<string | null>(path.includes("article") ? null : "الرئيسية | سبق");
   useAnalytics();
-  return <main>
-    <Metadata title={title} />
-    <AnalyticsRouteCommit />
-    <p data-testid="route">{path}</p>
-    <button onClick={() => { navigate("/article/same"); setTitle(null); }}>article</button>
-    <button onClick={() => { navigate("/category/news"); setTitle(null); }}>category</button>
-    <button onClick={() => setTitle("عنوان نهائي | سبق")}>ready</button>
-    <button onClick={() => navigate("/category/news?page=2")}>page two</button>
-  </main>;
+  return <main><Switch>
+    <Route path="/article/:slug">{() => <><Article /><AnalyticsRouteCommit /></>}</Route>
+    <Route path="/category/:slug">{() => <><Category /><AnalyticsRouteCommit /></>}</Route>
+    <Route>{() => <><Home /><AnalyticsRouteCommit /></>}</Route>
+  </Switch></main>;
 }
-
 createRoot(document.getElementById("root")!).render(<Router><App /></Router>);

@@ -118,7 +118,7 @@ test("AuthAnalyticsMarker rejects an invalid marker", async ({ page }) => {
 test("real pageview hooks emit one view after delayed metadata and do not repeat same title", async ({ page }) => {
   await setup(page, undefined, "analytics-pageviews");
   await expect.poll(async () => (await events(page)).filter(e => e[1] === "page_view").length).toBe(1);
-  await page.getByRole("button", { name: "article" }).click();
+  await page.getByRole("link", { name: "article" }).click();
   await page.waitForTimeout(100);
   expect((await events(page)).filter(e => e[1] === "page_view")).toHaveLength(1);
   await page.getByRole("button", { name: "ready" }).click();
@@ -146,10 +146,10 @@ test("real pageview hooks preserve same-title visits, Back, Forward and query pa
   const views = async () => (await events(page)).filter(e => e[1] === "page_view");
   await expect.poll(async () => (await views()).length).toBe(1);
   expect((await views())[0][2]).toMatchObject({ page_title: "الرئيسية | سبق", page_referrer: "" });
-  await page.getByRole("button", { name: "article", exact: true }).click();
+  await page.getByRole("link", { name: "article", exact: true }).click();
   await page.getByRole("button", { name: "ready", exact: true }).click();
   await expect.poll(async () => (await views()).length).toBe(2);
-  await page.getByRole("button", { name: "category", exact: true }).click();
+  await page.getByRole("link", { name: "category", exact: true }).click();
   await page.getByRole("button", { name: "ready", exact: true }).click();
   await expect.poll(async () => (await views()).length).toBe(3);
   await page.goBack();
@@ -157,7 +157,23 @@ test("real pageview hooks preserve same-title visits, Back, Forward and query pa
   expect((await views())[3][2]).toMatchObject({ page_location: `${publicOrigin}/article/same`, page_referrer: `${publicOrigin}/category/news`, page_title: "عنوان نهائي | سبق" });
   await page.goForward();
   await expect.poll(async () => (await views()).length).toBe(5);
-  await page.getByRole("button", { name: "page two", exact: true }).click();
+  await page.getByRole("link", { name: "page two", exact: true }).click();
   await expect.poll(async () => (await views()).length).toBe(6);
   expect((await views())[5][2]).toMatchObject({ page_location: `${publicOrigin}/category/news?page=2`, page_referrer: `${publicOrigin}/category/news` });
+});
+
+
+test("popstate never lets an outgoing page claim the next page's title", async ({ page }) => {
+  await setup(page, undefined, "analytics-pageviews");
+  const views = async () => (await events(page)).filter(e => e[1] === "page_view");
+  await expect.poll(async () => (await views()).length).toBe(1);
+  await page.getByRole("link", { name: "article", exact: true }).click();
+  await page.getByRole("button", { name: "ready", exact: true }).click();
+  await expect.poll(async () => (await views()).length).toBe(2);
+  await page.goBack();
+  await expect.poll(async () => (await views()).length).toBe(3);
+  expect((await views())[2][2]).toMatchObject({ page_title: "الرئيسية | سبق" });
+  await page.goForward();
+  await expect.poll(async () => (await views()).length).toBe(4);
+  expect((await views())[3][2]).toMatchObject({ page_title: "عنوان نهائي | سبق" });
 });
