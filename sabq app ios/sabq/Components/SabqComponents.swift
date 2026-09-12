@@ -178,15 +178,16 @@ struct HomeFeedSkeleton: View {
 // MARK: - Animated Appear Modifier
 
 struct AnimatedAppear: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let index: Int
     @State private var isVisible = false
 
     func body(content: Content) -> some View {
         content
-            .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible ? 0 : 18)
+            .opacity(isVisible || reduceMotion ? 1 : 0)
+            .offset(y: isVisible || reduceMotion ? 0 : 18)
             .onAppear {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.82).delay(Double(index) * 0.05)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.82).delay(Double(index) * 0.05)) {
                     isVisible = true
                 }
             }
@@ -1047,9 +1048,13 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0.38, green: 0.40, blue: 0.46, alpha: 1)
     })
     static let tertiaryInk = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.50, green: 0.50, blue: 0.55, alpha: 1)
-            : UIColor(red: 0.56, green: 0.58, blue: 0.64, alpha: 1)
+        if t.accessibilityContrast == .high {
+            return t.userInterfaceStyle == .dark
+                ? UIColor(white: 0.88, alpha: 1) : UIColor(white: 0.25, alpha: 1)
+        }
+        return t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.68, green: 0.68, blue: 0.72, alpha: 1)
+            : UIColor(red: 0.42, green: 0.44, blue: 0.49, alpha: 1)
     })
     static let outline = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1218,6 +1223,7 @@ struct SurfaceCard<Content: View>: View {
 // MARK: - Screen Header
 
 struct CompactScreenHeader: View {
+    @Environment(\.legibilityWeight) private var legibilityWeight
     let title: String
     let subtitle: String
     var actionTitle: String?
@@ -1229,7 +1235,8 @@ struct CompactScreenHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(SabqFonts.app(size: 28, weight: .semibold))
+                    .font(SabqFonts.editorial(.title, size: 28, weight: .semibold, boldText: legibilityWeight == .bold))
+                    .accessibilityAddTraits(.isHeader)
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
@@ -1478,6 +1485,7 @@ struct DetailLabelPill: View {
 // MARK: - Featured Article Card
 
 struct FeaturedArticleCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
@@ -1541,7 +1549,7 @@ struct FeaturedArticleCard: View {
                     article.title,
                     uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
                     color: SabqTheme.ink,
-                    lineLimit: 3,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
                     lineSpacing: 4
                 )
 
@@ -1549,11 +1557,14 @@ struct FeaturedArticleCard: View {
                     article.excerpt,
                     uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
                     color: SabqTheme.secondaryInk,
-                    lineLimit: 2,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
                     lineSpacing: 3
                 )
 
-                HStack(spacing: 12) {
+                let metadataLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                    : AnyLayout(HStackLayout(spacing: 12))
+                metadataLayout {
                     HStack(spacing: 5) {
                         Image(systemName: "clock")
                             .font(SabqFonts.app(size: 11, weight: .regular))
@@ -1584,6 +1595,8 @@ struct FeaturedArticleCard: View {
                             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
                     }
                     .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال")
                 }
             }
             .padding(20)
@@ -1863,6 +1876,8 @@ struct CompactArticleRow: View {
 // MARK: - Category Tile
 
 struct CategoryTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.legibilityWeight) private var legibilityWeight
     let category: ArticleCategory
 
     init(category: ArticleCategory) {
@@ -1886,13 +1901,13 @@ struct CategoryTile: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .font(SabqFonts.editorial(.headline, size: 16, weight: .semibold, boldText: legibilityWeight == .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(category.subtitle)
                     .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
             }

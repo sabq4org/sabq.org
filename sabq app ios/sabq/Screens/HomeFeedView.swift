@@ -74,6 +74,7 @@ struct HomeFeedView: View {
     /// TabView frame, which leaves a visible gap above them on short
     /// cards) and render our own tight against the card bottom.
     @State private var featuredIndex: Int = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// لقطة الاقتصاد الحي — تُحمَّل مع الرئيسية كي يظهر البلوك من أول رسم بعد الجلب.
     private let economyStore = EconomyStore.shared
     /// عرض عمود المحتوى مقيسًا من الحاوية لا من `UIScreen` — عرض الشاشة ليس
@@ -81,7 +82,7 @@ struct HomeFeedView: View {
     @State private var feedContentWidth: CGFloat = 0
     /// ميزانية كتلة النص تحت الهيرو (عنوان 3 أسطر + موجز سطرين + بيانات +
     /// حشو 20×2) — تتدرّج مع Dynamic Type كما تتدرّج خطوط البطاقة نفسها.
-    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 230
+    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 260
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
@@ -132,6 +133,7 @@ struct HomeFeedView: View {
     }
 
     private var fullBody: some View {
+        GeometryReader { container in
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 if isContentReady {
@@ -217,6 +219,7 @@ struct HomeFeedView: View {
                     moreTodaySection
                         .animatedAppear(index: 8)
                 }
+                .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 18)
                 .padding(.bottom, 40)
@@ -365,6 +368,7 @@ struct HomeFeedView: View {
                         }
                     }
             }
+        }
         }
     }
 
@@ -558,7 +562,7 @@ struct HomeFeedView: View {
                                     )
                                     .frame(width: 44, height: 44)
                                 Image(systemName: "bell.fill")
-                                    .font(SabqFonts.app(size: 17, weight: .semibold))
+                                    .font(.system(size: 17, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                             }
                             // Red unread dot — driven by NotificationsStore's
@@ -599,7 +603,7 @@ struct HomeFeedView: View {
                             .frame(width: 44, height: 44)
 
                         Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(SabqFonts.app(size: 18, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(SabqTheme.primaryEnd)
                     }
                 }
@@ -638,7 +642,7 @@ struct HomeFeedView: View {
             .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: systemName)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -709,6 +713,16 @@ struct HomeFeedView: View {
     private var featuredSection: some View {
         let featured = Array(articlesStore.featuredArticles.prefix(3))
         return VStack(spacing: 10) {
+            if dynamicTypeSize.isAccessibilitySize {
+                ForEach(featured) { article in
+                    NavigationLink(value: article) {
+                        FeaturedArticleCard(article: article,
+                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                            isBookmarked: bookmarksStore.isBookmarked(article.id))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
             TabView(selection: $featuredIndex) {
                 ForEach(Array(featured.enumerated()), id: \.element.id) { idx, article in
                     // VStack + trailing Spacer anchors the card to the top
@@ -745,7 +759,9 @@ struct HomeFeedView: View {
                 if width > 0 { feedContentWidth = width }
             }
 
-            if featured.count > 1 {
+            }
+
+            if featured.count > 1 && !dynamicTypeSize.isAccessibilitySize {
                 HStack(spacing: 7) {
                     ForEach(featured.indices, id: \.self) { i in
                         Circle()
@@ -764,8 +780,8 @@ struct HomeFeedView: View {
     /// TabView page height = full-width 16:10 hero + text block budget.
     /// Outer feed padding is 16pt each side (see `fullBody`).
     private var featuredCarouselHeight: CGFloat {
-        // القيمة المقيسة تصل بعد أول تخطيط؛ حتى ذلك الحين نقدّرها من الشاشة.
-        let contentWidth = feedContentWidth > 0 ? feedContentWidth : UIScreen.main.bounds.width - 32
+        // أول تخطيط يقتصر على النص؛ القياس التالي يأتي من الحاوية نفسها.
+        let contentWidth = max(0, feedContentWidth)
         let heroHeight = contentWidth * (10.0 / 16.0)
         return ceil(heroHeight + featuredTextBudget)
     }
@@ -1149,19 +1165,25 @@ struct HomeFeedView: View {
 
         let tip = Self.sabqTips[dayOfYear % Self.sabqTips.count]
 
-        return HStack(alignment: .top, spacing: 14) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+        return layout {
             ZStack {
                 Circle()
                     .fill(tint.opacity(0.14))
                     .frame(width: 52, height: 52)
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 22, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(tint)
                     .symbolRenderingMode(.hierarchical)
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                let labelLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                    : AnyLayout(HStackLayout(spacing: 6))
+                labelLayout {
                     Text(greeting)
                         .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
@@ -1190,14 +1212,14 @@ struct HomeFeedView: View {
                 Text(headline)
                     .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(tip)
                     .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
