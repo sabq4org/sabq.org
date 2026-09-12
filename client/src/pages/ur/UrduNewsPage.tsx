@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UrduLayout } from "@/components/ur/UrduLayout";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { UrduNewsAnalyticsHero } from "@/components/ur/UrduNewsAnalyticsHero";
 import { UrduAIInsightsPanel } from "@/components/ur/UrduAIInsightsPanel";
 import { UrduSmartFilterBar } from "@/components/ur/UrduSmartFilterBar";
@@ -32,6 +33,7 @@ type TimeRange = 'today' | 'week' | 'month' | 'all';
 type Mood = 'all' | 'trending' | 'calm' | 'hot';
 
 export default function UrduNewsPage() {
+  useAnalyticsPageMetadata("تازہ خبریں | سبق");
   const [currentPage, setCurrentPage] = useState(1);
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [mood, setMood] = useState<Mood>('all');

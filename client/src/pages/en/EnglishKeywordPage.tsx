@@ -8,6 +8,7 @@ import { Clock, Eye, Tag, Zap, Flame, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { EnArticle } from "@shared/schema";
 import { EnglishLayout } from "@/components/en/EnglishLayout";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
 import type { ArticleWithDetails } from "@shared/schema";
 import { apiUrl } from "@/lib/queryClient";
@@ -24,6 +25,7 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
 export default function EnglishKeywordPage() {
   const params = useParams();
   const keyword = decodeURIComponent(params.keyword || "");
+  useAnalyticsPageMetadata(keyword ? `${keyword} News | Sabq` : "Keywords | Sabq");
 
   const { data: user } = useQuery<{ id: string; firstName?: string; email?: string }>({
     queryKey: ["/api/auth/user"],

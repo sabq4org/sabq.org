@@ -17,7 +17,6 @@ interface User {
 export function UrduLayout({ children }: UrduLayoutProps) {
   // Set Urdu page title and RTL direction
   useEffect(() => {
-    document.title = "سبق سمارٹ - ذہین خبروں کا پلیٹ فارم";
     document.documentElement.dir = "rtl";
     document.documentElement.lang = "ur";
     

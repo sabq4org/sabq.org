@@ -2,6 +2,7 @@ import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { EnglishLayout } from "@/components/en/EnglishLayout";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +42,7 @@ export default function EnglishCategoryPage() {
   });
 
   useCanonical(category ? `https://sabq.org/en/category/${category.slug || slug}` : null);
+  useAnalyticsPageMetadata(category ? `${category.name} | Sabq` : categoryLoading ? null : "Category Not Found | Sabq");
 
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<EnArticle[]>({
     queryKey: ["/api/en/categories", slug, "articles"],

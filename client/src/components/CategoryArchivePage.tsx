@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useCanonical } from "@/hooks/useCanonical";
@@ -27,9 +27,9 @@ export function CategoryArchivePage({ slug, page }: { slug: string; page: number
     },
   });
   useCanonical(data?.canonical || null);
-  useEffect(() => {
-    if (data) document.title = `${data.name}${page && page > 1 ? ` — الصفحة ${page}` : ""} | سبق`;
-  }, [data, page]);
+  useAnalyticsPageMetadata(data && page !== null
+    ? `${data.name}${page > 1 ? ` — الصفحة ${page}` : ""} | سبق`
+    : isLoading && page !== null ? null : "تعذر عرض صفحة الأرشيف | سبق");
   return <div dir="rtl" className="public-page category-listing-page min-h-screen flex flex-col bg-background">
     <Header />
     <main id="main-content" className="public-container py-8 flex-1">

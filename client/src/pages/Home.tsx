@@ -1,3 +1,4 @@
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import "@/styles/home-surfaces.css";
 import { useState, useEffect, useRef, useCallback, useMemo, Component, ReactNode, startTransition, Suspense } from "react";
 import { lazyDefault, lazyNamed } from "@/lib/lazyChunk";
@@ -241,10 +242,7 @@ export default function Home() {
     }
   }, [homepage, isPlaceholderData]);
 
-  // Set document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    document.title = 'سبق - صحيفة إلكترونية سعودية';
-  }, []);
+  useAnalyticsPageMetadata("سبق - صحيفة إلكترونية سعودية");
 
   useCanonical("https://sabq.org");
 

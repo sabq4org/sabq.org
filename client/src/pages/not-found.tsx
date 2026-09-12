@@ -1,3 +1,5 @@
+import { apiUrl } from "@/lib/queryClient";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { Home, Search, Newspaper, FolderOpen, ArrowLeft, TrendingUp, MapPin } from "lucide-react";
@@ -218,27 +220,22 @@ function TrendingPanel({ articles, isLoading }: { articles: TrendingArticle[]; i
 }
 
 export default function NotFound() {
-  const [, setLocation] = useLocation();
+  useAnalyticsPageMetadata("404 - Page Not Found | سبق");
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).gtag) {
-      (window as any).gtag('event', 'page_view', {
-        page_title: '404 - Page Not Found',
-        page_location: window.location.href,
-        page_path: window.location.pathname,
-        error_type: '404'
-      });
       (window as any).gtag('event', '404_error', {
         page_url: window.location.pathname,
-        referrer: document.referrer || 'direct'
+        referrer: document.referrer || ""
       });
     }
-  }, []);
+  }, [location]);
 
   const { data, isLoading } = useQuery<TrendingResponse>({
     queryKey: ['/api/recommendations/trending'],
     queryFn: async () => {
-      const response = await fetch('/api/recommendations/trending?limit=4');
+      const response = await fetch(apiUrl('/api/recommendations/trending?limit=4'));
       if (!response.ok) throw new Error('Failed to fetch trending articles');
       return response.json();
     },

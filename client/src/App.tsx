@@ -12,7 +12,7 @@ import { SkipLinks } from "@/components/SkipLinks";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
-import { useAnalytics } from "@/hooks/use-analytics";
+import { AnalyticsRouteCommit, useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
 import { needsAccountCompletion, useAuth } from "@/hooks/useAuth";
 import {
@@ -25,6 +25,7 @@ import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
 import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "@/lib/deployRecovery";
 import { isChunkErrorMessage, retryImport } from "@/lib/retryImport";
+import { AuthAnalyticsMarker } from "@/components/AuthAnalyticsMarker";
 
 function WebMCPProvider() {
   useWebMCP();
@@ -581,6 +582,7 @@ function LazyRoute({ component: Component }: { component: React.LazyExoticCompon
     <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Component />
+        <AnalyticsRouteCommit />
       </Suspense>
     </ErrorBoundary>
   );
@@ -1316,6 +1318,7 @@ function App() {
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
+                  <AuthAnalyticsMarker />
                   <PostAuthResumeGuard />
                   <NameCompletionGuard />
                   <CapacitorDeepLinks />

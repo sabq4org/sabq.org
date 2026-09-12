@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { useState, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ type KeywordResponse = {
 export default function KeywordPage() {
   const params = useParams();
   const keyword = decodeURIComponent(params.keyword || "");
+  useAnalyticsPageMetadata(keyword ? `أخبار ${keyword} | سبق` : "الكلمات المفتاحية | سبق");
   const { toast } = useToast();
   
   const [sortBy, setSortBy] = useState<SortOption>('newest');

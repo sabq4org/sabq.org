@@ -1,3 +1,4 @@
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import "@/styles/article-detail.css";
 import { ArticleSummary } from "@/components/public/ArticleSummary";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
@@ -38,6 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
+import { useAnalyticsReadingEngagement } from "@/hooks/useAnalyticsReadingEngagement";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { signalContentPainted } from "@/lib/contentPaintedSignal";
@@ -47,6 +49,7 @@ import {
   trackArticleLike,
   trackBookmarkToggle,
   trackArticleComment,
+  trackReadingEngagement,
 } from "@/lib/analytics";
 import {
   Heart,
@@ -365,11 +368,6 @@ export default function ArticleDetail() {
     enabled: !!article && !!user,
   });
 
-  useEffect(() => {
-    if (!article?.id) return;
-    const categoryName = article.category?.nameAr ?? article.category?.nameEn;
-    trackArticleView(article.id, article.title || "", categoryName);
-  }, [article?.id, article?.title, article?.category?.nameAr, article?.category?.nameEn]);
 
   // Focus mode (Task #80)
   const [focusOpen, setFocusOpen] = useState(false);
@@ -395,15 +393,22 @@ export default function ArticleDetail() {
     }
   }, [article?.id, user?.id]);
 
-  // Update document.title for SEO (GA4 auto-tracks page views)
+  useAnalyticsPageMetadata(article?.title ? `${article.title} | سبق` : isLoading ? null : "تعذر عرض الخبر | سبق");
+  const lastAnalyticsArticle = useRef<string | null>(null);
   useEffect(() => {
-    if (article?.title) {
-      document.title = `${article.title} | سبق`;
-    }
-    return () => {
-      document.title = 'سبق - صحيفة إلكترونية سعودية';
-    };
-  }, [article?.title]);
+    if (!article?.id) return;
+    const visit = `${slug}:${article.id}`;
+    if (lastAnalyticsArticle.current === visit) return;
+    lastAnalyticsArticle.current = visit;
+    trackArticleView(article.id, article.title || "", article.category?.nameAr ?? article.category?.nameEn);
+  }, [slug, article?.id, article?.title, article?.category?.nameAr, article?.category?.nameEn]);
+
+  useAnalyticsReadingEngagement({
+    articleId: article?.id || "",
+    contentRef: articleBodyRef,
+    enabled: !!article?.id,
+    onEvent: (event) => trackReadingEngagement(event.name, event.params),
+  });
 
   useCanonical(article ? `https://sabq.org/article/${article.englishSlug || slug}` : null);
 

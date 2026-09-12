@@ -738,6 +738,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       return res.redirect(`/ar/login?error=${name}_auth_failed`);
     };
 
+  // The callback is the only reliable web signal that OAuth completed: it runs
+  // after Passport has authenticated and created the session. Keep the marker
+  // short-lived and free of identity data; the SPA consumes it once only after
+  // confirming /api/auth/user, then removes it from the URL.
+  const oauthLanding = (req: any, res: Response) => {
+    const user = req.user as { isProfileComplete?: boolean; isNewUser?: boolean } | undefined;
+    // Preserve the existing onboarding destination for incomplete existing
+    // accounts; isNewUser only controls the conversion event semantics.
+    const destination = user?.isProfileComplete === false ? "/onboarding/welcome" : "/dashboard";
+    const event = user?.isNewUser ? "sign_up" : "login";
+    const marker = new URLSearchParams({
+      sabq_auth_event: event,
+      method: req.path.includes("google") ? "google" : "apple",
+      nonce: randomUUID(),
+    });
+    return res.redirect(`${destination}?${marker.toString()}`);
+  };
+
   // Google OAuth Routes
   app.get("/api/auth/google",
     requireOAuthStrategy("google"),
@@ -752,13 +770,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }),
     (req, res) => {
       console.log("✅ Google OAuth callback successful");
-      // Redirect to onboarding or dashboard based on isProfileComplete
-      const user = req.user as any;
-      if (user && !user.isProfileComplete) {
-        res.redirect("/onboarding/welcome");
-      } else {
-        res.redirect("/dashboard");
-      }
+      oauthLanding(req, res);
     }
   );
 
@@ -776,13 +788,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }),
     (req, res) => {
       console.log("✅ Apple OAuth callback successful");
-      // Redirect to onboarding or dashboard based on isProfileComplete
-      const user = req.user as any;
-      if (user && !user.isProfileComplete) {
-        res.redirect("/onboarding/welcome");
-      } else {
-        res.redirect("/dashboard");
-      }
+      oauthLanding(req, res);
     }
   );
 
