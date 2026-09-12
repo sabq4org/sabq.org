@@ -711,6 +711,8 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
     let isAiGeneratedImage: Bool?
     let aiImageModel: String?
     let tags: [String]
+    /// المشاهدات — تُعرض على بطاقة أرشيف الرأي كما في الويب (#1605).
+    let views: Int?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -718,6 +720,9 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
             ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        views = (try? c.decode(Int.self, forKey: FlexKey("views")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("viewsCount")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("views_count")))
         id = rawId ?? slug ?? "derived-\(StableID.fnv1a(title))"
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
