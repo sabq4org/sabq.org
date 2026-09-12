@@ -77,4 +77,14 @@ struct WebParityBatch5Tests {
         let raw = RegistrationErrorMessage.message(for: APIError.serverError(500))
         #expect(!raw.contains("500"))
     }
+
+    // MARK: - 10. ركلات الترجيح في توقعات سبق
+
+    @Test func penaltiesDecodeAndFormatAwayFirst() throws {
+        let r = try JSONDecoder().decode(PredScoreResult.self, from: #"{"finalHome":1,"finalAway":1,"penalties":{"home":4,"away":3}}"#.data(using: .utf8)!)
+        #expect(PredScoreResult.penaltiesLabel(r.penalties) == "(3–4 ر.ت)")
+        let none = try JSONDecoder().decode(PredScoreResult.self, from: #"{"finalHome":2,"finalAway":0}"#.data(using: .utf8)!)
+        #expect(PredScoreResult.penaltiesLabel(none.penalties) == nil)
+        #expect(PredScoreResult.penaltiesLabel(PredPenaltiesMeta(home: nil, away: 3)) == nil)
+    }
 }

@@ -577,6 +577,14 @@ struct KcPredictionsView: View {
             VStack(spacing: 3) {
                 if let r = contest.result, let fh = r.finalHome, let fa = r.finalAway {
                     splitScore(home: fh, away: fa)
+                    // ركلات الترجيح تحت النتيجة النهائية (نقل الويب #1439)
+                    if let pen = PredScoreResult.penaltiesLabel(r.penalties ?? contest.metadata?.penalties) {
+                        Text(pen)
+                            .font(SabqFonts.app(size: 9.5, weight: .bold))
+                            .foregroundStyle(WCTheme.onDarkDim)
+                            .monospacedDigit()
+                            .environment(\.layoutDirection, .leftToRight)
+                    }
                 } else {
                     Text("بانتظار النتيجة")
                         .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
@@ -830,6 +838,12 @@ struct KcPredictionsView: View {
                     .font(SabqFonts.app(size: 13))
                     .foregroundStyle(WCTheme.onDark)
                     .lineSpacing(5)
+                // قاعدة الأدوار الإقصائية كما في بطاقة القواعد في الويب (#1439)
+                Text("· في مباريات الكؤوس وخروج المغلوب: يُعتمد التوقّع على نتيجة الوقتين الأصلي والإضافي (قبل ركلات الترجيح).")
+                    .font(SabqFonts.app(size: 12))
+                    .foregroundStyle(WCTheme.onDarkDim)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
