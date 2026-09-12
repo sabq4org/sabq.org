@@ -214,10 +214,11 @@ struct EconomyHomeBlock: View {
                 .minimumScaleFactor(0.85)
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // ملء ارتفاع الصف كي تتساوى بطاقات الشبكة (LazyVGrid يقترح ارتفاع أطول خلية)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.background)
+                .fill(SabqTheme.surface)
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
         )
     }
@@ -341,19 +342,34 @@ struct EconomyMonthlyCardView: View {
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.background)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
-        )
-        .overlay(alignment: .top) {
-            // حد علوي 3 نقاط بلون الاتجاه (كما في الويب)
-            RoundedRectangle(cornerRadius: 2)
-                .fill(EconomyTone.color(card.tone) ?? SabqTheme.primaryEnd)
-                .frame(height: 3)
-                .padding(.horizontal, 12)
-        }
+        .padding(.top, 3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .economyAccentCard(tone: EconomyTone.color(card.tone) ?? SabqTheme.primaryEnd)
+    }
+}
+
+/// بطاقة بيضاء بحد علوي ملوّن (3 نقاط) ينحني مع زوايا البطاقة — الشريط يُرسم
+/// كطبقة خلفية ثم تُقصّ الحاوية كلها بالشكل المستدير (ملاحظة المالك 2026-09-12).
+struct EconomyAccentCardModifier: ViewModifier {
+    let tone: Color
+    var radius: CGFloat = 12
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack(alignment: .top) {
+                    SabqTheme.surface
+                    tone.frame(height: 3)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+    }
+}
+
+extension View {
+    func economyAccentCard(tone: Color, radius: CGFloat = 12) -> some View {
+        modifier(EconomyAccentCardModifier(tone: tone, radius: radius))
     }
 }
 

@@ -201,7 +201,7 @@ struct EconomyView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(SabqTheme.surface)
@@ -326,7 +326,7 @@ private struct EconomySectionHead: View {
 private func economyCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
     VStack(alignment: .leading, spacing: 8) { content() }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(SabqTheme.surface)
@@ -475,18 +475,9 @@ struct EconomyWeeklyModule: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.surface)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
-        )
-        .overlay(alignment: .top) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(EconomyTone.color(st.tone) ?? SabqTheme.primaryEnd)
-                .frame(height: 3)
-                .padding(.horizontal, 12)
-        }
+        .padding(.top, 3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .economyAccentCard(tone: EconomyTone.color(st.tone) ?? SabqTheme.primaryEnd)
     }
 
     private func sectorsList(_ story: EconomyWeeklyStory) -> some View {
