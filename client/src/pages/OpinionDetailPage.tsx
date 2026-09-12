@@ -1,3 +1,4 @@
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { ArticleSummary } from "@/components/public/ArticleSummary";
 import "@/styles/article-detail.css";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
@@ -22,6 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
+import { useAnalyticsReadingEngagement } from "@/hooks/useAnalyticsReadingEngagement";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -30,6 +32,7 @@ import {
   trackArticleLike,
   trackBookmarkToggle,
   trackArticleComment,
+  trackReadingEngagement,
 } from "@/lib/analytics";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking, updateSignalDataLayer, triggerAdsWhenReady, resetAdsTriggerFlag } from "@/components/DmsAdSlot";
 import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
@@ -145,26 +148,22 @@ export default function OpinionDetailPage() {
     }
   }, [article?.id, user?.id]);
 
-  // Set document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    if (article?.title) {
-      document.title = `${article.title} | سبق`;
-    }
-    return () => {
-      document.title = 'سبق - صحيفة إلكترونية سعودية';
-    };
-  }, [article?.title]);
+  useAnalyticsPageMetadata(article?.title ? `${article.title} | سبق` : isLoading ? null : "تعذر عرض المقال | سبق");
 
   useCanonical(article ? `https://sabq.org/article/${article.englishSlug || slug}` : null);
 
-  // GA analytics view — fire immediately (separate from the inflated DB counter).
+  // One content view per route visit, independent of background metadata refreshes.
+  const analyticsOpinionVisit = useRef<string | null>(null);
   useEffect(() => {
     if (!article?.id) return;
+    const visit = `${slug}:${article.id}`;
+    if (analyticsOpinionVisit.current === visit) return;
+    analyticsOpinionVisit.current = visit;
     const author = article.author
       ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim()
       : "";
     trackOpinionView(article.id, article.title || "", author);
-  }, [article?.id, article?.title, article?.author?.firstName, article?.author?.lastName]);
+  }, [slug, article?.id, article?.title, article?.author?.firstName, article?.author?.lastName]);
 
   // Count the view ONLY after a genuine read: ≥10s of foreground dwell on the
   // page. Mashing the refresh button never reaches the threshold (each reload
@@ -241,6 +240,14 @@ export default function OpinionDetailPage() {
     });
     return transformArticleHtml(sanitized);
   }, [article?.content]);
+
+  const articleBodyRef = useRef<HTMLDivElement>(null);
+  useAnalyticsReadingEngagement({
+    articleId: article?.id || "",
+    contentRef: articleBodyRef,
+    enabled: !!article?.id,
+    onEvent: (event) => trackReadingEngagement(event.name, event.params),
+  });
 
   // googlebot-news 30-day noindex meta is now handled server-side by
   // seoInjector (see server/seoInjector.ts ~line 174). The previous
@@ -624,6 +631,7 @@ export default function OpinionDetailPage() {
 
               {/* Article Content */}
               <div
+                ref={articleBodyRef}
                 className="article-prose prose prose-lg dark:prose-invert max-w-none leading-loose text-justify"
                 dangerouslySetInnerHTML={{ __html: sanitizedArticleHtml }}
                 data-testid="text-article-content"

@@ -13,6 +13,8 @@ import { SiApple } from "react-icons/si";
 import { ChevronLeft, Eye, EyeOff, Loader2, AlertCircle, Bookmark, Bell, Sparkles, History, Crown, Zap } from "lucide-react";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import sabqLogo from "@assets/sabq-logo.png";
+import { trackLoginStart } from "@/lib/analytics";
+import { enqueueConversion } from "@/lib/analytics-conversion-queue";
 
 const registerSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -92,6 +94,7 @@ export default function Register() {
           lastName: data.lastName,
         }),
       });
+      enqueueConversion("sign_up", "email");
 
       // The server auto-logs-in the new user (sets the session). Prime the auth
       // cache with staleTime:0 BEFORE navigating (F-09) — otherwise the global
@@ -187,7 +190,10 @@ export default function Register() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.location.href = '/api/auth/google'}
+                    onClick={() => {
+                      trackLoginStart("google");
+                      window.location.href = '/api/auth/google';
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                     data-testid="button-google-register"
                   >
@@ -197,7 +203,10 @@ export default function Register() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.location.href = '/api/auth/apple'}
+                    onClick={() => {
+                      trackLoginStart("apple");
+                      window.location.href = '/api/auth/apple';
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                     data-testid="button-apple-register"
                   >

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, Fragment, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { formatDistanceToNow, parseISO, startOfDay, subDays, subHours, differenceInMinutes, isToday, isYesterday } from "date-fns";
 import { ar } from "date-fns/locale";
 import {
@@ -489,6 +490,7 @@ function BreakingTicker({ items }: { items: LiveUpdate[] }) {
 }
 
 export default function MomentByMoment() {
+  useAnalyticsPageMetadata("لحظة بلحظة | سبق");
   useAdTracking('لحظة بلحظة');
 
   const { data: user } = useQuery<{

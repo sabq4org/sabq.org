@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { EnglishLayout } from "@/components/en/EnglishLayout";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { EnglishNewsAnalyticsHero } from "@/components/en/EnglishNewsAnalyticsHero";
 import { EnglishAIInsightsPanel } from "@/components/en/EnglishAIInsightsPanel";
 import { EnglishSmartFilterBar } from "@/components/en/EnglishSmartFilterBar";
@@ -31,6 +32,7 @@ type TimeRange = 'today' | 'week' | 'month' | 'all';
 type Mood = 'all' | 'trending' | 'calm' | 'hot';
 
 export default function EnglishNewsPage() {
+  useAnalyticsPageMetadata("Latest News | Sabq");
   const [currentPage, setCurrentPage] = useState(1);
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [mood, setMood] = useState<Mood>('all');

@@ -13,8 +13,9 @@ import { SiApple } from "react-icons/si";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { GoogleIcon } from "@/components/GoogleIcon";
-import { trackLogin } from "@/lib/analytics";
+import { trackLoginStart } from "@/lib/analytics";
 import { consumePostAuthReturn, rememberPostAuthReturn } from "@/lib/postAuthRedirect";
+import { enqueueConversion } from "@/lib/analytics-conversion-queue";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -116,7 +117,7 @@ export default function Login() {
       staleTime: 0,
     });
     toast({ title: "مرحباً بك!", description: "تم تسجيل الدخول بنجاح" });
-    trackLogin(method);
+    enqueueConversion("login", method as "email" | "phone");
     const fallback = getDefaultRedirectPath(userData);
     const mustFinishAccount = fallback === "/complete-name" || userData.isProfileComplete === false;
     navigate(mustFinishAccount ? fallback : consumePostAuthReturn(fallback));
@@ -230,11 +231,11 @@ export default function Login() {
           confirmPassword: data.confirmPassword,
         }),
       });
+      enqueueConversion("sign_up", "phone");
       toast({ title: "تم إنشاء حسابك", description: "أرسلنا رابط تحقق إلى بريدك الإلكتروني" });
       // عضو جديد → نفس onboarding مسجّلي البريد (ترحيب ثم اهتمامات)،
       // بعد تهيئة كاش الجلسة كي لا تعيده الحراس إلى الدخول.
       await queryClient.fetchQuery<User>({ queryKey: ["/api/auth/user"], staleTime: 0 });
-      trackLogin("phone");
       navigate("/onboarding/welcome");
     } catch (error: any) {
       setPhoneLoading(false);
@@ -587,7 +588,7 @@ export default function Login() {
               type="button"
               variant="outline"
               onClick={() => {
-                trackLogin("google");
+                trackLoginStart("google");
                 window.location.href = '/api/auth/google';
               }}
               className="inline-flex w-full items-center justify-center gap-2"
@@ -600,7 +601,7 @@ export default function Login() {
               type="button"
               variant="outline"
               onClick={() => {
-                trackLogin("apple");
+                trackLoginStart("apple");
                 window.location.href = '/api/auth/apple';
               }}
               className="inline-flex w-full items-center justify-center gap-2"

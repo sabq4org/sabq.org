@@ -1,3 +1,4 @@
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { useParams, useSearch } from "wouter";
 import { CategoryArchivePage } from "@/components/CategoryArchivePage";
 import { useQuery } from "@tanstack/react-query";
@@ -136,15 +137,7 @@ function CategoryLandingPage() {
     setDisplayCount(12);
   }, [sortMode, timeRange, articleType]);
 
-  // Update document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    if (category?.nameAr) {
-      document.title = `${category.nameAr} | سبق`;
-    }
-    return () => {
-      document.title = 'سبق - صحيفة إلكترونية سعودية';
-    };
-  }, [category?.nameAr]);
+  useAnalyticsPageMetadata(category?.nameAr ? `${category.nameAr} | سبق` : categoryLoading ? null : "التصنيف غير موجود | سبق");
 
   useCanonical(category ? `https://sabq.org/category/${category.englishSlug || slug}` : null);
 

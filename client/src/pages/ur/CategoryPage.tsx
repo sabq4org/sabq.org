@@ -2,6 +2,7 @@ import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { UrduLayout } from "@/components/ur/UrduLayout";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ export default function UrduCategoryPage() {
   });
 
   useCanonical(category ? `https://sabq.org/ur/category/${category.slug || slug}` : null);
+  useAnalyticsPageMetadata(category ? `${category.name} | سبق` : categoryLoading ? null : "زمرہ نہیں ملا | سبق");
 
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<UrArticle[]>({
     queryKey: ["/api/ur/categories", slug, "articles"],

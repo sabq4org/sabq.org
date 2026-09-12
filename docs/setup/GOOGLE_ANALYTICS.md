@@ -1,268 +1,80 @@
-# Google Analytics (GA4) في مشروع سبق
+# Google Analytics 4 — عقد قياس سبق
 
-كيف نضع كود Google في المشروع وكيف تُرصد **مشاهدات الصفحات** والأحداث عبر الويب وiOS وAndroid.
+آخر تحديث: 2026-09-13 — إصلاح Issue #1646. تعديلات الكود هنا لا تعني أنها نُشرت إلى الإنتاج.
 
-> **معرّف القياس (Measurement ID):** `G-EEB5593GY7`  
-> **خاصية GA4:** Sabq GA3 - GA4  
-> الأحداث موحّدة الأسماء عبر المنصات حتى تظهر معاً في: **Reports → Engagement → Events**.
+## الملكية والمعرّفات
 
----
+| العنصر | المعرّف / المالك |
+|---|---|
+| خاصية GA4 | `369420309` — Sabq GA3 - GA4 |
+| تدفق sabq.org | `5043633834` / `G-EEB5593GY7` |
+| Google tag | `GT-WKXQP5B`، وجهة واحدة مرئية لنفس الخاصية |
+| حاوية الإعلانات المستخدمة | `GTM-T5PW84LM` — شركة الإعلانات، أكد المالك ذلك أثناء التدقيق |
+| الحاوية الظاهرة في حساب سبق | `GTM-KRVQHS9` — ليست الحاوية المحملة في الموقع؛ لا تستبدل بها معرّف الإعلانات |
 
-## 1) الويب (sabq.org) — المصدر الأساسي لمشاهدات الصفحات
+المعرّف العام ليس سرًا. لا تُنسخ API secrets إلى الواجهة أو التقارير. وجود `GA_API_SECRET` في خدمة Railway لا يثبت استخدامه؛ لم يظهر له مستهلك في المسارات التي فُحصت. متغيرات Cloudflare Pages وSHA الواجهة المنشورة لم يُثبتا خلال التدقيق.
 
-الويب تطبيق SPA (React + Wouter). تحميل الصفحة مرة واحدة لا يكفي؛ لازم نرسل `page_view` عند كل تغيير مسار.
+## تهيئة الويب
 
-### أ) تحميل مكتبة gtag في HTML
+`main.tsx` يستدعي `ensureAnalyticsReady` من `analytics-privacy.ts`. هذا هو المصدر الواحد للتهيئة والتنقية: تحميل gtag مرة لكل مستند، مع `send_page_view:false`، وإعادة تقييم المضيف والمسار عند كل محاولة إرسال. لا يرسل المحلي أو Pages preview أو المضيف غير المعتمد إلى تدفق الإنتاج. صفحات الإدارة والحساب والمصادقة الحساسة مستثناة، بما فيها نظائر اللغات.
 
-الملف: [`client/index.html`](../../client/index.html)
+`client/index.html` يحتفظ بحاوية شركة الإعلانات وتأجيلها إلى المحتوى/التفاعل/7 ثوانٍ. جاهزية GA وحدها لا تطلق الإعلانات. منع التحميل عند فتح صفحة حساسة مباشرة لا يزيل سكربتًا سبق تحميله قبل انتقال SPA؛ ضبط سلوك GTM/Permutive والموافقة داخل حاوية الشركة عمل مطلوب من مالكها، ولا يدّعي هذا الإصلاح تحكمًا كاملاً في طلبات الطرف الثالث.
 
-```html
-<!-- Google Analytics GA4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-EEB5593GY7" data-cfasync="false"></script>
-<script data-cfasync="false">
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-EEB5593GY7', {
-    send_page_view: false,   // مهم: لا ترسل page_view تلقائياً
-    cookie_flags: 'SameSite=None;Secure'
-  });
-</script>
-```
+## مصدر واحد لمشاهدات الصفحة
 
-| الإعداد | لماذا |
-|--------|--------|
-| `async` | لا يوقف تحليل الصفحة |
-| `data-cfasync="false"` | يمنع Cloudflare Rocket Loader من تأخير السكربت |
-| `send_page_view: false` | يمنع العدّ المزدوج؛ الـ SPA يرسل المشاهدات يدوياً |
+- `useAnalytics` يبدأ الزيارة وفق الرابط المنقّح بما فيه معلمات الأرشيف الآمنة؛ الرجوع والتقدم زيارة جديدة بعد تغير المسار.
+- `useAnalyticsPageMetadata(title)` يعلن جاهزية عنوان الصفحة من مالك بياناتها. `null` يعني أن البيانات ما زالت قيد التحميل. الأخطاء تعلن عنوان خطأ صريحًا.
+- الأخبار والرأي والتصنيفات والرئيسيات العربية والإنجليزية والأردية تستخدم العقد الصريح. العناوين المتطابقة لا تمنع تسجيل زيارة جديدة؛ تحديث عنوان الخبر أثناء الزيارة لا يعيد عدها.
+- الكلمات المفتاحية والأخبار الإنجليزية والأردية واللحظية والأرشيف تملك عناوين صريحة كذلك. تُصفّر قيمة العنوان السابق عند الانتقال قبل تشغيل آثار بيانات الصفحة الجديدة.
+- `AnalyticsRouteCommit` داخل Suspense يعالج الصفحات الأخرى بعد تركيب الصفحة الفعلية؛ ما لا يملك عنوانًا يستخدم عنوان الصحيفة العام. صفحة ديناميكية جديدة تحتاج العقد الصريح وإضافتها إلى `hasExplicitAnalyticsMetadata`؛ وجود المسار داخل Router وحده لا يضمن صحة عنوان يأتي من طلب متأخر.
+- يحدّث المرسل `page_location/page_referrer/page_title` ثم يرسل `page_view`. الإحالة الداخلية هي الصفحة السابقة الفعلية؛ الإحالة الأولى مأخوذة من document.referrer بعد التنقية. لا يُنشأ referrer وهمي عند الدخول المباشر.
+- صفحة 404 ترسل `404_error` إضافة إلى **مشاهدة واحدة فقط** من المصدر العام.
+- الزيارات التي يغادرها المستخدم قبل جاهزية بياناتها لا تُسجّل كمشاهدة محتوى مكتمل بعنوان مخمّن.
 
-> لا تُرجع `send_page_view` إلى `true` وأنت تستخدم `useAnalytics` — ستُحسب الزيارة الأولى مرتين.
+Enhanced Measurement في إعداد Google المرئي: page loads محدد، وbrowser-history page changes غير محدد. لا تُفعّل history auto tracking مع المالك اليدوي الحالي. وسوم GA4 وUA التي فُحصت في مورد GTM المنشور كانت موقوفة؛ `virtual_pageview` في dataLayer لا يثبت وجود حدث GA مرسل.
 
-### ب) رصد كل تغيير مسار (page views)
+## الأحداث ودلالاتها
 
-الملف: [`client/src/hooks/use-analytics.tsx`](../../client/src/hooks/use-analytics.tsx)  
-يُستدعى مرة واحدة من [`client/src/App.tsx`](../../client/src/App.tsx) داخل `Router()`:
+| الحدث | المعنى |
+|---|---|
+| `article_view`, `opinion_view` | ظهور بيانات محتوى، منفصل عن page_view وعن عداد المقال الداخلي |
+| `share` | نجاح النسخ أو native share؛ للأزرار الخارجية: اختيار وجهة المشاركة، وليس إثبات نشرها على الخدمة الأخرى. `noopener` قد يعيد null رغم فتح النافذة |
+| `search` | استجابة بحث ناجحة تطابق العبارة الحالية، دون عد الاستجابات المتأخرة أو الفاشلة. البحث الحي يظل قادرًا على إنتاج أكثر من عبارة ناجحة خلال حوار واحد |
+| `login` | دخول ناجح لحساب قائم، لا مجرد الضغط على Google/Apple |
+| `sign_up` | إنشاء حساب جديد ناجح |
+| `article_like`, `article_comment`, `bookmark_toggle` | أحداث التفاعل القائمة، لا محتوى تعليق أو بيانات الحساب |
+| `scroll_depth` | تجاوز 25/50/75/90% من جسم المقال، مرة لكل عتبة في الزيارة |
+| `reading_time` | ثواني foreground المتراكمة في زيارة المقال، بحد أدنى 10 ثوانٍ، مع حفظ رابط وعنوان وإحالة المقال وقت بدء الزيارة. التسليم عند المغادرة أفضل جهد؛ قتل المتصفح دون حدث مغادرة قد يفقد الزيارة. المعلمة `reading_time_seconds` مستقلة عن GA engagement_time_msec لتجنب مضاعفة زمن التفاعل التلقائي |
 
-```ts
-function Router() {
-  useAnalytics(); // ← مصدر واحد لكل page_view
-  return ( ... );
-}
-```
+OAuth يضع marker بلا هوية بعد نجاح Passport، مع nonce مستقل لكل عملية؛ اسم الحدث يعتمد على إنشاء مستخدم جديد فعليًا، والوجهة تبقى وفق اكتمال الملف. الواجهة تنظف الرابط وتؤكد الجلسة، ثم تؤجل التحويل حتى مسار عام مسموح. المسارات الحساسة لا تشغّل GA لإرسال التحويل فورًا. هذه دلالة مقصودة: من لا يعود إلى صفحة عامة قبل انتهاء مدة الانتظار قد لا يظهر تحويله في GA.
 
-الـ hook يرسل عند كل تغيير في مسار Wouter:
+الخاصية تضم أيضًا تدفقي iOS وAndroid عبر Measurement Protocol. افصل التقرير بتدفق الويب عند فحص هذا الإصلاح. لا تغييرات على تطبيقات الموبايل أو أسرارها في هذه المهمة. `articles.views` وbehavior_logs لا يساويان GA4 views.
 
-```ts
-gtag("event", "page_view", {
-  send_to: "G-EEB5593GY7",
-  page_path: location,          // مثال: /article/slug
-  page_title: document.title,
-  page_location: window.location.href,
-});
-```
+## تنقية البيانات
 
-هذا يغطي: الرئيسية، التصنيفات، المقالات، البحث، لحظة بلحظة، لوحة التحكم، إلخ — طالما التنقل داخل الـ SPA.
+- طبقة واحدة تنظف أوامر `config/set/event`، وتحتفظ بسياق الصفحة الصريح لأحداث المغادرة.
+- الاستعلامات المسموح بها: `q` و`page` و`utm_*` ومعرّفات حملات Google المعروفة؛ تُزال القيم التي تطابق أنماط البريد/الهاتف والمفاتيح الحساسة، وكذلك hash وبيانات اعتماد URL.
+- تنقية آلية تعتمد على الأنماط لا تستطيع إثبات خلو نص حر من جميع البيانات الشخصية. لا تضف بريدًا أو اسم حساب أو رمز جلسة إلى الأحداث، ولا تعتبر hash للبريد تصريحًا بالإرسال.
+- الإعداد المحفوظ في GA4 أثناء الإصلاح: **Email redaction active** و12 مفتاح رابط: `token, code, access_token, refresh_token, id_token, password, email, phone, otp, registrationtoken, sabq_auth_event, nonce`.
+- أُنشئت وتحققت Custom dimensions الحدثية: `category`, `content_type`, `method`. لا تُسجَّل عناوين الأخبار ومعرّفاتها عالية التنوع تلقائيًا كأبعاد إضافية.
 
-### ج) أحداث المحتوى (ليست page_view)
+## Google والموافقة وما بقي للتشغيل
 
-الملف: [`client/src/lib/analytics.ts`](../../client/src/lib/analytics.ts)
+راجع [دليل الموافقة](GOOGLE_ANALYTICS_CONSENT.md) و[تسليم شركة الإعلانات](GOOGLE_TAG_MANAGER_ADS_HANDOFF.md).
 
-| الدالة | الحدث في GA4 | متى تُستدعى |
-|--------|--------------|-------------|
-| `trackArticleView` | `article_view` | فتح مقال خبر |
-| `trackOpinionView` | `opinion_view` | فتح مقال رأي |
-| `trackArticleLike` | `article_like` | إعجاب |
-| `trackArticleComment` | `article_comment` | تعليق |
-| `trackBookmarkToggle` | `bookmark_toggle` | حفظ |
-| `trackShare` | `share` | مشاركة |
-| `trackSearch` | `search` | بحث |
-| `trackLogin` | `login` | تسجيل دخول |
+1. بعد نشر الكود والتحقق من نجاح المصادقة: اجعل `login` و`sign_up` بالأحرف الصغيرة أحداثًا رئيسية، وأزل العلامة عن `Login`/`Signup` القديمين بعد حفظ لقطة الإعداد. لم يُنفّذ هذا التغيير أثناء التطوير حتى لا تُحتسب نقرات OAuth في النسخة الحالية كتحويلات.
+2. لا تغيير لمرشح IP الداخلي: المستخدم صرّح أن استبعاد عناوين المكتب ليس شرطًا. يبقى مرشح Google المرئي Testing، ولا يوصف بأنه استبعاد فعّال.
+3. لا إضافة للنطاقات التي يقترحها Google قبل إثبات ملكيتها ومسار التنقل المطلوب. Cross-domain ليس مطلوبًا لمجرد وجود روابط خارجية أو تدفقات تطبيقات.
+4. تنبيه Some pages not tagged يحتاج تصدير قائمة الصفحات وفصل الإدارة/المعاينات المستثناة عمدًا عن صفحات الجمهور المطلوبة.
+5. إعلان الموافقة يجب أن يدار من مالك CMP واحد؛ لا تحويل كوكيز FCC إلى granted من عندنا. حساب Ad Manager الظاهر SABQ 22377763438 لا يعرض رسالة European regulations منشورة، وإعداد consent mode للإعلانات غير محدد. لا يثبت ذلك أن Funding Choices الذي حقنته الشركة صادر من هذا الحساب نفسه.
 
-مثال من صفحة المقال:
+## قبول الإصلاح
 
-```ts
-import { trackArticleView } from "@/lib/analytics";
-trackArticleView(article.id, article.title, categoryName);
-```
+- اختبارات الوحدة: المنقّي، ملكية المشاهدة، القراءة، ومعالجة تحويلات المصادقة.
+- اختبار متصفح محلي باستجابات API معزولة يمنع كل طلب خارجي إلى Google والإعلانات؛ يتحقق من الأحداث الفعلية في dataLayer وليس من وجود اسم الدالة في الكود.
+- قبل النشر: typecheck وlint للملفات المعدّلة وbuild:client، وفحص عقد redirects في backend.
+- بعد النشر المصرّح: الرئيسية → خبر → رجوع → تقدم → تصنيف/أرشيف، ثم 404، بحث ناجح/فاشل، نسخ/إلغاء native، ودخول/تسجيل بحساب اختبار مصرح به. مشاهدة واحدة لكل صفحة جاهزة بعنوانها وإحالتها الصحيحة.
+- افحص الأحداث داخل جسم الطلب المجمع؛ طلب collect واحد قد يحمل عدة أحداث. 204 وحده لا يثبت قبول المعلمات أو الإسناد النهائي.
+- اعزل الاختبار في DebugView/Realtime ثم التقارير بعد المعالجة المعتادة؛ لا تقارن التقارير القديمة مباشرة بعد تعديل الإعداد. تحقق التدفق الصحيح مع التقارير متعددة المنصات.
 
-### د) Google Tag Manager (GTM) — منفصل عن page views
-
-في نفس `client/index.html` يوجد أيضاً **GTM** (`GTM-T5PW84LM`) ويُحمَّل مؤجّلاً بعد تفاعل المستخدم أو إشارة المحتوى (للأداء والإعلانات).
-
-- **مشاهدات الصفحات** تعتمد على **gtag المباشر** + `useAnalytics` أعلاه.
-- **GTM** للأحداث/التاجات الإعلانية والطرف الثالث — لا تعتمد عليه وحده لعدّ page views في الـ SPA.
-
----
-
-## 2) إضافة رصد صفحة جديدة على الويب
-
-1. تأكد أن المسار داخل `Router` في `App.tsx` (أي مسار Wouter يمرّ تلقائياً بـ `useAnalytics`).
-2. حدّث `document.title` للصفحة إن أمكن — يظهر في `page_title`.
-3. إن كانت الصفحة «محتوى» (مقال/رأي) أضف حدثاً من `analytics.ts` بالإضافة إلى `page_view`.
-4. لا تضف سكربت gtag جديداً في الصفحة — السكربت العام في `index.html` كافٍ.
-
-للتحقق محلياً:
-
-1. افتح DevTools → Network → صفِّ بـ `google-analytics` أو `collect`.
-2. أو ثبّت [Google Analytics Debugger](https://chrome.google.com/webstore) وراقب Console.
-3. في GA4: **Admin → DebugView** (أو Realtime) أثناء التصفح.
-
----
-
-## 3) iOS — Measurement Protocol (بدون Firebase SDK)
-
-الملف: [`sabq app ios/sabq/Services/SabqAnalytics.swift`](../../sabq%20app%20ios/sabq/Services/SabqAnalytics.swift)
-
-- يرسل HTTPS POST إلى `https://www.google-analytics.com/mp/collect`.
-- الإعداد من Info.plist / Build Settings:
-  - `GA4_MEASUREMENT_ID` → مثل `G-EEB5593GY7`
-  - `GA4_API_SECRET` → من GA Admin → Data Streams → Measurement Protocol API secrets
-- إن نقص أحدهما: الاستدعاءات تصبح no-op بصمت.
-
-مشاهدات الشاشات:
-
-```swift
-SabqAnalytics.screen("ArticleDetail", screenClass: "ArticleDetailView")
-// أو عبر المُعدِّل:
-.sabqScreen("HomeFeed")
-```
-
-أحداث المحتوى بنفس أسماء الويب: `articleView`, `opinionView`, `login`, …
-
----
-
-## 4) Android — نفس بروتوكول القياس
-
-الملف: [`android-native/.../analytics/SabqAnalytics.kt`](../../android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/SabqAnalytics.kt)
-
-- مرآة 1:1 لـ iOS (نفس أسماء الأحداث والمعاملات).
-- يُفعَّل مرة عند الإقلاع: `SabqAnalytics.start(...)` من `SabqApplication`.
-- المفاتيح من `BuildConfig` (Measurement ID + API Secret).
-
-```kotlin
-SabqAnalytics.screen("Home")
-SabqAnalytics.articleView(id, title, category)
-```
-
----
-
-## 5) خريطة سريعة
-
-```
-المتصفح
-  └─ client/index.html          → يحمّل gtag.js + config (بدون page_view تلقائي)
-  └─ App.tsx → useAnalytics()   → page_view عند كل تغيير مسار SPA
-  └─ lib/analytics.ts           → أحداث المحتوى (article_view, search, …)
-
-iOS
-  └─ SabqAnalytics.swift        → MP/collect + screen_view / article_view / …
-
-Android
-  └─ SabqAnalytics.kt           → نفس MP/collect ونفس أسماء الأحداث
-```
-
----
-
-## 6) قواعد لا تكسر الرصد
-
-1. **لا** تضع `send_page_view: true` في `index.html` مع بقاء `useAnalytics`.
-2. **لا** تستدعِ `gtag('config', …)` مرة ثانية في صفحات فردية بدون حاجة.
-3. عند إضافة حدث جديد: سمِّه بنفس الاسم على الويب وiOS وAndroid، وحدّث الثلاثة معاً.
-4. Measurement ID ثابت في الكود حالياً (`G-EEB5593GY7`) — أي تغيير يجب أن يشمل `index.html` + `use-analytics.tsx` (+ أسرار الموبايل).
-5. صفحات SSR في `web-next/` لا تضمّن gtag حالياً؛ الزائر ينتقل للـ SPA أو يُحسب عند التحميل الكامل حسب مسار النشر — لا تفترض page_view من Next وحده.
-
----
-
-## 7) أين ترى النتائج في Google Analytics
-
-| ما تريد رؤيته | أين في GA4 |
-|---------------|------------|
-| مشاهدات الصفحات الحية | Reports → Realtime |
-| مسارات الصفحات | Reports → Engagement → Pages and screens |
-| أحداث مخصّصة (`article_view`…) | Reports → Engagement → Events |
-| تصحيح أثناء التطوير | Admin → DebugView |
-
----
-
-## 8) إضافة Google Analytics لتطبيق VARA (iOS)
-
-التطبيق: `sports app ios/SabqSports` (Bundle ID: `com.sabq.sports`).  
-**اليوم لا يوجد أي رصد GA في VARA** — هذا القسم خطة الإضافة المعتمدة.
-
-### القرار الموصى به
-
-اتبع **نفس أسلوب تطبيق سبق الأم**: Measurement Protocol عبر HTTPS (بدون Firebase SDK).
-
-| الخيار | متى تستخدمه |
-|--------|-------------|
-| **Measurement Protocol** (مثل `SabqAnalytics.swift`) | الرصد الداخلي للصفحات/الأحداث + خصوصية أعلى + بدون ATT/SDK ثقيل — **الموصى به لـ VARA** |
-| Firebase Analytics SDK | إذا احتجت حملات Google Ads للتطبيق أو Audience في Firebase |
-
-لا تخلط بيانات VARA مع سكربت ويب `sabq.org` (`G-EEB5593GY7` في `index.html`) دون قرار صريح — الأفضل **Data Stream منفصل** لتطبيق VARA داخل نفس خاصية GA4 أو خاصية مستقلة.
-
-### خطوات الإعداد في Google Analytics
-
-1. افتح GA4 → **Admin → Data streams → Add stream → iOS app**.
-2. Bundle ID: `com.sabq.sports`، اسم التطبيق: `VARA`.
-3. انسخ **Measurement ID** (شكل `G-XXXXXXXX`).
-4. من إعدادات الـ stream → **Measurement Protocol API secrets** → أنشئ سراً وانسخه.
-5. (اختياري) اربط Google Ads لاحقاً إن صارت حملات تثبيت.
-
-### خطوات التنفيذ في كود VARA
-
-1. **انسخ** منطق [`sabq app ios/sabq/Services/SabqAnalytics.swift`](../../sabq%20app%20ios/sabq/Services/SabqAnalytics.swift) إلى مثلاً:
-   - `sports app ios/SabqSports/Services/VaraAnalytics.swift`
-2. غيّر مفتاح `client_id` في UserDefaults إلى شيء خاص بـ VARA (مثل `vara_ga4_client_id`) حتى لا يختلط مع تثبيت سبق على نفس الجهاز.
-3. أضف في `SabqSports/Info.plist` (أو Build Settings → Info):
-
-```xml
-<key>GA4_MEASUREMENT_ID</key>
-<string>$(GA4_MEASUREMENT_ID)</string>
-<key>GA4_API_SECRET</key>
-<string>$(GA4_API_SECRET)</string>
-```
-
-وضع القيم الحقيقية في `.xcconfig` / Secrets CI — **لا ترفع الـ API Secret إلى Git علناً**.
-
-4. **رصد الشاشات** عند الظهور:
-
-```swift
-.sabqScreen("Home")           // إن نسخت المُعدِّل كما في سبق
-// أو:
-VaraAnalytics.screen("MatchCenter", screenClass: "MatchCenterView")
-```
-
-5. **أحداث VARA المقترحة** (أسماء ثابتة للتقارير):
-
-| الحدث | متى |
-|-------|-----|
-| `screen_view` | كل شاشة رئيسية |
-| `match_view` | فتح مركز مباراة |
-| `prediction_submit` | إرسال توقّع VARA |
-| `team_follow` | متابعة فريق |
-| `snap_impression` / `snap_tap` / `snap_push_open` | اللقطات الذكية (انظر `docs/VARA_SMART_SNAPS_PLAN.md`) |
-| `login` | دخول بعضوية سبق |
-| `notification_open` | فتح إشعار مباراة |
-
-6. عند تسجيل الدخول: `VaraAnalytics.setUserId(memberId)` — وامسحه عند الخروج.
-
-### التحقق
-
-1. ابنِ Debug مع المفاتيح مضبوطة (`debug_mode = 1` كما في سبق).
-2. GA4 → **Admin → DebugView** أثناء فتح الشاشات.
-3. أو Realtime بعد دقائق من Build إنتاجي.
-
-### ما لا تفعله
-
-- لا تلصق سكربت `gtag` من الويب داخل تطبيق iOS.
-- لا تستخدم Measurement ID الخاص بـ sabq.org للويب كبديل عن stream تطبيق VARA إن أردت فصل التقارير.
-- لا تضع `GA4_API_SECRET` داخل الكود المصدري أو PR عام.
-
-### تقدير الجهد
-
-- نسخ الخدمة + المفاتيح + `screen` على 5–8 شاشات أساسية: نصف يوم.
-- أحداث التوقّعات/المباريات/اللقطات: يوم إضافي حسب الأولوية.
-
----
-
-*آخر تحديث: 2026-07-11 — يعكس الكود الحالي في المستودع.*
+دليل التدقيق الأول: اختبار `/__ga4-audit-404-20260912` أظهر مستخدمًا واحدًا ومشاهدتين في Realtime قبل نشر الإصلاح، مطابقًا لحدثي page_view في الشبكة.

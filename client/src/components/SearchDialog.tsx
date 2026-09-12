@@ -73,14 +73,35 @@ export function SearchDialog({ buttonClassName, buttonVariant = "ghost", iconCla
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const { data, isLoading, isFetching } = useQuery<SearchResponse>({
+  const { data, isLoading, isFetching, isError } = useQuery<SearchResponse>({
     queryKey: ["/api/search", { q: debouncedQuery }],
     enabled: debouncedQuery.length >= 2,
   });
 
+  // Measure a completed search once the API has settled. Tracking on the
+  // debounce counted every intermediate phrase while the reader was typing.
+  const trackedSearchRef = useRef<string | null>(null);
   useEffect(() => {
-    if (debouncedQuery.length >= 2) trackSearch(debouncedQuery);
-  }, [debouncedQuery]);
+    if (!open) trackedSearchRef.current = null;
+  }, [open]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      debouncedQuery.length < 2 ||
+      query.trim() !== debouncedQuery.trim() ||
+      isLoading ||
+      isFetching ||
+      isError ||
+      !data ||
+      data.query.trim().replace(/[\u064B-\u065F\u0670]/g, "").toLowerCase() !== debouncedQuery.trim().replace(/[\u064B-\u065F\u0670]/g, "").toLowerCase() ||
+      trackedSearchRef.current === debouncedQuery
+    ) {
+      return;
+    }
+    trackSearch(debouncedQuery);
+    trackedSearchRef.current = debouncedQuery;
+  }, [data, debouncedQuery, isError, isFetching, isLoading, open, query]);
 
   const handleResultClick = useCallback(() => {
     setOpen(false);
