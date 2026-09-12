@@ -90,7 +90,7 @@
     "@uppy/core": "^5.0.2",
     "@uppy/dashboard": "^5.0.2",
     "@uppy/react": "^5.1.0",
-    "apexcharts": "^5.3.6",
+    "apexcharts": "^6.5.0",
     "apple-signin-auth": "^2.0.0",
     "bcrypt": "^6.0.0",
     "canvas-confetti": "^1.9.4",
