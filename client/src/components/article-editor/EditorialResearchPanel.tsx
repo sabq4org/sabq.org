@@ -5,20 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, hasRole } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
-import { ACTIVE_RESEARCH_STATUSES, researchStatusLabels, type ResearchCapabilities, type ResearchJob, type ResearchResult } from "@shared/editorialResearch";
+import { EDITORIAL_RESEARCH_ROLES, ACTIVE_RESEARCH_STATUSES, researchStatusLabels, type ResearchCapabilities, type ResearchJob, type ResearchResult } from "@shared/editorialResearch";
 
 const prefix = "/api/editorial-research";
 export function EditorialResearchPanel({ onReview }: { onReview: (result: ResearchResult) => void }) {
   const { user } = useAuth();
+  const canResearch = hasRole(user, ...EDITORIAL_RESEARCH_ROLES);
   const queryClient = useQueryClient();
   const [topic, setTopic] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const request = useRef<{ topic: string; requestId: string } | null>(null);
   const key = [prefix, "jobs", user?.id];
-  const capabilities = useQuery<ResearchCapabilities>({ queryKey: [prefix, "capabilities", user?.id], queryFn: () => apiRequest(`${prefix}/capabilities`), enabled: Boolean(user?.id), retry: false });
-  const history = useQuery<ResearchJob[]>({ queryKey: key, queryFn: () => apiRequest(`${prefix}/jobs`), enabled: Boolean(user?.id), retry: false, refetchInterval: query => (query.state.data ?? []).some(j => ACTIVE_RESEARCH_STATUSES.includes(j.status)) ? 4000 : false });
+  const capabilities = useQuery<ResearchCapabilities>({ queryKey: [prefix, "capabilities", user?.id], queryFn: () => apiRequest(`${prefix}/capabilities`), enabled: Boolean(user?.id) && canResearch, retry: false });
+  const history = useQuery<ResearchJob[]>({ queryKey: key, queryFn: () => apiRequest(`${prefix}/jobs`), enabled: Boolean(user?.id) && canResearch, retry: false, refetchInterval: query => (query.state.data ?? []).some(j => ACTIVE_RESEARCH_STATUSES.includes(j.status)) ? 4000 : false });
   const jobs = Array.isArray(history.data) ? history.data : [];
   const selected = jobs.find(j => j.id === selectedId) ?? jobs[0];
   const active = jobs.some(j => ACTIVE_RESEARCH_STATUSES.includes(j.status));
@@ -34,6 +35,7 @@ export function EditorialResearchPanel({ onReview }: { onReview: (result: Resear
   }, onSuccess: job => { updateJob(job); request.current = null; } });
   const cancel = useMutation({ mutationFn: (id: string) => apiRequest<ResearchJob>(`${prefix}/jobs/${id}/cancel`, { method: "POST" }), onSuccess: updateJob });
   const error = create.error ?? cancel.error ?? history.error ?? capabilities.error;
+  if (!canResearch) return null;
   return <div className="space-y-4" dir="rtl" data-testid="editorial-research-panel">
     <p className="text-sm text-muted-foreground leading-6">اكتب موضوعًا للبحث في المصادر العامة. يصلك تقرير ومصادر ونقاط تحتاج مراجعتك، ويمكنك العودة إلى المهمة بعد إغلاق الصفحة.</p>
     {(capabilities.data && !capabilities.data.enabled) && <Alert><AlertDescription>{capabilities.data.reason}</AlertDescription></Alert>}

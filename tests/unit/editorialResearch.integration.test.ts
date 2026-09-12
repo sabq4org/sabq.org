@@ -14,7 +14,7 @@ vi.mock("../../server/services/editorialResearchProvider", async original => ({ 
 vi.mock("../../server/services/editorialAiService", () => ({ runEditorialTask: state.edit }));
 vi.mock("../../server/rbac", () => ({
   requireAuth: (req: any, res: any, next: any) => { if (!req.headers["x-user"]) return res.sendStatus(401); req.user = { id: req.headers["x-user"] }; next(); },
-  requirePermission: (permission: string) => (req: any, res: any, next: any) => req.headers["x-permission"] === permission ? next() : res.sendStatus(403),
+  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => roles.includes(req.headers["x-role"]) ? next() : res.sendStatus(403),
 }));
 import router from "../../server/routes/editorialResearch";
 import { createResearchJob, getResearchJob, requestResearchCancellation, processResearchJobs } from "../../server/services/editorialResearchService";
@@ -28,7 +28,7 @@ const usage = { input_tokens: 9000, output_tokens: 200, total_tokens: 9200 };
 const bundle = { summary: "المصدر الرسمي يشرح أن أكاسيد الحديد سبب اللون الأحمر للمريخ.", sources: [{ title: "ناسا", url: "https://science.nasa.gov/mars/facts/", evidence: "تفسير لون سطح المريخ" }], openQuestions: ["لا يتناول البحث تفاصيل تركيب كل منطقة."] };
 let pool: pg.Pool, admin: pg.Pool, base: string;
 const app = express(); app.use(express.json()); app.use(router); const server = createServer(app);
-const headers = { "x-user": "editor-a", "x-permission": "articles.ai_generate", "Content-Type": "application/json" };
+const headers = { "x-user": "editor-a", "x-role": "system_admin", "x-permission": "articles.ai_generate", "Content-Type": "application/json" };
 const jobPath = "/api/editorial-research/jobs";
 suite("editorial research — local PostgreSQL and authenticated HTTP", () => {
   beforeAll(async () => {
@@ -54,11 +54,24 @@ suite("editorial research — local PostgreSQL and authenticated HTTP", () => {
     state.edit.mockResolvedValue({ headline: "لماذا يبدو المريخ أحمر؟", body: '<p>أكاسيد الحديد.</p><img src=x onerror=alert(1)><script>alert(1)</script>', altHeadlines: [], editorNotes: ["راجع المصدر"], sources: bundle.sources, riskFlags: [], meta: { modelId: "test-editor", fallbackUsed: false } });
     state.cancel.mockResolvedValue(undefined); state.request.mockResolvedValue(null);
   });
-  it("enforces auth, permission, strict input and private caching", async () => {
+  it("enforces auth, system administrator role, strict input and private caching", async () => {
     expect((await fetch(base + jobPath)).status).toBe(401);
     expect((await fetch(base + jobPath, { headers: { "x-user": "editor-a" } })).status).toBe(403);
     const bad = await fetch(base + jobPath, { method: "POST", headers, body: JSON.stringify({ ...input(), model: "unapproved" }) });
     expect(bad.status).toBe(400); expect(bad.headers.get("cache-control")).toBe("private, no-store"); expect(state.create).not.toHaveBeenCalled();
+  });
+  it.each(["editor", "admin", "reader", "reporter", "chief_editor"])("rejects %s on every research endpoint even with wildcard permissions", async role => {
+    const id = randomUUID();
+    for (const [method, path] of [["GET", "/api/editorial-research/capabilities"], ["GET", jobPath], ["POST", jobPath], ["GET", `${jobPath}/${id}`], ["POST", `${jobPath}/${id}/cancel`]]) {
+      const response = await fetch(base + path, { method, headers: { ...headers, "x-role": role, "x-permission": "*" }, ...(method === "POST" ? { body: JSON.stringify(input()) } : {}) });
+      expect(response.status).toBe(403);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+    }
+    expect((await pool.query("SELECT count(*) FROM editorial_research_jobs")).rows[0].count).toBe("0");
+    expect(state.create).not.toHaveBeenCalled();
+  });
+  it.each(["system_admin", "system.admin", "superadmin", "super_admin"])("allows the explicit system administrator alias %s", async role => {
+    expect((await fetch(base + "/api/editorial-research/capabilities", { headers: { ...headers, "x-role": role } })).status).toBe(200);
   });
   it("admits one duplicate request once and enforces global and per-user concurrency", async () => {
     const data = input(); const results = await Promise.all([createResearchJob("editor-a", data), createResearchJob("editor-a", data)]);

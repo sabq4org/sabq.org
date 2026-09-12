@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const EDITORIAL_RESEARCH_FEATURE = "editorial-research";
+// Explicit system administrator aliases; generic admin or AI permissions do not grant access.
+export const EDITORIAL_RESEARCH_ROLES = ["system_admin", "system.admin", "superadmin", "super_admin"] as const;
 export const EDITORIAL_RESEARCH_MODEL = "gpt-6-astra";
 export const researchRequestSchema = z.object({
   requestId: z.string().uuid(),

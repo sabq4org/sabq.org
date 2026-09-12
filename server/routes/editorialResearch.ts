@@ -1,14 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, requirePermission } from "../rbac";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
-import { researchRequestSchema } from "@shared/editorialResearch";
+import { requireAuth, requireRole } from "../rbac";
+import { EDITORIAL_RESEARCH_ROLES, researchRequestSchema } from "@shared/editorialResearch";
 import { ResearchError } from "../services/editorialResearchProvider";
 import { researchCapabilities, createResearchJob, getResearchJob, listResearchJobs, requestResearchCancellation } from "../services/editorialResearchService";
 
 const router = Router();
 const prefix = "/api/editorial-research";
-router.use(prefix, (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); }, requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE));
+router.use(prefix, (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); }, requireAuth, requireRole(...EDITORIAL_RESEARCH_ROLES));
 router.get(`${prefix}/capabilities`, (_req, res) => res.json(researchCapabilities()));
 router.get(`${prefix}/jobs`, async (req, res) => {
   try { res.json(await listResearchJobs((req.user as { id: string }).id)); }
