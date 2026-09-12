@@ -48,8 +48,10 @@ struct ArticleDetailView: View {
     @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
-    @State private var isPlayingAudio = false
-    @State private var audioPlayer: AVPlayer?
+    /// حالة الاستماع تأتي من المشغّل المشترك (Now Playing + شاشة القفل) —
+    /// لا AVPlayer محلي بعد تدقيق iOS 27 (F03).
+    private var audioKey: String { "article:\(displayArticle.slug ?? displayArticle.id)" }
+    private var isPlayingAudio: Bool { SabqAudioPlayer.shared.isPlaying(key: audioKey) }
     /// Comments are owned by a per-article store. Lazily created the first time
     /// the article slug is available — `nil` for articles that have no slug
     /// (extremely rare; we hide the section in that case).
@@ -346,21 +348,10 @@ struct ArticleDetailView: View {
             prefetchInlineImages(from: cachedBlocks.items)
         }
         .onDisappear {
-            if audioPlayer != nil {
-                audioPlayer?.pause()
-                audioPlayer = nil
-                SabqAudioSession.deactivate()
-            }
-            isPlayingAudio = false
+            // مغادرة المقال توقف ملخصه فقط (لا صوت شاشة أخرى)، وتُسلّم جلسة
+            // الصوت للآخرين. نهاية المقطع يعالجها المشغّل المشترك نفسه.
+            SabqAudioPlayer.shared.stopIfCurrent(key: audioKey)
             BehaviorTracker.shared.endSession()
-        }
-        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «جاري التشغيل...»
-        // وجلسة الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
-        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
-            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
-            isPlayingAudio = false
-            audioPlayer = nil
-            SabqAudioSession.deactivate()
         }
         .navigationDestination(for: Article.self) { related in
             ArticleDetailView(article: related)
@@ -551,14 +542,6 @@ struct ArticleDetailView: View {
     }
 
     private func toggleAudio() {
-        if isPlayingAudio {
-            audioPlayer?.pause()
-            isPlayingAudio = false
-            // Hand the audio focus back so CarPlay / Spotify / Podcasts
-            // can resume the music the user was on when they opened sabq.
-            SabqAudioSession.deactivate()
-            return
-        }
         // The backend's /api/articles/:slug/summary-audio streams
         // ElevenLabs (or Google fallback) MP3 bytes directly, not a
         // JSON envelope. We don't need to pre-fetch metadata — point
@@ -569,10 +552,13 @@ struct ArticleDetailView: View {
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
-        SabqAudioSession.activate()
-        audioPlayer = AVPlayer(url: url)
-        audioPlayer?.play()
-        isPlayingAudio = true
+        SabqAudioPlayer.shared.toggle(SabqAudioPlayer.Item(
+            key: audioKey,
+            url: url,
+            title: displayArticle.title,
+            subtitle: "الملخص الصوتي · سبق",
+            artworkURL: displayArticle.imageURL.flatMap { URL(string: $0) }
+        ))
     }
 
     // MARK: - Meta

@@ -27,8 +27,9 @@ struct OpinionDetailView: View {
     @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
-    @State private var audioPlayer: AVPlayer?
-    @State private var isPlayingAudio = false
+    /// حالة الاستماع من المشغّل المشترك (Now Playing + شاشة القفل) — F03.
+    private var audioKey: String { "opinion:\(displayOpinion.slug ?? displayOpinion.id)" }
+    private var isPlayingAudio: Bool { SabqAudioPlayer.shared.isPlaying(key: audioKey) }
 
     @AppStorage("articleFontSize") private var fontSize: Double = 17
     @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
@@ -207,20 +208,8 @@ struct OpinionDetailView: View {
         .onDisappear {
             copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
-            if audioPlayer != nil {
-                audioPlayer?.pause()
-                audioPlayer = nil
-                SabqAudioSession.deactivate()
-            }
-            isPlayingAudio = false
-        }
-        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «إيقاف» وجلسة
-        // الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
-        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
-            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
-            isPlayingAudio = false
-            audioPlayer = nil
-            SabqAudioSession.deactivate()
+            // مغادرة المقال توقف ملخصه فقط؛ نهاية المقطع يعالجها المشغّل المشترك.
+            SabqAudioPlayer.shared.stopIfCurrent(key: audioKey)
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
@@ -295,12 +284,6 @@ struct OpinionDetailView: View {
     }
 
     private func toggleAudio() {
-        if isPlayingAudio {
-            audioPlayer?.pause()
-            isPlayingAudio = false
-            SabqAudioSession.deactivate()
-            return
-        }
         // Same TTS endpoint as articles — backend's
         // /api/articles/:slug/summary-audio streams ElevenLabs MP3
         // bytes. Opinions live in the same `articles` table, so the
@@ -309,10 +292,13 @@ struct OpinionDetailView: View {
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
-        SabqAudioSession.activate()
-        audioPlayer = AVPlayer(url: url)
-        audioPlayer?.play()
-        isPlayingAudio = true
+        SabqAudioPlayer.shared.toggle(SabqAudioPlayer.Item(
+            key: audioKey,
+            url: url,
+            title: displayOpinion.title,
+            subtitle: displayOpinion.authorName.isEmpty ? "مقال رأي · سبق" : displayOpinion.authorName,
+            artworkURL: displayOpinion.imageURL.flatMap { URL(string: $0) }
+        ))
     }
 
     private func toggleLike() {

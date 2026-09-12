@@ -71,6 +71,12 @@ struct HomeFeedView: View {
     /// TabView frame, which leaves a visible gap above them on short
     /// cards) and render our own tight against the card bottom.
     @State private var featuredIndex: Int = 0
+    /// عرض عمود المحتوى مقيسًا من الحاوية لا من `UIScreen` — عرض الشاشة ليس
+    /// مساحة النافذة على iPad المقسّم أو Stage Manager (تدقيق iOS 27، F11).
+    @State private var feedContentWidth: CGFloat = 0
+    /// ميزانية كتلة النص تحت الهيرو (عنوان 3 أسطر + موجز سطرين + بيانات +
+    /// حشو 20×2) — تتدرّج مع Dynamic Type كما تتدرّج خطوط البطاقة نفسها.
+    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 230
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
@@ -713,6 +719,11 @@ struct HomeFeedView: View {
             // compressed the aspectRatio(.fit) hero horizontally while the
             // text block kept the card full-width → white side gutters.
             .frame(height: featuredCarouselHeight)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                if width > 0 { feedContentWidth = width }
+            }
 
             if featured.count > 1 {
                 HStack(spacing: 7) {
@@ -733,11 +744,10 @@ struct HomeFeedView: View {
     /// TabView page height = full-width 16:10 hero + text block budget.
     /// Outer feed padding is 16pt each side (see `fullBody`).
     private var featuredCarouselHeight: CGFloat {
-        let contentWidth = UIScreen.main.bounds.width - 32
+        // القيمة المقيسة تصل بعد أول تخطيط؛ حتى ذلك الحين نقدّرها من الشاشة.
+        let contentWidth = feedContentWidth > 0 ? feedContentWidth : UIScreen.main.bounds.width - 32
         let heroHeight = contentWidth * (10.0 / 16.0)
-        // title (3 lines) + excerpt (2) + meta + 20pt padding × 2 + spacing
-        let textBlock: CGFloat = 230
-        return ceil(heroHeight + textBlock)
+        return ceil(heroHeight + featuredTextBudget)
     }
 
     // MARK: - More Today (collapsed secondary blocks)

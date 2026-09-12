@@ -12,9 +12,8 @@ struct AudioNewslettersView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
 
-    @State private var playingID: String?
-    @State private var player: AVPlayer?
-    @State private var isPlaying = false
+    /// التشغيل عبر المشغّل المشترك (Now Playing + شاشة القفل + الخلفية) — F03.
+    private func audioKey(_ n: APIAudioNewsletter) -> String { "newsletter:\(n.id)" }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -67,7 +66,7 @@ struct AudioNewslettersView: View {
             }
         }
         .task { await load() }
-        .onDisappear { stop() }
+        .onDisappear { stopIfOurs() }
     }
 
     private var header: some View {
@@ -94,7 +93,7 @@ struct AudioNewslettersView: View {
     }
 
     private func newsletterRow(_ n: APIAudioNewsletter) -> some View {
-        let active = playingID == n.id && isPlaying
+        let active = SabqAudioPlayer.shared.isPlaying(key: audioKey(n))
         return HStack(alignment: .top, spacing: 14) {
             cover(n)
 
@@ -197,28 +196,20 @@ struct AudioNewslettersView: View {
     private func togglePlayback(_ n: APIAudioNewsletter) {
         SabqHaptics.light()
         guard let urlString = n.audioUrl, let url = URL(string: urlString) else { return }
-        if playingID == n.id && isPlaying {
-            player?.pause()
-            isPlaying = false
-            SabqAudioSession.deactivate()
-            return
-        }
-        // Switching to a new newsletter — replace player.
-        player?.pause()
-        SabqAudioSession.activate()
-        let newPlayer = AVPlayer(url: url)
-        player = newPlayer
-        playingID = n.id
-        newPlayer.play()
-        isPlaying = true
+        // النشرة نفسها → تبديل تشغيل/إيقاف؛ نشرة أخرى → يستبدلها المشغّل.
+        SabqAudioPlayer.shared.toggle(SabqAudioPlayer.Item(
+            key: audioKey(n),
+            url: url,
+            title: n.title,
+            subtitle: "النشرة الصوتية · سبق",
+            artworkURL: n.coverImageUrl.flatMap { URL(string: $0) }
+        ))
     }
 
-    private func stop() {
-        player?.pause()
-        player = nil
-        isPlaying = false
-        playingID = nil
-        SabqAudioSession.deactivate()
+    /// مغادرة الشاشة توقف نشرةً تشغّلها هي فقط — لا ملخص مقال يعمل في الخلفية.
+    private func stopIfOurs() {
+        guard SabqAudioPlayer.shared.currentKey?.hasPrefix("newsletter:") == true else { return }
+        SabqAudioPlayer.shared.stop()
     }
 
     private func formatDuration(_ seconds: Int) -> String {
