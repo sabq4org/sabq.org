@@ -381,6 +381,11 @@ actor APIClient {
         }
     }
 
+    /// ملف المراسل العام — الصفة لسطر الكاتب («مراسل صحفي»…). مسار عام فقط.
+    func fetchReporterProfile(slug: String) async throws -> APIReporterProfile {
+        try await get(APIReporterProfile.self, path: "/reporters/\(slug)", apiRoot: publicAPIBaseURL)
+    }
+
     func fetchRelated(slug: String) async throws -> [APIArticle] {
         // Public API returns a bare JSON array; v1 doesn't have this
         // endpoint (404). Mirror fetchArticle: public-first, v1 fallback.

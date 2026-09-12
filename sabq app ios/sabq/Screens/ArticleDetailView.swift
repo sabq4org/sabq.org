@@ -50,6 +50,8 @@ struct ArticleDetailView: View {
     @State private var relatedArticles: [Article] = []
     /// مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
     @State private var relatedOpinions: [OpinionArticle] = []
+    /// صفة الكاتب من ملف المراسل (`/api/reporters/:slug`) — تسبق القواعد المحلية.
+    @State private var reporterTitle: String?
     /// حالة الاستماع تأتي من المشغّل المشترك (Now Playing + شاشة القفل) —
     /// لا AVPlayer محلي بعد تدقيق iOS 27 (F03).
     private var audioKey: String { "article:\(displayArticle.slug ?? displayArticle.id)" }
@@ -504,6 +506,13 @@ struct ArticleDetailView: View {
                 relatedArticles = await NewsService.fetchRelated(slug: slug)
             }
 
+            // صفة الكاتب من ملف المراسل (كما يفعل الويب) — فشلها يسقط على القواعد المحلية.
+            if let staffSlug = displayArticle.authorSlug, displayArticle.articleType != "infographic" {
+                let title = (try? await APIClient.shared.fetchReporterProfile(slug: staffSlug))?.title?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let title, !title.isEmpty { reporterTitle = title }
+            }
+
             // بلوك الرأي يحتاج معرّف التصنيف (يأتي مع حمولة التفاصيل)؛ بلا معرّف
             // يختفي البلوك بصمت كما في الويب.
             if let categoryId = displayArticle.categoryId, !categoryId.isEmpty {
@@ -813,46 +822,85 @@ struct ArticleDetailView: View {
     // Publication metadata between title and excerpt. Single calm row,
     // tertiary ink, bullet separators — should not visually disrupt the
     // text flow above or below it.
+    // سطر الكاتب كما في الويب (#1598): صورة 48 + الاسم (رابط ملف الكاتب) وعلامة
+    // التوثيق + الصفة، ثم التاريخ | الوقت بتوقيت الرياض، و«آخر تحديث» عند وجود
+    // تعديل تحريري، و«قراءة N دقيقة». يُقرأ من `displayArticle` كي يتحدّث من
+    // قيمة الفيد المخزّنة إلى حمولة التفاصيل (المراسل المختار في اللوحة).
     private var articleMeta: some View {
-        HStack(spacing: 8) {
-            // Use `displayArticle.author` (not `article.author`) so the byline
-            // refreshes from the home-feed cached value to the freshly-loaded
-            // full-article value. The backend prefers `reporterId` over
-            // `authorId`, so the full-article fetch can replace a "staff who
-            // entered" name with the actual reporter chosen in the dashboard.
-            NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
-                Text(displayArticle.author)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                OpinionAuthorAvatar(
+                    name: displayArticle.author,
+                    imageURL: displayArticle.authorImageURL,
+                    size: 48
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
+                        HStack(spacing: 4) {
+                            Text(displayArticle.author)
+                                .font(SabqFonts.app(size: 15, weight: .bold))
+                                .foregroundStyle(SabqTheme.ink)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            if displayArticle.isAuthorVerified {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.primaryEnd)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(reporterTitle ?? displayArticle.authorRole ?? "كاتب الخبر")
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .layoutPriority(2)
 
-            Text("·")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                    Text(displayArticle.publicationDate)
+                        .lineLimit(1)
+                    Text(displayArticle.publicationClock)
+                        .padding(.leading, 8)
+                        .overlay(alignment: .leading) {
+                            Rectangle()
+                                .fill(SabqTheme.outline)
+                                .frame(width: 1, height: 12)
+                        }
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                .font(SabqFonts.app(size: 13, weight: .regular))
+                .foregroundStyle(SabqTheme.ink)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("نُشر في \(displayArticle.publicationDate) \(displayArticle.publicationClock)")
 
-            Text(article.readingTime)
-                .font(SabqFonts.app(size: 11, weight: .regular))
+                if let updated = displayArticle.lastUpdatedLabel {
+                    HStack(spacing: 6) {
+                        Text("آخر تحديث")
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                        Text(updated)
+                            .foregroundStyle(SabqTheme.ink)
+                            .monospacedDigit()
+                    }
+                    .font(SabqFonts.app(size: 13, weight: .regular))
+                }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "book")
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                    Text(displayArticle.readingLabel)
+                        .monospacedDigit()
+                }
+                .font(SabqFonts.app(size: 13, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
-                .monospacedDigit()
-                .lineLimit(1)
-                .layoutPriority(1)
-
-            Text("·")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
-
-            Text(article.dateFormatted)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .layoutPriority(3)
-
-            Spacer(minLength: 0)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
