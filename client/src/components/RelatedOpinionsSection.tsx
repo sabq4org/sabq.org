@@ -116,8 +116,9 @@ export function RelatedOpinionsSection({
             // Opinion pieces without artwork keep the author's photo inside the same frame.
             imageUrl: article.imageUrl || article.author?.profileImageUrl || null,
             updatedAt: article.updatedAt,
-            publishedAt: article.publishedAt,
+            // No timestamp here: the block reads as a writers' list, not a timeline.
             byline: authorName(article),
+            bylineAvatarUrl: article.author?.profileImageUrl || null,
           }}
         />
       ))}

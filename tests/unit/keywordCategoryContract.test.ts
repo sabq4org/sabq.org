@@ -11,15 +11,17 @@ const article = { id: "news-1", title: "خبر رياضي", categoryName: "ري�
 describe("keyword article category contract", () => {
   beforeEach(() => execute.mockReset());
 
-  it.each([0, 1, 2])("includes categories when articles are found by lookup %i", async (fallbacks) => {
-    for (let i = 0; i < fallbacks; i++) execute.mockResolvedValueOnce({ rows: [] });
-    execute.mockResolvedValueOnce({ rows: [article] });
+  it.each([0, 1, 2])("includes categories when articles are found by lookup %i", async (hit) => {
+    // Lookups 0 (tag join) and 1 (GIN SEO match) always run; 2 (case-insensitive
+    // scan) only when both came back empty.
+    const lookups = hit === 2 ? 3 : 2;
+    for (let i = 0; i < lookups; i++) execute.mockResolvedValueOnce({ rows: i === hit ? [article] : [] });
     execute.mockResolvedValueOnce({ rows: [{ id: "topic-1" }] });
 
     expect(await getArticlesByKeyword("نيوم")).toEqual({
       articles: [article], muqtarabTopics: [{ id: "topic-1" }],
     });
-    const queries = execute.mock.calls.slice(0, fallbacks + 1).map(([query]) => dialect.sqlToQuery(query));
+    const queries = execute.mock.calls.slice(0, lookups).map(([query]) => dialect.sqlToQuery(query));
     for (const query of queries) {
       expect(query.sql).toMatch(/LEFT JOIN categories c ON c.id = a.category_id/);
       expect(query.sql).toContain('c.name_ar AS "categoryName"');
@@ -36,7 +38,7 @@ describe("keyword article category contract", () => {
 
   it("preserves articles without a category and the existing payload wrapper", async () => {
     const uncategorized = { ...article, categoryName: null, categorySlug: null, category: null };
-    execute.mockResolvedValueOnce([uncategorized]).mockResolvedValueOnce([]);
+    execute.mockResolvedValueOnce([uncategorized]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     expect(await getArticlesByKeyword("وسم")).toEqual({ articles: [uncategorized], muqtarabTopics: [] });
   });
 

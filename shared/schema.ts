@@ -4713,6 +4713,12 @@ export type ReporterArticle = {
   title: string;
   slug: string;
   englishSlug?: string | null;
+  excerpt?: string | null;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  imageFocalPoint?: { x: number; y: number } | null;
+  isAiGeneratedImage?: boolean;
+  updatedAt?: Date | null;
   publishedAt: Date | null;
   category: {
     name: string;
