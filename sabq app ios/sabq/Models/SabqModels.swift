@@ -12,7 +12,9 @@ nonisolated enum SabqFormatters {
     /// "٤٥٤٥" because the editorial team standardised on Latin digits
     /// across web + email + dashboard.
     private static let arabicLatinDigits = Locale(identifier: "ar-u-nu-latn")
-    private static let saudiArabicLatinDigits = Locale(identifier: "ar_SA-u-nu-latn")
+    /// معرّف الويب نفسه (`ar-SA-u-ca-gregory-nu-latn`): الصيغة السابقة بشرطة سفلية
+    /// لم تكن تُفعّل الأرقام اللاتينية فظهرت «٠٧:٢٣» في أوقات الرياض.
+    private static let saudiArabicLatinDigits = Locale(identifier: "ar-SA-u-ca-gregory-nu-latn")
 
     static let arabicDate: DateFormatter = {
         let f = DateFormatter()
@@ -45,6 +47,36 @@ nonisolated enum SabqFormatters {
         f.locale = saudiArabicLatinDigits
         f.timeZone = TimeZone(identifier: "Asia/Riyadh")
         f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// تاريخ النشر بتوقيت الرياض بأرقام لاتينية — «12 سبتمبر 2026» (سطر الكاتب في الويب).
+    static let riyadhDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "d MMMM yyyy"
+        return f
+    }()
+
+    /// ساعة النشر 12-ساعة بتوقيت الرياض — «07:23 ص» كما في الويب (`hour12: true`).
+    static let riyadhClock12: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "hh:mm a"
+        return f
+    }()
+
+    /// تاريخ ووقت مطلقان لسطر «آخر تحديث».
+    static let riyadhDateTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "d MMMM yyyy، hh:mm a"
         return f
     }()
 
@@ -424,6 +456,13 @@ struct Article: Identifiable, Equatable, Hashable {
     /// معرّف التصنيف في الخادم (لبلوك مقالات الرأي المرتبطة). nil في الحمولات القديمة.
     var categoryId: String? = nil
     let author: String
+    /// سطر الكاتب (نقل الويب #1598): الصورة، الصفة، رابط ملف المراسل، التوثيق،
+    /// وتاريخ التعديل التحريري (يُظهر «آخر تحديث» فقط عند وجوده).
+    var authorImageURL: String? = nil
+    var authorRole: String? = nil
+    var authorSlug: String? = nil
+    var isAuthorVerified: Bool = false
+    var editorialModifiedAt: Date? = nil
     let publishDate: Date
     let isBreaking: Bool
     let isFeatured: Bool
@@ -459,6 +498,27 @@ struct Article: Identifiable, Equatable, Hashable {
 
     /// اسم القسم المعروض للقارئ: القسم الثابت إن طابق، وإلا اسم الخادم، وإلا «أخبار».
     var categoryTitle: String { categoryLabel ?? category.title }
+
+    /// تاريخ النشر بتوقيت الرياض («12 سبتمبر 2026»).
+    var publicationDate: String { SabqFormatters.riyadhDate.string(from: publishDate) }
+    /// ساعة النشر («07:23 ص»).
+    var publicationClock: String { SabqFormatters.riyadhClock12.string(from: publishDate) }
+    /// «آخر تحديث» — nil عندما لا يوجد تعديل تحريري مسجّل (كما في الويب).
+    var lastUpdatedLabel: String? {
+        editorialModifiedAt.map { SabqFormatters.riyadhDateTime.string(from: $0) }
+    }
+    /// «قراءة N دقيقة» بصياغة الويب.
+    var readingLabel: String { "قراءة \(readingMinutes) دقيقة" }
+
+    /// صفة الكاتب بقواعد الويب نفسها: صفة ملف المراسل إن وُجدت، وإلا
+    /// «صحيفة إلكترونية سعودية» لحساب الصحيفة، وإلا «مراسل صحفي» عندما يكون
+    /// الكاتب هو المراسل المختار في اللوحة، وإلا «كاتب الخبر».
+    nonisolated static func resolveAuthorRole(name: String, authorId: String?, reporterId: String?, staffTitle: String?) -> String {
+        if let t = staffTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        if name.trimmingCharacters(in: .whitespacesAndNewlines) == "صحيفة سبق" { return "صحيفة إلكترونية سعودية" }
+        if let authorId, let reporterId, !authorId.isEmpty, authorId == reporterId { return "مراسل صحفي" }
+        return "كاتب الخبر"
+    }
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -524,6 +584,10 @@ struct Article: Identifiable, Equatable, Hashable {
 
     nonisolated static func from(_ api: APIArticle) -> Article {
         let body = Self.stripHTMLTags(from: api.fullText)
+        // الاسم: الكاتب (الاسم الأول + الأخير) ثم اسم ملف الموظف ثم «سبق» — كما في الويب.
+        let authorName = api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+            ?? api.staffName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "سبق"
         // Preserve raw HTML for the rich renderer. List payloads return a
         // short excerpt without HTML; detail payloads carry the full body
         // with TipTap markup (paragraphs, bold, blockquotes, galleries, …).
@@ -546,7 +610,12 @@ struct Article: Identifiable, Equatable, Hashable {
             category: ArticleCategory(fromSection: api.categoryName),
             categoryLabel: Self.resolveCategoryLabel(name: api.categoryName, slug: api.categorySlug),
             categoryId: api.categoryId,
-            author: api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? "سبق",
+            author: authorName,
+            authorImageURL: api.authorImage.flatMap { $0.isEmpty ? nil : $0 },
+            authorRole: Self.resolveAuthorRole(name: authorName, authorId: api.authorId, reporterId: api.reporterId, staffTitle: api.staffTitle),
+            authorSlug: api.staffSlug.flatMap { $0.isEmpty ? nil : $0 },
+            isAuthorVerified: api.staffVerified ?? false,
+            editorialModifiedAt: api.editorialModifiedAt.flatMap { SabqFormatters.parseISO8601($0) },
             publishDate: Self.parsePublishedAt(api.publishedAt),
             isBreaking: api.newsType == "breaking",
             isFeatured: api.isFeatured ?? false,

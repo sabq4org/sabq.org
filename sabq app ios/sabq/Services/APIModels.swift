@@ -102,6 +102,13 @@ nonisolated struct APIWhatsAppCta: Decodable, Hashable, Sendable {
     }
 }
 
+/// ملف المراسل العام `/api/reporters/:slug` — نحتاج الصفة فقط لسطر الكاتب.
+nonisolated struct APIReporterProfile: Decodable {
+    let title: String?
+    let fullName: String?
+    let avatarUrl: String?
+}
+
 nonisolated struct APIArticle: Decodable {
     let id: String
     let title: String
@@ -126,6 +133,17 @@ nonisolated struct APIArticle: Decodable {
     let newsType: String?
     let isFeatured: Bool?
     let isReading: Bool?
+    /// سطر الكاتب (نقل الويب #1598): صورة الكاتب ومعرّفه، ومعرّف المراسل
+    /// المختار في اللوحة، وبيانات ملف الموظف (slug/الاسم/الصفة/التوثيق)،
+    /// وتاريخ التعديل التحريري الذي يُظهر «آخر تحديث».
+    let authorImage: String?
+    let authorId: String?
+    let reporterId: String?
+    let staffSlug: String?
+    let staffName: String?
+    let staffTitle: String?
+    let staffVerified: Bool?
+    let editorialModifiedAt: String?
     var keywords: [String]?
     let imageUrl: String?
     /// Editorial focal point shipped by the backend as
@@ -198,9 +216,40 @@ nonisolated struct APIArticle: Decodable {
             authorName = combined.isEmpty
                 ? (try? auth.decode(String.self, forKey: FlexKey("name")))
                 : combined
+            authorId = (try? auth.decode(String.self, forKey: FlexKey("id")))
+                ?? (try? auth.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
+            authorImage = ["profileImageUrl", "profile_image_url", "avatarUrl", "avatar_url", "avatar"]
+                .lazy.compactMap { try? auth.decode(String.self, forKey: FlexKey($0)) }
+                .first { !$0.isEmpty }
         } else {
             authorName = (try? c.decode(String.self, forKey: FlexKey("author_name")))
                 ?? (try? c.decode(String.self, forKey: FlexKey("author")))
+            authorId = (try? c.decode(String.self, forKey: FlexKey("authorId")))
+                ?? (try? c.decode(String.self, forKey: FlexKey("author_id")))
+            authorImage = ["author_image", "authorImage", "authorImageUrl"]
+                .lazy.compactMap { try? c.decode(String.self, forKey: FlexKey($0)) }
+                .first { !$0.isEmpty }
+        }
+        reporterId = (try? c.decode(String.self, forKey: FlexKey("reporterId")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("reporter_id")))
+        if let staff = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("staff")) {
+            staffSlug = try? staff.decode(String.self, forKey: FlexKey("slug"))
+            staffName = (try? staff.decode(String.self, forKey: FlexKey("nameAr")))
+                ?? (try? staff.decode(String.self, forKey: FlexKey("name_ar")))
+            staffTitle = try? staff.decode(String.self, forKey: FlexKey("title"))
+            staffVerified = (try? staff.decode(Bool.self, forKey: FlexKey("isVerified")))
+                ?? (try? staff.decode(Bool.self, forKey: FlexKey("is_verified")))
+        } else {
+            staffSlug = nil
+            staffName = nil
+            staffTitle = nil
+            staffVerified = nil
+        }
+        if let seoMeta = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("seoMetadata")) {
+            editorialModifiedAt = (try? seoMeta.decode(String.self, forKey: FlexKey("editorialModifiedAt")))
+                ?? (try? seoMeta.decode(String.self, forKey: FlexKey("editorial_modified_at")))
+        } else {
+            editorialModifiedAt = try? c.decode(String.self, forKey: FlexKey("editorialModifiedAt"))
         }
 
         if let v = try? c.decode(String.self, forKey: FlexKey("publishedAt")) { publishedAt = v }
