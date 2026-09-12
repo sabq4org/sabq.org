@@ -827,23 +827,23 @@ struct ArticleDetailView: View {
                 .font(SabqFonts.app(size: 10.5, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
 
+                publicationSummary
+                    .accessibilityLabel(publicationAccessibilityLabel)
+
+                // «آخر تحديث» سطر ظاهر كما في الويب (#1598) لا خلف قائمة؛ يُقرأ من
+                // `seoMetadata.editorialModifiedAt` فقط فلا يظهر بلا تعديل تحريري.
                 if let updated = displayArticle.lastUpdatedLabel {
-                    Menu {
-                        Text("نُشر في \(displayArticle.publicationDate) \(displayArticle.publicationClock)")
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 9, weight: .regular))
+                            .accessibilityHidden(true)
                         Text("آخر تحديث: \(updated)")
-                    } label: {
-                        HStack(spacing: 3) {
-                            publicationSummary
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 10))
-                        }
+                            .monospacedDigit()
+                            .lineLimit(1)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(publicationAccessibilityLabel)، آخر تحديث: \(updated)")
-                    .accessibilityHint("عرض تفاصيل النشر والتحديث")
-                } else {
-                    publicationSummary
-                        .accessibilityLabel(publicationAccessibilityLabel)
+                    .font(SabqFonts.app(size: 11, weight: .regular))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .accessibilityLabel("آخر تحديث \(updated)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

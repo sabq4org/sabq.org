@@ -80,7 +80,7 @@ struct KingsCupHomeStrip: View {
     var body: some View {
         // حامل Color.clear يمنع SwiftUI من إلغاء .task قبل وصول البيانات.
         ZStack {
-            Color.clear.frame(width: 0, height: 0)
+            HomeStripAnchor()
             if let ov = store.overview, !hidden {
                 NavigationLink(value: KingsCupRoute()) {
                     if let champion = ov.champion {

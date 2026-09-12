@@ -140,7 +140,7 @@ struct HomeFeedView: View {
                     // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
                     // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
                     // a collapsed «المزيد اليوم» disclosure.
-                    VStack(alignment: .leading, spacing: 20) {
+                    CollapsingVStack(spacing: 20) {
                         Color.clear
                             .frame(height: 0)
                             .id(Self.scrollTopID)
@@ -221,7 +221,9 @@ struct HomeFeedView: View {
                 }
                 .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)
-                .padding(.top, 18)
+                // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
+                // الصفرية؛ CollapsingVStack لا يحجزها فنعوّضها هنا لبقاء الرأس مكانه.
+                .padding(.top, 38)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
