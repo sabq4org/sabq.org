@@ -591,6 +591,20 @@ actor APIClient {
         }
     }
 
+    /// مقالات رأي من التصنيف نفسه (ترتيب ذكي: حداثة + مشاهدات + تمييز) —
+    /// المصدر نفسه لبلوك «مقالات قد تهمك» في الويب.
+    func fetchRelatedOpinions(categoryId: String, excludeId: String?, limit: Int = 5) async throws -> [APIOpinion] {
+        var query: [String: String] = ["limit": "\(limit)"]
+        if let excludeId, !excludeId.isEmpty { query["excludeId"] = excludeId }
+        // المسار عام فقط (`/api/opinion/...`)؛ لا نظير له تحت v1.
+        return try await get(
+            WrappedArray<APIOpinion>.self,
+            path: "/opinion/related/category/\(categoryId)",
+            query: query,
+            apiRoot: publicAPIBaseURL
+        ).items
+    }
+
     func fetchOpinion(slug: String) async throws -> APIOpinion {
         do {
             return try await get(WrappedObject<APIOpinion>.self, path: "/opinion/\(slug)", apiRoot: publicAPIBaseURL).item

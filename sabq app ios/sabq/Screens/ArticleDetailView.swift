@@ -48,6 +48,8 @@ struct ArticleDetailView: View {
     @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
+    /// مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
+    @State private var relatedOpinions: [OpinionArticle] = []
     /// حالة الاستماع تأتي من المشغّل المشترك (Now Playing + شاشة القفل) —
     /// لا AVPlayer محلي بعد تدقيق iOS 27 (F03).
     private var audioKey: String { "article:\(displayArticle.slug ?? displayArticle.id)" }
@@ -208,9 +210,14 @@ struct ArticleDetailView: View {
                                 .padding(.top, 20)
                         }
 
+                        if !isFocusMode, !relatedOpinions.isEmpty {
+                            relatedOpinionsSection
+                                .padding(.top, 24)
+                        }
+
                         if !isFocusMode, !relatedArticles.isEmpty {
                             relatedSection
-                                .padding(.top, 24)
+                                .padding(.top, 16)
                         }
 
                         if !isFocusMode, let store = commentsStore {
@@ -273,7 +280,7 @@ struct ArticleDetailView: View {
             SabqAnalytics.articleView(
                 id: displayArticle.id,
                 title: displayArticle.title,
-                category: displayArticle.category.title
+                category: displayArticle.categoryTitle
             )
             BehaviorTracker.shared.startSession(articleId: displayArticle.id)
         }
@@ -432,7 +439,7 @@ struct ArticleDetailView: View {
         var urls: [URL] = []
         for block in blocks {
             switch block {
-            case .image(let url, _, _):
+            case .image(let url, _, _, _):
                 urls.append(url)
             case .imageGallery(let images):
                 urls.append(contentsOf: images.map(\.url))
@@ -496,6 +503,15 @@ struct ArticleDetailView: View {
             if relatedArticles.isEmpty {
                 relatedArticles = await NewsService.fetchRelated(slug: slug)
             }
+
+            // بلوك الرأي يحتاج معرّف التصنيف (يأتي مع حمولة التفاصيل)؛ بلا معرّف
+            // يختفي البلوك بصمت كما في الويب.
+            if let categoryId = displayArticle.categoryId, !categoryId.isEmpty {
+                relatedOpinions = await NewsService.fetchRelatedOpinions(
+                    categoryId: categoryId,
+                    excludeId: displayArticle.id
+                )
+            }
         }
 
         _ = await prepareShareURL()
@@ -542,12 +558,13 @@ struct ArticleDetailView: View {
     }
 
     private func toggleAudio() {
-        // The backend's /api/articles/:slug/summary-audio streams
-        // ElevenLabs (or Google fallback) MP3 bytes directly, not a
-        // JSON envelope. We don't need to pre-fetch metadata — point
-        // AVPlayer at the URL and let it start streaming. ElevenLabs
-        // synthesis takes ~3-8s the first time; subsequent loads hit
-        // the backend's 24h Cache-Control header.
+        // The backend's /api/articles/:slug/summary-audio returns the
+        // whole clip (HUMAIN WAV, or ElevenLabs/Google MP3 fallback)
+        // with an `X-TTS-Provider` header. The shared player downloads
+        // it first so the provider is known for the attribution label,
+        // then plays the local file. The route is `no-store` since the
+        // HUMAIN rollout, so every play re-fetches (server-side cache
+        // keeps synthesis to once per article).
         guard let slug = displayArticle.slug, !slug.isEmpty,
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
@@ -557,7 +574,8 @@ struct ArticleDetailView: View {
             url: url,
             title: displayArticle.title,
             subtitle: "الملخص الصوتي · سبق",
-            artworkURL: displayArticle.imageURL.flatMap { URL(string: $0) }
+            artworkURL: displayArticle.imageURL.flatMap { URL(string: $0) },
+            delivery: .download
         ))
     }
 
@@ -569,9 +587,14 @@ struct ArticleDetailView: View {
     private var labelsRow: some View {
         FlowLayout(spacing: 8) {
             DetailLabelPill(
-                title: article.category.title,
+                title: article.categoryTitle,
                 tint: article.category.tint
             )
+
+            // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420)
+            if article.isReading {
+                DetailLabelPill(title: "قراءة", tint: SabqTheme.emerald, icon: "book")
+            }
 
             // Breaking pill (only when applicable)
             if article.isBreaking {
@@ -691,6 +714,9 @@ struct ArticleDetailView: View {
                         .foregroundStyle(SabqTheme.ink)
                     Spacer(minLength: 0)
                     if canListen {
+                        if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
+                            summaryAudioAttribution
+                        }
                         listenButton
                     }
                 }
@@ -747,6 +773,16 @@ struct ArticleDetailView: View {
     /// due to long Arabic words, so we err on the generous side at 120 chars.
     private static func summaryNeedsToggle(_ text: String) -> Bool {
         text.count > 120
+    }
+
+    /// إسناد المزوّد بعبارة الويب حرفيًا (`SummaryAudioAttribution.tsx`) — يظهر
+    /// فقط عندما يكون مقطع هذا الخبر عبر HUMAIN (رأس `X-TTS-Provider`).
+    private var summaryAudioAttribution: some View {
+        Text("الصوت عبر HUMAIN")
+            .font(SabqFonts.app(size: 11, weight: .regular))
+            .foregroundStyle(SabqTheme.emerald)
+            .lineLimit(1)
+            .accessibilityLabel("الصوت عبر هيومن")
     }
 
     /// Compact play/pause pill for the audio summary. Sits in the smart-
@@ -1334,65 +1370,65 @@ struct ArticleDetailView: View {
 
     // MARK: - Related Articles
 
+    // الحاوية الموحدة (نقل الويب #1610/#1612): سطح أزرق فاتح، عنوان واحد،
+    // صفوف بشكل بطاقة الخبر المضغوطة 104×84 بإطار خفيف.
     private var relatedSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Divider().foregroundStyle(SabqTheme.outline)
-
-            SectionHeader(
-                title: "أخبار ذات صلة",
-                subtitle: "مقالات مشابهة قد تهمك",
-                icon: "link",
-                tint: SabqTheme.primaryEnd
-            )
-
-            ForEach(relatedArticles.prefix(5)) { related in
+        ArticleSidebarModule(
+            // تسمية الويب (4ad1892): القائمة آخر ما نُشر في القسم لا تشابهًا
+            title: "اقرأ أيضاً",
+            description: "آخر ما نُشر في القسم",
+            icon: "link"
+        ) {
+            ForEach(Array(relatedArticles.prefix(5).enumerated()), id: \.element.id) { index, related in
+                if index > 0 { SidebarRowDivider() }
                 NavigationLink(value: related) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            SabqRTLText(
-                                related.title,
-                                uiFont: SabqFonts.uiApp(size: 14, weight: .semibold),
-                                color: SabqTheme.ink,
-                                lineLimit: 2,
-                                lineSpacing: 2
-                            )
-
-                            Text(related.relativeDate)
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if let urlStr = related.imageURL, let url = URL(string: urlStr) {
-                            CachedAsyncImage(url: url, contentMode: .fill) {
-                                relatedPlaceholder(related)
-                            }
-                            .frame(width: 56, height: 56)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        } else {
-                            relatedPlaceholder(related)
-                        }
-                    }
-                    .padding(.vertical, 4)
+                    SidebarArticleRow(
+                        title: related.title,
+                        imageURL: related.imageURL,
+                        date: related.relativeDate,
+                        placeholderIcon: related.category.icon,
+                        placeholderTint: related.category.tint
+                    )
                 }
                 .buttonStyle(.plain)
-
-                if related.id != relatedArticles.prefix(5).last?.id {
-                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
-                }
             }
         }
     }
 
-    private func relatedPlaceholder(_ article: Article) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(article.category.tint.opacity(0.1))
-            .frame(width: 56, height: 56)
-            .overlay {
-                Image(systemName: article.category.icon)
-                    .font(SabqFonts.app(size: 18, weight: .light))
-                    .foregroundStyle(article.category.tint.opacity(0.4))
+    /// «مقالات قد تهمك»: مقالات رأي من تصنيف الخبر — صورة الكاتب الصغيرة قبل
+    /// اسمه وبلا توقيت (تُقرأ كقائمة كتّاب لا خطًّا زمنيًا)، ومقال الرأي بلا
+    /// صورة يعرض صورة الكاتب داخل الإطار نفسه. نقل الويب #1609/#1624.
+    private var relatedOpinionsSection: some View {
+        ArticleSidebarModule(
+            title: "مقالات قد تهمك",
+            description: "من تصنيف «\(displayArticle.categoryTitle)»",
+            icon: "book",
+            action: {
+                NavigationLink(value: OpinionsRoute()) {
+                    HStack(spacing: 4) {
+                        Text("عرض المزيد")
+                        Image(systemName: "arrow.left")
+                            .font(SabqFonts.app(size: 11, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
             }
+        ) {
+            ForEach(Array(relatedOpinions.prefix(5).enumerated()), id: \.element.id) { index, opinion in
+                if index > 0 { SidebarRowDivider() }
+                NavigationLink(value: opinion) {
+                    SidebarArticleRow(
+                        title: opinion.title,
+                        // مقال بلا صورة (أو بصورة فارغة) يعرض صورة الكاتب داخل الإطار نفسه
+                        imageURL: opinion.imageURL.flatMap { $0.isEmpty ? nil : $0 } ?? opinion.authorImageURL,
+                        byline: opinion.authorName.isEmpty ? "كاتب رأي" : opinion.authorName,
+                        bylineAvatarURL: opinion.authorImageURL,
+                        placeholderIcon: "text.quote"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Comments

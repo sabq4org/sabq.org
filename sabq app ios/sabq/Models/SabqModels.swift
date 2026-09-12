@@ -277,18 +277,19 @@ enum ArticleCategory: String, CaseIterable, Identifiable {
         }
     }
 
-    nonisolated init(fromSection name: String?) {
+    /// مطابقة دقيقة بالاسم العربي أو الـslug؛ nil إن كان القسم غير معروف للتطبيق.
+    nonisolated static func match(_ name: String?) -> ArticleCategory? {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if let match = ArticleCategory(rawValue: trimmed) {
-            self = match
-            return
-        }
+        if let match = ArticleCategory(rawValue: trimmed) { return match }
         let lower = trimmed.lowercased()
-        if let bySlug = ArticleCategory.allCases.first(where: { $0.slug == lower }) {
-            self = bySlug
-            return
-        }
-        self = .saudi
+        return ArticleCategory.allCases.first(where: { $0.slug == lower })
+    }
+
+    /// القسم غير المعروف يسقط على لون «محليات» لأغراض التلوين فقط — اسمه
+    /// يُحمل في `Article.categoryLabel` كي لا يُنسب الخبر إلى المحليات
+    /// (نقل إصلاح أندرويد #1573).
+    nonisolated init(fromSection name: String?) {
+        self = ArticleCategory.match(name) ?? .saudi
     }
 
     private static func color(hex: String) -> Color {
@@ -417,6 +418,11 @@ struct Article: Identifiable, Equatable, Hashable {
     /// list-payload articles. ArticleHtmlParser consumes this — never `body`.
     let bodyHTML: String
     let category: ArticleCategory
+    /// اسم القسم كما أرسله الخادم عندما لا يطابق أحد الأقسام الثابتة.
+    /// nil = الاسم من `category.title`.
+    var categoryLabel: String? = nil
+    /// معرّف التصنيف في الخادم (لبلوك مقالات الرأي المرتبطة). nil في الحمولات القديمة.
+    var categoryId: String? = nil
     let author: String
     let publishDate: Date
     let isBreaking: Bool
@@ -450,6 +456,9 @@ struct Article: Identifiable, Equatable, Hashable {
     var mediaAssets: [APIMediaAsset]? = nil
     /// زر واتساب في نهاية المقال (من حقل whatsappCta). الإدراج داخل النص عبر HTML.
     var whatsappCta: APIWhatsAppCta? = nil
+
+    /// اسم القسم المعروض للقارئ: القسم الثابت إن طابق، وإلا اسم الخادم، وإلا «أخبار».
+    var categoryTitle: String { categoryLabel ?? category.title }
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -499,6 +508,20 @@ struct Article: Identifiable, Equatable, Hashable {
         hasher.combine(id)
     }
 
+    /// قسم غير معروف لا يُسمّى «محليات»: اسم الخادم ← الاسم المشتق من slug
+    /// ← «أخبار». nil عندما يطابق قسمًا ثابتًا (يُستخدم اسمه).
+    nonisolated static func resolveCategoryLabel(name: String?, slug: String?) -> String? {
+        if ArticleCategory.match(name) != nil { return nil }
+        if let slug, let bySlug = ArticleCategory.match(slug) { return bySlug.rawValue }
+        if let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            return trimmed
+        }
+        if let slug = slug?.trimmingCharacters(in: .whitespacesAndNewlines), !slug.isEmpty {
+            return slug.replacingOccurrences(of: "-", with: " ")
+        }
+        return "أخبار"
+    }
+
     nonisolated static func from(_ api: APIArticle) -> Article {
         let body = Self.stripHTMLTags(from: api.fullText)
         // Preserve raw HTML for the rich renderer. List payloads return a
@@ -521,6 +544,8 @@ struct Article: Identifiable, Equatable, Hashable {
             body: body.isEmpty ? excerpt : body,
             bodyHTML: bodyHTML,
             category: ArticleCategory(fromSection: api.categoryName),
+            categoryLabel: Self.resolveCategoryLabel(name: api.categoryName, slug: api.categorySlug),
+            categoryId: api.categoryId,
             author: api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? "سبق",
             publishDate: Self.parsePublishedAt(api.publishedAt),
             isBreaking: api.newsType == "breaking",

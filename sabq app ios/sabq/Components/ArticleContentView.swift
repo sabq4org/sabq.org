@@ -24,6 +24,10 @@ struct ArticleContentView: View {
     /// non-interactive behaviour.
     var onImageTap: ((URL) -> Void)? = nil
 
+    /// عرض عمود القراءة المقيس — تُنسب إليه صور المحرر ذات العرض الجزئي.
+    @State private var columnWidth: CGFloat = 0
+    @Environment(\.layoutDirection) private var layoutDirection
+
     private var design: Font.Design { useReaderFont ? .serif : .default }
 
     var body: some View {
@@ -40,6 +44,11 @@ struct ArticleContentView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            if width > 0 { columnWidth = width }
+        }
     }
 
     @ViewBuilder
@@ -53,8 +62,8 @@ struct ArticleContentView: View {
             listView(ordered: ordered, items: items)
         case .blockquote(let runs, let attribution):
             quoteView(runs, attribution: attribution)
-        case .image(let url, let alt, let caption):
-            imageBlock(url: url, alt: alt, caption: caption)
+        case .image(let url, let alt, let caption, let layout):
+            imageBlock(url: url, alt: alt, caption: caption, layout: layout)
         case .imageGallery(let images):
             galleryView(images: images)
         case .twitterEmbed(let url):
@@ -313,8 +322,23 @@ struct ArticleContentView: View {
 
     // MARK: - Images
 
-    private func imageBlock(url: URL, alt: String?, caption: String?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// محاذاة الصورة داخل العمود. الويب يقصد الجهة البصرية (right = يمين
+    /// الشاشة)، بينما leading/trailing في SwiftUI تتبع اتجاه الواجهة — فنقلبها
+    /// تحت RTL كي يبقى «يمين» يمينًا.
+    private func alignment(for align: ImageAlign) -> Alignment {
+        switch align {
+        case .center: return .center
+        case .right: return layoutDirection == .rightToLeft ? .leading : .trailing
+        case .left: return layoutDirection == .rightToLeft ? .trailing : .leading
+        }
+    }
+
+    private func imageBlock(url: URL, alt: String?, caption: String?, layout: ImageLayout) -> some View {
+        // عرض جزئي من المحرر (25/33/50/75٪) → نضيّق الصورة إلى نسبة العمود
+        // المقيس ونحاذيها إلى الجهة المطلوبة (نقل تعديل الويب #1512).
+        let fraction = layout.widthFraction ?? 1
+        let targetWidth: CGFloat? = (fraction < 1 && columnWidth > 0) ? floor(columnWidth * fraction) : nil
+        return VStack(alignment: .leading, spacing: 8) {
             // Inline body image — the column is narrower than the hero,
             // so a 1600px decode is more than enough for retina and
             // halves the decode time + memory cost vs. the default 2400.
@@ -322,7 +346,7 @@ struct ArticleContentView: View {
                 placeholder
             }
             .frame(maxWidth: .infinity)
-            .frame(minHeight: 200)
+            .frame(minHeight: targetWidth == nil ? 200 : 200 * fraction)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .onTapGesture {
@@ -341,6 +365,8 @@ struct ArticleContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(width: targetWidth)
+        .frame(maxWidth: .infinity, alignment: targetWidth == nil ? .leading : alignment(for: layout.align))
     }
 
     private var placeholder: some View {

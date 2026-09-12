@@ -259,8 +259,18 @@ struct OpinionDetailView: View {
 
     // MARK: - Audio Summary
 
-    /// Compact play/pause pill that drives ElevenLabs TTS for the
-    /// "الموجز الذكي" card. Mirrors ArticleDetailView's listenButton.
+    /// إسناد المزوّد بعبارة الويب حرفيًا — يظهر عندما يكون المقطع عبر HUMAIN.
+    private var summaryAudioAttribution: some View {
+        Text("الصوت عبر HUMAIN")
+            .font(SabqFonts.app(size: 11, weight: .regular))
+            .foregroundStyle(SabqTheme.emerald)
+            .lineLimit(1)
+            .accessibilityLabel("الصوت عبر هيومن")
+    }
+
+    /// Compact play/pause pill that drives the summary TTS (HUMAIN, with
+    /// ElevenLabs/Google fallback) for the "الموجز الذكي" card. Mirrors
+    /// ArticleDetailView's listenButton.
     private var listenButton: some View {
         Button {
             SabqHaptics.light()
@@ -297,7 +307,8 @@ struct OpinionDetailView: View {
             url: url,
             title: displayOpinion.title,
             subtitle: displayOpinion.authorName.isEmpty ? "مقال رأي · سبق" : displayOpinion.authorName,
-            artworkURL: displayOpinion.imageURL.flatMap { URL(string: $0) }
+            artworkURL: displayOpinion.imageURL.flatMap { URL(string: $0) },
+            delivery: .download
         ))
     }
 
@@ -471,6 +482,9 @@ struct OpinionDetailView: View {
                         .foregroundStyle(SabqTheme.ink)
                     Spacer(minLength: 0)
                     if canListen {
+                        if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
+                            summaryAudioAttribution
+                        }
                         listenButton
                     }
                 }
@@ -678,59 +692,29 @@ struct OpinionDetailView: View {
 
     // MARK: - More Opinions
 
+    // الحاوية الموحدة للبلوكات الجانبية كما في الويب (#1610): سطح أزرق فاتح،
+    // عنوان واحد، وصفوف بشكل بطاقة الخبر المضغوطة. مقال الرأي بلا صورة يعرض
+    // صورة الكاتب داخل الإطار نفسه.
     private var moreOpinionsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Divider().foregroundStyle(SabqTheme.outline)
-
-            SectionHeader(
-                title: "مقالات أخرى",
-                subtitle: "مقالات رأي قد ترغب بقراءتها بعد هذا المقال",
-                icon: "text.quote",
-                tint: SabqTheme.primaryEnd
-            )
-
-            ForEach(moreOpinions) { opinion in
+        ArticleSidebarModule(
+            title: "مقالات أخرى",
+            description: "مقالات رأي قد ترغب بقراءتها بعد هذا المقال",
+            icon: "text.quote"
+        ) {
+            ForEach(Array(moreOpinions.enumerated()), id: \.element.id) { index, opinion in
+                if index > 0 { SidebarRowDivider() }
                 NavigationLink(value: opinion) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(opinion.title)
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-
-                            HStack(spacing: 5) {
-                                Image(systemName: "applepencil")
-                                    .font(SabqFonts.app(size: 10, weight: .regular))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                Text("\(opinion.bylineLabel):")
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                Text(opinion.authorName)
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                    .lineLimit(1)
-                            }
-
-                            Text(opinion.relativeDate)
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        OpinionAuthorAvatar(
-                            name: opinion.authorName,
-                            imageURL: opinion.authorImageURL,
-                            size: 48
-                        )
-                    }
-                    .padding(.vertical, 4)
+                    SidebarArticleRow(
+                        title: opinion.title,
+                        imageURL: opinion.imageURL.flatMap { $0.isEmpty ? nil : $0 } ?? opinion.authorImageURL,
+                        byline: opinion.authorName,
+                        bylineAvatarURL: opinion.authorImageURL,
+                        date: opinion.relativeDate,
+                        placeholderIcon: "text.quote",
+                        placeholderTint: SabqTheme.primaryEnd
+                    )
                 }
                 .buttonStyle(.plain)
-
-                if opinion.id != moreOpinions.last?.id {
-                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
-                }
             }
         }
     }

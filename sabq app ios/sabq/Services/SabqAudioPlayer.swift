@@ -22,6 +22,15 @@ import UIKit
 final class SabqAudioPlayer {
     static let shared = SabqAudioPlayer()
 
+    /// طريقة جلب المقطع.
+    nonisolated enum Delivery: Sendable {
+        /// بث مباشر عبر AVPlayer (النشرات الصوتية — ملفات كبيرة ثابتة).
+        case stream
+        /// تنزيل كامل أولًا ثم تشغيل ملف محلي — للملخص الصوتي: الخادم يرسل
+        /// المقطع كاملًا برأس `X-TTS-Provider` الذي يلزم لإسناد «الصوت عبر HUMAIN».
+        case download
+    }
+
     /// ما يُعرض على شاشة القفل ومركز التحكم.
     nonisolated struct Item: Equatable, Sendable {
         /// معرّف مستقر للمحتوى (مثل `article:<slug>`) — تقارنه كل شاشة بمحتواها.
@@ -30,10 +39,18 @@ final class SabqAudioPlayer {
         let title: String
         let subtitle: String?
         let artworkURL: URL?
+        var delivery: Delivery = .stream
     }
 
     private(set) var currentKey: String?
     private(set) var isPlaying = false
+    /// مزوّد المقطع الحالي (`humain` / `elevenlabs` / `google`) من رأس الاستجابة —
+    /// يُعرف فقط في وضع التنزيل.
+    private(set) var provider: String?
+    /// المفتاح الذي يجري تنزيله الآن (قبل بدء التشغيل).
+    private(set) var preparingKey: String?
+    private var prepareTask: Task<Void, Never>?
+    private var localFileURL: URL?
 
     private var player: AVPlayer?
     private var currentItem: Item?
@@ -51,12 +68,22 @@ final class SabqAudioPlayer {
 
     // MARK: - واجهة الشاشات
 
+    /// يشمل مرحلة التنزيل كي يعكس الزر «إيقاف» فور النقر.
     func isPlaying(key: String) -> Bool {
-        isPlaying && currentKey == key
+        currentKey == key && (isPlaying || preparingKey == key)
+    }
+
+    /// مزوّد مقطع هذا المحتوى تحديدًا (nil لغيره أو قبل معرفته).
+    func provider(for key: String) -> String? {
+        currentKey == key ? provider : nil
     }
 
     /// زر «استماع/إيقاف» في الشاشات: يبدّل إن كان المحتوى نفسه، وإلا يبدأ الجديد.
     func toggle(_ item: Item) {
+        if currentKey == item.key, preparingKey == item.key {
+            stop()
+            return
+        }
         if currentKey == item.key, player != nil {
             if isPlaying { pause() } else { resume() }
             return
@@ -66,18 +93,78 @@ final class SabqAudioPlayer {
 
     func play(_ item: Item) {
         teardownPlayer()
+        prepareTask?.cancel()
+        prepareTask = nil
+        removeLocalFile()
         currentItem = item
         currentKey = item.key
         artwork = nil
+        provider = nil
         SabqAudioSession.activate()
-        let newPlayer = AVPlayer(url: item.url)
+        installRemoteCommandsIfNeeded()
+        switch item.delivery {
+        case .stream:
+            preparingKey = nil
+            start(AVPlayer(url: item.url))
+        case .download:
+            preparingKey = item.key
+            prepareTask = Task { @MainActor [weak self] in
+                do {
+                    let (data, response) = try await URLSession.shared.data(from: item.url)
+                    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                        throw URLError(.badServerResponse)
+                    }
+                    let ext = Self.fileExtension(forContentType: http.value(forHTTPHeaderField: "Content-Type"))
+                    let fileURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("sabq-summary-\(UUID().uuidString).\(ext)")
+                    try data.write(to: fileURL, options: .atomic)
+                    guard let self, !Task.isCancelled, self.currentKey == item.key else {
+                        try? FileManager.default.removeItem(at: fileURL)
+                        return
+                    }
+                    self.localFileURL = fileURL
+                    self.provider = Self.providerName(from: http)
+                    self.preparingKey = nil
+                    self.start(AVPlayer(url: fileURL))
+                } catch {
+                    guard let self, self.currentKey == item.key else { return }
+                    self.stop()
+                }
+            }
+        }
+        loadArtwork(item.artworkURL)
+    }
+
+    private func start(_ newPlayer: AVPlayer) {
         newPlayer.automaticallyWaitsToMinimizeStalling = true
         attach(newPlayer)
-        installRemoteCommandsIfNeeded()
         newPlayer.play()
         isPlaying = true
         publishNowPlaying()
-        loadArtwork(item.artworkURL)
+    }
+
+    /// اسم المزوّد من رأس `X-TTS-Provider` بحروف صغيرة (`humain`…).
+    nonisolated static func providerName(from response: HTTPURLResponse) -> String? {
+        let raw = response.value(forHTTPHeaderField: "X-TTS-Provider")?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return raw.isEmpty ? nil : raw
+    }
+
+    /// امتداد الملف المؤقت من نوع المحتوى (HUMAIN يرسل WAV، والبدائل MP3).
+    nonisolated static func fileExtension(forContentType type: String?) -> String {
+        let t = (type ?? "").lowercased()
+        if t.contains("wav") { return "wav" }
+        if t.contains("mpeg") || t.contains("mp3") { return "mp3" }
+        if t.contains("ogg") { return "ogg" }
+        if t.contains("aac") || t.contains("mp4") || t.contains("m4a") { return "m4a" }
+        return "mp3"
+    }
+
+    private func removeLocalFile() {
+        if let localFileURL {
+            try? FileManager.default.removeItem(at: localFileURL)
+        }
+        localFileURL = nil
     }
 
     func pause() {
@@ -96,7 +183,12 @@ final class SabqAudioPlayer {
 
     /// إيقاف نهائي: يفرغ المشغّل ويمسح Now Playing ويسلّم الجلسة للآخرين.
     func stop() {
+        prepareTask?.cancel()
+        prepareTask = nil
+        preparingKey = nil
         teardownPlayer()
+        removeLocalFile()
+        provider = nil
         currentItem = nil
         currentKey = nil
         artwork = nil

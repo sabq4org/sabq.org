@@ -7,6 +7,7 @@ struct KeywordArticlesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var items: [KeywordContentItem] = []
     @State private var isLoading = true
+    @State private var loadError: String? = nil
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -21,6 +22,11 @@ struct KeywordArticlesView: View {
                             .padding(.top, 40)
                     }
                     .frame(maxWidth: .infinity)
+                } else if items.isEmpty, let loadError {
+                    // كان الفشل يُبتلع إلى «لا توجد مواد» حتى بلا إنترنت (نقل أندرويد #1573).
+                    ErrorStateView(message: loadError) {
+                        Task { await loadArticles() }
+                    }
                 } else if items.isEmpty {
                     EmptyStateView(
                         icon: "tag",
@@ -91,8 +97,10 @@ struct KeywordArticlesView: View {
                     return seen.insert(item.id).inserted ? item : nil
                 }
                 .sorted { $0.publishDate > $1.publishDate }
+            loadError = nil
         } catch {
             items = []
+            loadError = ReaderErrorMessage.message(for: error, fallback: "تعذّر تحميل مواد هذا الوسم. حاول مرة أخرى.")
         }
         isLoading = false
     }

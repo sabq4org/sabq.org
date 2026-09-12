@@ -1099,10 +1099,20 @@ nonisolated enum SabqTheme {
     nonisolated static let gold        = Color(red: 0.92, green: 0.68, blue: 0.20)
     nonisolated static let coral       = Color(red: 0.90, green: 0.35, blue: 0.32)
     nonisolated static let leaf        = Color(red: 0.40, green: 0.73, blue: 0.22)
+    /// زمردي شارات «قراءة» في الويب (#047857).
+    nonisolated static let emerald     = Color(red: 0.016, green: 0.47, blue: 0.34)
+    /// درجة الأزرق الفاتح المعتمدة في الويب (`--public-surface` ‏#f4f8fb، داكن #172330)
+    /// لحاويات البلوكات الجانبية وبنود الرئيسية — اعتمدها المالك لتطبيق iOS 2026-09-12.
+    static let publicSurface = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
+            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
+    })
+    /// الفاتح يطابق درجة الويب #f4f8fb (كان #f0f7fc)؛ الداكن يبقى محايدًا.
     static let paleFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.14, green: 0.14, blue: 0.16, alpha: 1)
-            : UIColor(red: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
     })
     static let softFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1120,11 +1130,9 @@ nonisolated enum SabqTheme {
     // بالأزرق العميق #0E76B8 (يُستبدل بالسماوي في الداكن للتباين).
     // الفاتح #DCF1FE من لوحة الهوية — أوضح تمايزًا عن خلفية التطبيق
     // #F2F7FC بعد ملاحظة المالك أن الصبغة الأخف كانت تذوب فيها.
-    static let sectionCard = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.11, green: 0.15, blue: 0.21, alpha: 1)
-            : UIColor(red: 0.86, green: 0.95, blue: 1.00, alpha: 1)
-    })
+    /// بطاقات بنود الرئيسية (الرأي، الرحلة…) — درجة الويب نفسها #f4f8fb / #172330
+    /// (كانت سماوية أقوى #dbf2ff). اعتمدها المالك 2026-09-12.
+    static let sectionCard = publicSurface
     static let sectionSeparator = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.20, green: 0.26, blue: 0.33, alpha: 1)
@@ -1652,8 +1660,9 @@ struct CompactArticleRow: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    StatusChip(title: article.category.title, tint: article.category.tint)
+                    StatusChip(title: article.categoryTitle, tint: article.category.tint)
                     if article.isBreaking { breakingPill }
+                    if article.isReading { readingPill }
                     if isNew { newPill }
                 }
 
@@ -1733,8 +1742,9 @@ struct CompactArticleRow: View {
 
             HStack(spacing: 6) {
                 if article.isBreaking { breakingPill }
+                if article.isReading { readingPill }
                 if isNew { newPill }
-                StatusChip(title: article.category.title, tint: article.category.tint)
+                StatusChip(title: article.categoryTitle, tint: article.category.tint)
             }
             .padding(10)
         }
@@ -1769,6 +1779,23 @@ struct CompactArticleRow: View {
         .background(
             Capsule(style: .continuous)
                 .fill(SabqTheme.coral.opacity(0.10))
+        )
+    }
+
+    /// شارة «قيد القراءة» التحريرية — نص وترتيب شارة البطاقة في الويب (#1420).
+    private var readingPill: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "book")
+                .font(SabqFonts.app(size: 9, weight: .medium))
+            Text("قيد القراءة")
+                .font(SabqFonts.app(size: 10, weight: .medium))
+        }
+        .foregroundStyle(SabqTheme.emerald)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(SabqTheme.emerald.opacity(0.12))
         )
     }
 
