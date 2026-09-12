@@ -928,120 +928,86 @@ struct HomeFeedView: View {
 
     // MARK: - Opinions Preview
 
-    // «آراء تستحق القراءة» — نقل بلوك الرأي في الرئيسية (#1596): حتى 8 بطاقات
-    // بيضاء داخل نطاق أزرق فاتح؛ كل بطاقة: صورة الكاتب 48 + الاسم + «كاتب رأي»،
-    // العنوان (3 أسطر)، النبذة (سطران)، ثم الوقت النسبي و«اقرأ المقال».
+    // «آراء تستحق القراءة» — بروح بلوك «مقالات قد تهمك» داخل تفاصيل الخبر
+    // (الحاوية الموحدة نفسها) لكن بترتيب مضغوط: صف قائد واحد بصورة المقال أو
+    // الكاتب، ثم شبكة عمودين من بطاقات صغيرة (صورة الكاتب الدائرية + العنوان).
+    // خمس مواد في نحو ثلث مساحة البطاقات الكبيرة السابقة (قرار المالك 2026-09-12).
     @ViewBuilder
     private var opinionsPreviewSection: some View {
-        if !articlesStore.opinions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .center) {
-                    HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(SabqTheme.brandBlue)
-                            .frame(width: 6, height: 28)
-                        Text("آراء تستحق القراءة")
-                            .font(SabqFonts.app(size: 20, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
-                    }
-
-                    Spacer(minLength: 0)
-
+        let opinions = Array(articlesStore.opinions.prefix(5))
+        if let lead = opinions.first {
+            ArticleSidebarModule(
+                title: "آراء تستحق القراءة",
+                description: "أحدث ما كتبه كتّاب سبق",
+                icon: "text.quote",
+                action: {
                     NavigationLink(value: OpinionsRoute()) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Text("المزيد")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
                             Image(systemName: "chevron.left")
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                         }
-                        .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 4)
+            ) {
+                NavigationLink(value: lead) {
+                    SidebarArticleRow(
+                        title: lead.title,
+                        imageURL: lead.imageURL.flatMap { $0.isEmpty ? nil : $0 } ?? lead.authorImageURL,
+                        byline: lead.authorName,
+                        bylineAvatarURL: lead.authorImageURL,
+                        date: lead.relativeDate,
+                        placeholderIcon: "text.quote"
+                    )
+                }
+                .buttonStyle(.plain)
 
-                ForEach(articlesStore.opinions.prefix(8)) { opinion in
-                    NavigationLink(value: opinion) {
-                        opinionHomeCard(opinion)
+                if opinions.count > 1 {
+                    SidebarRowDivider()
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        ForEach(opinions.dropFirst()) { opinion in
+                            NavigationLink(value: opinion) {
+                                opinionMiniTile(opinion)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(.top, 12)
                 }
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(SabqTheme.sectionCard)
-            )
         }
     }
 
-    private func opinionHomeCard(_ opinion: OpinionArticle) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                opinionAuthorAvatar(opinion, size: 48)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(opinion.authorName)
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .lineLimit(1)
-                    Text("كاتب رأي")
-                        .font(SabqFonts.app(size: 13, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-                Spacer(minLength: 0)
-                // علامة التنصيص الزخرفية في زاوية البطاقة (لون الحد)
-                Image(systemName: "quote.opening")
-                    .font(SabqFonts.app(size: 24, weight: .regular))
-                    .foregroundStyle(SabqTheme.outline)
+    /// بطاقة صغيرة: صورة الكاتب الدائرية واسمه ثم العنوان في سطرين — على السطح الأبيض
+    /// داخل الحاوية الزرقاء كي تُقرأ كعائلة بطاقات تفاصيل الخبر نفسها.
+    private func opinionMiniTile(_ opinion: OpinionArticle) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                opinionAuthorAvatar(opinion, size: 36)
+                Text(opinion.authorName)
+                    .font(SabqFonts.app(size: 12, weight: .bold))
+                    .foregroundStyle(SabqTheme.brandBlue)
+                    .lineLimit(1)
             }
-
-            Text(opinion.title)
-                .font(SabqFonts.app(size: 18, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 14)
-
-            if !opinion.excerpt.isEmpty {
-                Text(opinion.excerpt)
-                    .font(SabqFonts.app(size: 14, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
-                    .lineSpacing(3)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 8)
-            }
-
-            Divider().overlay(SabqTheme.outline)
-                .padding(.top, 14)
-
-            HStack {
-                HStack(spacing: 5) {
-                    Image(systemName: "clock")
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                    Text(opinion.relativeDate)
-                }
-                .font(SabqFonts.app(size: 12, weight: .regular))
+            SabqRTLText(
+                opinion.title,
+                uiFont: SabqFonts.uiApp(size: 13, weight: .semibold),
+                color: SabqTheme.ink,
+                lineLimit: 2,
+                lineSpacing: 2
+            )
+            Spacer(minLength: 0)
+            Text(opinion.relativeDate)
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
-                Spacer(minLength: 0)
-                HStack(spacing: 5) {
-                    Image(systemName: "book")
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
-                    Text("اقرأ المقال")
-                }
-                .font(SabqFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(SabqTheme.brandBlue)
-            }
-            .padding(.top, 12)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(SabqTheme.surface)
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
         )
         .contentShape(Rectangle())
     }
