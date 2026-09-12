@@ -32,19 +32,22 @@ struct SabqRTLText: View {
     let uiColor: UIColor
     var lineLimit: Int
     var lineSpacing: CGFloat
+    var textStyle: UIFont.TextStyle
 
     init(
         _ text: String,
         uiFont: UIFont,
         color: Color,
         lineLimit: Int = 2,
-        lineSpacing: CGFloat = 4
+        lineSpacing: CGFloat = 4,
+        textStyle: UIFont.TextStyle = .body
     ) {
         self.text = text
         self.uiFont = uiFont
         self.uiColor = UIColor(color)
         self.lineLimit = lineLimit
         self.lineSpacing = lineSpacing
+        self.textStyle = textStyle
     }
 
     var body: some View {
@@ -53,7 +56,8 @@ struct SabqRTLText: View {
             font: uiFont,
             textColor: uiColor,
             numberOfLines: lineLimit,
-            lineSpacing: lineSpacing
+            lineSpacing: lineSpacing,
+            textStyle: textStyle
         )
         // الـ UIViewRepresentable يبتلع اللمسة قبل وصولها إلى NavigationLink
         // فيصبح العنوان «ميتاً» للنقر بينما الصورة تستجيب (بلاغ 2026-07-19).
@@ -72,6 +76,7 @@ private struct SabqRTLLabel: UIViewRepresentable {
     let textColor: UIColor
     let numberOfLines: Int
     let lineSpacing: CGFloat
+    let textStyle: UIFont.TextStyle
 
     func makeUIView(context: Context) -> UILabel {
         let label = UILabel()
@@ -99,7 +104,12 @@ private struct SabqRTLLabel: UIViewRepresentable {
     private func scaledFont(_ context: Context) -> UIFont {
         let category = UIContentSizeCategory(context.environment.sizeCategory)
         let traits = UITraitCollection(preferredContentSizeCategory: category)
-        return UIFontMetrics(forTextStyle: .body).scaledFont(for: font, compatibleWith: traits)
+        var base = font
+        if context.environment.legibilityWeight == .bold,
+           let descriptor = font.fontDescriptor.withSymbolicTraits(.traitBold) {
+            base = UIFont(descriptor: descriptor, size: font.pointSize)
+        }
+        return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base, compatibleWith: traits)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {

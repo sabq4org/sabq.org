@@ -14,7 +14,8 @@ struct ExploreView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var requestID = UUID()
 
     @State private var recentSearches: [String] = {
         UserDefaults.standard.stringArray(forKey: "sabq_recent_searches") ?? []
@@ -24,17 +25,16 @@ struct ExploreView: View {
     @State private var submittedQuery = ""
     @State private var searchTask: Task<Void, Never>?
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 155), spacing: 14)]
+    }
 
     private var trimmedSearchText: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var displayResults: [Article] {
-        if trimmedSearchText == submittedQuery && !apiResults.isEmpty {
+        if trimmedSearchText == submittedQuery {
             return apiResults
         }
         return articlesStore.search(query: trimmedSearchText)
@@ -43,19 +43,10 @@ struct ExploreView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
-                CompactScreenHeader(
-                    title: "استكشف",
-                    subtitle: "تصفّح الأقسام والمواضيع الأكثر تأثيراً"
-                )
-                .animatedAppear(index: 0)
-
-                SabqSearchBar(
-                    text: $searchText,
-                    placeholder: "ابحث عن خبر أو موضوع…",
-                    onSubmit: { performSearch() },
-                    focusState: $isSearchFocused
-                )
-                .animatedAppear(index: 1)
+                Text("تصفّح الأقسام والمواضيع الأكثر تأثيراً")
+                    .font(SabqFonts.editorial(.subheadline, size: 14))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if trimmedSearchText.isEmpty {
                     idleContent
@@ -65,18 +56,31 @@ struct ExploreView: View {
             }
             .padding(.horizontal, 18)
             .padding(.top, 18)
-            .padding(.bottom, 100)
+            .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
+        .navigationTitle("استكشف")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "ابحث عن خبر أو موضوع…")
+        .onSubmit(of: .search) { performSearch() }
         .sabqRTL()
         .sabqScreen("Explore")
         .scrollDismissesKeyboard(.interactively)
-        .navigationDestination(for: ArticleCategory.self) { category in
-            CategoryArticlesView(category: category)
-        }
+
         .onChange(of: trimmedSearchText) { _, newValue in
             scheduleSearch(for: newValue)
+        }
+        .onAppear {
+            if !trimmedSearchText.isEmpty && trimmedSearchText != submittedQuery {
+                scheduleSearch(for: trimmedSearchText)
+            }
+        }
+        .onDisappear {
+            searchTask?.cancel()
+            requestID = UUID()
+            isSearching = false
         }
     }
 
@@ -136,6 +140,7 @@ struct ExploreView: View {
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 7)
+                        .frame(minHeight: 44)
                         .background(
                             Capsule(style: .continuous)
                                 .fill(SabqTheme.softFill)
@@ -206,6 +211,8 @@ struct ExploreView: View {
 
     private func scheduleSearch(for query: String) {
         searchTask?.cancel()
+        requestID = UUID()
+        isSearching = false
         guard !query.isEmpty else {
             apiResults = []
             submittedQuery = ""
@@ -227,16 +234,18 @@ struct ExploreView: View {
             recentSearches = Array(recentSearches.prefix(10))
             UserDefaults.standard.set(recentSearches, forKey: "sabq_recent_searches")
         }
-        Task { await runSearch(query: q) }
+        searchTask?.cancel()
+        searchTask = Task { await runSearch(query: q) }
     }
 
     private func runSearch(query: String) async {
+        let id = UUID()
+        requestID = id
         isSearching = true
-        defer { isSearching = false }
         let result = await NewsService.search(query: query)
-        if trimmedSearchText == query {
-            apiResults = result.articles
-            submittedQuery = query
-        }
+        guard !Task.isCancelled, requestID == id, trimmedSearchText == query else { return }
+        apiResults = result.articles
+        submittedQuery = query
+        isSearching = false
     }
 }

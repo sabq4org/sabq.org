@@ -32,6 +32,15 @@ struct JustifiedTextCacheTests {
         )
     }
 
+    @Test func boldTextInvalidatesCacheAndKeepsEditorialBold() {
+        let regular = style()
+        let bold = style(weight: JustifiedTextStyle.legibleWeight(.regular, boldText: true))
+        #expect(JustifiedRunsKey(runs: runs, style: regular) != JustifiedRunsKey(runs: runs, style: bold))
+        #expect(bold.weight == .semibold)
+        #expect(JustifiedTextStyle.legibleWeight(.bold, boldText: true) == .bold)
+        #expect(JustifiedTextStyle.legibleWeight(.regular, boldText: false) == .regular)
+    }
+
     // MARK: - المفتاح الغني (مسار HTML)
 
     @Test func sameInputsProduceEqualKey() {

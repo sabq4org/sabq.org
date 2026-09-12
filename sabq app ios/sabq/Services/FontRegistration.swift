@@ -86,6 +86,14 @@ enum SabqFonts {
         }
     }
 
+    /// Explicit semantic scaling for new editorial surfaces; legacy callers stay unchanged.
+    nonisolated static func editorial(_ style: Font.TextStyle, size: CGFloat,
+                                       weight: Font.Weight = .regular, boldText: Bool = false) -> Font {
+        let name = boldText ? (weight == .regular ? semibold : bold)
+            : (weight == .regular ? regular : semibold)
+        return .custom(name, size: size, relativeTo: style)
+    }
+
     private static var didRegister = false
 
     static func registerAll() {

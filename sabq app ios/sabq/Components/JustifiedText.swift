@@ -22,6 +22,11 @@ nonisolated struct JustifiedTextStyle: Equatable {
     /// يعيد بناء الفقرة بحجم مقيس.
     var sizeCategory: UIContentSizeCategory
 
+    /// النص العريض في إعدادات إمكانية الوصول يجب أن يغيّر مفتاح الكاش والرسم معًا.
+    nonisolated static func legibleWeight(_ weight: UIFont.Weight, boldText: Bool) -> UIFont.Weight {
+        boldText && weight.rawValue < UIFont.Weight.semibold.rawValue ? .semibold : weight
+    }
+
     /// الحجم النهائي بعد تطبيق مقياس النظام على حجم القارئ. نستخدم مقياس
     /// `.body` تحديدًا لأن `Font.custom(_:size:)` في بقية الشاشة يتدرّج
     /// نسبةً إلى body، فيبقى جسم المقال والعناوين على المقياس نفسه (F02).
@@ -143,7 +148,7 @@ struct JustifiedText: UIViewRepresentable {
             text: text,
             style: JustifiedTextStyle(
                 fontSize: fontSize,
-                weight: weight,
+                weight: JustifiedTextStyle.legibleWeight(weight, boldText: context.environment.legibilityWeight == .bold),
                 useSerifReader: useSerifReader,
                 lineSpacing: lineSpacing,
                 colorKey: JustifiedTextStyle.colorKey(textColor, darkMode: context.environment.colorScheme == .dark),
@@ -160,7 +165,7 @@ struct JustifiedText: UIViewRepresentable {
         context.coordinator.lastKey = key
         let size = key.style.scaledFontSize
         uiView.attributedText = NSAttributedString(string: text, attributes: [
-            .font: readerFont(size: size, weight: weight, serif: useSerifReader),
+            .font: readerFont(size: size, weight: key.style.weight, serif: useSerifReader),
             .foregroundColor: textColor,
             .paragraphStyle: justifiedParagraphStyle(lineSpacing: lineSpacing),
         ])
@@ -209,7 +214,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
             runs: runs,
             style: JustifiedTextStyle(
                 fontSize: baseSize,
-                weight: baseWeight,
+                weight: JustifiedTextStyle.legibleWeight(baseWeight, boldText: context.environment.legibilityWeight == .bold),
                 useSerifReader: useSerifReader,
                 lineSpacing: lineSpacing,
                 colorKey: JustifiedTextStyle.colorKey(textColor, darkMode: context.environment.colorScheme == .dark),
@@ -231,7 +236,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
         let m = NSMutableAttributedString(attributedString: InlineRunAttributing.attributedString(
             runs: runs,
             baseSize: key.style.scaledFontSize,
-            baseWeight: baseWeight,
+            baseWeight: key.style.weight,
             useSerifReader: useSerifReader,
             textColor: textColor
         ))

@@ -227,10 +227,11 @@ struct ArticleDetailView: View {
                                 .padding(.top, 24)
                         }
                     }
-                    .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
+                    .frame(width: max(0, min(proxy.size.width - 40, 720)), alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
-                    .padding(.bottom, 60)
+                    .padding(.bottom, 40)
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
@@ -251,7 +252,6 @@ struct ArticleDetailView: View {
         .sabqRTL()
         .sabqScreen("ArticleDetail")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
         .fullScreenCover(isPresented: $isHeroLightboxPresented) {
             ImageLightbox(
                 url: displayArticle.imageURL.flatMap(URL.init(string:)),
@@ -287,62 +287,36 @@ struct ArticleDetailView: View {
             BehaviorTracker.shared.startSession(articleId: displayArticle.id)
         }
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    SabqHaptics.light()
-                    dismiss()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.right")
-                            .font(SabqFonts.app(size: 14, weight: .bold))
-                    }
-                    .foregroundStyle(SabqTheme.ink)
-                    .padding(8)
-                    .background(
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                    )
-                }
-                .accessibilityLabel("رجوع")
-            }
-
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
-                    likeButton
-
-                    Button {
-                        SabqHaptics.medium()
-                        bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-                    } label: {
-                        Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(
-                                bookmarksStore.isBookmarked(displayArticle.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
-                            )
-                            .padding(8)
-                            .background(
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                            )
-                    }
-                    .accessibilityLabel(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال")
-
-                    Button {
-                        SabqHaptics.light()
-                        shareArticle()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .padding(8)
-                            .background(
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("مشاركة المقال")
+                Button {
+                    SabqHaptics.medium()
+                    bookmarksStore.toggle(displayArticle.id, article: displayArticle)
+                } label: {
+                    Label(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال",
+                          systemImage: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
                 }
+                .accessibilityIdentifier("article.bookmark")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("مشاركة المقال", systemImage: "square.and.arrow.up") {
+                    SabqHaptics.light()
+                    shareArticle()
+                }
+                .accessibilityIdentifier("article.share")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    likeButton
+                    Button("إعدادات القراءة", systemImage: "textformat.size") {
+                        showReaderControls = true
+                    }
+                    Button(isFocusMode ? "إظهار تفاصيل المقال" : "التركيز على القراءة", systemImage: "doc.text") {
+                        isFocusMode.toggle()
+                    }
+                } label: {
+                    Label("أدوات المقال", systemImage: "ellipsis")
+                }
+                .accessibilityIdentifier("article.tools")
             }
         }
         .task {
@@ -398,11 +372,7 @@ struct ArticleDetailView: View {
             SabqHaptics.medium()
             toggleLike()
         } label: {
-            Image(systemName: isLiked ? "heart.fill" : "heart")
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
-                .padding(8)
-                .background(Circle().fill(.ultraThinMaterial))
+            Label(isLiked ? "إلغاء الإعجاب" : "أعجبني", systemImage: isLiked ? "heart.fill" : "heart")
         }
         .disabled(isLikeBusy)
         .buttonStyle(.plain)
