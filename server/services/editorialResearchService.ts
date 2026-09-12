@@ -141,8 +141,8 @@ export async function processResearchJobs() {
     try { await processClaimedJob(row); }
     catch (error) {
       const safe = error instanceof ResearchError ? error : new ResearchError(502, "research_failed", "تعذر إعداد نتيجة موثقة. ملف البحث المتاح محفوظ للمراجعة.");
-      console.warn("[editorial-research] job check failed", { jobId: row.id, code: safe.code });
-      if (["missing_output", "invalid_output", "unopened_source", "history_limit", "empty_report", "unknown_report_source", "research_failed"].includes(safe.code)) {
+      console.warn("[editorial-research] job check failed", { jobId: row.id, code: safe.code, ...(safe.diagnostics ? { diagnostics: safe.diagnostics } : {}) });
+      if (["missing_output", "invalid_output", "no_readable_sources", "unopened_source", "history_limit", "empty_report", "unknown_report_source", "research_failed"].includes(safe.code)) {
         await save(row.id, { status: "failed", error: safe.message }, ["researching", "editing"]);
       } else {
         // Transport/auth failures keep active jobs recoverable and admission slots occupied.
