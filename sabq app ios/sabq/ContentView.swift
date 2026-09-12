@@ -102,6 +102,9 @@ struct ContentView: View {
                 .navigationDestination(for: RoshnRoute.self) { _ in
                     RoshnView()
                 }
+                .navigationDestination(for: EconomyRoute.self) { _ in
+                    EconomyView()
+                }
                 .navigationDestination(for: RoshnTeamRoute.self) { route in
                     RoshnTeamView(teamId: route.teamId)
                 }
