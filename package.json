@@ -30,7 +30,7 @@
     "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@capacitor/app": "^7.1.0",
-    "@capacitor/core": "^7.4.4",
+    "@capacitor/core": "^8.4.2",
     "@capacitor/keyboard": "^7.0.3",
     "@capacitor/splash-screen": "^7.0.3",
     "@capacitor/status-bar": "^7.0.3",
