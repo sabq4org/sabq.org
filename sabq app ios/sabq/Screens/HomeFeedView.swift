@@ -71,6 +71,8 @@ struct HomeFeedView: View {
     /// TabView frame, which leaves a visible gap above them on short
     /// cards) and render our own tight against the card bottom.
     @State private var featuredIndex: Int = 0
+    /// لقطة الاقتصاد الحي — تُحمَّل مع الرئيسية كي يظهر البلوك من أول رسم بعد الجلب.
+    private let economyStore = EconomyStore.shared
     /// عرض عمود المحتوى مقيسًا من الحاوية لا من `UIScreen` — عرض الشاشة ليس
     /// مساحة النافذة على iPad المقسّم أو Stage Manager (تدقيق iOS 27، F11).
     @State private var feedContentWidth: CGFloat = 0
@@ -123,6 +125,7 @@ struct HomeFeedView: View {
         // ScrollView فيتعطّل سحب التحديث (.refreshable) بالكامل على iOS.
         // منع السحب الأفقي يتم بتقييد عرض الأبناء داخل القائمة نفسها.
         .frame(maxWidth: .infinity)
+        .task { await economyStore.loadSnapshotIfNeeded(maxAge: 300) }
     }
 
     private var fullBody: some View {
@@ -182,6 +185,15 @@ struct HomeFeedView: View {
 
                     RoshnHomeStrip()
                         .animatedAppear(index: 3)
+
+                    // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
+                    // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
+                    // الشرط هنا لا داخل البلوك: Group بمحتوى EmptyView لا يشغّل .task
+                    // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
+                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                        EconomyHomeBlock()
+                            .animatedAppear(index: 3)
+                    }
 
                     // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {
