@@ -27,6 +27,12 @@
 ## عند التعديل
 - [ ] قرأت هذا الملف + `docs/DEPLOYMENT_STATUS.md` عند لمس الطوبولوجيا
 
+## حافة الصفحات — مراجعة 2026-09-05
+- مسارات noindex في الخادم مغطاة باختبار مقابل Pages، بما فيها survey/meet/verify والإعدادات المترجمة.
+- مفاتيح كاش الأقسام تشمل `withStats` و`includeIfox`.
+- SSR له مهلة 5 ثوان؛ 5xx أو فشل الاتصال يرجع لمسار SPA/SEO القائم، بينما 404 الحقيقي يُحفظ.
+- `googlebotNews` يمر إلى `googlebot-news` في Next. توقيع عنوان الزائر موثق في platform-runtime؛ يلزم إعداده قبل نشر دفعة الثقة بالحافة.
+
 ## ثقة بروكسي Pages وWorker
 - `functions/_middleware.js` يوقّع عنوان الزائر عند تمرير `/api/*` إلى `API_ORIGIN`، ويحذف أي ترويسات `X-Sabq-*` واردة من العميل قبل إعادة البناء.
 - `cloudflare-worker/wrangler.api.toml` يثبت route الإنتاج `api.sabq.org/*` مع `zone_name = "sabq.org"` بعد تحقق Railway والأصل. يبقى `EDGE_PROXY_SHARED_SECRET` binding مُداراً خارج الملف؛ غياب السر في Worker يفشل مغلقاً بـ503 ولا يمرر الطلبات. لا توجّه `API_ORIGIN` إلى `api.sabq.org` نفسه لتجنب الحلقة. بوابة قبول عنوان الوكيل الحساس (`EDGE_PROXY_GATE_REQUIRED`) تُدار في خدمة Railway API عبر `server/utils/trustedProxyIp.ts`، وليست متغيراً في Worker.

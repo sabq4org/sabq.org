@@ -2,7 +2,7 @@
 # Sabq backend Dockerfile (Railway-aligned headless build)
 # ============================================================
 # Builds ONLY the Express server bundle. The frontend (Vite) is
-# built separately on Vercel — Railway runs the API in headless
+# built separately on Cloudflare Pages — Railway runs the API in headless
 # mode (SERVE_SPA=false default below).
 #
 # Note: this image does NOT serve the SPA. Local docker-compose
@@ -12,7 +12,7 @@
 # locally and mount dist/public into the container).
 
 # Stage 1: Builder
-FROM node:20.20.2-alpine AS builder
+FROM node:24.20.0-alpine AS builder
 
 # Bumped to bust Railway's docker layer cache when mobileApiRoutes.ts
 # changes weren't being picked up despite commits landing on main. Any
@@ -35,7 +35,7 @@ COPY . .
 RUN npm run build:server
 
 # Stage 2: Production
-FROM node:20.20.2-alpine AS production
+FROM node:24.20.0-alpine AS production
 
 WORKDIR /app
 
