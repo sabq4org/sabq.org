@@ -569,6 +569,11 @@ private fun PhoneLoginSection(viewModel: AuthViewModel, form: AuthFormState) {
                 )
             }
 
+            // تعبئة الرمز تلقائيًا من رسالة SABQ (نافذة موافقة واحدة من النظام).
+            SmsOtpAutofill(enabled = true) { auto ->
+                code = auto
+                viewModel.verifyPhoneCode(normalized, auto)
+            }
             OtpBoxes(
                 code = code,
                 onCodeChange = { code = it },
@@ -705,7 +710,7 @@ private fun OtpBoxes(
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.NumberPassword,
+                keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Done,
             ),
             modifier = Modifier

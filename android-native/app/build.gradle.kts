@@ -194,6 +194,8 @@ dependencies {
     // play-services adapter — lets us `await()` Google Play Tasks
     // (FirebaseMessaging.getInstance().token) from suspend code.
     implementation(libs.kotlinx.coroutines.play.services)
+    // التقاط رمز SMS تلقائيًا (User Consent — نافذة موافقة واحدة، بلا READ_SMS)
+    implementation(libs.play.services.auth.api.phone)
 
     // Hilt
     implementation(libs.hilt.android)
