@@ -2,6 +2,7 @@
 // تستهلك POST /api/editorial-ai/task (docs/editorial-ai-unified-system-plan-2026-08-03.md).
 // المخرج مسودة دائماً: لا شيء يُطبق على المقال إلا بضغطة تطبيق صريحة من المحرر.
 import { useState } from "react";
+import { EditorialResearchPanel } from "./EditorialResearchPanel";
 import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
@@ -100,6 +101,7 @@ export function SabqEditorAssistant({
   onApplyBody,
 }: SabqEditorAssistantProps) {
   const { toast } = useToast();
+  const [researchOpen, setResearchOpen] = useState(false);
   const [task, setTask] = useState<EditorialTaskType>("edit");
   const [material, setMaterial] = useState("");
   const [material2, setMaterial2] = useState("");
@@ -147,9 +149,9 @@ export function SabqEditorAssistant({
         if (!next) reset();
       }}
     >
-      <DialogContent className="max-w-3xl" data-testid="dialog-sabq-assistant">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent dir="rtl" className="max-w-3xl max-h-[90dvh] overflow-y-auto" data-testid="dialog-sabq-assistant">
+        <DialogHeader className="text-right sm:text-right">
+          <DialogTitle className="flex items-center gap-2 ps-8">
             <NotebookPen className="h-5 w-5" />
             محرر سبق
           </DialogTitle>
@@ -158,7 +160,11 @@ export function SabqEditorAssistant({
           </DialogDescription>
         </DialogHeader>
 
-        {!result ? (
+        {!result && <div className="flex flex-wrap gap-2">
+          <Button variant={researchOpen ? "outline" : "default"} size="sm" onClick={() => setResearchOpen(false)}>مهام التحرير</Button>
+          <Button variant={researchOpen ? "default" : "outline"} size="sm" onClick={() => setResearchOpen(true)} data-testid="open-editorial-research">بحث وإعداد تقرير</Button>
+        </div>}
+        {!result && researchOpen ? <EditorialResearchPanel onReview={data => { setSelectedSourceIndexes([]); setResult(data); }} /> : !result ? (
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>المهمة</Label>
@@ -246,7 +252,7 @@ export function SabqEditorAssistant({
             </Button>
           </div>
         ) : (
-          <ScrollArea className="max-h-[65vh] pr-2">
+          <ScrollArea dir="rtl" className="max-h-[65vh] pl-2 text-right">
             <div className="space-y-4">
               {result.meta.verificationRecommended && (
                 <Alert variant="destructive">

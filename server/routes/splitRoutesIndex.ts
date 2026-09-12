@@ -97,6 +97,7 @@ import accountSecurityRouter from "./accountSecurity";
 import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
 import editorialAiRouter from "./editorialAi";
+import editorialResearchRouter from "./editorialResearch";
 import imageStylesRouter from "./imageStyles";
 import deepseekLabRouter from "./deepseekLab";
 import editorialImagesRouter from "./editorialImages";
@@ -211,6 +212,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(audioNewsletterCompatibilityRouter);
   // نظام التحرير الموحد «محرر سبق» (docs/editorial-ai-unified-system-plan-2026-08-03.md)
   app.use(editorialAiRouter);
+  app.use(editorialResearchRouter);
   // أنماط توليد الصور (editorial)
   app.use(imageStylesRouter);
   app.use(deepseekLabRouter);
