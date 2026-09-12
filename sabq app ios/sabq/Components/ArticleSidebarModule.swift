@@ -9,6 +9,9 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
     let title: String
     let description: String
     let icon: String
+    /// لون الحاوية: أزرق فاتح على صفحة الخبر البيضاء، وأبيض على الرئيسية التي
+    /// خلفيتها بالدرجة الزرقاء نفسها (وإلا ذابت البطاقة في الخلفية — ملاحظة المالك).
+    var fill: Color = SabqTheme.publicSurface
     @ViewBuilder let action: () -> Action
     @ViewBuilder let content: () -> Content
 
@@ -16,12 +19,14 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
         title: String,
         description: String,
         icon: String,
+        fill: Color = SabqTheme.publicSurface,
         @ViewBuilder action: @escaping () -> Action,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.description = description
         self.icon = icon
+        self.fill = fill
         self.action = action
         self.content = content
     }
@@ -40,7 +45,7 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(SabqTheme.publicSurface)
+                .fill(fill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -94,9 +99,10 @@ extension ArticleSidebarModule where Action == EmptyView {
         title: String,
         description: String,
         icon: String,
+        fill: Color = SabqTheme.publicSurface,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.init(title: title, description: description, icon: icon, action: { EmptyView() }, content: content)
+        self.init(title: title, description: description, icon: icon, fill: fill, action: { EmptyView() }, content: content)
     }
 }
 

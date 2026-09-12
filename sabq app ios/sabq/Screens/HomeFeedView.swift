@@ -939,6 +939,7 @@ struct HomeFeedView: View {
                 title: "آراء تستحق القراءة",
                 description: "أحدث ما كتبه كتّاب سبق",
                 icon: "text.quote",
+                fill: SabqTheme.surface,
                 action: {
                     NavigationLink(value: OpinionsRoute()) {
                         HStack(spacing: 4) {
@@ -989,8 +990,9 @@ struct HomeFeedView: View {
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
+            // بطاقات فاتحة داخل حاوية بيضاء (عكس ترتيب صفحة الخبر) كي لا تذوب في خلفية الرئيسية
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.surface)
+                .fill(SabqTheme.publicSurface)
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
         )
         .contentShape(Rectangle())
