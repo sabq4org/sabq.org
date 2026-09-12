@@ -17,7 +17,7 @@ final class NativeDesignTests: XCTestCase {
         app.scrollViews.firstMatch.swipeUp()
         XCTAssertTrue(app.tabBars.buttons["محفوظاتي"].isHittable)
         app.tabBars.buttons["محفوظاتي"].tap()
-        XCTAssertTrue(app.staticTexts["المحفوظات"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["محفوظاتي"].waitForExistence(timeout: 5))
         explore.tap()
         XCTAssertEqual(search.value as? String, "الرياض")
         let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -39,7 +39,7 @@ final class NativeDesignTests: XCTestCase {
         let tools = app.buttons["article.tools"]
         XCTAssertTrue(tools.waitForExistence(timeout: 10))
         app.tabBars.buttons["محفوظاتي"].tap()
-        XCTAssertTrue(app.staticTexts["المحفوظات"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["محفوظاتي"].waitForExistence(timeout: 5))
         app.tabBars.buttons["الرئيسية"].tap()
         XCTAssertTrue(tools.waitForExistence(timeout: 5))
         tools.tap()

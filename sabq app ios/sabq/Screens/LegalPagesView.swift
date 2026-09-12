@@ -55,8 +55,6 @@ struct LegalFooter {
 struct LegalPageView: View {
     let content: LegalPageContent
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 24) {
@@ -74,27 +72,8 @@ struct LegalPageView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle(content.title)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    SabqHaptics.light()
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                Text(content.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
     }
 
     // MARK: Hero

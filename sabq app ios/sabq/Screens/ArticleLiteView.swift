@@ -21,7 +21,6 @@ import SwiftUI
 struct ArticleLiteView: View {
     let article: Article
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var fullArticle: Article?
@@ -42,10 +41,11 @@ struct ArticleLiteView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 40)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
         .background(SabqTheme.background.ignoresSafeArea())
-        .navigationBarBackButtonHidden(true)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { liteToolbar }
         .task(id: displayArticle.id) {
             // Skip the placeholder phase so we don't ship the slug
@@ -125,45 +125,33 @@ struct ArticleLiteView: View {
 
     @ToolbarContentBuilder
     private var liteToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
+
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button {
+                SabqHaptics.medium()
+                bookmarksStore.toggle(displayArticle.id, article: displayArticle)
+            } label: {
+                Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .foregroundStyle(
+                        bookmarksStore.isBookmarked(displayArticle.id)
+                            ? SabqTheme.primaryEnd
+                            : SabqTheme.secondaryInk
+                    )
+
+            }
+            .accessibilityLabel(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ الخبر")
             Button {
                 SabqHaptics.light()
-                dismiss()
+                share()
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
+                Image(systemName: "square.and.arrow.up")
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
+
             }
-        }
-        ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 8) {
-                Button {
-                    SabqHaptics.medium()
-                    bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-                } label: {
-                    Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(
-                            bookmarksStore.isBookmarked(displayArticle.id)
-                                ? SabqTheme.primaryEnd
-                                : SabqTheme.secondaryInk
-                        )
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-                Button {
-                    SabqHaptics.light()
-                    share()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
+            .accessibilityLabel("مشاركة")
+
         }
     }
 

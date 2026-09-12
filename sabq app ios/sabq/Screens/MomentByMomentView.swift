@@ -5,7 +5,6 @@ import SwiftUI
 /// (`client/src/pages/MomentByMoment.tsx`). Distinct from `LiveCoverageView`
 /// which renders the separate live-events table.
 struct MomentByMomentView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(BookmarksStore.self) private var bookmarksStore
     @State private var items: [APILiveUpdate] = []
     @State private var nextCursor: String? = nil
@@ -14,6 +13,7 @@ struct MomentByMomentView: View {
     @State private var loadError: String? = nil
     @State private var filter: Filter = .all
     @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Filter: String, CaseIterable, Identifiable {
         case all
@@ -106,31 +106,11 @@ struct MomentByMomentView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            // `.cancellationAction` is the app-wide convention for the
-            // back chevron — places it on the leading edge (visual
-            // right in RTL) so Article, Opinion, Settings sheets,
-            // Author, Trending, OMQ, … all match. Was previously
-            // `.navigationBarTrailing` which put the chevron on the
-            // left edge in RTL, inconsistent with every other screen.
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-                .buttonStyle(.plain)
-            }
-            ToolbarItem(placement: .principal) {
-                Text("لحظة بلحظة")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
+        .navigationTitle("لحظة بلحظة")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             await reload()
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
                 pulse = true
             }
         }
@@ -181,27 +161,12 @@ struct MomentByMomentView: View {
     // MARK: - Filter
 
     private var filterRow: some View {
-        HStack(spacing: 8) {
-            ForEach(Filter.allCases) { f in
-                Button {
-                    SabqHaptics.light()
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                        filter = f
-                    }
-                } label: {
-                    Text(f.label)
-                        .font(SabqFonts.app(size: 13, weight: filter == f ? .bold : .medium))
-                        .foregroundStyle(filter == f ? .white : SabqTheme.ink)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule().fill(filter == f ? SabqTheme.primaryEnd : SabqTheme.paleFill)
-                        )
-                }
-                .buttonStyle(.plain)
+        Picker("الأخبار المعروضة", selection: $filter) {
+            ForEach(Filter.allCases) { filter in
+                Text(filter.label).tag(filter)
             }
-            Spacer(minLength: 0)
         }
+        .modifier(SabqAdaptivePickerStyle())
     }
 
     // MARK: - Empty / Loading / Error

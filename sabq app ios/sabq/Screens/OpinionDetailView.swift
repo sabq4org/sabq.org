@@ -3,7 +3,6 @@ import AVFoundation
 
 struct OpinionDetailView: View {
     let opinion: OpinionArticle
-    @Environment(\.dismiss) private var dismiss
     @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var fullOpinion: OpinionArticle?
@@ -104,12 +103,12 @@ struct OpinionDetailView: View {
                                 .padding(.top, 24)
                         }
                     }
-                    .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
+                    .frame(width: min(720, max(0, proxy.size.width - 40)), alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
                     .padding(.bottom, 60)
                 }
-                .frame(width: proxy.size.width, alignment: .leading)
+                .frame(width: proxy.size.width, alignment: .center)
             }
             .sabqScrollProgressTracker { progress in
                 scrollProgress.value = progress
@@ -124,7 +123,6 @@ struct OpinionDetailView: View {
         .sabqRTL()
         .sabqScreen("OpinionDetail")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
         .fullScreenCover(isPresented: $isHeroLightboxPresented) {
             ImageLightbox(
                 url: displayOpinion.imageURL.flatMap(URL.init(string:)),
@@ -153,52 +151,37 @@ struct OpinionDetailView: View {
             BehaviorTracker.shared.startSession(articleId: opinion.id)
         }
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                likeButton
+
+                Button {
+                    SabqHaptics.medium()
+                    // Pass an Article-shaped bookmark payload so the
+                    // bookmarks list can render this opinion offline
+                    // — passing `nil` only saves the ID, and the
+                    // BookmarksView lookup then has nothing to show.
+                    bookmarksStore.toggle(opinion.id, article: displayOpinion.asArticleForBookmark())
+                } label: {
+                    Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
+                        .foregroundStyle(
+                            bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
+                        )
+
+                }
+                .accessibilityLabel(bookmarksStore.isBookmarked(opinion.id) ? "إزالة من المحفوظات" : "حفظ المقال")
+
                 Button {
                     SabqHaptics.light()
-                    dismiss()
+                    shareOpinion()
                 } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
-                    likeButton
+                    Image(systemName: "square.and.arrow.up")
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
 
-                    Button {
-                        SabqHaptics.medium()
-                        // Pass an Article-shaped bookmark payload so the
-                        // bookmarks list can render this opinion offline
-                        // — passing `nil` only saves the ID, and the
-                        // BookmarksView lookup then has nothing to show.
-                        bookmarksStore.toggle(opinion.id, article: displayOpinion.asArticleForBookmark())
-                    } label: {
-                        Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(
-                                bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
-                            )
-                            .padding(8)
-                            .background(Circle().fill(.ultraThinMaterial))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        SabqHaptics.light()
-                        shareOpinion()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .padding(8)
-                            .background(Circle().fill(.ultraThinMaterial))
-                    }
-                    .buttonStyle(.plain)
                 }
+                .accessibilityLabel("مشاركة")
+
             }
         }
         .task {
@@ -242,11 +225,10 @@ struct OpinionDetailView: View {
             Image(systemName: isLiked ? "heart.fill" : "heart")
                 .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
-                .padding(8)
-                .background(Circle().fill(.ultraThinMaterial))
+
         }
         .disabled(isLikeBusy)
-        .buttonStyle(.plain)
+        .accessibilityLabel(isLiked ? "إلغاء الإعجاب" : "إعجاب")
     }
 
     @MainActor

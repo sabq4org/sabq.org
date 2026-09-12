@@ -141,7 +141,6 @@ func muqStripDuplicateLead(html: String, title: String, excerpt: String?) -> Str
 // MARK: - صفحة القسم (الزوايا + أحدث المواضيع)
 
 struct MuqtarabLandingView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var angles: [MuqAngle] = []
     @State private var topics: [MuqTopic] = []
     @State private var isLoading = true
@@ -181,20 +180,9 @@ struct MuqtarabLandingView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar { backButton }
+        .navigationTitle("مُقترب")
         .refreshable { await load() }
         .task { if topics.isEmpty && angles.isEmpty { await load() } }
-    }
-
-    private var backButton: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.right")
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
     }
 
     private var header: some View {
@@ -452,7 +440,6 @@ struct MuqtarabAngleView: View {
     let initialName: String?
     let initialColorHex: String?
 
-    @Environment(\.dismiss) private var dismiss
     @State private var angle: MuqAngle?
     @State private var writer: MuqWriter?
     @State private var topics: [MuqTopic] = []
@@ -506,16 +493,7 @@ struct MuqtarabAngleView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
+        .navigationTitle(angle?.nameAr ?? initialName ?? "زاوية")
         .task { if topics.isEmpty { await load() } }
     }
 
@@ -638,7 +616,6 @@ struct MuqtarabTopicView: View {
     let topicSlug: String
     let initialTitle: String?
 
-    @Environment(\.dismiss) private var dismiss
     @State private var topic: MuqTopic?
     @State private var angle: MuqAngle?
     @State private var writer: MuqWriter?
@@ -680,20 +657,12 @@ struct MuqtarabTopicView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
+        .navigationTitle("مُقترب")
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
             ToolbarItem(placement: .primaryAction) {
                 Button { share() } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
+                    Label("مشاركة", systemImage: "square.and.arrow.up")
+                        .labelStyle(.iconOnly)
                 }
             }
         }
@@ -920,7 +889,6 @@ struct MuqtarabWriterView: View {
     let id: String
     let initialName: String?
 
-    @Environment(\.dismiss) private var dismiss
     @State private var profile: MuqWriterProfile?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -950,16 +918,7 @@ struct MuqtarabWriterView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
+        .navigationTitle("كاتب مُقترب")
         .task { if profile == nil { await load() } }
     }
 

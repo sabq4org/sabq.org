@@ -869,24 +869,8 @@ struct NotificationPreferencesView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("إعدادات الإشعارات")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                Text("إعدادات الإشعارات")
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
         .task {
             if let p = try? await APIClient.shared.fetchNotificationPreferences() {
                 prefs = p

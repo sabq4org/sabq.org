@@ -13,10 +13,7 @@ struct SectionsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 20) {
-                CompactScreenHeader(
-                    title: "الأقسام",
-                    subtitle: "تصفح الأخبار حسب التصنيف"
-                )
+                SabqPageIntro("تصفح الأخبار حسب التصنيف")
 
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { index, category in
@@ -35,6 +32,8 @@ struct SectionsView: View {
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .navigationTitle("الأقسام")
+        .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationDestination(for: ArticleCategory.self) { category in
@@ -134,7 +133,8 @@ struct CategoryArticlesView: View {
                                 CompactArticleRow(
                                     article: article,
                                     onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                    isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                    isBookmarked: bookmarksStore.isBookmarked(article.id),
+                                    showsCategory: false
                                 )
                             }
                             .buttonStyle(.plain)

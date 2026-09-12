@@ -18,11 +18,12 @@ final class SabqNavigationState {
 /// navigation share the same path. Wide windows keep the list beside the reader.
 struct SabqTabNavigation<Root: View>: View {
     @Binding var path: NavigationPath
+    var usesReaderColumns = true
     @Environment(\.horizontalSizeClass) private var sizeClass
     @ViewBuilder var root: () -> Root
 
     var body: some View {
-        if sizeClass == .regular {
+        if sizeClass == .regular && usesReaderColumns {
             NavigationSplitView {
                 root()
                     .modifier(SabqDestinations())

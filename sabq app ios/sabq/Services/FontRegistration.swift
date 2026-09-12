@@ -65,24 +65,38 @@ enum SabqFonts {
     /// - `headline()` يبقى Bold للعناوين التحريرية الكبيرة فقط.
     nonisolated static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let isCaption = size <= 13
+        let style = textStyle(for: size)
 
         switch weight {
         case .ultraLight, .thin, .light, .regular:
-            return .custom(regular, size: size)
+            return .custom(regular, size: size, relativeTo: style)
         case .medium:
             // Medium must stay Regular — mapping it to SemiBold made every
             // clock/date/meta label look bold across the app.
-            return .custom(regular, size: size)
+            return .custom(regular, size: size, relativeTo: style)
         case .semibold:
-            return .custom(isCaption ? regular : semibold, size: size)
+            return .custom(isCaption ? regular : semibold, size: size, relativeTo: style)
         case .bold:
             // Soften one step: captions → Regular, body/titles → SemiBold.
-            return .custom(isCaption ? regular : semibold, size: size)
+            return .custom(isCaption ? regular : semibold, size: size, relativeTo: style)
         case .heavy, .black:
             // Captions stay airy; only large display type keeps true Bold.
-            return .custom(isCaption ? regular : bold, size: size)
+            return .custom(isCaption ? regular : bold, size: size, relativeTo: style)
         default:
-            return .custom(regular, size: size)
+            return .custom(regular, size: size, relativeTo: style)
+        }
+    }
+
+    /// Shared by news, account, forms and sports without changing their base typography.
+    nonisolated private static func textStyle(for size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case ...11: return .caption2
+        case ...13: return .caption
+        case ...15: return .subheadline
+        case ...17: return .body
+        case ...20: return .title3
+        case ...24: return .title2
+        default: return .title
         }
     }
 

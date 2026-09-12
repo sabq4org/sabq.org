@@ -36,17 +36,8 @@ struct DailyBriefView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("لك")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .sheet(isPresented: $showLogin, onDismiss: { }) {
             LoginSheet(initialMode: false)
         }

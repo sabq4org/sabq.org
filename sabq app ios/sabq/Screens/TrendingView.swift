@@ -41,49 +41,13 @@ struct TrendingView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    SabqHaptics.light()
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                Text("الأكثر تداولاً")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
+        .navigationTitle("الأكثر تداولاً")
+        .navigationBarTitleDisplayMode(.inline)
         .task { await loadData() }
     }
 
-    @Environment(\.dismiss) private var dismiss
-
     private var heroSection: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "flame.fill")
-                .font(SabqFonts.app(size: 28, weight: .medium))
-                .foregroundStyle(.orange)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("الأكثر تداولاً")
-                    .font(SabqFonts.app(size: 22, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-
-                Text("الأخبار الأكثر مشاهدة في آخر 48 ساعة")
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-            }
-
-            Spacer()
-        }
+        SabqPageIntro("الأخبار الأكثر مشاهدة في آخر 48 ساعة")
     }
 
     private var tagsSection: some View {
