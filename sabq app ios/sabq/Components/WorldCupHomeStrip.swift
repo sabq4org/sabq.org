@@ -99,7 +99,7 @@ struct WorldCupHomeStrip: View {
         // حامل مكان Color.clear يمنع SwiftUI من إلغاء العرض (وبالتالي .task)
         // عندما لا تكون البيانات قد وصلت بعد — فخ Group+EmptyView المعروف.
         ZStack {
-            Color.clear.frame(width: 0, height: 0)
+            HomeStripAnchor()
             if let ov = store.overview, !stripHidden {
                 // البطل (بعد حسم النهائي) يتقدّم على مربع المباراة — يبقي البانر
                 // حيًّا بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم.

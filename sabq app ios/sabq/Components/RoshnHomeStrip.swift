@@ -99,7 +99,7 @@ struct RoshnHomeStrip: View {
     var body: some View {
         // حامل Color.clear يمنع SwiftUI من إلغاء .task قبل وصول البيانات.
         ZStack {
-            Color.clear.frame(width: 0, height: 0)
+            HomeStripAnchor()
             if let h = store.hero, !hidden {
                 NavigationLink(value: RoshnRoute()) {
                     if let champion = offSeasonChampion {

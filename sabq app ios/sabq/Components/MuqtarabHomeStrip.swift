@@ -47,7 +47,7 @@ struct MuqtarabHomeStrip: View {
 
     var body: some View {
         ZStack {
-            Color.clear.frame(width: 0, height: 0)
+            HomeStripAnchor()
             if !visibleTopics.isEmpty {
                 content
             }
