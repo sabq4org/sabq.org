@@ -15,6 +15,7 @@ import {
   type SaveSahraaTvBlockInput,
 } from "./sahraaTvBlockUtils";
 import { resolveXVideoFromPostUrl } from "./sahraaTvVideoResolver";
+import { mirrorSahraaVideoToR2 } from "./sahraaTvMediaMirror";
 
 export {
   SAHRAA_MEDIA_PATH,
@@ -68,6 +69,24 @@ async function ensureVideoResolved(
   return next;
 }
 
+/** ينسخ الفيديو إلى R2 ويثبّت الرابط في الإعدادات. single-flight داخل الناسخ. */
+async function mirrorAndPersist(config: SahraaTvBlockConfig): Promise<void> {
+  const tweetId = extractTweetId(config.xPostUrl);
+  if (!tweetId || !config.videoUrl || config.mirroredVideoUrl) return;
+  const mirrored = await mirrorSahraaVideoToR2(config.videoUrl, tweetId);
+  if (!mirrored) return;
+  try {
+    await storage.upsertSystemSetting(
+      SAHRAA_TV_BLOCK_KEY,
+      { ...config, mirroredVideoUrl: mirrored },
+      "content",
+      true,
+    );
+  } catch (e) {
+    console.warn("[SahraaTvBlock] failed to persist mirrored url:", e);
+  }
+}
+
 export async function getPublicSahraaTvBlock(): Promise<SahraaTvBlockPublic> {
   let config = await getSahraaTvBlockConfig();
   try {
@@ -81,8 +100,14 @@ export async function getPublicSahraaTvBlock(): Promise<SahraaTvBlockPublic> {
     return { isVisible: false };
   }
   const pub = toPublicSahraaTvBlock(config);
-  // المتصفح يرسل Referer=sabq.org فيُرفض الفيديو من twimg — التشغيل عبر بروكسي نفس المنشأ
   if (pub.isVisible && pub.videoUrl) {
+    // نسخة R2 تُقدَّم من الحافة مباشرة. قبل اكتمال النسخ: بروكسي نفس المنشأ
+    // (المتصفح يرسل Referer=sabq.org فيُرفض الفيديو من twimg) — ويُطلق النسخ
+    // بالخلفية دون تعطيل الاستجابة.
+    if (config.mirroredVideoUrl) {
+      return { ...pub, videoUrl: config.mirroredVideoUrl };
+    }
+    void mirrorAndPersist(config);
     return { ...pub, videoUrl: SAHRAA_MEDIA_PATH };
   }
   return pub;
@@ -102,6 +127,13 @@ export async function saveSahraaTvBlockConfig(
       videoUrl: resolved.videoUrl,
       posterUrl: resolved.posterUrl,
     };
+    // النسخ إلى R2 أثناء الحفظ (ثوانٍ للمشرف) فيصل الجمهور من الحافة مباشرة.
+    // فشله لا يمنع الحفظ — يبقى بروكسي /media احتياطًا.
+    const tweetId = extractTweetId(next.xPostUrl);
+    if (tweetId && !next.mirroredVideoUrl) {
+      const mirrored = await mirrorSahraaVideoToR2(resolved.videoUrl, tweetId);
+      if (mirrored) next = { ...next, mirroredVideoUrl: mirrored };
+    }
   }
 
   await storage.upsertSystemSetting(SAHRAA_TV_BLOCK_KEY, next, "content", true);
