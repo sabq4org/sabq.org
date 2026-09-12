@@ -66,6 +66,9 @@ struct HomeFeedView: View {
     /// wrapper that SwiftUI tracks by reference (and therefore never
     /// re-renders on mutation) is the right shape.
     @State private var scrollOffsetRef = ScrollOffsetRef()
+    /// تصغير الشعار عند التمرير (#1600) — يتغيّر عند عبور العتبة فقط، لا مع كل بكسل.
+    @State private var isHeaderCompact = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the custom page-indicator row under the featured carousel.
     /// We hide TabView's built-in dots (they sit at the bottom of the
     /// TabView frame, which leaves a visible gap above them on short
@@ -247,6 +250,10 @@ struct HomeFeedView: View {
             }
             .sabqScrollOffsetTracker { y in
                 scrollOffsetRef.value = y
+                let compact = HomeHeaderCompact.next(current: isHeaderCompact, y: y)
+                if compact != isHeaderCompact {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { isHeaderCompact = compact }
+                }
             }
             .sabqAutoHideTabBar()
             .refreshable {
@@ -516,11 +523,12 @@ struct HomeFeedView: View {
 
     private var headerSection: some View {
         HStack(alignment: .center, spacing: 14) {
+            // 52 → 44 نقطة عند التمرير كما في الويب (الجوال 44×1.18 ثم 44)
             Image("SabqLogo")
                 .renderingMode(.original)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(height: 48)
+                .frame(height: isHeaderCompact ? 44 : 52)
 
             Spacer(minLength: 0)
 
@@ -920,89 +928,73 @@ struct HomeFeedView: View {
 
     // MARK: - Opinions Preview
 
-    // قائمة رأسية بهوية سبق: بطاقة سماوية فاتحة، صورة الكاتب دائرية،
-    // الاسم بأزرق سبق والتاريخ النسبي بجانبه — بلا صور للمقالات
-    // ولا تمرير أفقي.
+    // «آراء تستحق القراءة» — الحاوية الموحدة نفسها (بلوك تفاصيل الخبر) وست
+    // بطاقات متماثلة في شبكة عمودين بلا تمييز لمقال عن البقية (قرار المالك
+    // 2026-09-12): صورة الكاتب الدائرية + الاسم + العنوان في سطرين + الوقت.
     @ViewBuilder
     private var opinionsPreviewSection: some View {
-        if !articlesStore.opinions.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .center) {
-                    HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(SabqTheme.brandSky)
-                            .frame(width: 4, height: 22)
-                        Text("الرأي")
-                            .font(SabqFonts.app(size: 20, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
-                    }
-
-                    Spacer(minLength: 0)
-
+        let opinions = Array(articlesStore.opinions.prefix(6))
+        if !opinions.isEmpty {
+            ArticleSidebarModule(
+                title: "آراء تستحق القراءة",
+                description: "أحدث ما كتبه كتّاب سبق",
+                icon: "text.quote",
+                fill: SabqTheme.surface,
+                action: {
                     NavigationLink(value: OpinionsRoute()) {
-                        HStack(spacing: 6) {
-                            Text("كل المقالات")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                            Image(systemName: "arrow.left")
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
+                        HStack(spacing: 4) {
+                            Text("المزيد")
+                            Image(systemName: "chevron.left")
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                         }
-                        .foregroundStyle(SabqTheme.brandBlue)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 4)
-
-                ForEach(Array(articlesStore.opinions.prefix(5).enumerated()), id: \.element.id) { index, opinion in
-                    if index > 0 {
-                        Rectangle()
-                            .fill(SabqTheme.sectionSeparator)
-                            .frame(height: 0.8)
-                            .padding(.horizontal, 16)
+            ) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(opinions) { opinion in
+                        NavigationLink(value: opinion) {
+                            opinionMiniTile(opinion)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    NavigationLink(value: opinion) {
-                        opinionListRow(opinion)
-                    }
-                    .buttonStyle(.plain)
                 }
+                .padding(.top, 12)
             }
-            .padding(.bottom, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(SabqTheme.sectionCard)
-            )
         }
     }
 
-    private func opinionListRow(_ opinion: OpinionArticle) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            opinionAuthorAvatar(opinion, size: 52)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(opinion.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    Text(opinion.authorName)
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
-                        .foregroundStyle(SabqTheme.brandBlue)
-                        .lineLimit(1)
-                    Text("•")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                    Text(opinion.relativeDate)
-                        .font(SabqFonts.app(size: 13, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                        .lineLimit(1)
-                }
+    /// بطاقة صغيرة: صورة الكاتب الدائرية واسمه ثم العنوان في سطرين — على السطح الأبيض
+    /// داخل الحاوية الزرقاء كي تُقرأ كعائلة بطاقات تفاصيل الخبر نفسها.
+    private func opinionMiniTile(_ opinion: OpinionArticle) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                opinionAuthorAvatar(opinion, size: 36)
+                Text(opinion.authorName)
+                    .font(SabqFonts.app(size: 12, weight: .bold))
+                    .foregroundStyle(SabqTheme.brandBlue)
+                    .lineLimit(1)
             }
+            SabqRTLText(
+                opinion.title,
+                uiFont: SabqFonts.uiApp(size: 13, weight: .semibold),
+                color: SabqTheme.ink,
+                lineLimit: 2,
+                lineSpacing: 2
+            )
             Spacer(minLength: 0)
+            Text(opinion.relativeDate)
+                .font(SabqFonts.app(size: 10, weight: .regular))
+                .foregroundStyle(SabqTheme.tertiaryInk)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            // بطاقات فاتحة داخل حاوية بيضاء (عكس ترتيب صفحة الخبر) كي لا تذوب في خلفية الرئيسية
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.publicSurface)
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+        )
         .contentShape(Rectangle())
     }
 
@@ -1674,4 +1666,14 @@ struct StoryBubble: View {
 extension Notification.Name {
     /// Posted when the user re-taps the Home tab while already on the feed.
     static let sabqHomeScrollToTop = Notification.Name("sabq.home.scrollToTop")
+}
+
+/// عتبتان لتصغير شعار الرأس (72 للتصغير، 16 للعودة) كي لا يعيد تغيّر ارتفاع
+/// الرأس نفسه تفعيل التبديل عبر تثبيت التمرير — نقل Header.tsx (#1600).
+nonisolated enum HomeHeaderCompact {
+    static func next(current: Bool, y: CGFloat) -> Bool {
+        if y > 72 { return true }
+        if y <= 16 { return false }
+        return current
+    }
 }

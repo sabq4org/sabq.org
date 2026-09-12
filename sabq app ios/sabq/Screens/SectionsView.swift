@@ -91,6 +91,7 @@ struct CategoryArticlesView: View {
     let category: ArticleCategory
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var categoryArticles: [Article] = []
     @State private var isLoading = true
     @State private var hasMore = false
@@ -201,24 +202,76 @@ struct CategoryArticlesView: View {
         isLoading = false
     }
 
+    /// رأس التصنيف بهوية لونية (نقل الويب 8afef17/9c4f68f): شريط علوي بلون
+    /// القسم، توهّج شعاعي خفيف (12٪) من الزاوية الأمامية، مسار «الرئيسية ›
+    /// التصنيفات › القسم» بسهم يسار، وأيقونة في مربع ملوّن 36؛ الوصف يُخفى
+    /// على الهاتف ويبقى على iPad كما يفعل الويب.
     private var heroSection: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 4) {
+                Image(systemName: "house")
+                    .font(SabqFonts.app(size: 11, weight: .regular))
+                Text("الرئيسية")
+                Image(systemName: "chevron.left")
+                    .font(SabqFonts.app(size: 9, weight: .semibold))
+                    .opacity(0.6)
+                Text("التصنيفات")
+                Image(systemName: "chevron.left")
+                    .font(SabqFonts.app(size: 9, weight: .semibold))
+                    .opacity(0.6)
                 Text(category.title)
-                    .font(SabqFonts.app(size: 26, weight: .bold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(SabqTheme.ink)
-
-                Text(category.subtitle)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineSpacing(4)
-
-                StatusChip(title: "\(categoryArticles.count) خبر", tint: category.tint)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(SabqFonts.app(size: 12, weight: .regular))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .lineLimit(1)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("مسار الصفحة")
 
-            SquareIconBadge(systemImage: category.icon, tint: category.tint)
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: category.icon)
+                    .font(SabqFonts.app(size: 17, weight: .semibold))
+                    .foregroundStyle(category.tint)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(category.tint.opacity(0.12)))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(category.tint.opacity(0.30), lineWidth: 1))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(category.title)
+                            .font(SabqFonts.app(size: 22, weight: .bold))
+                            .foregroundStyle(SabqTheme.ink)
+                        StatusChip(title: "\(categoryArticles.count) خبر", tint: category.tint)
+                    }
+                    if horizontalSizeClass == .regular {
+                        Text(category.subtitle)
+                            .font(SabqFonts.app(size: 14, weight: .regular))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 15)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ZStack(alignment: .top) {
+                SabqTheme.publicSurface
+                RadialGradient(
+                    colors: [category.tint.opacity(0.12), .clear],
+                    center: .topLeading,
+                    startRadius: 0,
+                    endRadius: 320
+                )
+                category.tint.frame(height: 3)
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
     }
 }
 

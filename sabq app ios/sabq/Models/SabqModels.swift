@@ -100,6 +100,16 @@ nonisolated enum SabqFormatters {
         }
     }
 
+    /// عدد صحيح مجمّع بأرقام لاتينية (1240 → "1,240") — نظير `formatNumber` في الويب.
+    nonisolated static func groupedLatin(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.numberStyle = .decimal
+        f.usesGroupingSeparator = true
+        f.maximumFractionDigits = 0
+        return f.string(from: NSNumber(value: n)) ?? String(n)
+    }
+
     /// Compact, eye-friendly view count. 1,234 → "1,234". 12,500 → "12.5K".
     /// 1,200,000 → "1.2M". Uses Latin digits to match the rest of the app.
     static func compactViewCount(_ n: Int) -> String {
@@ -770,6 +780,10 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     var aiImageModel: String? = nil
     let slug: String?
     let articleURL: String?
+    /// المشاهدات لبطاقة الأرشيف («1,240 مشاهدة» بأرقام لاتينية مجمّعة — #1605).
+    var viewsCount: Int = 0
+
+    var viewsLabel: String { "\(SabqFormatters.groupedLatin(viewsCount)) مشاهدة" }
 
     /// Minimal opinion shell used by deep-link routes that only carry a
     /// slug. OpinionDetailView re-fetches the full payload via
@@ -891,7 +905,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,
-            articleURL: articleURL
+            articleURL: articleURL,
+            viewsCount: api.views ?? 0
         )
     }
 
@@ -930,7 +945,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,
-            articleURL: articleURL
+            articleURL: articleURL,
+            viewsCount: api.viewsCount ?? 0
         )
     }
 }

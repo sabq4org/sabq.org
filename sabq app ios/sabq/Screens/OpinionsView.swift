@@ -219,6 +219,20 @@ struct OpinionsView: View {
             Text(opinion.authorName)
                 .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            // عدد المشاهدات في طرف الصف بدل «اقرأ المقال» — بطاقة أرشيف الرأي في الويب (#1605)
+            HStack(spacing: 5) {
+                Image(systemName: "eye")
+                    .font(SabqFonts.app(size: 10, weight: .regular))
+                Text(opinion.viewsLabel)
+                    .monospacedDigit()
+            }
+            .font(SabqFonts.app(size: 12, weight: .regular))
+            .foregroundStyle(SabqTheme.tertiaryInk)
+            .lineLimit(1)
         }
     }
 

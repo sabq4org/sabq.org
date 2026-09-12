@@ -80,3 +80,40 @@ nonisolated enum ReaderErrorMessage {
         return "\(ns.domain) \(ns.code)"
     }
 }
+
+
+/// نصوص فشل التسجيل بحسب الحالة — نقل `registrationUpload.ts` (#1530): لا رمز
+/// خام، وضمان «بياناتك ما زالت في النموذج» في كل حالة لا نستطيع فيها إثبات
+/// أن الطلب حُفظ (انقطاع/5xx/استجابة غير مفهومة).
+nonisolated enum RegistrationErrorMessage {
+    static let connection = "تعذر تأكيد إرسال الطلب بسبب انقطاع الاتصال. بياناتك ما زالت في النموذج؛ تحقق من اتصالك وحاول بعد قليل."
+    static let tooLarge = "حجم المرفقات كبير. اختر ملفات أصغر ثم أعد تقديم الطلب."
+    static let tooMany = "تم تجاوز عدد المحاولات. انتظر قليلاً ثم حاول مجدداً."
+    static let forbidden = "تعذر إتمام التحقق من الطلب. حاول مجدداً بعد قليل."
+    static let unconfirmed = "تعذر تأكيد استلام الطلب. بياناتك ما زالت في النموذج؛ حاول بعد قليل."
+
+    static func message(for error: Error) -> String {
+        if let api = error as? APIError {
+            switch api {
+            // رسالة الخادم (مثل «البريد مستخدم») تبقى كما هي.
+            case .apiMessage(let m), .accountPendingActivation(let m, _):
+                return m.isEmpty ? unconfirmed : m
+            case .rateLimited: return tooMany
+            case .forbidden: return forbidden
+            case .serverError(let code):
+                if code == 413 { return tooLarge }
+                if code == 429 { return tooMany }
+                if code == 403 { return forbidden }
+                if code >= 500 || code == 408 { return connection }
+                return unconfirmed
+            // استجابة HTML/مشوّهة ليست دليلًا على الحفظ.
+            case .decodingError, .noResponse: return connection
+            default: return unconfirmed
+            }
+        }
+        if let url = error as? URLError {
+            return url.code == .cancelled ? unconfirmed : connection
+        }
+        return unconfirmed
+    }
+}

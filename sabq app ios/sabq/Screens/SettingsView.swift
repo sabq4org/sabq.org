@@ -1052,6 +1052,16 @@ struct SettingsView: View {
                 .multilineTextAlignment(.leading)
                 .lineSpacing(5)
 
+            NavigationLink(destination: AITeamView()) {
+                settingsRow(
+                    title: "فريق سبق الذكي",
+                    subtitle: "زملاؤنا الرقميون بأسمائهم وأدوارهم — تحت إشراف بشري",
+                    icon: "person.3.fill",
+                    tint: SabqTheme.primaryEnd
+                )
+            }
+            .buttonStyle(.plain)
+
             NavigationLink(destination: PrivacyPolicyView()) {
                 settingsRow(
                     title: "خصوصيتك أولاً",

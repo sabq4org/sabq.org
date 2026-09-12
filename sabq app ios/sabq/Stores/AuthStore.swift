@@ -424,7 +424,9 @@ final class AuthStore {
                 registrationPending = true
             }
         } catch {
-            errorMessage = error.localizedDescription
+            // نص بحسب الحالة (429/413/انقطاع/5xx) بدل localizedDescription الخام،
+            // مع تأكيد بقاء البيانات في النموذج (نقل الويب #1530).
+            errorMessage = RegistrationErrorMessage.message(for: error)
         }
         isLoading = false
     }
