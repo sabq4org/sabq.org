@@ -55,7 +55,7 @@ struct ArticleLiteView: View {
             SabqAnalytics.articleView(
                 id: displayArticle.id,
                 title: displayArticle.title,
-                category: displayArticle.category.title
+                category: displayArticle.categoryTitle
             )
         }
         .task {
@@ -74,15 +74,8 @@ struct ArticleLiteView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // شارة التصنيف حُذفت من سبق لايت كما في الويب (#1614) — يبقى الوقت.
             HStack(spacing: 8) {
-                Text(displayArticle.category.title)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(displayArticle.category.tint)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule().fill(displayArticle.category.tint.opacity(0.12))
-                    )
                 Text(SabqFormatters.relativeArabic.localizedString(for: displayArticle.publishDate, relativeTo: Date()))
                     .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)

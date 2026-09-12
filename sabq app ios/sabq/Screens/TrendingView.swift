@@ -5,6 +5,7 @@ struct TrendingView: View {
     @State private var articles: [Article] = []
     @State private var tags: [String] = []
     @State private var isLoading = true
+    @State private var loadError: String? = nil
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -17,6 +18,11 @@ struct TrendingView: View {
 
                 if isLoading {
                     loadingSection
+                } else if articles.isEmpty, let loadError {
+                    ErrorStateView(message: loadError) {
+                        isLoading = true
+                        Task { await loadData() }
+                    }
                 } else if articles.isEmpty {
                     EmptyStateView(
                         icon: "flame",
@@ -150,7 +156,7 @@ struct TrendingView: View {
                                 .multilineTextAlignment(.leading)
 
                             HStack(spacing: 8) {
-                                Text(article.category.title)
+                                Text(article.categoryTitle)
                                     .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.primaryEnd)
 
@@ -203,10 +209,16 @@ struct TrendingView: View {
             await MainActor.run {
                 articles = mapped
                 tags = response.tags
+                loadError = nil
                 isLoading = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            // رسالة مفهومة للقارئ بحسب نوع الفشل بدل الصمت (نقل أندرويد #1573).
+            let message = ReaderErrorMessage.message(for: error, fallback: "تعذّر تحميل الأخبار الرائجة. حاول مرة أخرى.")
+            await MainActor.run {
+                loadError = message
+                isLoading = false
+            }
         }
     }
 }

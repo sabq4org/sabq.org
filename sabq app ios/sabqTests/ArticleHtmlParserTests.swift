@@ -146,7 +146,7 @@ struct ArticleHtmlParserTests {
         let blocks = ArticleHtmlParser.parse(
             #"<img src="https://cdn.sabq.org/a.jpg" alt="وصف الصورة">"#
         )
-        guard case .image(let url, let alt, _) = blocks.first else {
+        guard case .image(let url, let alt, _, _) = blocks.first else {
             Issue.record("لم يُنتج بلوك صورة: \(blocks)")
             return
         }
@@ -158,7 +158,7 @@ struct ArticleHtmlParserTests {
         let blocks = ArticleHtmlParser.parse(
             #"<p><img src="https://cdn.sabq.org/b.jpg"></p>"#
         )
-        guard case .image(let url, _, _) = blocks.first else {
+        guard case .image(let url, _, _, _) = blocks.first else {
             Issue.record("الصورة داخل <p> لم تُستخرج: \(blocks)")
             return
         }

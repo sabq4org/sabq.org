@@ -287,14 +287,11 @@ struct MomentByMomentView: View {
                 nextCursor = response.nextCursor
                 isLoading = false
             }
-        } catch let api as APIError {
-            await MainActor.run {
-                loadError = api.errorDescription ?? "تعذر تحميل الأخبار"
-                isLoading = false
-            }
         } catch {
+            // نص بحسب نوع الفشل (انقطاع/مهلة/429/5xx) لا «خطأ في الخادم (500)».
+            let message = ReaderErrorMessage.message(for: error, fallback: "تعذر تحميل الأخبار")
             await MainActor.run {
-                loadError = "تعذر تحميل الأخبار"
+                loadError = message
                 isLoading = false
             }
         }

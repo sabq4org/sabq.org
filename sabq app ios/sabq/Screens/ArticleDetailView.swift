@@ -273,7 +273,7 @@ struct ArticleDetailView: View {
             SabqAnalytics.articleView(
                 id: displayArticle.id,
                 title: displayArticle.title,
-                category: displayArticle.category.title
+                category: displayArticle.categoryTitle
             )
             BehaviorTracker.shared.startSession(articleId: displayArticle.id)
         }
@@ -432,7 +432,7 @@ struct ArticleDetailView: View {
         var urls: [URL] = []
         for block in blocks {
             switch block {
-            case .image(let url, _, _):
+            case .image(let url, _, _, _):
                 urls.append(url)
             case .imageGallery(let images):
                 urls.append(contentsOf: images.map(\.url))
@@ -569,9 +569,14 @@ struct ArticleDetailView: View {
     private var labelsRow: some View {
         FlowLayout(spacing: 8) {
             DetailLabelPill(
-                title: article.category.title,
+                title: article.categoryTitle,
                 tint: article.category.tint
             )
+
+            // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420)
+            if article.isReading {
+                DetailLabelPill(title: "قراءة", tint: SabqTheme.emerald, icon: "book")
+            }
 
             // Breaking pill (only when applicable)
             if article.isBreaking {
@@ -1339,8 +1344,9 @@ struct ArticleDetailView: View {
             Divider().foregroundStyle(SabqTheme.outline)
 
             SectionHeader(
-                title: "أخبار ذات صلة",
-                subtitle: "مقالات مشابهة قد تهمك",
+                // تسمية الويب (4ad1892): القائمة آخر ما نُشر في القسم لا تشابهًا
+                title: "اقرأ أيضاً",
+                subtitle: "آخر ما نُشر في القسم",
                 icon: "link",
                 tint: SabqTheme.primaryEnd
             )
