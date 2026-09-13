@@ -1026,6 +1026,7 @@ fun SabqApp(
                         onAuthorClick = { name ->
                             navController.navigate(SabqRoutes.authorArticles(name))
                         },
+                        onOpinionsSeeAll = { navController.navigate(SabqRoutes.Opinions) },
                     )
                 }
                 composable(
