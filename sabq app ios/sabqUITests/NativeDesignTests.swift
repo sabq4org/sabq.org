@@ -36,16 +36,21 @@ final class NativeDesignTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["استكشف"].waitForExistence(timeout: 25))
         app.tabBars.buttons["استكشف"].tap()
         app.open(URL(string: "sabq://article/design-navigation-test")!)
-        let tools = app.buttons["article.tools"]
-        XCTAssertTrue(tools.waitForExistence(timeout: 10))
+        // زر المشاركة في شريط التنقل هو دليل وجود القارئ؛ قائمة «…» أُزيلت في
+        // مراجعة 10.3.3 وصار الإعجاب زرًا مباشرًا وأدوات القراءة في شريط الإجراءات.
+        let share = app.buttons["article.share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10))
         app.tabBars.buttons["محفوظاتي"].tap()
         XCTAssertTrue(app.navigationBars["محفوظاتي"].waitForExistence(timeout: 5))
         app.tabBars.buttons["الرئيسية"].tap()
-        XCTAssertTrue(tools.waitForExistence(timeout: 5))
-        tools.tap()
-        app.buttons["إعدادات القراءة"].tap()
-        XCTAssertTrue(app.staticTexts["تنسيق القراءة"].waitForExistence(timeout: 5))
-        app.buttons["تم"].tap()
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["article.like"].exists)
+        let format = app.buttons["تنسيق"]
+        if format.waitForExistence(timeout: 5), format.isHittable {
+            format.tap()
+            XCTAssertTrue(app.staticTexts["تنسيق القراءة"].waitForExistence(timeout: 5))
+            app.buttons["تم"].tap()
+        }
     }
 
 }

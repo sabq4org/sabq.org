@@ -187,6 +187,7 @@ struct ContactSheet: View {
                     }
                 }
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {

@@ -163,6 +163,7 @@ struct EditProfileSheet: View {
                 }
                 .padding(20)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {

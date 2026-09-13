@@ -76,6 +76,7 @@ struct NewsletterSheet: View {
                 .padding(.top, 24)
                 .padding(.bottom, 60)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {

@@ -50,6 +50,7 @@ struct LoginSheet: View {
                 }
                 .padding(24)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .interactiveDismissDisabled(awaitingName)

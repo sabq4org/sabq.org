@@ -305,19 +305,11 @@ struct ArticleDetailView: View {
                 }
                 .accessibilityIdentifier("article.share")
             }
+            // الإعجاب مباشر في الشريط؛ «تنسيق» و«قراءة» في شريط الإجراءات أسفل
+            // النص فقط — لا يتكرر زر في موضعين (مراجعة 10.3.3).
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    likeButton
-                    Button("إعدادات القراءة", systemImage: "textformat.size") {
-                        showReaderControls = true
-                    }
-                    Button(isFocusMode ? "إظهار تفاصيل المقال" : "التركيز على القراءة", systemImage: "doc.text") {
-                        isFocusMode.toggle()
-                    }
-                } label: {
-                    Label("أدوات المقال", systemImage: "ellipsis")
-                }
-                .accessibilityIdentifier("article.tools")
+                likeButton
+                    .accessibilityIdentifier("article.like")
             }
         }
         .task {
@@ -881,35 +873,10 @@ struct ArticleDetailView: View {
 
     // MARK: - Action Bar
 
-    // Bar trimmed to 4 calmer buttons: مشاركة / حفظ / Aa / قراءة.
-    // Passport is reachable from the inline pill above; copy-link lives
-    // inside the iOS share sheet.
+    // شريط الإجراءات أسفل النص: أدوات القراءة فقط («تنسيق» و«قراءة»).
+    // المشاركة والحفظ والإعجاب في شريط التنقل الأصلي (#1642) ولا تتكرر هنا.
     private var actionBar: some View {
         HStack(spacing: 0) {
-            Button {
-                SabqHaptics.light()
-                shareArticle()
-            } label: {
-                actionButton(icon: "square.and.arrow.up", label: "مشاركة")
-            }
-            .buttonStyle(.plain)
-
-            Divider().frame(height: 28)
-
-            Button {
-                SabqHaptics.medium()
-                bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-            } label: {
-                actionButton(
-                    icon: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark",
-                    label: bookmarksStore.isBookmarked(displayArticle.id) ? "تم الحفظ" : "حفظ",
-                    isActive: bookmarksStore.isBookmarked(displayArticle.id)
-                )
-            }
-            .buttonStyle(.plain)
-
-            Divider().frame(height: 28)
-
             Button {
                 SabqHaptics.light()
                 showReaderControls = true
