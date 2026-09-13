@@ -82,6 +82,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.sabq.smart.util.ImageAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -1407,55 +1410,64 @@ private fun BodyBlock(
             }
             is BlockNode.Image -> {
                 // Inline body images render at their NATURAL aspect
-                // ratio — never force-cropped to 16:10. Portrait shots
-                // (e.g. press-conference vertical photos) used to get
-                // their tops/bottoms chopped off; the user fix on iOS
-                // is `.fill + min-height` which lets the image grow
-                // to its true height. We mirror that here with
-                // `ContentScale.Fit` + `Modifier.fillMaxWidth` (no
-                // fixed aspectRatio). See memory [[ui-design-system]]:
-                // "hero+inline image natural aspect ratios".
-                Column(
+                // ratio — never force-cropped to 16:10 (`ContentScale.Fit`,
+                // no fixed aspectRatio). عرض جزئي من المحرر (25/33/50/75٪)
+                // يضيّق الصورة إلى نسبة العمود ويحاذيها إلى الجهة المطلوبة
+                // (نقل الويب #1512) — بلا التفاف نص كما في iOS.
+                val fraction = block.layout.widthFraction ?: 1f
+                val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                val boxAlignment = when (block.layout.align) {
+                    ImageAlign.Center -> Alignment.Center
+                    ImageAlign.Right -> if (isRtl) Alignment.CenterStart else Alignment.CenterEnd
+                    ImageAlign.Left -> if (isRtl) Alignment.CenterEnd else Alignment.CenterStart
+                }
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentAlignment = if (fraction < 1f) boxAlignment else Alignment.CenterStart,
                 ) {
-                    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
-                    SubcomposeAsyncImage(
-                        model = block.url,
-                        contentDescription = block.alt,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(shape)
-                            .background(SabqTheme.colors.paleFill, shape)
-                            .pointerInput(block.url) {
-                                detectTapGestures(onTap = { onImageTap(block.url) })
+                    Column(
+                        modifier = Modifier.fillMaxWidth(fraction),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+                        val placeholderHeight = (220f * fraction).dp
+                        SubcomposeAsyncImage(
+                            model = block.url,
+                            contentDescription = block.alt,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(shape)
+                                .background(SabqTheme.colors.paleFill, shape)
+                                .pointerInput(block.url) {
+                                    detectTapGestures(onTap = { onImageTap(block.url) })
+                                },
+                            loading = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(placeholderHeight)
+                                        .background(SabqTheme.colors.paleFill),
+                                )
                             },
-                        loading = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp)
-                                    .background(SabqTheme.colors.paleFill),
-                            )
-                        },
-                        error = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp)
-                                    .background(SabqTheme.colors.paleFill),
-                            )
-                        },
-                    )
-                    if (!block.caption.isNullOrEmpty()) {
-                        Text(
-                            text = block.caption,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = SabqTheme.colors.tertiaryInk,
-                            lineHeight = 16.sp,
+                            error = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(placeholderHeight)
+                                        .background(SabqTheme.colors.paleFill),
+                                )
+                            },
                         )
+                        if (!block.caption.isNullOrEmpty()) {
+                            Text(
+                                text = block.caption,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SabqTheme.colors.tertiaryInk,
+                                lineHeight = 16.sp,
+                            )
+                        }
                     }
                 }
             }
@@ -1909,8 +1921,9 @@ private fun RelatedSection(related: List<Article>, onClick: (Article) -> Unit) {
     ) {
         HorizontalDivider(color = SabqTheme.colors.outline)
         SectionHeaderRow(
-            title = "أخبار ذات صلة",
-            subtitle = "مقالات مشابهة قد تهمك",
+            // تسمية الويب (4ad1892): القائمة آخر ما نُشر في القسم لا تشابهًا
+            title = "اقرأ أيضاً",
+            subtitle = "آخر ما نُشر في القسم",
             icon = Icons.Outlined.Link,
             tint = SabqTheme.colors.primaryEnd,
         )
