@@ -33,8 +33,9 @@ describe("Bevatel OTP transport", () => {
     const payload = JSON.parse(String(init?.body));
     expect(payload).toEqual({
       src: "SABQ News", dests: ["966500000000"], body,
-      msgClass: "transactional", secure: true, dlr: true, validity: 5, maxParts: 1,
+      secure: true, dlr: true, validity: 5, maxParts: 1,
     });
+    expect(payload).not.toHaveProperty("msgClass");
     expect(payload.body.length).toBeLessThanOrEqual(70);
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });

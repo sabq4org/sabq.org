@@ -1,6 +1,6 @@
 /**
  * موصل Bevatel SMS — https://sms-api.bevatel.com (مواصفة docsv1.json).
- *   POST /msgs/sms  { src, dests[], body, msgClass, secure, dlr }
+ *   POST /msgs/sms  { src, dests[], body, secure, dlr }
  *   Authorization: Bearer <BEVATEL_API_KEY>
  *
  * البيئة: BEVATEL_API_KEY (إلزامي)، BEVATEL_SENDER_ID (اسم المرسل المعتمد، افتراضيًا SABQ News)،
@@ -52,7 +52,7 @@ export const bevatelProvider: SmsProvider = {
           src,
           dests: [dest],
           body,
-          msgClass: "transactional",
+          // Omit msgClass: Bevatel support requires the account default route (#1665).
           // secure: نص الرسالة مشفّر لدى المزوّد — مناسب لرموز التحقق.
           secure: true,
           dlr: true,
