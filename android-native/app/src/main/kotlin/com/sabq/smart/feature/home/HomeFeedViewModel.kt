@@ -217,7 +217,7 @@ class HomeFeedViewModel @Inject constructor(
             // بار العاجل من لوحة التحكم — الخادم يرجع `null` حرفيًا عند عدم
             // وجود موضوع نشط ففشلُ الترميز هنا يعني «لا شريط» (سقوط للبطاقة).
             val tickerJob = async { runCatching { extrasRepo.getBreakingTicker() }.getOrDefault(emptyList()) }
-            val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 5) }.getOrNull()?.items ?: emptyList() }
+            val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 6) }.getOrNull()?.items ?: emptyList() }
             val trendingJob = async { runCatching { repo.getTrending() }.getOrDefault(emptyList()) }
             val storiesJob = async { runCatching { extrasRepo.getStories() }.getOrDefault(emptyList()) }
             val calendarJob = async { runCatching { extrasRepo.getCalendarUpcoming() }.getOrDefault(emptyList()) }

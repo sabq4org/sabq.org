@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
@@ -129,6 +130,7 @@ fun SettingsScreen(
     onNewsletterClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onTermsClick: () -> Unit = {},
+    onAiTeamClick: () -> Unit = {},
     onOpenWebsite: () -> Unit = {},
     onOpenTwitter: () -> Unit = {},
     onSubmitOpinionClick: () -> Unit = {},
@@ -254,6 +256,7 @@ fun SettingsScreen(
         AboutSection(
             onPrivacyClick = onPrivacyClick,
             onTermsClick = onTermsClick,
+            onAiTeamClick = onAiTeamClick,
             onOpenWebsite = onOpenWebsite,
             onOpenTwitter = onOpenTwitter,
             onContactClick = onContactClick,
@@ -1668,6 +1671,7 @@ private fun SubscriptionSection(onNewsletterClick: () -> Unit) {
 private fun AboutSection(
     onPrivacyClick: () -> Unit,
     onTermsClick: () -> Unit,
+    onAiTeamClick: () -> Unit,
     onOpenWebsite: () -> Unit,
     onOpenTwitter: () -> Unit,
     onContactClick: () -> Unit,
@@ -1685,6 +1689,13 @@ private fun AboutSection(
                 fontSize = 15.sp,
                 color = SabqTheme.colors.secondaryInk,
             ),
+        )
+        SettingsRow(
+            title = "فريق سبق الذكي",
+            subtitle = "زملاؤنا الرقميون بأسمائهم وأدوارهم — تحت إشراف بشري",
+            icon = Icons.Filled.Groups,
+            tint = SabqTheme.colors.primaryEnd,
+            onClick = onAiTeamClick,
         )
         SettingsRow(
             title = "خصوصيتك أولاً",

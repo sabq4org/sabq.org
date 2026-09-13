@@ -1934,22 +1934,7 @@ private fun ActionBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        ActionCell(
-            icon = Icons.Filled.Share,
-            label = "مشاركة",
-            isActive = false,
-            modifier = Modifier.weight(1f),
-            onClick = onShare,
-        )
-        VerticalSeparator()
-        ActionCell(
-            icon = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-            label = if (isBookmarked) "تم الحفظ" else "حفظ",
-            isActive = isBookmarked,
-            modifier = Modifier.weight(1f),
-            onClick = onBookmark,
-        )
-        VerticalSeparator()
+        // المشاركة والحفظ في الشريط العلوي فقط — لا زر في موضعين (مراجعة 10.3.3 #1651).
         ActionCell(
             icon = Icons.Filled.TextFields,
             label = "تنسيق",
