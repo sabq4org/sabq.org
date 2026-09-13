@@ -92,6 +92,8 @@ object SabqRoutes {
     const val RevisionEditor = "revisions/{id}"
     fun revisionEditor(id: String): String = "revisions/${android.net.Uri.encode(id)}"
     const val Opinions = "opinions"
+    /** «الاقتصاد بالأرقام» — نقل الويب /economy (#1493–#1506). */
+    const val Economy = "economy"
     const val Trending = "trending"
     const val DailyBrief = "brief"
     const val InterestsPicker = "interests/picker"
@@ -398,6 +400,9 @@ fun SabqApp(
                         onRoshnClick = {
                             navController.navigate(SabqRoutes.Roshn)
                         },
+                        onEconomyClick = {
+                            navController.navigate(SabqRoutes.Economy)
+                        },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
                         },
@@ -603,6 +608,14 @@ fun SabqApp(
                 ) {
                     com.sabq.smart.feature.revisions.RevisionEditorScreen(
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.Economy) {
+                    com.sabq.smart.feature.economy.EconomyScreen(
+                        onBack = { navController.popBackStack() },
+                        onBusinessNewsClick = {
+                            navController.navigate(SabqRoutes.categoryArticles("business", "اقتصاد"))
+                        },
                     )
                 }
                 composable(SabqRoutes.Opinions) {
