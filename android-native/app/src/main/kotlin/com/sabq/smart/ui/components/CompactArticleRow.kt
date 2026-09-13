@@ -67,6 +67,7 @@ fun CompactArticleRow(
                     compact = true,
                 )
                 if (article.isBreaking) BreakingPill()
+                if (article.isReading) ReadingPill()
             }
 
             Text(
