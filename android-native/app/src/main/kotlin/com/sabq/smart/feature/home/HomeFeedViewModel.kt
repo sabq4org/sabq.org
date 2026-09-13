@@ -80,6 +80,8 @@ sealed interface HomeFeedUiState {
          *  with an "الكل" link to the Muqtarab landing. Empty hides
          *  the whole block. */
         val muqtarabTopics: List<MuqTopic> = emptyList(),
+        /** لقطة «الاقتصاد الحي» — بطاقة الرقم الواحد بعد الهيرو؛ null تخفيها. */
+        val economySnapshot: com.sabq.smart.feature.economy.EconomySnapshot? = null,
     ) : HomeFeedUiState
 }
 
@@ -91,6 +93,7 @@ class HomeFeedViewModel @Inject constructor(
     private val insightsRepo: InsightsRepository,
     private val loyaltyRepo: LoyaltyRepository,
     private val muqtarabRepo: MuqtarabRepository,
+    private val economyRepo: com.sabq.smart.feature.economy.EconomyRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeFeedUiState>(HomeFeedUiState.Loading)
@@ -221,6 +224,8 @@ class HomeFeedViewModel @Inject constructor(
             val audioJob = async { runCatching { extrasRepo.getLatestAudioNewsletter() }.getOrNull() }
             val hajjJob = async { runCatching { extrasRepo.getHajjBlock() }.getOrNull() }
             val muqtarabJob = async { runCatching { muqtarabRepo.getFeaturedTopics(limit = 6) }.getOrDefault(emptyList()) }
+            // الاقتصاد الحي: إيقاع الرئيسية 5 دقائق؛ الفشل صامت (البطاقة تختفي).
+            val economyJob = async { runCatching { economyRepo.loadSnapshotIfNeeded(300_000) }.getOrNull() }
             // Auth-required side-fetches. Anonymous users will 401 here;
             // we swallow that and the personal-journey block stays
             // hidden because [journeyInsights] remains null.
@@ -240,6 +245,7 @@ class HomeFeedViewModel @Inject constructor(
             val audioNewsletter = audioJob.await()
             val hajjBlock = hajjJob.await()
             val muqtarabTopics = muqtarabJob.await()
+            val economySnapshot = economyJob.await()
             val insights = insightsJob.await()
             val loyalty = loyaltyJob.await()
 
@@ -255,6 +261,7 @@ class HomeFeedViewModel @Inject constructor(
                         audioNewsletter = audioNewsletter,
                         hajjBlock = hajjBlock,
                         muqtarabTopics = muqtarabTopics,
+                        economySnapshot = economySnapshot,
                         journeyInsights = insights,
                         loyaltySummary = loyalty,
                     )

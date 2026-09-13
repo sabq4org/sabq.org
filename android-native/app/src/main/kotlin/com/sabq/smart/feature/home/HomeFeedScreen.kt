@@ -65,6 +65,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawOutline
@@ -127,6 +128,7 @@ fun HomeFeedScreen(
     onAsianCupClick: () -> Unit = {},
     onKingsCupClick: () -> Unit = {},
     onRoshnClick: () -> Unit = {},
+    onEconomyClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
@@ -190,6 +192,7 @@ fun HomeFeedScreen(
                 onAsianCupClick = onAsianCupClick,
                 onKingsCupClick = onKingsCupClick,
                 onRoshnClick = onRoshnClick,
+                onEconomyClick = onEconomyClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
@@ -241,6 +244,7 @@ private fun LoadedFeed(
     onAsianCupClick: () -> Unit,
     onKingsCupClick: () -> Unit,
     onRoshnClick: () -> Unit,
+    onEconomyClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
@@ -368,6 +372,13 @@ private fun LoadedFeed(
             }
         }
 
+        // الاقتصاد الحي: بطاقة برقم واحد بعد الهيرو وقبل أشرطة البطولات (قرار
+        // المالك #1641/#1642)؛ تختفي بلا بيانات (نقل الويب #1493–#1506).
+        if (com.sabq.smart.feature.economy.EconomyFormat.homeMode(state.economySnapshot) != com.sabq.smart.feature.economy.EconomyFormat.HomeMode.Hidden) {
+            sectionItem {
+                com.sabq.smart.feature.economy.EconomyHomeBlock(snapshot = state.economySnapshot, onClick = onEconomyClick)
+            }
+        }
         // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
         // (خليجي 27 غير معروض في الرئيسية مطابقةً لتطبيق iOS.)
         sectionItem {
@@ -1871,6 +1882,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sectionItem(
     content: @androidx.compose.runtime.Composable () -> Unit,
 ) {
     item(key = key, contentType = contentType) {
-        Box(Modifier.padding(bottom = SabqTheme.dimens.sectionGap)) { content() }
+        // الشرائط التي تختفي ذاتيًا (البطولات/الاقتصاد) ترسم صفرًا؛ لا نحجز
+        // لها فجوة وإلا تراكمت الفراغات تحت بطاقة الاقتصاد (نظير iOS #1644).
+        val gap = SabqTheme.dimens.sectionGap
+        Box(
+            Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                if (placeable.height == 0) {
+                    layout(placeable.width, 0) {}
+                } else {
+                    val extra = gap.roundToPx()
+                    layout(placeable.width, placeable.height + extra) { placeable.placeRelative(0, 0) }
+                }
+            },
+        ) { content() }
     }
 }
