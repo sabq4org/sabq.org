@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-09-08 | المالك: platform
+> آخر مراجعة: 2026-09-13 | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -37,6 +37,7 @@
 - Postgres الخاص بالجلسات يستخدم pool مستقلاً صغيراً (`SESSION_FALLBACK_POOL_MAX`، الافتراضي 4، والسقف 10) بمهلات قصيرة؛ لا تعيده إلى pool المحتوى لأن انقطاع Redis قد يستنزف كل اتصالات الأخبار.
 
 ## صحة وتشغيل
+- OTP: توليد وتحقق في `server/services/otpService.ts`، وإرسال عبر `server/services/sms/`؛ اسم Bevatel الافتراضي المعتمد `SABQ News`. قوالب الدخول/توثيق الجوال/2FA لا تتجاوز 70 وحدة UTF-16 حتى تلائم `maxParts: 1`، وصلاحية طابور الإرسال 5 دقائق. تفاصيل الإعداد والاختبار في [دليل Bevatel](../../SMS_OTP_BEVATEL.md)؛ قبول الطلب لا يثبت التسليم. Issue #1663؛ لا تغيير لعقود الويب أو الموبايل.
 - راجع CLAUDE.md § RBAC قبل أي تغيير
 - عند 500 على `/api/login` مع `Command timed out` من ioredis: تحقق من Upstash ثم من سجل `[Session Pool]` ومن أن الفايل أوفر يكتب على جدول `sessions`.
 
