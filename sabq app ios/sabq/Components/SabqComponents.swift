@@ -1721,6 +1721,12 @@ struct CompactArticleRow: View {
                 }
                 .frame(width: 84, height: 84)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // شعارات الجهات البيضاء كانت تذوب في البطاقة فتبدو بلا قص؛ الإطار
+                // نفسه المستخدم في صفوف الحاوية الموحدة يحفظ الزوايا (مراجعة 10.3.3).
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(SabqTheme.ink.opacity(0.10), lineWidth: 1)
+                )
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
