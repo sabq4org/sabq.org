@@ -3,7 +3,7 @@
  *   POST /msgs/sms  { src, dests[], body, msgClass, secure, dlr }
  *   Authorization: Bearer <BEVATEL_API_KEY>
  *
- * البيئة: BEVATEL_API_KEY (إلزامي)، BEVATEL_SENDER_ID (اسم المرسل المعتمد، افتراضيًا SABQ)،
+ * البيئة: BEVATEL_API_KEY (إلزامي)، BEVATEL_SENDER_ID (اسم المرسل المعتمد، افتراضيًا SABQ News)،
  * BEVATEL_API_BASE (اختياري لبيئة اختبار).
  *
  * ملاحظة: Bevatel يستقبل الأرقام بلا «+» (96654XXXXXXX) — نزيلها هنا.
@@ -35,7 +35,7 @@ export const bevatelProvider: SmsProvider = {
     const apiKey = process.env.BEVATEL_API_KEY?.trim();
     if (!apiKey) return { ok: false, provider: "bevatel", error: "BEVATEL_API_KEY not configured" };
     const base = (process.env.BEVATEL_API_BASE?.trim() || DEFAULT_BASE).replace(/\/+$/, "");
-    const src = process.env.BEVATEL_SENDER_ID?.trim() || "SABQ";
+    const src = process.env.BEVATEL_SENDER_ID?.trim() || "SABQ News";
     const dest = to.replace(/^\+/, "").replace(/\D/g, "");
 
     const controller = new AbortController();
@@ -56,8 +56,8 @@ export const bevatelProvider: SmsProvider = {
           // secure: نص الرسالة مشفّر لدى المزوّد — مناسب لرموز التحقق.
           secure: true,
           dlr: true,
-          // رموز OTP قصيرة العمر: لا فائدة من بقائها في الطابور أكثر من 10 دقائق.
-          validity: 10,
+          // صلاحية الطابور لا تتجاوز صلاحية الرمز (5 دقائق).
+          validity: 5,
           maxParts: 1,
         }),
         signal: controller.signal,
