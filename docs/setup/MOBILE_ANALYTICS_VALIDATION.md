@@ -23,7 +23,7 @@
 | مشروع Firebase | مؤكد: `sabq-ga3-ga4`، رقم `534820013195` | حساب الوصول `sabq4u@gmail.com`، والربط الإداري مع GA4 property `369420309` |
 | تطبيق iOS | مؤكد: `com.sabq.sabqorg`، App ID `1:534820013195:ios:d516ed2e146f209abdc08e` | ملف `GoogleService-Info.plist` مدمج مع الحفاظ على OAuth؛ البناء السابق ناجح |
 | تطبيق Android الإنتاجي | مؤكد في Firebase: `com.sabqorg.sabq`، App ID `1:534820013195:android:22935774c3725e53bdc08e` | إعداد Release غير مدمج لأن مشروع FCM الإنتاجي مختلف؛ حاجز Release يبقى فعالًا |
-| تطبيق Android QA | مؤكد: `com.sabqorg.sabq.dev`، App ID `1:534820013195:android:5287c6c9eacf65d0bdc08e` | `src/debug/google-services.json` مدمج؛ البناء الصريح نجح، مع 26 اختبارًا دون فشل |
+| تطبيق Android QA | مؤكد: `com.sabqorg.sabq.dev`، App ID `1:534820013195:android:5287c6c9eacf65d0bdc08e` | `src/debug/google-services.json` مُزوّد محليًا ومستبعد من Git؛ البناء الصريح نجح، مع 26 اختبارًا دون فشل |
 | استقبال GA4 | غير متحقق | DebugView عند 10:40 بتوقيت الرياض أظهر 0 أجهزة و0 أحداث؛ لا يُستنتج التسجيل من config أو build فقط |
 
 تدفقات التطبيقات الأصلية المسجلة في GA4 property `369420309`: iOS `15768236568`، Android الإنتاجي `15768279887`، وAndroid QA `15768280630`. التسجيل والربط الإداريان لا يثبتان استقبال الأحداث. قيمة `IS_ANALYTICS_ENABLED=false` موجودة في الملف الرسمي؛ لم يُثبت أنها سبب غياب الأحداث، ولم تُغيّر بالتخمين.
