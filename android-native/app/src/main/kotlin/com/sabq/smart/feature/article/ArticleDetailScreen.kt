@@ -117,6 +117,7 @@ import com.sabq.smart.util.InlineRun
 import com.sabq.smart.util.GalleryImage
 import com.sabq.smart.util.VideoProvider
 import com.sabq.smart.ui.components.BreakingPill
+import com.sabq.smart.ui.components.ReadingPill
 import com.sabq.smart.ui.components.CommentComposer
 import com.sabq.smart.ui.components.CommentRow
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -842,6 +843,7 @@ private fun LabelsRow(
             OpinionMarkerPill()
         } else {
             StatusChip(title = article.categoryLabel.ifBlank { article.category.title }, tint = article.category.tint())
+            if (article.isReading) ReadingPill(compact = false)
             if (article.isBreaking) BreakingPill()
         }
 
