@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
+import com.sabq.smart.ui.components.EmptyStateView
+import com.sabq.smart.ui.components.ErrorStateView
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,19 +69,13 @@ fun CategoryArticlesScreen(
                 )
             }
             is CategoryArticlesUiState.Error -> {
-                Column(
+                // حالة الخطأ الموحدة (أيقونة + رسالة القارئ + إعادة المحاولة)
+                // كما في الوسم والرائج — نقل #1573.
+                ErrorStateView(
+                    message = s.message,
+                    onRetry = { viewModel.retry() },
                     modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(s.message, color = SabqTheme.colors.tertiaryInk, fontSize = 14.sp)
-                    Text(
-                        "إعادة المحاولة",
-                        color = SabqTheme.colors.primaryEnd,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { viewModel.retry() },
-                    )
-                }
+                )
             }
             is CategoryArticlesUiState.Loaded -> {
                 val visual = ArticleCategory.fromSlug(s.slug)
@@ -98,6 +94,17 @@ fun CategoryArticlesScreen(
                             count = s.articles.size,
                             visual = visual,
                         )
+                    }
+                    if (s.articles.isEmpty()) {
+                        item {
+                            EmptyStateView(
+                                icon = visual.icon,
+                                tint = visual.tint(),
+                                title = "لا أخبار في هذا القسم حاليًا",
+                                subtitle = "تابع الأقسام الأخرى أو عد لاحقًا.",
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
+                        }
                     }
                     item {
                         SurfaceCard {
