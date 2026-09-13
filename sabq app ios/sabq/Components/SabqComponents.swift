@@ -1829,12 +1829,12 @@ struct CompactArticleRow: View {
         )
     }
 
-    /// شارة «قيد القراءة» التحريرية — نص وترتيب شارة البطاقة في الويب (#1420).
+    /// شارة «قراءة» التحريرية — نص وترتيب شارة البطاقة في الويب (#1420).
     private var readingPill: some View {
         HStack(spacing: 4) {
             Image(systemName: "book")
                 .font(SabqFonts.app(size: 9, weight: .medium))
-            Text("قيد القراءة")
+            Text("قراءة")
                 .font(SabqFonts.app(size: 10, weight: .medium))
         }
         .foregroundStyle(SabqTheme.emerald)

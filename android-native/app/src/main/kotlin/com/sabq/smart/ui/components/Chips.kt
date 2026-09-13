@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -160,6 +162,42 @@ fun BreakingPill(modifier: Modifier = Modifier) {
             text = "عاجل",
             style = SabqTheme.typography.breakingPill,
             color = SabqTheme.colors.coral,
+        )
+    }
+}
+
+/** Editorial reading label, matching iOS card and detail pills. */
+@Composable
+fun ReadingPill(modifier: Modifier = Modifier, compact: Boolean = true) {
+    val tint = Color(red = 0.016f, green = 0.47f, blue = 0.34f)
+    if (!compact) {
+        DetailLabelPill(
+            title = "قراءة",
+            tint = tint,
+            modifier = modifier,
+            icon = Icons.Outlined.MenuBook,
+        )
+        return
+    }
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.12f), CircleShape)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.MenuBook,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(9.dp),
+        )
+        Text(
+            text = "قراءة",
+            style = SabqTheme.typography.breakingPill,
+            color = tint,
+            maxLines = 1,
         )
     }
 }
