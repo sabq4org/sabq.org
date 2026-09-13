@@ -331,6 +331,18 @@ interface SabqApi {
     @GET("api/trending-keywords")
     suspend fun getTrendingKeywords(): List<ApiTrendingKeyword>
 
+    /**
+     * مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
+     * المسار عام فقط (`/api/opinion/...`) ولا نظير له تحت v1؛ نفس غلاف
+     * `{ articles, total }`. iOS: `APIClient.fetchRelatedOpinions`.
+     */
+    @GET("api/opinion/related/category/{categoryId}")
+    suspend fun getRelatedOpinions(
+        @Path("categoryId") categoryId: String,
+        @Query("excludeId") excludeId: String? = null,
+        @Query("limit") limit: Int = 5,
+    ): ApiArticlesResponse
+
     @GET("api/opinion")
     suspend fun getOpinions(
         @Query("page") page: Int = 1,

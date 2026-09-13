@@ -22,6 +22,8 @@ sealed interface ArticleDetailUiState {
     data class Loaded(
         val article: Article,
         val related: List<Article> = emptyList(),
+        /** «مقالات قد تهمك»: رأي من تصنيف الخبر (يختفي للرأي أو بلا تصنيف). */
+        val relatedOpinions: List<Article> = emptyList(),
         val mediaAssets: List<MediaAsset> = emptyList(),
         /** المحتوى المعروض من بطاقة القائمة والنص الكامل ما زال يُجلب. */
         val hydrating: Boolean = false,
@@ -63,6 +65,7 @@ class ArticleDetailViewModel @Inject constructor(
                 .onSuccess { article ->
                     _state.value = ArticleDetailUiState.Loaded(article = article)
                     loadRelated()
+                    loadRelatedOpinions(article)
                     loadMediaAssets(article.id)
                 }
                 .onFailure { e ->
@@ -89,6 +92,22 @@ class ArticleDetailViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     android.util.Log.e("ArticleDetailVM", "Failed to load related articles", e)
+                }
+        }
+    }
+
+    private fun loadRelatedOpinions(article: Article) {
+        val categoryId = article.categoryId ?: return
+        if (article.isOpinion) return
+        viewModelScope.launch {
+            runCatching { repo.getRelatedOpinions(categoryId, excludeId = article.id) }
+                .onSuccess { opinions ->
+                    _state.update { c ->
+                        if (c is ArticleDetailUiState.Loaded) c.copy(relatedOpinions = opinions) else c
+                    }
+                }
+                .onFailure { e ->
+                    android.util.Log.e("ArticleDetailVM", "Failed to load related opinions", e)
                 }
         }
     }

@@ -21,6 +21,10 @@ data class Article(
     val isBreaking: Boolean = false,
     val isFeatured: Boolean = false,
     val isReading: Boolean = false,
+    /** معرّف التصنيف (category.id في العام، section_id في v1) — لبلوك «مقالات قد تهمك». */
+    val categoryId: String? = null,
+    /** عدد المشاهدات (views / views_count) — لبطاقة أرشيف الرأي «N مشاهدة». */
+    val viewsCount: Int? = null,
     val slug: String? = null,
     val authorName: String? = null,
     /** صورة كاتب الرأي (رابط مطلق) — تُعرض في قائمة «الرأي» بالرئيسية. */

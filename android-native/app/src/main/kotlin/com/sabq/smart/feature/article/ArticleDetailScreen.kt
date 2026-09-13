@@ -86,6 +86,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.sabq.smart.util.ImageAlign
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -144,6 +146,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.sabq.smart.ui.components.SmallActionButton
 import com.sabq.smart.ui.components.StatusChip
 import com.sabq.smart.ui.theme.SabqTheme
+import com.sabq.smart.ui.components.ArticleSidebarModule
+import com.sabq.smart.ui.components.SidebarArticleRow
+import com.sabq.smart.ui.components.SidebarRowDivider
+import com.sabq.smart.util.formatRelativeDateAr
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
 import com.sabq.smart.util.BlockNode
 import com.sabq.smart.util.HtmlSimpleParser
@@ -186,6 +192,7 @@ fun ArticleDetailScreen(
     onTagClick: (String) -> Unit = {},
     onAuthorClick: (String) -> Unit = {},
     onRelatedClick: (Article) -> Unit = {},
+    onOpinionsSeeAll: () -> Unit = {},
     viewModel: ArticleDetailViewModel = hiltViewModel(),
     commentsViewModel: CommentsViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
@@ -227,6 +234,7 @@ fun ArticleDetailScreen(
                         onTagClick = onTagClick,
                         onAuthorClick = onAuthorClick,
                         onRelatedClick = onRelatedClick,
+                onOpinionsSeeAll = onOpinionsSeeAll,
                     )
                     com.sabq.smart.feature.opinions.OpinionFallbackState.Idle,
                     com.sabq.smart.feature.opinions.OpinionFallbackState.Loading,
@@ -248,6 +256,7 @@ fun ArticleDetailScreen(
                 article = s.article,
                 hydrating = s.hydrating,
                 related = s.related,
+                relatedOpinions = s.relatedOpinions,
                 mediaAssets = s.mediaAssets,
                 fontSize = settings.articleFontSize,
                 lineSpacing = settings.articleLineSpacing,
@@ -260,6 +269,7 @@ fun ArticleDetailScreen(
                 onTagClick = onTagClick,
                 onAuthorClick = onAuthorClick,
                 onRelatedClick = onRelatedClick,
+                onOpinionsSeeAll = onOpinionsSeeAll,
             )
         }
     }
@@ -270,6 +280,7 @@ private fun ArticleBody(
     article: Article,
     hydrating: Boolean = false,
     related: List<Article>,
+    relatedOpinions: List<Article> = emptyList(),
     mediaAssets: List<com.sabq.smart.data.MediaAsset>,
     fontSize: Float,
     lineSpacing: Float,
@@ -282,6 +293,7 @@ private fun ArticleBody(
     onTagClick: (String) -> Unit,
     onAuthorClick: (String) -> Unit,
     onRelatedClick: (Article) -> Unit,
+    onOpinionsSeeAll: () -> Unit = {},
 ) {
     android.util.Log.d("ArticleBody", "Article: ${article.title}, tags: ${article.tags}, related size: ${related.size}")
     val context = LocalContext.current
@@ -656,6 +668,22 @@ private fun ArticleBody(
                 item {
                     Spacer(modifier = Modifier.height(6.dp))
                     RelatedSection(related = related, onClick = onRelatedClick)
+                }
+            }
+
+            // 10.2 — «مقالات قد تهمك»: رأي من تصنيف الخبر (نقل الويب #1609/#1624).
+            if (!isFocusMode && !article.isOpinion && relatedOpinions.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    RelatedOpinionsSection(
+                        article = article,
+                        opinions = relatedOpinions,
+                        onClick = { opinion ->
+                            com.sabq.smart.data.ArticleHandoff.put(opinion)
+                            onRelatedClick(opinion)
+                        },
+                        onSeeAll = onOpinionsSeeAll,
+                    )
                 }
             }
 
@@ -1117,6 +1145,7 @@ private fun SmartSummaryCard(article: Article) {
             // ExoPlayer (AudioPlayerController). Mirrors iOS
             // `listenButton` (ArticleDetailView.swift:712-732).
             article.slug?.takeIf { it.isNotBlank() }?.let { slug ->
+                SummaryAudioAttribution(slug = slug)
                 ListenPill(slug = slug)
             }
         }
@@ -1165,6 +1194,30 @@ private fun SmartSummaryCard(article: Article) {
  *   - "إيقاف" + pause.fill when playing
  *   - emerald-ish brand pill backdrop + shadow
  */
+/**
+ * إسناد المزوّد بعبارة الويب حرفيًا (`SummaryAudioAttribution.tsx`) — يظهر فقط
+ * عندما يكون مقطع هذا الخبر عبر HUMAIN (رأس `X-TTS-Provider`).
+ */
+@Composable
+private fun SummaryAudioAttribution(slug: String) {
+    val context = LocalContext.current
+    val controller = remember {
+        dagger.hilt.android.EntryPointAccessors
+            .fromApplication(context.applicationContext, AudioPlayerEntryPoint::class.java)
+            .audioPlayerController()
+    }
+    val playerState by controller.state.collectAsState()
+    if (playerState.playingSlug == slug && playerState.isHumain) {
+        Text(
+            text = "الصوت عبر HUMAIN",
+            fontSize = 11.sp,
+            color = Color(0.016f, 0.47f, 0.34f),
+            maxLines = 1,
+            modifier = Modifier.semantics { contentDescription = "الصوت عبر هيومن" },
+        )
+    }
+}
+
 @Composable
 private fun ListenPill(slug: String) {
     val context = LocalContext.current
@@ -1913,81 +1966,77 @@ private fun TagChip(tag: String, onClick: () -> Unit) {
 
 @Composable
 private fun RelatedSection(related: List<Article>, onClick: (Article) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    // الحاوية الموحدة (نقل #1610): تسمية الويب (4ad1892) — القائمة آخر ما
+    // نُشر في القسم لا تشابهًا.
+    ArticleSidebarModule(
+        title = "اقرأ أيضاً",
+        description = "آخر ما نُشر في القسم",
+        icon = Icons.Outlined.Link,
+        modifier = Modifier.padding(horizontal = 20.dp),
     ) {
-        HorizontalDivider(color = SabqTheme.colors.outline)
-        SectionHeaderRow(
-            // تسمية الويب (4ad1892): القائمة آخر ما نُشر في القسم لا تشابهًا
-            title = "اقرأ أيضاً",
-            subtitle = "آخر ما نُشر في القسم",
-            icon = Icons.Outlined.Link,
-            tint = SabqTheme.colors.primaryEnd,
-        )
         related.forEachIndexed { idx, item ->
+            if (idx > 0) SidebarRowDivider()
+            SidebarArticleRow(
+                title = item.title,
+                imageUrl = item.imageUrl,
+                date = formatRelativeDateAr(item.publishedAtIso).ifBlank { item.dateFormatted },
+                placeholderIcon = Icons.Outlined.AutoStories,
+                placeholderTint = item.category.tint(),
+                onClick = { onClick(item) },
+            )
+        }
+    }
+}
+
+/**
+ * «مقالات قد تهمك»: مقالات رأي من تصنيف الخبر — صورة الكاتب الصغيرة قبل اسمه
+ * وبلا توقيت (تُقرأ كقائمة كتّاب لا خطًّا زمنيًا)، ومقال الرأي بلا صورة يعرض
+ * صورة الكاتب داخل الإطار نفسه، و«عرض المزيد» يفتح قسم الرأي.
+ */
+@Composable
+private fun RelatedOpinionsSection(
+    article: Article,
+    opinions: List<Article>,
+    onClick: (Article) -> Unit,
+    onSeeAll: () -> Unit,
+) {
+    val categoryTitle = article.categoryLabel.ifBlank { article.category.title }
+    ArticleSidebarModule(
+        title = "مقالات قد تهمك",
+        description = "من تصنيف «$categoryTitle»",
+        icon = Icons.Outlined.AutoStories,
+        modifier = Modifier.padding(horizontal = 20.dp),
+        action = {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onClick(item) }
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.clickable { onSeeAll() },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = item.title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SabqTheme.colors.ink,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = item.dateFormatted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = SabqTheme.colors.tertiaryInk,
-                    )
-                }
-                if (!item.imageUrl.isNullOrBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(SabqTheme.colors.paleFill),
-                    ) {
-                        FocalCachedAsyncImage(
-                            url = item.imageUrl,
-                            focalPoint = item.focalPoint,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(item.category.tint().copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AutoStories,
-                            contentDescription = null,
-                            tint = item.category.tint().copy(alpha = 0.4f),
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
+                Text(
+                    text = "عرض المزيد",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SabqTheme.colors.primaryEnd,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = null,
+                    tint = SabqTheme.colors.primaryEnd,
+                    modifier = Modifier.size(14.dp),
+                )
             }
-            if (idx != related.lastIndex) {
-                HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.5f))
-            }
+        },
+    ) {
+        opinions.take(5).forEachIndexed { idx, opinion ->
+            if (idx > 0) SidebarRowDivider()
+            SidebarArticleRow(
+                title = opinion.title,
+                imageUrl = opinion.imageUrl?.takeIf { it.isNotBlank() } ?: opinion.authorImageUrl,
+                byline = opinion.authorName?.takeIf { it.isNotBlank() } ?: "كاتب رأي",
+                bylineAvatarUrl = opinion.authorImageUrl,
+                placeholderIcon = Icons.Filled.FormatQuote,
+                onClick = { onClick(opinion) },
+            )
         }
     }
 }

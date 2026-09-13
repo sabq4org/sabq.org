@@ -104,6 +104,8 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         isBreaking = breaking,
         isFeatured = isFeatured == true,
         isReading = isReading == true,
+        categoryId = (category?.id?.takeIf { it.isNotBlank() } ?: sectionId?.takeIf { it.isNotBlank() }),
+        viewsCount = viewsCount?.takeIf { it >= 0 },
         slug = slug,
         authorName = resolvedAuthor,
         authorImageUrl = absoluteAuthorImage,

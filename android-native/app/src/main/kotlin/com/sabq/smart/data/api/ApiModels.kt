@@ -230,6 +230,7 @@ data class ApiAuthor(
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ApiCategoryNested(
+    val id: String? = null,
     @JsonNames("nameAr", "name")
     val name: String? = null,
     val slug: String? = null,
