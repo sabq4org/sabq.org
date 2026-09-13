@@ -105,6 +105,18 @@ data class ApiArticle(
     /** صورة كاتب الرأي — نفس مفاتيح iOS (APIModels.swift line 665). */
     @JsonNames("author_image", "authorImage")
     val authorImage: String? = null,
+    /** معرّف مُدخل الخبر ومعرّف المراسل المختار — لصفة «مراسل صحفي» (نقل #1598). */
+    @JsonNames("author_id", "authorId")
+    val authorId: String? = null,
+    @JsonNames("reporter_id", "reporterId")
+    val reporterId: String? = null,
+    /** ملف المراسل الموحد (`staff`) في تفاصيل الخبر العامة. */
+    val staff: ApiStaffNested? = null,
+    /** `seoMetadata.editorialModifiedAt` هو المصدر الوحيد لـ«آخر تحديث». */
+    @JsonNames("seo_metadata", "seoMetadata")
+    val seoMetadata: ApiSeoMetadata? = null,
+    @JsonNames("editorial_modified_at", "editorialModifiedAt")
+    val editorialModifiedAt: String? = null,
 
     @JsonNames("published_at", "publishedAt", "createdAt", "created_at")
     val publishedAt: String? = null,
@@ -218,6 +230,36 @@ data class ApiWeeklyPhoto(
 data class ApiSeo(
     @JsonNames("keywords", "tags")
     val keywords: kotlinx.serialization.json.JsonElement? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiStaffNested(
+    val id: String? = null,
+    @JsonNames("nameAr", "name", "fullName")
+    val nameAr: String? = null,
+    val slug: String? = null,
+    @JsonNames("profileImage", "avatarUrl", "profile_image")
+    val profileImage: String? = null,
+    @JsonNames("isVerified", "is_verified")
+    val isVerified: Boolean? = null,
+    @JsonNames("title", "titleAr", "jobTitle")
+    val title: String? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiSeoMetadata(
+    @JsonNames("editorialModifiedAt", "editorial_modified_at")
+    val editorialModifiedAt: String? = null,
+)
+
+/** `/api/reporters/{slug}` — الصفة تُستبدل بها صفة الخبر (نقل #1598). */
+@Serializable
+data class ApiReporterProfile(
+    val title: String? = null,
+    val fullName: String? = null,
+    val avatarUrl: String? = null,
 )
 
 @Serializable

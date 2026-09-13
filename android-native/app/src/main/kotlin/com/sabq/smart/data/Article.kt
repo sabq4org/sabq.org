@@ -29,6 +29,13 @@ data class Article(
     val authorName: String? = null,
     /** صورة كاتب الرأي (رابط مطلق) — تُعرض في قائمة «الرأي» بالرئيسية. */
     val authorImageUrl: String? = null,
+    /** صفة الكاتب بقواعد الويب (`resolveAuthorRole`) — تُستبدل بصفة ملف المراسل عند توفرها. */
+    val authorRole: String? = null,
+    /** slug ملف المراسل الموحد — لجلب صفته من `/api/reporters/{slug}`. */
+    val authorSlug: String? = null,
+    val isAuthorVerified: Boolean = false,
+    /** «آخر تحديث» — من `seoMetadata.editorialModifiedAt` فقط؛ null بلا تعديل تحريري. */
+    val editorialModifiedAtIso: String? = null,
     val body: String? = null,
     val articleType: String? = null,
     val authorGender: String? = null,

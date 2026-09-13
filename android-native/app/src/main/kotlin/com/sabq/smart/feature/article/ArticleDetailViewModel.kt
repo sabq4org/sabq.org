@@ -24,6 +24,8 @@ sealed interface ArticleDetailUiState {
         val related: List<Article> = emptyList(),
         /** «مقالات قد تهمك»: رأي من تصنيف الخبر (يختفي للرأي أو بلا تصنيف). */
         val relatedOpinions: List<Article> = emptyList(),
+        /** صفة المراسل من `/api/reporters/{slug}` — تُستبدل بها `authorRole`. */
+        val reporterTitle: String? = null,
         val mediaAssets: List<MediaAsset> = emptyList(),
         /** المحتوى المعروض من بطاقة القائمة والنص الكامل ما زال يُجلب. */
         val hydrating: Boolean = false,
@@ -66,6 +68,7 @@ class ArticleDetailViewModel @Inject constructor(
                     _state.value = ArticleDetailUiState.Loaded(article = article)
                     loadRelated()
                     loadRelatedOpinions(article)
+                    loadReporterTitle(article)
                     loadMediaAssets(article.id)
                 }
                 .onFailure { e ->
@@ -93,6 +96,19 @@ class ArticleDetailViewModel @Inject constructor(
                 .onFailure { e ->
                     android.util.Log.e("ArticleDetailVM", "Failed to load related articles", e)
                 }
+        }
+    }
+
+    private fun loadReporterTitle(article: Article) {
+        val slug = article.authorSlug ?: return
+        viewModelScope.launch {
+            runCatching { repo.getReporterTitle(slug) }
+                .onSuccess { title ->
+                    if (title != null) _state.update { c ->
+                        if (c is ArticleDetailUiState.Loaded) c.copy(reporterTitle = title) else c
+                    }
+                }
+                .onFailure { e -> android.util.Log.e("ArticleDetailVM", "Failed to load reporter title", e) }
         }
     }
 

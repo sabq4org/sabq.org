@@ -62,6 +62,8 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -257,6 +259,7 @@ fun ArticleDetailScreen(
                 hydrating = s.hydrating,
                 related = s.related,
                 relatedOpinions = s.relatedOpinions,
+                reporterTitle = s.reporterTitle,
                 mediaAssets = s.mediaAssets,
                 fontSize = settings.articleFontSize,
                 lineSpacing = settings.articleLineSpacing,
@@ -281,6 +284,7 @@ private fun ArticleBody(
     hydrating: Boolean = false,
     related: List<Article>,
     relatedOpinions: List<Article> = emptyList(),
+    reporterTitle: String? = null,
     mediaAssets: List<com.sabq.smart.data.MediaAsset>,
     fontSize: Float,
     lineSpacing: Float,
@@ -532,7 +536,7 @@ private fun ArticleBody(
             item { ArticleTitle(article = article, fontSize = fontSize, useSerif = useSerif) }
 
             // 4. Meta row (author · reading time · date).
-            item { MetaRow(article = article, onAuthorClick = onAuthorClick) }
+            item { MetaRow(article = article, reporterTitle = reporterTitle, onAuthorClick = onAuthorClick) }
 
             // 5. Smart Summary Card.
             if (!isFocusMode) {
@@ -1044,45 +1048,145 @@ private fun ArticleTitle(article: Article, fontSize: Float, useSerif: Boolean) {
 // ============================================================
 
 @Composable
-private fun MetaRow(article: Article, onAuthorClick: (String) -> Unit) {
+private fun MetaRow(article: Article, reporterTitle: String?, onAuthorClick: (String) -> Unit) {
     if (article.isOpinion) {
         OpinionMetaRow(article = article, onAuthorClick = onAuthorClick)
     } else {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        NewsBylineRow(article = article, reporterTitle = reporterTitle, onAuthorClick = onAuthorClick)
+    }
+}
+
+/**
+ * سطر الكاتب كما في الويب (#1598) بتصميم iOS المضغوط (#1642/#1644): صورة 34،
+ * الاسم (رابط) + شارة التوثيق · الصفة، ثم التاريخ | الوقت | «قراءة N دقيقة»
+ * بأيقونات صغيرة، ثم «آخر تحديث» سطرًا ظاهرًا عند وجود تعديل تحريري فقط.
+ */
+@Composable
+private fun NewsBylineRow(article: Article, reporterTitle: String?, onAuthorClick: (String) -> Unit) {
+    val name = article.authorName?.takeIf { it.isNotBlank() } ?: "صحيفة سبق"
+    val role = reporterTitle ?: article.authorRole ?: "كاتب الخبر"
+    val date = com.sabq.smart.data.ArticleByline.publicationDate(article.publishedAtIso)
+    val clock = com.sabq.smart.data.ArticleByline.publicationClock(article.publishedAtIso)
+    // تفاصيل الخبر العامة بلا reading_minutes؛ نقدّرها من طول النص كما في iOS (800 حرف/دقيقة).
+    val readingMinutes = article.readingMinutesInt
+        ?: article.body?.takeIf { it.isNotBlank() }?.let { maxOf(1, it.length / 800) }
+    val reading = com.sabq.smart.data.ArticleByline.readingLabel(readingMinutes)
+    val updated = com.sabq.smart.data.ArticleByline.lastUpdatedLabel(article.editorialModifiedAtIso)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BylineAvatar(name = name, imageUrl = article.authorImageUrl, size = 34.dp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            article.authorName?.takeIf { it.isNotBlank() }?.let { name ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable { onAuthorClick(name) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = name,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SabqTheme.colors.ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (article.isAuthorVerified) {
+                        Icon(
+                            imageVector = Icons.Filled.Verified,
+                            contentDescription = "موثّق",
+                            tint = SabqTheme.colors.primaryEnd,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
+                Text("·", fontSize = 11.sp, color = SabqTheme.colors.secondaryInk)
                 Text(
-                    text = name,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SabqTheme.colors.primaryEnd,
+                    text = role,
+                    fontSize = 11.sp,
+                    color = SabqTheme.colors.secondaryInk,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.clickable { onAuthorClick(name) }
                 )
-                MiddleDot()
             }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (date != null) BylineItem(text = date, icon = Icons.Outlined.CalendarMonth)
+                if (clock != null) BylineItem(text = clock, icon = Icons.Outlined.Schedule)
+                BylineItem(text = reading, icon = Icons.Outlined.AutoStories)
+            }
+            if (updated != null) {
+                BylineItem(text = "آخر تحديث: $updated", icon = Icons.Outlined.Refresh)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BylineItem(text: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(11.dp),
+        )
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            color = SabqTheme.colors.secondaryInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun BylineAvatar(name: String, imageUrl: String?, size: androidx.compose.ui.unit.Dp) {
+    val initials: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                text = article.readingTime,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.tertiaryInk,
-                maxLines = 1,
-            )
-            MiddleDot()
-            Text(
-                text = article.dateFormatted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.tertiaryInk,
-                maxLines = 1,
+                text = name.trim().take(1),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = SabqTheme.colors.primaryEnd,
             )
         }
+    }
+    if (!imageUrl.isNullOrBlank()) {
+        SubcomposeAsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(size).clip(CircleShape),
+            loading = { initials() },
+            error = { initials() },
+        )
+    } else {
+        initials()
     }
 }
 
