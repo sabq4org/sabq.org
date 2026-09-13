@@ -1,5 +1,10 @@
 import java.util.Properties
 
+val analyticsDebugEnabled = providers.gradleProperty("analyticsDebugEnabled")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+    .get()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,6 +12,28 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+}
+
+// Every release entry point validates the native Firebase app configuration.
+val firebaseConfigCandidates = listOf(file("src/debug/google-services.json"),
+    file("src/release/google-services.json"), file("google-services.json"))
+if (firebaseConfigCandidates.any { it.exists() }) {
+    apply(plugin = "com.google.gms.google-services")
+}
+val validateReleaseFirebase = tasks.register<Exec>("validateReleaseFirebase") {
+    val config = file("src/release/google-services.json").takeIf { it.exists() } ?: file("google-services.json")
+    commandLine("python3", rootProject.file("../scripts/verify-mobile-firebase-config.py"),
+        "--platform", "android", "--config", config, "--identity", "com.sabqorg.sabq")
+}
+val validateDebugFirebase = tasks.register<Exec>("validateDebugFirebase") {
+    val config = file("src/debug/google-services.json").takeIf { it.exists() } ?: file("google-services.json")
+    onlyIf { config.exists() }
+    commandLine("python3", rootProject.file("../scripts/verify-mobile-firebase-config.py"),
+        "--platform", "android", "--config", config, "--identity", "com.sabqorg.sabq.dev")
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(validateReleaseFirebase)
+    if (name == "preDebugBuild") dependsOn(validateDebugFirebase)
 }
 
 android {
@@ -50,14 +77,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        // GA4 Measurement Protocol credentials — Sabq Android App (MP) stream
-        // in the Sabq GA3 - GA4 property. Shared with web (gtag.js) and iOS
-        // (MP) so events unify in Reports → Engagement → Events.
-        // These values are also visible in the on-the-wire HTTPS POST, so
-        // committing them is no different from shipping them inside the APK.
-        buildConfigField("String", "GA4_MEASUREMENT_ID", "\"G-XPS0W1N9CQ\"")
-        buildConfigField("String", "GA4_API_SECRET", "\"8rfI2G7RTxW7IZ4iIM-D-A\"")
-
         // OAuth — Google Web Client ID is what Credential Manager uses to
         // sign Google ID tokens that our backend can verify (the backend
         // checks the audience against `GOOGLE_CLIENT_ID`, the Web client).
@@ -76,6 +95,7 @@ android {
             "GOOGLE_WEB_CLIENT_ID",
             "\"664097075837-tk2a6h79sovkgu75teukvcb3bv7gfjpr.apps.googleusercontent.com\"",
         )
+        buildConfigField("boolean", "ANALYTICS_DEBUG_ENABLED", analyticsDebugEnabled.toString())
     }
 
     // Production signing config reads from local.properties (gitignored)
@@ -116,8 +136,10 @@ android {
             // testing. Drop the suffix when shipping to Play Store.
             applicationIdSuffix = ".dev"
             isMinifyEnabled = false
+            manifestPlaceholders["analyticsDeactivated"] = if (analyticsDebugEnabled) "false" else "true"
         }
         release {
+            manifestPlaceholders["analyticsDeactivated"] = "false"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -219,6 +241,7 @@ dependencies {
     // Push (FCM)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.analytics)
 
     // Media (audio)
     implementation(libs.androidx.media3.exoplayer)

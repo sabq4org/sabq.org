@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-12",
+  "updatedAt": "2026-09-13",
   "systems": [
     {
       "id": "account-center",
@@ -1120,6 +1120,35 @@
         "tests/unit/economyNumberGuard.test.ts",
         "tests/fixtures/sama/**"
       ]
+    },
+    {
+      "id": "mobile-analytics",
+      "nameAr": "قياس التطبيقات الأصلية",
+      "nameEn": "Native mobile analytics",
+      "status": "active",
+      "category": "infra",
+      "summary": "Firebase Analytics وموافقة المستخدم وأحداث تطبيقَي سبق iOS وأندرويد.",
+      "docPath": "docs/systems/mobile-analytics/SYSTEM.md",
+      "relatedDocs": [
+        "docs/setup/MOBILE_ANALYTICS.md",
+        "docs/setup/MOBILE_ANALYTICS_VALIDATION.md"
+      ],
+      "pathGlobs": [
+        "sabq app ios/sabq/Services/SabqAnalytics*.swift",
+        "sabq app ios/sabq/Services/Analytics*.swift",
+        "sabq app ios/sabq/Components/Analytics*.swift",
+        "sabq app ios/sabqTests/*Analytics*.swift",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/**",
+        "android-native/app/src/test/**/analytics/**",
+        "scripts/verify-mobile-firebase-config.py",
+        "tests/unit/test_mobile_firebase_config.py"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": null,
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-09-13"
     }
   ]
 }

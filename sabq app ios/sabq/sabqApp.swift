@@ -5,6 +5,7 @@ import AVFoundation
 struct sabqApp: App {
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @AppStorage("sabqHasCompletedOnboardingV2") private var hasOnboarded: Bool = false
+    @State private var showAnalyticsConsent = false
     @Environment(\.scenePhase) private var scenePhase
 
     // Bridge UIApplicationDelegate so we can receive APNs callbacks
@@ -13,6 +14,7 @@ struct sabqApp: App {
     @UIApplicationDelegateAdaptor(SabqAppDelegate.self) private var appDelegate
 
     init() {
+        SabqAnalytics.configureIfAvailable()
         // Register bundled IBM Plex Sans Arabic before any SwiftUI view
         // tries to look it up via .font(.custom(...)).
         SabqFonts.registerAll()
@@ -67,8 +69,26 @@ struct sabqApp: App {
                         .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                         .interactiveDismissDisabled(true)
                 }
+                .onAppear {
+                    SabqAnalytics.setAppActive(scenePhase == .active)
+                    if hasOnboarded && !SabqAnalytics.hasAnalyticsConsent {
+                        showAnalyticsConsent = true
+                    }
+                }
+                .onChange(of: hasOnboarded) { _, completed in
+                    if completed && !SabqAnalytics.hasAnalyticsConsent {
+                        showAnalyticsConsent = true
+                    }
+                }
+                .alert("تحليلات الاستخدام", isPresented: $showAnalyticsConsent) {
+                    Button("السماح") { SabqAnalytics.setAnalyticsConsent(true) }
+                    Button("لا، شكرًا", role: .cancel) { SabqAnalytics.setAnalyticsConsent(false) }
+                } message: {
+                    Text("نستخدم بيانات الاستخدام لتحسين التطبيق. الاختيار اختياري ويمكن تغييره لاحقًا من الإعدادات.")
+                }
         }
         .onChange(of: scenePhase) { _, newPhase in
+            SabqAnalytics.setAppActive(newPhase == .active)
             // Flush any queued loyalty events when the app backgrounds.
             // The queue's 30s timer still runs while in foreground, so
             // this is only the safety net for "app suspended before

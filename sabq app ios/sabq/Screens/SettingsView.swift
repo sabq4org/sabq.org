@@ -26,6 +26,7 @@ struct SettingsView: View {
     @AppStorage("articleFontSize") private var textSize: Double = 17
     @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
     @AppStorage("homeCardStyle") private var cardStyleRaw: String = "classic"
+    @AppStorage("sabq.analytics.consent") private var analyticsConsent = false
     @State private var showLogin = false
     @State private var showRoleDebug = false
     @State private var roleDebugMessage = ""
@@ -56,6 +57,7 @@ struct SettingsView: View {
                 }
                 displaySection
                 browsingExperienceSection
+                analyticsPrivacySection
                 if authStore.isLoggedIn {
                     matchAlertsSection
                 }
@@ -841,6 +843,32 @@ struct SettingsView: View {
                 }
                 .modifier(SabqAdaptivePickerStyle())
             }
+        }
+    }
+
+    private var analyticsPrivacySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(
+                title: "الخصوصية والبيانات",
+                subtitle: "تحكم في إرسال بيانات الاستخدام لتحسين التطبيق.",
+                icon: "chart.bar.xaxis",
+                tint: SabqTheme.primaryEnd
+            )
+            Toggle(isOn: Binding(
+                get: { analyticsConsent },
+                set: {
+                    analyticsConsent = $0
+                    SabqAnalytics.setAnalyticsConsent($0)
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("تحليلات الاستخدام")
+                    Text("تساعدنا على تحسين الأخبار، ويمكنك سحب الاختيار في أي وقت.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(SabqTheme.primaryEnd)
         }
     }
 

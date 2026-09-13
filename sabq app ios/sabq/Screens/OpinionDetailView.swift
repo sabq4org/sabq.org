@@ -15,6 +15,7 @@ struct OpinionDetailView: View {
     /// body. Without this, every scroll tick re-rendered the entire
     /// opinion reader (including its JustifiedText paragraphs).
     @State private var scrollProgress = ArticleScrollProgress()
+    @State private var isAnalyticsVisible = false
     @State private var showReaderControls = false
     @State private var isFocusMode = false
     /// Drives the hero `ImageLightbox` fullScreenCover when the reader
@@ -83,6 +84,7 @@ struct OpinionDetailView: View {
 
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         opinionBody
+                            .analyticsReadingBody()
 
                         // Mirrors ArticleDetailView's spacing pass —
                         // the lower share / keywords / more-opinions
@@ -114,6 +116,9 @@ struct OpinionDetailView: View {
             .sabqScrollProgressTracker { progress in
                 scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
+            }
+            .analyticsReadingProgress { progress in
+                SabqAnalytics.updateReading(articleId: opinion.id, percent: Int(progress * 100))
             }
             .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
@@ -150,6 +155,8 @@ struct OpinionDetailView: View {
             // Unified tracker — opinion reads feed both the home
             // "Reading Journey" card and the weighted trending score.
             BehaviorTracker.shared.startSession(articleId: opinion.id)
+            isAnalyticsVisible = true
+            SabqAnalytics.beginReading(articleId: opinion.id)
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -190,10 +197,16 @@ struct OpinionDetailView: View {
             await refreshLikeStatus()
         }
         .onDisappear {
+            isAnalyticsVisible = false
             copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
+            SabqAnalytics.endReading(articleId: opinion.id)
             // مغادرة المقال توقف ملخصه فقط؛ نهاية المقطع يعالجها المشغّل المشترك.
             SabqAudioPlayer.shared.stopIfCurrent(key: audioKey)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+            guard isAnalyticsVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+            SabqAnalytics.beginReading(articleId: opinion.id)
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
@@ -715,7 +728,11 @@ struct OpinionDetailView: View {
 
     private func shareOpinion() {
         let url = fallbackShareURL
-        SabqShareHelper.presentShareSheet(with: url)
+        SabqAnalytics.shareIntent(articleId: opinion.id)
+        let id = opinion.id
+        SabqShareHelper.presentShareSheet(with: url) { completed in
+            if completed { SabqAnalytics.shareCompleted(articleId: id, stage: "ios_completion") }
+        }
     }
 
     private func copyShareLink() {
