@@ -110,6 +110,7 @@ struct OpinionDetailView: View {
                 }
                 .frame(width: proxy.size.width, alignment: .center)
             }
+            .sabqNavigationEdge()
             .sabqScrollProgressTracker { progress in
                 scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
@@ -399,7 +400,9 @@ struct OpinionDetailView: View {
                     Image(systemName: "applepencil")
                         .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
-                    Text("\(displayOpinion.bylineLabel):")
+                    // علامة RTL في أول النص كي تُرسم النقطتان بعد الكلمة لا قبلها
+                    // (القطعة وحدها تُقرأ LTR فتنقلب: «:الكاتب»).
+                    Text("\u{200F}\(displayOpinion.bylineLabel):")
                         .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(displayOpinion.authorName)
