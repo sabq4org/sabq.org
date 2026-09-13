@@ -262,6 +262,38 @@ data class ApiReporterProfile(
     val avatarUrl: String? = null,
 )
 
+/** «فريق سبق الذكي» — `/api/public/ai-team` (نقل e1dc9c7). */
+@Serializable
+data class ApiAiTeam(
+    val generatedAt: String? = null,
+    val team: List<ApiAiTeamMember> = emptyList(),
+    val counters: ApiAiTeamCounters? = null,
+) {
+    /** «لا أرقام وهمية»: بلا أعضاء لا يُعرض القسم. */
+    val isRenderable: Boolean get() = team.isNotEmpty()
+}
+
+@Serializable
+data class ApiAiTeamMember(
+    val slug: String = "",
+    val nameAr: String = "",
+    val titleAr: String = "",
+    val departmentAr: String = "",
+    val avatarUrl: String? = null,
+) {
+    /** الصور نسبية على الويب (`/ai-team/rased.jpg`) — نُكمّلها بأصل الموقع. */
+    val absoluteAvatarUrl: String?
+        get() {
+            val raw = avatarUrl?.trim().orEmpty()
+            if (raw.isEmpty()) return null
+            if (raw.startsWith("http")) return raw
+            return "https://sabq.org" + (if (raw.startsWith("/")) raw else "/$raw")
+        }
+}
+
+@Serializable
+data class ApiAiTeamCounters(val monthOps: Int = 0, val teamCount: Int = 0)
+
 @Serializable
 data class ApiAuthor(
     @SerialName("firstName") val firstName: String? = null,

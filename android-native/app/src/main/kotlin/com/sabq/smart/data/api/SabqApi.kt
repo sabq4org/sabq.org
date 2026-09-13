@@ -336,6 +336,10 @@ interface SabqApi {
      * المسار عام فقط (`/api/opinion/...`) ولا نظير له تحت v1؛ نفس غلاف
      * `{ articles, total }`. iOS: `APIClient.fetchRelatedOpinions`.
      */
+    /** «فريق سبق الذكي» — عام، كاش 5 دقائق على الخادم (نقل e1dc9c7). */
+    @GET("api/public/ai-team")
+    suspend fun getAiTeam(): ApiAiTeam
+
     /** ملف المراسل الموحد — صفته تُستبدل بها صفة الخبر (نقل #1598). عام لا v1. */
     @GET("api/reporters/{slug}")
     suspend fun getReporterProfile(@Path("slug") slug: String): ApiReporterProfile
