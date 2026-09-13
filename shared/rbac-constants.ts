@@ -602,15 +602,17 @@ export function denyPermissionsForRoles(
   return permissions.filter((code) => !denied.has(code));
 }
 
-/** دمج صلاحيات DB مع خريطة الكود ثم تطبيق الاستبعادات الصريحة للدور. */
+/** دمج المنح ثم تطبيق استبعادات الدور والمنع الفردي؛ عقد الأدمن "*" يبقى كما هو. */
 export function resolveEffectivePermissions(
   roleNames: string[],
   dbPermissions: string[] = [],
+  deniedPermissionCodes: string[] = [],
 ): string[] {
   const codePerms = getPermissionsForRoles(roleNames);
   if (codePerms.includes("*")) return ["*"];
   const merged = [...new Set([...dbPermissions, ...codePerms])];
-  return denyPermissionsForRoles(roleNames, merged);
+  const denied = new Set(deniedPermissionCodes);
+  return denyPermissionsForRoles(roleNames, merged).filter(code => !denied.has(code));
 }
 
 // Roles that grant full superuser via getUserPermissions' name check — assigning

@@ -239,3 +239,29 @@ describe("AIGateway failover", () => {
     expect(incidents.some((i) => i.kind === "chain_exhausted")).toBe(true);
   });
 });
+
+describe("AIGateway total deadline", () => {
+  it("aborts transport and never dispatches a fallback after expiry", async () => {
+    let signal: AbortSignal | undefined;
+    let fallbacks = 0;
+    const { gateway } = buildHarness([
+      makeAdapter("openai", async (_m, p) => { signal = p.signal; return new Promise((_r, reject) => p.signal!.addEventListener("abort", () => reject(p.signal!.reason), { once: true })); }),
+      makeAdapter("anthropic", async () => { fallbacks++; return ok("unexpected"); }),
+    ], makeConfig());
+    await expect(gateway.complete({ feature: "test-feature", prompt: "test", timeoutMs: 15 })).rejects.toMatchObject({ code: "TIMEOUT" });
+    expect(signal?.aborted).toBe(true); expect(fallbacks).toBe(0);
+  });
+  it("expires a queued request without starting provider transport later", async () => {
+    const release: (() => void)[] = [];
+    const { gateway } = buildHarness([makeAdapter("openai", async () => new Promise(resolve => {
+      release.push(() => resolve(ok("done")));
+    }))], makeConfig({ fallbackChain: [] }));
+    const running = Array.from({ length: 8 }, () => gateway.complete({ feature: "test-feature", prompt: "occupy", timeoutMs: 1000 }));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(release).toHaveLength(8);
+    await expect(gateway.complete({ feature: "test-feature", prompt: "queued", timeoutMs: 15 })).rejects.toMatchObject({ code: "TIMEOUT" });
+    release.forEach(r => r()); await Promise.all(running);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(release).toHaveLength(8);
+  });
+});

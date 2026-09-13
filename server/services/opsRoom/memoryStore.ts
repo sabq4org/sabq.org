@@ -72,9 +72,11 @@ export class MemoryOpsStore implements OpsStore {
     return row ? { ...row } : undefined;
   }
 
-  async updateTask(id: string, patch: TaskPatch): Promise<OpsTaskRow | undefined> {
+  async updateTask(id: string, patch: TaskPatch, expected?: { status: string; attempts: number; startedAt: Date | null }): Promise<OpsTaskRow | undefined> {
     const row = this.tasks.get(id);
     if (!row) return undefined;
+    if (expected && (row.status !== expected.status || row.attempts !== expected.attempts ||
+      row.startedAt?.getTime() !== expected.startedAt?.getTime())) return undefined;
     const next = { ...row, ...(patch as Partial<OpsTaskRow>) } as OpsTaskRow;
     this.tasks.set(id, next);
     return { ...next };
@@ -90,10 +92,12 @@ export class MemoryOpsStore implements OpsStore {
     return [...this.tasks.values()].filter((t) => t.parentId === parentId).sort((a, b) => a.stepIndex - b.stepIndex).map((t) => ({ ...t }));
   }
 
-  async listMainTasks(opts?: { statuses?: OpsTaskStatus[]; limit?: number }): Promise<OpsTaskRow[]> {
+  async listMainTasks(opts?: { statuses?: OpsTaskStatus[]; limit?: number; oldestFirst?: boolean }): Promise<OpsTaskRow[]> {
     let rows = [...this.tasks.values()].filter((t) => !t.parentId);
     if (opts?.statuses) rows = rows.filter((t) => opts.statuses!.includes(t.status as OpsTaskStatus));
-    rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    rows.sort((a, b) => opts?.oldestFirst
+      ? a.updatedAt.getTime() - b.updatedAt.getTime()
+      : b.createdAt.getTime() - a.createdAt.getTime());
     return rows.slice(0, opts?.limit ?? 100).map((t) => ({ ...t }));
   }
 

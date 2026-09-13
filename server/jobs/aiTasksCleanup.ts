@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron from '../leaderCron';
 import { log } from "../utils/logger";
 import { storage } from '../storage';
 import { db } from '../db';

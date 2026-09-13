@@ -48,6 +48,20 @@ describe("isPublishingStatus", () => {
 });
 
 describe("decidePublish", () => {
+  it.each(["published", "scheduled"])("personal deny blocks trusted-publisher %s", nextStatus => {
+    expect(decidePublish({
+      nextStatus, gate: publisherGate({ autoPublish: true }),
+      permissions: ["articles.publish"], deniedPermissionCodes: ["articles.publish"],
+    })?.httpStatus).toBe(403);
+  });
+
+  it("personal publish denial still permits saving a draft", () => {
+    expect(decidePublish({
+      nextStatus: "draft", gate: publisherGate({ autoPublish: true }),
+      permissions: [], deniedPermissionCodes: ["articles.publish"],
+    })).toBeNull();
+  });
+
   it("lets a draft through for a user with no publish permission", () => {
     expect(
       decidePublish({ nextStatus: "draft", gate: NO_PUBLISHER, permissions: [] }),

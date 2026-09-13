@@ -14,7 +14,7 @@ import {
   pushNotificationLogs,
   articles,
 } from "@shared/schema";
-import { eq, desc, sql, count, gte, and, or, ilike } from "drizzle-orm";
+import { inArray, eq, desc, sql, count, gte, and, or, ilike } from "drizzle-orm";
 import { sendImmediatePush } from "../jobs/pushWorker";
 import { isFcmConfigured, sendToTopic, getPushStats, subscribeToTopic, sendToMultipleDevices } from "../services/fcmService";
 import { isApnsConfigured, sendBatchPushNotifications as sendApnsBatch, createCustomNotificationPayload } from "../services/apnsService";
@@ -377,7 +377,11 @@ router.post("/campaigns", async (req: Request, res: Response) => {
 router.patch("/campaigns/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const allowed = ["name", "type", "title", "titleAr", "body", "bodyAr", "imageUrl", "deeplink", "articleId", "segmentId", "targetAll", "scheduledAt", "status", "priority", "badge", "sound", "richMediaUrl", "actionButtons"];
+    const updates: any = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
+    if (updates.status && !["draft", "scheduled", "cancelled"].includes(updates.status)) {
+      return res.status(400).json({ error: "Invalid campaign status" });
+    }
 
     const [existing] = await db
       .select({ status: pushCampaigns.status })
@@ -389,7 +393,7 @@ router.patch("/campaigns/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Campaign not found" });
     }
 
-    if (existing.status === "sent" || existing.status === "sending") {
+    if (!["draft", "scheduled", "cancelled"].includes(existing.status)) {
       return res.status(400).json({ error: "Cannot update sent campaigns" });
     }
 
@@ -405,8 +409,9 @@ router.patch("/campaigns/:id", async (req: Request, res: Response) => {
     const [campaign] = await db
       .update(pushCampaigns)
       .set(updates)
-      .where(eq(pushCampaigns.id, id))
+      .where(and(eq(pushCampaigns.id, id), inArray(pushCampaigns.status, ["draft", "scheduled", "cancelled"])))
       .returning();
+    if (!campaign) return res.status(409).json({ error: "Campaign already claimed" });
 
     res.json(campaign);
   } catch (error) {
@@ -433,18 +438,20 @@ router.post("/campaigns/:id/send", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Campaign not found" });
     }
 
-    if (campaign.status === "sent") {
-      return res.status(400).json({ error: "Campaign already sent" });
+    if (!["draft", "scheduled"].includes(campaign.status)) {
+      return res.status(409).json({ error: "Campaign cannot be requeued in its current delivery state" });
     }
 
-    await db
+    const queued = await db
       .update(pushCampaigns)
       .set({ 
         status: "scheduled", 
         scheduledAt: new Date(),
         updatedAt: new Date() 
       })
-      .where(eq(pushCampaigns.id, id));
+      .where(and(eq(pushCampaigns.id, id), inArray(pushCampaigns.status, ["draft", "scheduled"])))
+      .returning({ id: pushCampaigns.id });
+    if (!queued.length) return res.status(409).json({ error: "Campaign already claimed" });
 
     res.json({ success: true, message: "Campaign queued for immediate sending" });
   } catch (error) {
@@ -461,9 +468,14 @@ router.delete("/campaigns/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    await db
+    const deleted = await db
       .delete(pushCampaigns)
-      .where(eq(pushCampaigns.id, id));
+      .where(and(eq(pushCampaigns.id, id), inArray(pushCampaigns.status, ["draft", "scheduled", "cancelled", "sent", "failed"])))
+      .returning({ id: pushCampaigns.id });
+    if (!deleted.length) {
+      const [existing] = await db.select({ id: pushCampaigns.id }).from(pushCampaigns).where(eq(pushCampaigns.id, id));
+      if (existing) return res.status(409).json({ error: "Cannot delete a sending campaign or unresolved delivery record" });
+    }
 
     res.json({ success: true });
   } catch (error) {
