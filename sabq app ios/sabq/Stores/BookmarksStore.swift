@@ -36,6 +36,8 @@ final class BookmarksStore {
         }
         persist()
         persistArticleCache()
+        // This event confirms the local bookmark state, including offline use.
+        SabqAnalytics.bookmarkToggle(id: articleID, isBookmarked: !wasBookmarked)
         // Sync to server via the v1 Bearer-token endpoints. The old
         // call to /articles/:id/bookmark used Passport auth and
         // silently 401'd for iOS, so bookmarks never reached the DB.

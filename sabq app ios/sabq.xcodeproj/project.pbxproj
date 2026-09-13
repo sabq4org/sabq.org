@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FBAA00000000000000000001 /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; productRef = FBAA00000000000000000002 /* FirebaseAnalyticsWithoutAdIdSupport */; };
 		3AFD17212FC1BC640025FACF /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 3AFD17202FC1BC640025FACF /* GoogleSignIn */; };
 		3AFD17232FC1BC6D0025FACF /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 3AFD17222FC1BC6D0025FACF /* GoogleSignInSwift */; };
 		5A11110000000000000000B1 /* LiveMatchAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A1 /* LiveMatchAttributes.swift */; };
@@ -101,6 +102,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FBAA00000000000000000001 /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
 				3AFD17212FC1BC640025FACF /* GoogleSignIn in Frameworks */,
 				3AFD17232FC1BC6D0025FACF /* GoogleSignInSwift in Frameworks */,
 			);
@@ -181,6 +183,7 @@
 				3AFE5FD42F60C121006270F8 /* Sources */,
 				3AFE5FD52F60C121006270F8 /* Frameworks */,
 				3AFE5FD62F60C121006270F8 /* Resources */,
+				FBAA00000000000000000004 /* Validate Firebase config */,
 				5A11110000000000000000C4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -193,6 +196,7 @@
 			);
 			name = sabq;
 			packageProductDependencies = (
+				FBAA00000000000000000002 /* FirebaseAnalyticsWithoutAdIdSupport */,
 				3AFD17202FC1BC640025FACF /* GoogleSignIn */,
 				3AFD17222FC1BC6D0025FACF /* GoogleSignInSwift */,
 			);
@@ -302,6 +306,7 @@
 			mainGroup = 3AFE5FCF2F60C121006270F8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				FBAA00000000000000000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				3AFD171E2FC1BAD70025FACF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -347,6 +352,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		FBAA00000000000000000004 /* Validate Firebase config */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			name = "Validate Firebase config";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  python3 \"$SRCROOT/../scripts/verify-mobile-firebase-config.py\" --platform ios --config \"$SRCROOT/sabq/GoogleService-Info.plist\" --identity com.sabq.sabqorg\nfi";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		3AFE5FD42F60C121006270F8 /* Sources */ = {
@@ -562,6 +582,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 10.3.3;
+				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -622,6 +643,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 10.3.3;
+				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -850,6 +872,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		FBAA00000000000000000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.15.0;
+			};
+		};
 		3AFD171E2FC1BAD70025FACF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
@@ -861,6 +891,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		FBAA00000000000000000002 /* FirebaseAnalyticsWithoutAdIdSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FBAA00000000000000000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsWithoutAdIdSupport;
+		};
 		3AFD17202FC1BC640025FACF /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 3AFD171E2FC1BAD70025FACF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;

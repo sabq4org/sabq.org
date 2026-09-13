@@ -411,7 +411,7 @@ final class AuthStore {
                 currentUser = loginUser
                 isLoggedIn = true
                 SabqAnalytics.setUserId(loginUser.id)
-                SabqAnalytics.login(method: "register")
+                SabqAnalytics.signUp(method: "email")
                 successMessage = response.message ?? "تم إنشاء الحساب بنجاح"
                 // Pull the full profile so role/interests populate ASAP.
                 await fetchFullProfile()

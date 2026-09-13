@@ -89,6 +89,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.R
 import com.sabq.smart.data.User
+import com.sabq.smart.data.analytics.SabqAnalytics
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.ui.components.SurfaceCard
 import com.sabq.smart.ui.theme.SabqAccent
@@ -142,6 +143,9 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val settingsContext = androidx.compose.ui.platform.LocalContext.current
+    var analyticsAllowed by remember {
+        mutableStateOf(SabqAnalytics.consentState(settingsContext) == SabqAnalytics.Consent.GRANTED)
+    }
     val revisionsStore = remember {
         dagger.hilt.android.EntryPointAccessors.fromApplication(
             settingsContext.applicationContext,
@@ -228,6 +232,14 @@ fun SettingsScreen(
 
         // 5) Display
         DisplaySection(viewModel = viewModel, settings = settings)
+
+        AnalyticsConsentSection(
+            allowed = analyticsAllowed,
+            onChange = { enabled ->
+                analyticsAllowed = enabled
+                SabqAnalytics.setConsent(settingsContext, enabled)
+            },
+        )
 
         // 5.5) تجربة التصفح (وضع Lite)
         com.sabq.smart.feature.lite.BrowsingExperienceSection(
@@ -1580,6 +1592,52 @@ private fun AccentDot(
                 color = if (selected) color else SabqTheme.colors.tertiaryInk,
             ),
         )
+    }
+}
+
+@Composable
+private fun AnalyticsConsentSection(
+    allowed: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    SurfaceCard(accent = SabqTheme.colors.teal) {
+        SectionHeader(
+            title = "الخصوصية والقياس",
+            subtitle = "تحكم في قياس الاستخدام لتحسين التطبيق",
+            icon = Icons.Filled.BarChart,
+            tint = SabqTheme.colors.teal,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SmallSquareBadge(icon = Icons.Filled.Security, tint = SabqTheme.colors.teal)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "السماح بتحليلات الاستخدام",
+                    style = SabqTheme.typography.cardTitle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SabqTheme.colors.ink,
+                    ),
+                )
+                Text(
+                    text = "قد يرتبط بمعرف حسابك عند تسجيل الدخول، ولا يرسل الاسم أو البريد أو الهاتف",
+                    style = SabqTheme.typography.metaSmall.copy(fontSize = 13.sp, color = SabqTheme.colors.secondaryInk),
+                )
+            }
+            Switch(
+                checked = allowed,
+                onCheckedChange = onChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = SabqTheme.colors.teal,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = SabqTheme.colors.outline,
+                ),
+            )
+        }
     }
 }
 

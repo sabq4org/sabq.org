@@ -42,7 +42,7 @@ struct ContentView: View {
         .environment(LiteModeManager.shared)
         .onChange(of: notificationsStore.pendingDeepLink) { _, newLink in
             guard let link = newLink else { return }
-            handleDeepLink(link)
+            handleDeepLink(link, source: "notification")
             // Consume so a re-render doesn't navigate twice.
             notificationsStore.pendingDeepLink = nil
         }
@@ -50,7 +50,7 @@ struct ContentView: View {
             // Catch deep links captured before this view rendered (cold
             // start from a notification tap).
             if let link = notificationsStore.pendingDeepLink {
-                handleDeepLink(link)
+                handleDeepLink(link, source: "notification")
                 notificationsStore.pendingDeepLink = nil
             }
         }
@@ -61,7 +61,7 @@ struct ContentView: View {
         // screen was last visible and never reached the match center.
         .onOpenURL { url in
             if let link = notificationsStore.parseSabqDeepLink(url: url) {
-                handleDeepLink(link)
+                handleDeepLink(link, source: "url")
             }
         }
         .sheet(item: $deepLinkMatch) { sel in
@@ -159,35 +159,55 @@ struct ContentView: View {
     /// navigation. `article` → ArticleDetailView via slug, `draft` /
     /// `feedback` → the editorial notifications screen so the user lands on
     /// the entry that describes the editorial action.
-    private func handleDeepLink(_ link: NotificationDeepLink) {
+    private func handleDeepLink(_ link: NotificationDeepLink, source: String = "notification") {
         navigation.selectedTab = .home
+        if source != "notification" {
+            let kind: String = {
+                switch link {
+                case .article: return "article"
+                case .opinion: return "opinion"
+                case .draft: return "draft"
+                case .feedback: return "feedback"
+                case .match: return "match"
+                case .asianCupMatch: return "asian_cup_match"
+                case .roshn: return "roshn"
+                case .roshnTeam: return "roshn_team"
+                case .roshnMatch: return "roshn_match"
+                case .survey: return "survey"
+                }
+            }()
+            SabqAnalytics.deepLinkOpen(kind: kind, source: source)
+        }
         switch link {
         case .article(let slug):
-            SabqAnalytics.notificationOpen(type: "article", articleId: nil)
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "article", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(ArticleSlugRoute(slug: slug))
         case .opinion(let slug):
-            SabqAnalytics.notificationOpen(type: "opinion", articleId: nil)
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "opinion", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(OpinionSlugRoute(slug: slug))
         case .draft(let id):
-            SabqAnalytics.notificationOpen(type: "draft", articleId: id)
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "draft", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(DraftDeepLinkRoute(articleId: id))
         case .feedback(let id):
-            SabqAnalytics.notificationOpen(type: "feedback", articleId: id)
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "feedback", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(EditorialNotificationsRoute())
         case .match(let id):
-            SabqAnalytics.notificationOpen(type: "match", articleId: String(id))
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "match", articleId: String(id)) }
             deepLinkMatch = DeepLinkMatch(id: id, competition: nil)
         case .asianCupMatch(let id):
-            SabqAnalytics.notificationOpen(type: "asian-cup-match", articleId: String(id))
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "asian-cup-match", articleId: String(id)) }
             deepLinkMatch = DeepLinkMatch(id: id, competition: "asian-cup")
         case .roshn:
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "roshn", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(RoshnRoute())
         case .roshnTeam(let id):
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "roshn_team", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(RoshnTeamRoute(teamId: id))
         case .roshnMatch(let id):
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "roshn_match", articleId: nil) }
             deepLinkMatch = DeepLinkMatch(id: id, competition: "roshn")
         case .survey(let token):
-            SabqAnalytics.notificationOpen(type: "survey", articleId: nil)
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "survey", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(SurveyDeepLinkRoute(token: token))
         }
     }

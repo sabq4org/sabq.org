@@ -74,6 +74,7 @@ struct ArticleDetailView: View {
     /// the type-level doc comment for the rationale (same root cause as
     /// the home-feed perf fix logged in `ScrollOffsetRef`).
     @State private var scrollProgress = ArticleScrollProgress()
+    @State private var isAnalyticsVisible = false
     @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
@@ -187,6 +188,7 @@ struct ArticleDetailView: View {
 
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         articleBody
+                            .analyticsReadingBody()
                         mediaAssetsGallery
 
                         // Weekly-photos pack — only renders when the
@@ -243,6 +245,9 @@ struct ArticleDetailView: View {
                 scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
+            .analyticsReadingProgress { progress in
+                SabqAnalytics.updateReading(articleId: displayArticle.id, percent: Int(progress * 100))
+            }
 
             .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
@@ -286,6 +291,8 @@ struct ArticleDetailView: View {
                 category: displayArticle.categoryTitle
             )
             BehaviorTracker.shared.startSession(articleId: displayArticle.id)
+            isAnalyticsVisible = true
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -324,10 +331,16 @@ struct ArticleDetailView: View {
             prefetchInlineImages(from: cachedBlocks.items)
         }
         .onDisappear {
+            isAnalyticsVisible = false
             // مغادرة المقال توقف ملخصه فقط (لا صوت شاشة أخرى)، وتُسلّم جلسة
             // الصوت للآخرين. نهاية المقطع يعالجها المشغّل المشترك نفسه.
             SabqAudioPlayer.shared.stopIfCurrent(key: audioKey)
             BehaviorTracker.shared.endSession()
+            SabqAnalytics.endReading(articleId: displayArticle.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+            guard isAnalyticsVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .navigationDestination(for: Article.self) { related in
             ArticleDetailView(article: related)
@@ -1310,6 +1323,7 @@ struct ArticleDetailView: View {
     private func shareArticle() {
         Task {
             let url = await prepareShareURL()
+            SabqAnalytics.shareIntent(articleId: displayArticle.id)
             presentShareSheet(with: url)
         }
     }
@@ -1327,7 +1341,10 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func presentShareSheet(with url: URL) {
-        SabqShareHelper.presentShareSheet(with: url)
+        let articleId = displayArticle.id
+        SabqShareHelper.presentShareSheet(with: url) { completed in
+            if completed { SabqAnalytics.shareCompleted(articleId: articleId, stage: "ios_completion") }
+        }
     }
 
     // MARK: - Tags

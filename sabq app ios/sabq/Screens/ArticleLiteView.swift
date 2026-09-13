@@ -25,6 +25,7 @@ struct ArticleLiteView: View {
 
     @State private var fullArticle: Article?
     @State private var isLoading = false
+    @State private var isAnalyticsVisible = false
 
     /// Same fall-back pattern as `ArticleDetailView`: prefer the
     /// freshly-fetched detail (canonical id, full body) and fall back
@@ -37,6 +38,7 @@ struct ArticleLiteView: View {
                 titleBlock
                 heroImage
                 bodyText
+                    .analyticsReadingBody()
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -45,6 +47,10 @@ struct ArticleLiteView: View {
             .frame(maxWidth: .infinity)
         }
         .background(SabqTheme.background.ignoresSafeArea())
+        .analyticsReadingProgress { progress in
+            SabqAnalytics.updateReading(articleId: displayArticle.id, percent: Int(progress * 100))
+        }
+        .sabqScreen("ArticleDetail")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { liteToolbar }
         .task(id: displayArticle.id) {
@@ -52,11 +58,13 @@ struct ArticleLiteView: View {
             // to anything that expects a canonical id (mirrors the
             // ArticleDetailView guard added in #72).
             guard displayArticle.id != displayArticle.slug else { return }
+            isAnalyticsVisible = true
             SabqAnalytics.articleView(
                 id: displayArticle.id,
                 title: displayArticle.title,
                 category: displayArticle.categoryTitle
             )
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .task {
             // Hydrate the body content. Lite mode doesn't pull related
@@ -67,6 +75,14 @@ struct ArticleLiteView: View {
                 if let bundle { fullArticle = bundle.article }
                 isLoading = false
             }
+        }
+        .onDisappear {
+            isAnalyticsVisible = false
+            SabqAnalytics.endReading(articleId: displayArticle.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+            guard isAnalyticsVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
     }
 
@@ -160,7 +176,12 @@ struct ArticleLiteView: View {
     private func share() {
         guard let urlString = displayArticle.articleURL ?? displayArticle.slug.map({ "https://sabq.org/article/\($0)" }),
               let url = URL(string: urlString) else { return }
+        SabqAnalytics.shareIntent(articleId: displayArticle.id)
         let activity = UIActivityViewController(activityItems: [displayArticle.title, url], applicationActivities: nil)
+        let articleId = displayArticle.id
+        activity.completionWithItemsHandler = { _, completed, _, _ in
+            if completed { SabqAnalytics.shareCompleted(articleId: articleId, stage: "ios_lite_completion") }
+        }
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let root = scene.windows.first?.rootViewController {
             // Walk to topmost presented controller so we don't try to
@@ -169,6 +190,5 @@ struct ArticleLiteView: View {
             while let next = presenter.presentedViewController { presenter = next }
             presenter.present(activity, animated: true)
         }
-        SabqAnalytics.articleShare(id: displayArticle.id, platform: "ios_lite_share")
     }
 }

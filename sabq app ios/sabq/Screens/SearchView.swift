@@ -1,4 +1,5 @@
 import SwiftUI
+// Search analytics is emitted only after the API returns successfully.
 
 struct SearchView: View {
     @Environment(ArticlesStore.self) private var articlesStore
@@ -126,6 +127,7 @@ struct SearchView: View {
                 apiResults = result.articles
                 searchTotal = result.total
                 isSearching = false
+                SabqAnalytics.searchSucceeded(query: query)
             }
         }
     }

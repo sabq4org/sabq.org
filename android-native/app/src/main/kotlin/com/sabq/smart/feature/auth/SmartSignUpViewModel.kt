@@ -144,6 +144,7 @@ class SmartSignUpViewModel @Inject constructor(
             ok.onSuccess { outcome ->
                 when (outcome) {
                     is RegisterOutcome.Authenticated -> {
+                        com.sabq.smart.data.analytics.SabqAnalytics.signUp("email")
                         if (snap.selectedInterestIds.isNotEmpty()) {
                             runCatching {
                                 val ordered = snap.categories
