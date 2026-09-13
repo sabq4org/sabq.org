@@ -235,6 +235,7 @@ struct ArticleDetailView: View {
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
+            .sabqNavigationEdge()
             .sabqScrollProgressTracker { progress in
                 // Update through the class — does NOT invalidate this view
                 // body, only the `ReadingProgressOverlay` subview observes

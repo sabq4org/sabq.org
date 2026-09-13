@@ -72,6 +72,7 @@ struct SettingsView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .sabqNavigationEdge()
         .navigationTitle("حسابي")
         .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
