@@ -576,8 +576,10 @@ struct ArticleDetailView: View {
                 tint: article.category.tint
             )
 
-            // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420)
-            if article.isReading {
+            // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
+            // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
+            // القارئ من قائمة أو رابط عميق بلا الشارة.
+            if displayArticle.isReading {
                 DetailLabelPill(title: "قراءة", tint: SabqTheme.emerald, icon: "book")
             }
 

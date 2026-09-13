@@ -3046,6 +3046,10 @@ function formatArticleForMobile(row: any, baseUrl: string) {
     article_url: `${baseUrl}/article/${article.slug}`,
     is_breaking: article.newsType === "breaking",
     is_featured: article.isFeatured || false,
+    // شارة «قراءة» التحريرية: كانت في الإسقاط (articleCardSelect) والصف الكامل
+    // لكن المُسلسِل يُسقطها، فلا يعرف iOS/Android الشارة التي يعرضها الويب
+    // (بلاغ المالك 2026-09-13). العميلان يفكّان is_reading/isReading معًا.
+    is_reading: article.isReading === true,
     reading_minutes: estimateReadingMinutes(article.content || ""),
     views_count: article.viewsCount || article.views || 0,
     shares_count: article.sharesCount || article.shares || 0,
