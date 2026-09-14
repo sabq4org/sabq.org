@@ -1,6 +1,6 @@
 # الإشعارات الفورية (`push-notifications`)
 
-> آخر مراجعة: 2026-08-21 | المالك: platform
+> آخر مراجعة: 2026-09-14 | المالك: platform
 
 ## الغرض
 إرسال إشعارات عبر FCM / APNs / Expo مع عامل خلفي وناقل داخلي.
@@ -14,6 +14,7 @@
 |--------|--------|
 | Backend | `fcm*`, `apnsService`, `expoService`, `pushWorker`, `notificationBus` |
 | Android VARA | `android-native/vara/src/main/kotlin/com/sabq/vara/push/` |
+| Android SABQ | `android-native/app/src/main/kotlin/com/sabq/smart/data/push/` |
 | Docs | `docs/APPLE_PUSH_SETUP.md` |
 
 ## عقود مهمة / Gotchas
@@ -25,6 +26,8 @@
 - **حزمة debug (2026-07-29):** `sportsAlertsService` يقبل `com.sabq.sports.dev` بجانب الإنتاج — ضروري لاختبار المحاكي يوم المباراة بعد نشر Railway.
 - **فلتر الروابط العميقة في Manifest مفصول** (2026-07-27): دمج `sabqsports://` و`sabq://roshn` في `intent-filter` واحد كان يوحّد السمات فيشترط host على كليهما ويعطّل كل روابط `sabqsports://` الخارجية. لا تعد دمجهما.
 - **FCM لتطبيق VARA مفعّل (2026-07-27):** مشروع Firebase `sabq-vara` بالحزمتين (`com.sabq.sports` + `.dev`) وبصمات SHA لمفتاحي الرفع وDebug. `google-services.json` موجود محليًا في `vara/` وغير ملتزم (gitignored — أضِفه كسرّ في CI). **البلجن يُطبَّق شرطيًا** عند وجود الملف؛ غيابه = بناء أخضر بتدهور آمن. تحقق: توكن FCM يصدر ويُسجَّل عبر `/api/v1/devices/register`.
+- **فصل مشروعَي Android (2026-09-14):** تبقى `FCM_PROJECT_ID` / `FCM_CLIENT_EMAIL` / `FCM_PRIVATE_KEY` لمشروع VARA وللتوكنات القديمة غير الموسومة. تستخدم حزم سبق `com.sabqorg.sabq` و`.dev` الاعتمادات المنفصلة `FCM_SABQ_PROJECT_ID` / `FCM_SABQ_CLIENT_EMAIL` / `FCM_SABQ_PRIVATE_KEY`. لا يرجع توكن سبق إلى اعتماد VARA عند غياب إعداد سبق، حتى لا يُعطّل بسبب `SENDER_ID_MISMATCH`.
+- تطبيق سبق يرسل `BuildConfig.APPLICATION_ID` مع `/api/v1/devices/register`. التوكنات القديمة بلا `bundleId` تبقى على المسار القديم تدريجيًا، ولا تُحذف أو تُعاد نسبتها بالتخمين.
 - **إشعار «انتهت المباراة» (2026-08-21):** `sportsAlertsService` لا يُعلن النهاية من ومضة FT عند الاستراحة/د47 ولا عند د87 والشوط الثاني جارٍ. الحارس في `sportsMatchStatus.ts` — المصدر الحيّ يغلب، والنهاية تتطلب ≥90 دقيقة لعب و≥120 دقيقة تقويمية. Live Activity تستخدم الحارس نفسه حتى لا تُثبَّت شاشة القفل على «انتهت» أثناء الشوط الثاني.
 
 ## صحة وتشغيل
@@ -34,3 +37,4 @@
 ## عند التعديل
 - [ ] قرأت هذا الملف
 - [ ] لا تضع مفاتيح APNs في الكود
+- [ ] لا تضع مفاتيح FCM أو ملفات خدمة Firebase في الكود

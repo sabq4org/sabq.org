@@ -19,9 +19,10 @@ import {
 } from "@shared/schema";
 import { eq, and, lte, inArray, sql, isNull, or, gte } from "drizzle-orm";
 import { 
-  sendToMultipleDevices,
+  sendToFcmTargets,
   sendToTopic,
   isFcmConfigured,
+  isAnyFcmConfigured,
   FCMMessage
 } from "../services/fcmService";
 import {
@@ -42,7 +43,7 @@ let pushWorkerInterval: NodeJS.Timeout | null = null;
  * Uses APNs for iOS and FCM for Android (hybrid mode)
  */
 export function startPushWorker(): void {
-  const fcmEnabled = isFcmConfigured();
+  const fcmEnabled = isAnyFcmConfigured();
   const apnsEnabled = isApnsConfigured();
   
   if (!fcmEnabled && !apnsEnabled) {
@@ -161,7 +162,8 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
           .select({ 
             deviceToken: pushDevices.deviceToken,
             platform: pushDevices.platform,
-            tokenProvider: pushDevices.tokenProvider
+            tokenProvider: pushDevices.tokenProvider,
+            bundleId: pushDevices.bundleId,
           })
           .from(pushDevices)
           .where(eq(pushDevices.isActive, true));
@@ -213,9 +215,11 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         }
         
         // Send to Android via FCM
-        if (androidDevices.length > 0 && isFcmConfigured()) {
-          const androidTokens = androidDevices.map(d => d.deviceToken);
-          const fcmResults = await sendToMultipleDevices(androidTokens, message);
+        if (androidDevices.length > 0 && isAnyFcmConfigured()) {
+          const fcmResults = await sendToFcmTargets(
+            androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+            message,
+          );
           log.info(`[PushWorker] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
           totalSuccess += fcmResults.successCount;
           totalFailure += fcmResults.failureCount;
@@ -391,9 +395,11 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
     }
     
     // Send to Android via FCM
-    if (androidDevices.length > 0 && isFcmConfigured()) {
-      const androidTokens = androidDevices.map(d => d.deviceToken);
-      const fcmResults = await sendToMultipleDevices(androidTokens, message);
+    if (androidDevices.length > 0 && isAnyFcmConfigured()) {
+      const fcmResults = await sendToFcmTargets(
+        androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+        message,
+      );
       log.info(`[PushWorker] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
       totalSuccess += fcmResults.successCount;
       totalFailure += fcmResults.failureCount;
@@ -434,7 +440,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
  */
 async function getTargetDevices(
   campaign: typeof pushCampaigns.$inferSelect
-): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string }>> {
+): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string; bundleId: string | null }>> {
   // If targeting all users
   if (campaign.targetAll) {
     return await db
@@ -442,7 +448,8 @@ async function getTargetDevices(
         deviceToken: pushDevices.deviceToken,
         userId: pushDevices.userId,
         tokenProvider: pushDevices.tokenProvider,
-        platform: pushDevices.platform
+        platform: pushDevices.platform,
+        bundleId: pushDevices.bundleId,
       })
       .from(pushDevices)
       .where(eq(pushDevices.isActive, true));
@@ -470,7 +477,8 @@ async function getTargetDevices(
       deviceToken: pushDevices.deviceToken,
       userId: pushDevices.userId,
       tokenProvider: pushDevices.tokenProvider,
-      platform: pushDevices.platform
+      platform: pushDevices.platform,
+      bundleId: pushDevices.bundleId,
     })
     .from(pushDevices)
     .where(eq(pushDevices.isActive, true));
@@ -491,7 +499,7 @@ async function getDevicesBySegmentCriteria(
     lastActiveAfter?: string;
     lastActiveBefore?: string;
   }
-): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string }>> {
+): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string; bundleId: string | null }>> {
   // Build conditions array
   const conditions: any[] = [eq(pushDevices.isActive, true)];
 
@@ -517,7 +525,8 @@ async function getDevicesBySegmentCriteria(
       deviceToken: pushDevices.deviceToken,
       userId: pushDevices.userId,
       tokenProvider: pushDevices.tokenProvider,
-      platform: pushDevices.platform
+      platform: pushDevices.platform,
+      bundleId: pushDevices.bundleId,
     })
     .from(pushDevices)
     .innerJoin(users, eq(pushDevices.userId, users.id))
@@ -553,12 +562,12 @@ export async function sendImmediatePush(
     priority?: "low" | "normal" | "high" | "critical";
   } = {}
 ): Promise<{ success: number; failed: number; errors: string[] }> {
-  let targetDevices: Array<{ deviceToken: string; tokenProvider: string }> = [];
+  let targetDevices: Array<{ deviceToken: string; tokenProvider: string; bundleId: string | null }> = [];
 
   // Get devices by tokens (need to look up their provider)
   if (options.deviceTokens && options.deviceTokens.length > 0) {
     const devices = await db
-      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider })
+      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider, bundleId: pushDevices.bundleId })
       .from(pushDevices)
       .where(inArray(pushDevices.deviceToken, options.deviceTokens));
     targetDevices = devices;
@@ -566,7 +575,7 @@ export async function sendImmediatePush(
   // Get devices by user IDs
   else if (options.userIds && options.userIds.length > 0) {
     const devices = await db
-      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider })
+      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider, bundleId: pushDevices.bundleId })
       .from(pushDevices)
       .where(
         and(
@@ -586,7 +595,7 @@ export async function sendImmediatePush(
 
     if (segment) {
       const devices = await getDevicesBySegmentCriteria(segment.criteria as any);
-      targetDevices = devices.map(d => ({ deviceToken: d.deviceToken, tokenProvider: d.tokenProvider }));
+      targetDevices = devices.map(d => ({ deviceToken: d.deviceToken, tokenProvider: d.tokenProvider, bundleId: d.bundleId }));
     }
   }
 
@@ -614,8 +623,10 @@ export async function sendImmediatePush(
   }
   
   // Send to FCM devices only
-  const fcmTokens = fcmDevices.map(d => d.deviceToken);
-  const fcmResults = await sendToMultipleDevices(fcmTokens, message);
+  const fcmResults = await sendToFcmTargets(
+    fcmDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+    message,
+  );
   
   return { 
     success: fcmResults.successCount, 
@@ -643,6 +654,7 @@ export async function sendBreakingNewsPush(
       deviceToken: pushDevices.deviceToken,
       platform: pushDevices.platform,
       tokenProvider: pushDevices.tokenProvider,
+      bundleId: pushDevices.bundleId,
     })
     .from(pushDevices)
     .where(eq(pushDevices.isActive, true));
@@ -683,7 +695,7 @@ export async function sendBreakingNewsPush(
   }
 
   // Send to Android via FCM
-  if (androidDevices.length > 0 && isFcmConfigured()) {
+  if (androidDevices.length > 0 && isAnyFcmConfigured()) {
     const message: FCMMessage = {
       title: "🔴 خبر عاجل",
       body: article.title,
@@ -695,8 +707,10 @@ export async function sendBreakingNewsPush(
         deeplink,
       },
     };
-    const androidTokens = androidDevices.map((d) => d.deviceToken);
-    const fcmResults = await sendToMultipleDevices(androidTokens, message);
+    const fcmResults = await sendToFcmTargets(
+      androidDevices.map((d) => ({ token: d.deviceToken, bundleId: d.bundleId })),
+      message,
+    );
     log.info(`[PushWorker] Breaking news FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
     totalSuccess += fcmResults.successCount;
     totalFailed += fcmResults.failureCount;
