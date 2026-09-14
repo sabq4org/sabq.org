@@ -716,6 +716,7 @@
         "server/jobs/pushWorker.ts",
         "server/notificationBus.ts",
         "server/routes/pushNotificationRoutes.ts",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/push/**",
         "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
         "docs/APPLE_PUSH_SETUP.md"
       ],
@@ -724,7 +725,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-21"
+      "lastReviewed": "2026-09-14"
     },
     {
       "id": "ads",

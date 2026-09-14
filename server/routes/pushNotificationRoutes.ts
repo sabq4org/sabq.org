@@ -16,7 +16,7 @@ import {
 } from "@shared/schema";
 import { eq, desc, sql, count, gte, and, or, ilike } from "drizzle-orm";
 import { sendImmediatePush } from "../jobs/pushWorker";
-import { isFcmConfigured, sendToTopic, getPushStats, subscribeToTopic, sendToMultipleDevices } from "../services/fcmService";
+import { isAnyFcmConfigured, isFcmConfigured, sendToTopic, getPushStats, subscribeToTopic, sendToFcmTargets } from "../services/fcmService";
 import { isApnsConfigured, sendBatchPushNotifications as sendApnsBatch, createCustomNotificationPayload } from "../services/apnsService";
 import { parseLimit, parseOffset } from "../utils/pagination";
 
@@ -28,7 +28,9 @@ const router = Router();
 // ==========================================
 router.get("/status", async (req: Request, res: Response) => {
   try {
-    const configured = isFcmConfigured();
+    const defaultConfigured = isFcmConfigured();
+    const sabqConfigured = isFcmConfigured("com.sabqorg.sabq");
+    const configured = defaultConfigured || sabqConfigured;
     
     const [deviceStats] = await db
       .select({
@@ -41,6 +43,7 @@ router.get("/status", async (req: Request, res: Response) => {
 
     res.json({
       configured,
+      profiles: { default: defaultConfigured, sabq: sabqConfigured },
       provider: "firebase",
       environment: process.env.NODE_ENV === "development" ? "development" : "production",
       devices: deviceStats,
@@ -66,7 +69,7 @@ router.post("/quick-send", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "معرف المقال مطلوب" });
     }
 
-    const fcmEnabled = isFcmConfigured();
+    const fcmEnabled = isAnyFcmConfigured();
     const apnsEnabled = isApnsConfigured();
 
     if (!fcmEnabled && !apnsEnabled) {
@@ -120,7 +123,8 @@ router.post("/quick-send", async (req: Request, res: Response) => {
     const allDevices = await db
       .select({
         deviceToken: pushDevices.deviceToken,
-        platform: pushDevices.platform
+        platform: pushDevices.platform,
+        bundleId: pushDevices.bundleId,
       })
       .from(pushDevices)
       .where(eq(pushDevices.isActive, true));
@@ -198,8 +202,9 @@ router.post("/quick-send", async (req: Request, res: Response) => {
 
         // Send to Android via FCM
         if (androidDevices.length > 0 && fcmEnabled) {
-          const androidTokens = androidDevices.map(d => d.deviceToken);
-          const fcmResults = await sendToMultipleDevices(androidTokens, {
+          const fcmResults = await sendToFcmTargets(
+            androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+            {
             title: "خبر جديد من سبق",
             body: article.title,
             imageUrl: article.imageUrl || undefined,
@@ -208,7 +213,8 @@ router.post("/quick-send", async (req: Request, res: Response) => {
               articleId: String(article.id),
               deeplink,
             },
-          });
+            },
+          );
           console.log(`[Push API] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
           totalSuccess += fcmResults.successCount;
           totalFailed += fcmResults.failureCount;
