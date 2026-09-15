@@ -484,6 +484,8 @@ const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")
 const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
+const GulfCupTeam = lazy(() => retryImport(() => import("@/pages/GulfCupTeam")));
+const GulfCupFantasy = lazy(() => retryImport(() => import("@/pages/GulfCupFantasy")));
 const PredictionCenter = lazy(() => retryImport(() => import("@/pages/PredictionCenter")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
@@ -518,6 +520,11 @@ function PageLoader() {
       <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
     </div>
   );
+}
+
+function GulfCupPredictionsRedirect() {
+  const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  return <Redirect to={tab === "fantasy" ? "/gulf-cup/fantasy" : "/predictions?competition=gulf-cup-27"} />;
 }
 
 class ErrorBoundary extends Component<
@@ -1102,7 +1109,9 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
-        <Route path="/gulf-cup/predictions">{() => <Redirect to="/predictions?competition=gulf-cup-27" />}</Route>
+        <Route path="/gulf-cup/team/:id">{() => <LazyRoute component={GulfCupTeam} />}</Route>
+        <Route path="/gulf-cup/fantasy">{() => <LazyRoute component={GulfCupFantasy} />}</Route>
+        <Route path="/gulf-cup/predictions">{() => <GulfCupPredictionsRedirect />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
         {/* المنصة المركزية للتوقعات — كل البطولات ما عدا مونديال 2026 */}

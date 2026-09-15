@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Target, Handshake } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import type { GcScorer, GcScorersBoard } from "./gcTypes";
+import { GC_SECTION_SCROLL_MT } from "./gcTypes";
 
 /**
  * «الهدّافون وصنّاع اللعب» — منصة تتويج للثلاثة الأوائل + جدول للبقية،
@@ -61,16 +61,16 @@ export function GcScorersSection() {
   const rest = scorers.slice(3, 11);
 
   return (
-    <section id="gc-scorers" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <section id="gc-scorers" dir="rtl" className={`container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 ${GC_SECTION_SCROLL_MT}`}>
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Target className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">الهدّافون وصنّاع اللعب</h2>
-        {data && !data.isCurrent && (
-          <Badge variant="outline" className="border-sky-400/50 text-sky-700 dark:text-sky-300">
-            أرقام خليجي 26 — إلى حين انطلاق البطولة
-          </Badge>
-        )}
       </div>
+      {data && !data.isCurrent && (
+        <p className="mb-5 rounded-2xl border border-sky-400/40 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900 dark:border-sky-400/30 dark:bg-sky-950/40 dark:text-sky-100">
+          أرقام خليجي 26 — تظهر هنا إلى حين تسجيل أول أهداف خليجي 27.
+        </p>
+      )}
 
       <div className={assists.length > 0 ? "grid gap-6 lg:grid-cols-[1fr_300px]" : ""}>
         {/* الهدّافون: منصة + جدول */}
