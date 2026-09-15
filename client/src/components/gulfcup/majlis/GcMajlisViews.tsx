@@ -209,7 +209,7 @@ function kickoffLabel(value: string): string {
   if (!value) return "موعد المباراة قريبًا";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "موعد المباراة قريبًا";
-  return new Intl.DateTimeFormat("ar-SA", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     weekday: "long",
     hour: "numeric",
     minute: "2-digit",
@@ -337,7 +337,7 @@ function shiftDateKey(value: string, days: number): string {
 }
 
 function matchdayDateLabel(value: string): string {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -548,7 +548,7 @@ export function GcMajlisFantasyView({ majlisId, currentUserId }: { majlisId: str
   if (query.isLoading) return <LoadingCards count={4} />;
   if (query.isError) return <ErrorCard retry={() => void query.refetch()} />;
   if (!rows.some((row) => row.hasSquad)) {
-    return <StateCard icon={Sparkles} title="لا تشكيلات في المجلس بعد" description="كوّن تشكيلتك في فانتازي خليجي، وستظهر منافستكم هنا تلقائيًا." action={<Button asChild variant="outline"><Link href="/gulf-cup/predictions?tab=fantasy">كوّن تشكيلتك</Link></Button>} />;
+    return <StateCard icon={Sparkles} title="لا تشكيلات في المجلس بعد" description="كوّن تشكيلتك في فانتازي خليجي، وستظهر منافستكم هنا تلقائيًا." action={<Button asChild variant="outline"><Link href="/gulf-cup/fantasy">كوّن تشكيلتك</Link></Button>} />;
   }
   return (
     <div className="grid gap-3 sm:grid-cols-2">
